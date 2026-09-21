@@ -1,0 +1,58 @@
+/* Storefront design tokens — soft boutique boutique (Sellwood-inspired, Cyrillic-ready). */
+:root {
+  --color-background: #ffffff;
+  --color-surface: #f7f5f2;
+  --color-foreground: #2c2825;
+  --color-muted: #7a736c;
+  --color-border: #e8e2da;
+  --color-brand: #6b7a68;
+  --color-brand-foreground: #ffffff;
+  --color-brand-soft: #eef1ec;
+  --color-accent: #c4a484;
+  --color-danger: #9b2c2c;
+  --color-success: #4a6b52;
+  --radius-sm: 0.25rem;
+  --radius-md: 0.375rem;
+  --font-sans: var(--font-body), 'Source Sans 3', 'Segoe UI', ui-sans-serif, system-ui, sans-serif;
+  --font-display: var(--font-display), 'Cormorant Garamond', 'Times New Roman', ui-serif, Georgia, serif;
+  --font-script: var(--font-script), 'Marck Script', 'Segoe Script', cursive;
+  --shadow-soft: 0 1px 2px rgb(44 40 37 / 0.04);
+  --header-expanded: 7.25rem;
+  --header-collapsed: 3.75rem;
+}
+
+@theme inline {
+  --color-background: var(--color-background);
+  --color-surface: var(--color-surface);
+  --color-foreground: var(--color-foreground);
+  --color-muted: var(--color-muted);
+  --color-border: var(--color-border);
+  --color-brand: var(--color-brand);
+  --color-brand-foreground: var(--color-brand-foreground);
+  --color-brand-soft: var(--color-brand-soft);
+  --color-accent: var(--color-accent);
+  --color-danger: var(--color-danger);
+  --color-success: var(--color-success);
+  --font-sans: var(--font-sans);
+  --font-display: var(--font-display);
+  --font-script: var(--font-script);
+  --radius-sm: var(--radius-sm);
+  --radius-md: var(--radius-md);
+}
+
+body {
+  background: var(--color-background);
+  color: var(--color-foreground);
+  font-family: var(--font-sans);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

@@ -1,0 +1,81 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  quality:
+    name: Lint, typecheck, test, build
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: bouquet
+          POSTGRES_PASSWORD: bouquet_dev_password
+          POSTGRES_DB: bouquet_one
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U bouquet -d bouquet_one"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      NODE_ENV: test
+      DATABASE_URL: postgresql://bouquet:bouquet_dev_password@localhost:5432/bouquet_one?schema=public
+      NEXT_PUBLIC_SITE_URL: http://localhost:3000
+      API_URL: http://localhost:3001
+      CORS_ORIGINS: http://localhost:3000
+      ALLOW_INDEXING: 'false'
+      SWAGGER_ENABLED: 'false'
+      TRUST_PROXY: 'false'
+      LOG_LEVEL: error
+      SESSION_HMAC_SECRET: ci-test-session-hmac-secret
+      SESSION_ABSOLUTE_TTL_SECONDS: '43200'
+      SESSION_IDLE_TTL_SECONDS: '1800'
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.17.0
+
+      - name: Setup Node.js 24
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Generate Prisma client
+        run: pnpm db:generate
+
+      - name: Run migrations
+        run: pnpm db:migrate:deploy
+
+      - name: Lint
+        run: pnpm lint
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Test
+        run: pnpm test
+
+      - name: Build
+        run: pnpm build

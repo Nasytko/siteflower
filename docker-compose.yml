@@ -1,0 +1,21 @@
+services:
+  postgres:
+    image: postgres:17-alpine
+    container_name: bouquet-one-postgres
+    restart: unless-stopped
+    ports:
+      - '${POSTGRES_PORT:-5433}:5432'
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-bouquet}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-bouquet_dev_password}
+      POSTGRES_DB: ${POSTGRES_DB:-bouquet_one}
+    volumes:
+      - bouquet_one_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U ${POSTGRES_USER:-bouquet} -d ${POSTGRES_DB:-bouquet_one}']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  bouquet_one_pgdata:

@@ -1,0 +1,10 @@
+{
+  "extends": "@bouquet-one/config/typescript/nextjs.json",
+  "compilerOptions": {
+    "jsx": "react-jsx",
+    "noEmit": true,
+    "plugins": []
+  },
+  "include": ["src/**/*"],
+  "exclude": ["src/**/*.test.ts"]
+}

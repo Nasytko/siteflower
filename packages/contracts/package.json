@@ -1,0 +1,30 @@
+{
+  "name": "@bouquet-one/contracts",
+  "version": "0.0.0",
+  "private": true,
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "lint": "eslint .",
+    "clean": "rimraf dist",
+    "test": "node --import tsx --test src/index.test.ts src/catalog.test.ts src/orders.test.ts"
+  },
+  "devDependencies": {
+    "@bouquet-one/config": "workspace:*",
+    "@eslint/js": "9.36.0",
+    "@types/node": "24.3.0",
+    "eslint": "9.36.0",
+    "rimraf": "6.0.1",
+    "tsx": "4.20.5",
+    "typescript": "5.9.3",
+    "typescript-eslint": "8.44.0"
+  }
+}

@@ -1,0 +1,60 @@
+# Dependencies
+node_modules/
+.pnpm-store/
+
+# Builds
+dist/
+build/
+.next/
+out/
+*.tsbuildinfo
+
+# Env / secrets
+.env
+.env.local
+.env.*.local
+!.env.example
+
+# Prisma generated client
+packages/database/src/generated/
+packages/database/generated/
+
+# Turbo
+.turbo/
+
+# Test / coverage
+coverage/
+playwright-report/
+test-results/
+blob-report/
+
+# Visual QA artifacts (local only)
+artifacts/
+
+# IDE / OS
+.idea/
+.vscode/
+*.swp
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+npm-debug.log*
+pnpm-debug.log*
+
+# Misc
+*.pem
+.cache/
+
+# Local smoke logs
+api-out.log
+api-err.log
+web-out.log
+web-err.log
+.tmp-*.txt
+.tmp-*.log
+
+# Local media storage
+storage/
+apps/api/storage/

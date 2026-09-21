@@ -1,0 +1,37 @@
+{
+  "name": "@bouquet-one/web",
+  "version": "0.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev --port 3000",
+    "build": "cross-env NODE_ENV=production next build",
+    "start": "next start --port 3000",
+    "lint": "eslint .",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "node --import tsx --test src/lib/seo/seo.test.ts src/lib/favorites.test.ts src/lib/media.test.ts src/lib/seo/product-json-ld.test.ts src/lib/catalog-search-params.test.ts src/lib/cart.test.ts",
+    "clean": "rimraf .next"
+  },
+  "dependencies": {
+    "@bouquet-one/contracts": "workspace:*",
+    "@bouquet-one/ui": "workspace:*",
+    "next": "16.3.5",
+    "react": "19.2.0",
+    "react-dom": "19.2.0",
+    "zod": "4.1.5"
+  },
+  "devDependencies": {
+    "@bouquet-one/config": "workspace:*",
+    "@eslint/js": "9.36.0",
+    "@tailwindcss/postcss": "4.1.13",
+    "@types/node": "24.3.0",
+    "@types/react": "19.1.13",
+    "@types/react-dom": "19.1.9",
+    "eslint": "9.36.0",
+    "rimraf": "6.0.1",
+    "tailwindcss": "4.1.13",
+    "tsx": "4.20.5",
+    "typescript": "5.9.3",
+    "typescript-eslint": "8.44.0",
+    "cross-env": "7.0.3"
+  }
+}

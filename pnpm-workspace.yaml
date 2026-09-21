@@ -1,0 +1,15 @@
+packages:
+  - "apps/*"
+  - "packages/*"
+
+onlyBuiltDependencies:
+  - "@prisma/engines"
+  - "@tailwindcss/oxide"
+  - argon2
+  - esbuild
+  - nestjs-pino
+  - prisma
+  - unrs-resolver
+
+ignoredBuiltDependencies:
+  - "@scarf/scarf"
