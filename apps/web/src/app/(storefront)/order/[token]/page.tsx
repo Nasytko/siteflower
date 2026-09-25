@@ -25,11 +25,12 @@ async function fetchTracking(token: string): Promise<OrderTrackingDto | null> {
   }
 }
 
-export async function generateMetadata({ params }: Props): Promise<Metadata> {
+export async function generateMetadata(): Promise<Metadata> {
+  // Never put the tracking token into canonical / OpenGraph URLs.
   return buildPageMetadata({
     title: 'Статус заказа',
     description: 'Отслеживание заказа',
-    path: `/order/${(await params).token}`,
+    path: '/order',
     noIndex: true,
   });
 }

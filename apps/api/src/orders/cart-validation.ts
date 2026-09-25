@@ -8,16 +8,11 @@ import type {
   CheckoutValidatedLineDto,
   CommercialAvailability,
 } from '@bouquet-one/contracts';
+import { formatPriceFromMinor } from '@bouquet-one/contracts';
 import { isEffectivelyPublished } from '../catalog/catalog.logic';
 
 export const MAX_LINE_QUANTITY = 20;
 export const MAX_CART_LINES = 30;
-
-function formatMinorByN(minor: bigint): string {
-  const whole = minor / 100n;
-  const frac = (minor % 100n).toString().padStart(2, '0');
-  return `${whole},${frac} BYN`;
-}
 
 export type VariantPriceSource = {
   product: {
@@ -162,7 +157,7 @@ export function validateCartLines(input: {
         code: 'PRICE_CHANGED',
         productId: product.id,
         variantId: variant.id,
-        message: `Цена букета «${product.name}» изменилась с ${formatMinorByN(prior)} на ${formatMinorByN(unit)}.`,
+        message: `Цена букета «${product.name}» изменилась с ${formatPriceFromMinor(prior)} на ${formatPriceFromMinor(unit)}.`,
         previousUnitPriceMinor: prior.toString(),
         currentUnitPriceMinor: unit.toString(),
       });

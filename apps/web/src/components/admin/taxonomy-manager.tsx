@@ -77,37 +77,59 @@ export function TaxonomyManager({ kind, title, initial, canCreate, canUpdate }: 
   }
 
   return (
-    <div className="space-y-6">
+    <main id="main-content" className="space-y-6">
       <header>
-        <h1 className="text-3xl font-semibold text-stone-900">{title}</h1>
+        <h1 className="admin-page-title">{title}</h1>
+        <p className="admin-page-lead">Справочник каталога · {kind}</p>
       </header>
-      {error ? <p className="text-sm text-red-700">{error}</p> : null}
+
+      {error ? <p className="admin-error">{error}</p> : null}
+
       {canCreate ? (
-        <form onSubmit={onCreate} className="flex flex-wrap gap-3">
-          <input name="name" required placeholder="Название" className="rounded-md border border-stone-300 px-3 py-2" />
-          <input name="slug" placeholder="slug" className="rounded-md border border-stone-300 px-3 py-2" />
-          <Button type="submit">Добавить</Button>
+        <form onSubmit={onCreate} className="admin-toolbar">
+          <label className="admin-field">
+            <span>Название</span>
+            <input name="name" required placeholder="Название" className="admin-input w-56" />
+          </label>
+          <label className="admin-field">
+            <span>Slug</span>
+            <input name="slug" placeholder="slug" className="admin-input w-48" />
+          </label>
+          <Button type="submit" className="!rounded-lg !bg-[var(--admin-brand)]">
+            Добавить
+          </Button>
         </form>
       ) : null}
+
       {items.length === 0 ? (
-        <p className="text-stone-500">Пусто</p>
+        <div className="admin-panel">
+          <p className="admin-empty">Пусто</p>
+        </div>
       ) : (
-        <ul className="divide-y divide-stone-100 border border-stone-200 rounded-md">
-          {items.map((item) => (
-            <li key={item.id} className="flex items-center justify-between gap-3 px-4 py-3 text-sm">
-              <div>
-                <p className="font-medium text-stone-900">{item.name}</p>
-                <p className="text-stone-500">{item.slug} · {item.visibility}</p>
-              </div>
-              {canUpdate ? (
-                <Button type="button" onClick={() => void toggleVisibility(item)}>
-                  {item.visibility === 'VISIBLE' ? 'Скрыть' : 'Показать'}
-                </Button>
-              ) : null}
-            </li>
-          ))}
-        </ul>
+        <div className="admin-panel">
+          <ul className="admin-list">
+            {items.map((item) => (
+              <li key={item.id} className="admin-list__item">
+                <div>
+                  <p className="font-semibold text-[var(--admin-ink)]">{item.name}</p>
+                  <p className="mt-0.5 text-xs text-[var(--admin-muted)]">
+                    {item.slug} · {item.visibility}
+                  </p>
+                </div>
+                {canUpdate ? (
+                  <button
+                    type="button"
+                    className="admin-btn-ghost"
+                    onClick={() => void toggleVisibility(item)}
+                  >
+                    {item.visibility === 'VISIBLE' ? 'Скрыть' : 'Показать'}
+                  </button>
+                ) : null}
+              </li>
+            ))}
+          </ul>
+        </div>
       )}
-    </div>
+    </main>
   );
 }

@@ -18,7 +18,7 @@ import { hashIp } from '../auth/crypto.util';
 import { AppConfigService } from '../config/app-config.service';
 import { PrismaService } from '../database/prisma.service';
 import { MediaService } from '../media/media.service';
-import type { ActorContext } from './catalog.actor';
+import type { ActorContext } from '../common/actor.util';
 import {
   OCC_CONFLICT_MESSAGE,
   validatePublishRequirements,
@@ -139,6 +139,7 @@ export class ProductsService {
           lifecycle: 'DRAFT',
           ...(input.availability ? { availability: input.availability } : {}),
           ...(input.featured === undefined ? {} : { featured: input.featured }),
+          ...(input.heightCm === undefined ? {} : { heightCm: input.heightCm }),
           ...(input.currency ? { currency: input.currency } : {}),
           seoTitle: input.seoTitle ? trimmedOrNull(input.seoTitle) : null,
           seoDescription: input.seoDescription ? trimmedOrNull(input.seoDescription) : null,
@@ -206,6 +207,7 @@ export class ProductsService {
           : { description: trimmedOrNull(input.description) }),
         ...(input.availability === undefined ? {} : { availability: input.availability }),
         ...(input.featured === undefined ? {} : { featured: input.featured }),
+        ...(input.heightCm === undefined ? {} : { heightCm: input.heightCm }),
         ...(input.currency === undefined ? {} : { currency: input.currency }),
         ...(input.seoTitle === undefined ? {} : { seoTitle: trimmedOrNull(input.seoTitle) }),
         ...(input.seoDescription === undefined

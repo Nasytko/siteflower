@@ -4,26 +4,34 @@ import Image from 'next/image';
 import { useState } from 'react';
 import type { ProductPublicDto } from '@bouquet-one/contracts';
 import { pickDerivativeUrl } from '@/lib/media';
+import { HeightRuler } from './height-ruler';
 
 type MediaItem = ProductPublicDto['media'][number];
 
 type Props = {
   media: MediaItem[];
   productName: string;
+  /** Optional merchandising height — shown as a ruler beside photos when set. */
+  heightCm?: number | null;
 };
 
-export function ProductGallery({ media, productName }: Props) {
+export function ProductGallery({ media, productName, heightCm = null }: Props) {
   const sorted = [...media].sort((a, b) => {
     if (a.isPrimary !== b.isPrimary) return a.isPrimary ? -1 : 1;
     return a.sortOrder - b.sortOrder;
   });
   const [activeIndex, setActiveIndex] = useState(0);
   const active = sorted[activeIndex] ?? sorted[0];
+  const showHeight = heightCm != null && heightCm > 0;
+  const heightValue = showHeight ? heightCm : null;
 
   if (sorted.length === 0) {
     return (
-      <div className="flex aspect-[4/5] items-end rounded-[var(--radius-md)] bg-brand-soft p-6 text-sm text-muted">
+      <div className="relative flex aspect-[4/5] items-end overflow-hidden rounded-[var(--radius-xl)] bg-brand-soft p-6 text-sm text-muted">
         Фото скоро
+        {heightValue != null ? (
+          <HeightRuler heightCm={heightValue} mode="always" side="right" />
+        ) : null}
       </div>
     );
   }
@@ -40,7 +48,7 @@ export function ProductGallery({ media, productName }: Props) {
           return (
             <div
               key={`${item.url}-${index}`}
-              className="relative aspect-[4/5] w-[85%] shrink-0 snap-center overflow-hidden rounded-[var(--radius-md)] bg-brand-soft"
+              className="relative aspect-[4/5] w-[85%] shrink-0 snap-center overflow-hidden rounded-[var(--radius-xl)] bg-brand-soft"
             >
               <Image
                 src={src}
@@ -50,6 +58,9 @@ export function ProductGallery({ media, productName }: Props) {
                 className="object-cover"
                 priority={index === 0}
               />
+              {heightValue != null && index === 0 ? (
+                <HeightRuler heightCm={heightValue} mode="always" side="right" />
+              ) : null}
             </div>
           );
         })}
@@ -57,7 +68,7 @@ export function ProductGallery({ media, productName }: Props) {
 
       {/* Desktop: main + thumbs */}
       <div className="hidden md:block">
-        <div className="relative aspect-[4/5] overflow-hidden rounded-[var(--radius-md)] bg-brand-soft">
+        <div className="relative aspect-[4/5] overflow-hidden rounded-[var(--radius-xl)] bg-brand-soft shadow-[var(--shadow-soft)]">
           {active ? (
             <Image
               src={pickDerivativeUrl(active, 1200) ?? active.url}
@@ -68,6 +79,9 @@ export function ProductGallery({ media, productName }: Props) {
               priority
             />
           ) : null}
+          {heightValue != null ? (
+          <HeightRuler heightCm={heightValue} mode="always" side="right" />
+        ) : null}
         </div>
         {sorted.length > 1 ? (
           <ul className="mt-3 flex gap-2 overflow-x-auto">
@@ -80,7 +94,7 @@ export function ProductGallery({ media, productName }: Props) {
                     type="button"
                     aria-label={`Фото ${index + 1}`}
                     aria-pressed={selected}
-                    className={`relative h-20 w-16 overflow-hidden rounded-[var(--radius-sm)] bg-brand-soft ring-offset-2 transition ${
+                    className={`relative h-20 w-16 overflow-hidden rounded-[var(--radius-md)] bg-brand-soft ring-offset-2 transition ${
                       selected ? 'ring-2 ring-brand' : 'opacity-80 hover:opacity-100'
                     }`}
                     onClick={() => setActiveIndex(index)}

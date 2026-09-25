@@ -1,6 +1,6 @@
 import type { Request } from 'express';
 import type { AuthenticatedAdmin } from '../auth/current-admin.decorator';
-import { getRequestId } from '../common/middleware/request-id.middleware';
+import { getRequestId } from './middleware/request-id.middleware';
 
 export type ActorContext = {
   actorId: string;

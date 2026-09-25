@@ -48,6 +48,8 @@ type BouquetSeed = {
   shortDescription: string;
   description: string;
   featured: boolean;
+  /** Optional height in cm — not every bouquet has it. */
+  heightCm?: number;
   colorHex: string;
   prices: { S: number; M: number; L: number };
   flowers: string[];
@@ -103,6 +105,7 @@ const BOUQUETS: BouquetSeed[] = [
     shortDescription: 'Нежный розовый букет с розами и эустомой.',
     description: 'Мягкая палитра для тёплого поздравления. Подходит на день рождения и «просто так».',
     featured: true,
+    heightCm: 45,
     colorHex: '#f3c4d4',
     prices: { S: 8900, M: 11900, L: 14900 },
     flowers: ['rozy', 'eustoma'],
@@ -122,6 +125,7 @@ const BOUQUETS: BouquetSeed[] = [
     shortDescription: 'Светлый букет с белыми акцентами.',
     description: 'Чистая композиция для спокойного подарка маме или коллеге.',
     featured: true,
+    heightCm: 40,
     colorHex: '#efe8df',
     prices: { S: 7900, M: 10900, L: 13900 },
     flowers: ['rozy', 'eustoma'],
@@ -141,6 +145,7 @@ const BOUQUETS: BouquetSeed[] = [
     shortDescription: 'Воздушный монобукет из роз.',
     description: 'Лёгкий объём и спокойный белый тон — когда хочется «воздуха».',
     featured: false,
+    heightCm: 55,
     colorHex: '#e8eef5',
     prices: { S: 9900, M: 12900, L: 16900 },
     flowers: ['rozy'],
@@ -157,6 +162,7 @@ const BOUQUETS: BouquetSeed[] = [
     shortDescription: 'Пионы и розы в мягкой гамме.',
     description: 'Сезонный характер пионов — букет для особого дня.',
     featured: true,
+    heightCm: 50,
     colorHex: '#f7d6e0',
     prices: { S: 12900, M: 16900, L: 21900 },
     flowers: ['piony', 'rozy'],
@@ -176,6 +182,7 @@ const BOUQUETS: BouquetSeed[] = [
     shortDescription: 'Классические красные розы.',
     description: 'Прямой и понятный жест — монобукет для любимой.',
     featured: false,
+    heightCm: 60,
     colorHex: '#e8b4b8',
     prices: { S: 10900, M: 14900, L: 19900 },
     flowers: ['rozy'],
@@ -224,6 +231,7 @@ const BOUQUETS: BouquetSeed[] = [
     shortDescription: 'Пышный букет на пионах.',
     description: 'Объём и фактура — когда нужен заметный подарок.',
     featured: true,
+    heightCm: 48,
     colorHex: '#f0c9d4',
     prices: { S: 15900, M: 19900, L: 24900 },
     flowers: ['piony'],
@@ -476,6 +484,7 @@ async function upsertBouquet(
       lifecycle: 'PUBLISHED',
       availability: 'AVAILABLE',
       featured: bouquet.featured,
+      heightCm: bouquet.heightCm ?? null,
       currency: 'BYN',
       publishedAt: new Date(),
       seoTitle: `${bouquet.name} — букет с доставкой по Гродно`,
@@ -488,6 +497,7 @@ async function upsertBouquet(
       lifecycle: 'PUBLISHED',
       availability: 'AVAILABLE',
       featured: bouquet.featured,
+      heightCm: bouquet.heightCm ?? null,
       publishedAt: new Date(),
       seoTitle: `${bouquet.name} — букет с доставкой по Гродно`,
       seoDescription: bouquet.shortDescription,

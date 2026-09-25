@@ -36,7 +36,7 @@ import {
 import type { Request } from 'express';
 import { CurrentAdmin, type AuthenticatedAdmin } from '../auth/current-admin.decorator';
 import { RequirePermissions } from '../auth/decorators';
-import { actorFrom } from './catalog.actor';
+import { actorFrom } from '../common/actor.util';
 import { CollectionsService } from './collections.service';
 import { ExpectedVersionDto } from './products.dto';
 

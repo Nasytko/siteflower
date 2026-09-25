@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import type { Metadata } from 'next';
 import {
+  CatalogActiveFilters,
   CatalogFilters,
   CatalogSortSelect,
   type CatalogFilterOptions,
@@ -81,12 +82,12 @@ export default async function CatalogPage({ searchParams }: { searchParams: Sear
         : `${products.total} букетов`;
 
   return (
-    <main id="main-content" className="sf-container-wide py-10 md:py-16">
-      <header className="mb-10 max-w-2xl">
-        <p className="sf-label mb-2">Каталог</p>
+    <main id="main-content" className="sf-container-wide py-6 sm:py-8 md:py-10">
+      <header className="mb-6 sm:mb-8">
+        <p className="sf-label mb-1">Каталог</p>
         <h1 className="sf-h1">Букеты</h1>
-        <p className="sf-body mt-3 text-muted">
-          Выберите букет по цвету, поводу или бюджету — мы доставим по Гродно.
+        <p className="sf-body mt-2 max-w-xl text-muted">
+          Фильтры по цвету, поводу и бюджету — доставка по Гродно.
         </p>
       </header>
 
@@ -103,6 +104,8 @@ export default async function CatalogPage({ searchParams }: { searchParams: Sear
             </div>
             <CatalogSortSelect state={state} />
           </div>
+
+          <CatalogActiveFilters state={state} options={options} />
 
           {products.items.length === 0 ? (
             <EmptyState

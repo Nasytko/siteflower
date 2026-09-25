@@ -37,10 +37,22 @@ import {
 import { validateCartLines, type VariantPriceSource } from './cart-validation';
 import { FulfillmentSettingsService } from './fulfillment-settings.service';
 import { maskPhoneE164, normalizeByPhone } from './phone.util';
-import { generateTrackingToken, hashTrackingToken } from './tracking-token.util';
+import {
+  encryptRecoveryPayload,
+  decryptRecoveryPayload,
+  ORDER_RECOVERY_KEY_VERSION,
+  RecoveryCryptoError,
+} from './recovery-crypto.util';
+import {
+  generateTrackingToken,
+  hashTrackingToken,
+  isWellFormedTrackingToken,
+} from './tracking-token.util';
 
 const OUTBOX_ORDER_CREATED = 'ORDER_CREATED';
 const OUTBOX_SCHEMA_VERSION = 1;
+/** Idempotency scope for POST /orders — must stay stable. */
+export const ORDERS_CREATE_IDEMPOTENCY_SCOPE = 'orders.create';
 
 function statusToEventType(to: OrderStatus): OrderEventType {
   switch (to) {
@@ -367,9 +379,32 @@ export class OrdersService {
               totalMinor: created.totalMinor.toString(),
               currency: created.currency,
               itemCount: priced.items.length,
-              requestHash,
               createdAt: created.createdAt.toISOString(),
             } as Prisma.InputJsonValue,
+          },
+        });
+
+        const recoveryBlob = encryptRecoveryPayload(
+          {
+            trackingToken,
+            orderId: created.id,
+            orderNumber: created.orderNumber,
+          },
+          this.appConfig.orderRecoveryEncryptionKey,
+        );
+        const expiresAt = new Date(
+          Date.now() + this.appConfig.orderRecoveryTtlHours * 60 * 60 * 1000,
+        );
+        await tx.idempotencyRecord.create({
+          data: {
+            scope: ORDERS_CREATE_IDEMPOTENCY_SCOPE,
+            idempotencyKey,
+            requestHash,
+            resourceType: 'Order',
+            resourceId: created.id,
+            encryptedRecoveryPayload: new Uint8Array(recoveryBlob),
+            encryptionKeyVersion: ORDER_RECOVERY_KEY_VERSION,
+            expiresAt,
           },
         });
 
@@ -419,30 +454,71 @@ export class OrdersService {
       fulfillmentDate: string;
       timeWindowLabel: string;
       totalMinor: bigint;
+      idempotencyKey: string;
     },
     requestHash: string,
   ): Promise<OrderCreatedResponse> {
-    const outbox = await this.prisma.client.outboxEvent.findFirst({
+    const record = await this.prisma.client.idempotencyRecord.findUnique({
       where: {
-        aggregateType: 'Order',
-        aggregateId: existing.id,
-        eventType: OUTBOX_ORDER_CREATED,
+        scope_idempotencyKey: {
+          scope: ORDERS_CREATE_IDEMPOTENCY_SCOPE,
+          idempotencyKey: existing.idempotencyKey,
+        },
       },
-      orderBy: { createdAt: 'asc' },
     });
-    const prevHash =
-      outbox && typeof outbox.payload === 'object' && outbox.payload !== null
-        ? (outbox.payload as { requestHash?: string }).requestHash
-        : undefined;
-    if (prevHash && prevHash !== requestHash) {
-      throw new ConflictException('Idempotency key reused with a different payload');
+
+    if (record) {
+      if (record.requestHash !== requestHash) {
+        throw new ConflictException('Idempotency key reused with a different payload');
+      }
+    } else {
+      // Legacy orders created before IdempotencyRecord: cannot verify payload or recover token.
+      // Do not invent a token — return replay without recovery material.
+      return this.toReplayResponse(existing, null);
     }
+
+    const now = new Date();
+    if (record.expiresAt.getTime() <= now.getTime()) {
+      // Recovery window expired — same order, no tracking token disclosure.
+      return this.toReplayResponse(existing, null);
+    }
+
+    try {
+      const recovered = decryptRecoveryPayload(
+        Buffer.from(record.encryptedRecoveryPayload),
+        this.appConfig.orderRecoveryEncryptionKey,
+      );
+      if (recovered.orderId !== existing.id) {
+        return this.toReplayResponse(existing, null);
+      }
+      return this.toReplayResponse(existing, recovered.trackingToken);
+    } catch (error) {
+      if (error instanceof RecoveryCryptoError) {
+        // Tampered/wrong key — fail closed without leaking; still confirm same order identity.
+        return this.toReplayResponse(existing, null);
+      }
+      throw error;
+    }
+  }
+
+  private toReplayResponse(
+    existing: {
+      id: string;
+      orderNumber: string;
+      status: OrderStatus;
+      fulfillmentType: FulfillmentType;
+      fulfillmentDate: string;
+      timeWindowLabel: string;
+      totalMinor: bigint;
+    },
+    trackingToken: string | null,
+  ): OrderCreatedResponse {
     return {
       id: existing.id,
       orderNumber: existing.orderNumber,
       status: existing.status,
-      trackingToken: null,
-      trackingPath: null,
+      trackingToken,
+      trackingPath: trackingToken ? `/order/${trackingToken}` : null,
       replayed: true,
       totalMinor: existing.totalMinor.toString(),
       currency: 'BYN',
@@ -453,7 +529,7 @@ export class OrdersService {
   }
 
   async trackByToken(rawToken: string): Promise<OrderTrackingDto> {
-    if (!rawToken || rawToken.length < 20) throw new NotFoundException();
+    if (!isWellFormedTrackingToken(rawToken)) throw new NotFoundException();
     const hash = hashTrackingToken(rawToken);
     const order = await this.prisma.client.order.findUnique({
       where: { trackingTokenHash: hash },

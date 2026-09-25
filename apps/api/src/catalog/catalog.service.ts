@@ -93,6 +93,7 @@ export class CatalogService {
       lifecycle: product.lifecycle,
       availability: product.availability,
       featured: product.featured,
+      heightCm: product.heightCm ?? null,
       currency: product.currency,
       publishedAt: product.publishedAt?.toISOString() ?? null,
       publishAt: product.publishAt?.toISOString() ?? null,
@@ -153,6 +154,7 @@ export class CatalogService {
       description: admin.description,
       availability: admin.availability,
       featured: admin.featured,
+      heightCm: admin.heightCm,
       currency: admin.currency,
       price,
       seo: admin.seo,
@@ -189,6 +191,16 @@ export class CatalogService {
 
   toListItem(product: ProductLoaded): ProductListItemDto {
     const primary = product.media.find((m) => m.isPrimary) ?? product.media[0];
+    const active = product.variants
+      .filter((v) => v.status === 'ACTIVE')
+      .slice()
+      .sort((a, b) => {
+        const byOrder = a.sortOrder - b.sortOrder;
+        if (byOrder !== 0) return byOrder;
+        if (a.priceMinor === b.priceMinor) return 0;
+        return a.priceMinor < b.priceMinor ? -1 : 1;
+      });
+    const pick = active[0];
     return {
       id: product.id,
       slug: product.slug,
@@ -196,7 +208,11 @@ export class CatalogService {
       lifecycle: product.lifecycle,
       availability: product.availability,
       featured: product.featured,
+      heightCm: product.heightCm ?? null,
       price: activeVariantPrices(product.currency, product.variants),
+      defaultVariant: pick
+        ? { id: pick.id, name: pick.name, priceMinor: pick.priceMinor.toString() }
+        : null,
       primaryImageUrl: primary
         ? this.media.getPublicUrl(primary.mediaAsset.storageKey)
         : null,

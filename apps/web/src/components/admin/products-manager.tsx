@@ -58,77 +58,79 @@ export function ProductsManager({ initial, canCreate }: Props) {
   }
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-6">
       {canCreate ? (
-        <form onSubmit={onCreate} className="flex flex-wrap items-end gap-3 border-b border-stone-200 pb-6">
-          <label className="block text-sm">
-            <span className="text-stone-600">Новый товар</span>
+        <form onSubmit={onCreate} className="admin-toolbar">
+          <label className="admin-field">
+            <span>Новый товар</span>
             <input
               name="name"
               required
-              className="mt-1 block w-56 rounded-md border border-stone-300 px-3 py-2"
+              className="admin-input w-56"
               placeholder="Название"
             />
           </label>
-          <label className="block text-sm">
-            <span className="text-stone-600">Slug (опц.)</span>
-            <input
-              name="slug"
-              className="mt-1 block w-48 rounded-md border border-stone-300 px-3 py-2"
-              placeholder="ameli"
-            />
+          <label className="admin-field">
+            <span>Slug (опц.)</span>
+            <input name="slug" className="admin-input w-48" placeholder="ameli" />
           </label>
-          <Button type="submit" disabled={pending}>
+          <Button type="submit" disabled={pending} className="!rounded-lg !bg-[var(--admin-brand)]">
             Создать черновик
           </Button>
         </form>
       ) : null}
 
-      {error ? <p className="text-sm text-red-700">{error}</p> : null}
+      {error ? <p className="admin-error">{error}</p> : null}
 
       {initial.items.length === 0 ? (
-        <p className="text-stone-500">Товаров пока нет.</p>
+        <div className="admin-panel">
+          <p className="admin-empty">Товаров пока нет.</p>
+        </div>
       ) : (
-        <div className="overflow-x-auto">
-          <table className="min-w-full text-left text-sm">
-            <thead className="border-b border-stone-200 text-stone-500">
+        <div className="admin-panel overflow-x-auto">
+          <table className="admin-table">
+            <thead>
               <tr>
-                <th className="py-2 pr-4">Товар</th>
-                <th className="py-2 pr-4">Статус</th>
-                <th className="py-2 pr-4">Доступность</th>
-                <th className="py-2 pr-4">Цена</th>
-                <th className="py-2 pr-4">Обновлён</th>
+                <th>Товар</th>
+                <th>Статус</th>
+                <th>Доступность</th>
+                <th>Цена</th>
+                <th>Обновлён</th>
               </tr>
             </thead>
             <tbody>
               {initial.items.map((item) => (
-                <tr key={item.id} className="border-b border-stone-100">
-                  <td className="py-3 pr-4">
+                <tr key={item.id}>
+                  <td>
                     <div className="flex items-center gap-3">
                       {item.primaryImageUrl ? (
                         <img
                           src={toSameOriginMediaUrl(item.primaryImageUrl) ?? item.primaryImageUrl}
                           alt=""
-                          className="h-12 w-12 rounded object-cover"
+                          className="h-12 w-12 rounded-lg object-cover"
                         />
                       ) : (
-                        <div className="h-12 w-12 rounded bg-stone-200" />
+                        <div className="h-12 w-12 rounded-lg bg-[#eef1ef]" />
                       )}
                       <div>
                         <Link
                           href={`/admin/catalog/products/${item.id}`}
-                          className="font-medium text-stone-900 underline-offset-2 hover:underline"
+                          className="font-semibold text-[var(--admin-ink)] underline-offset-2 hover:text-[var(--admin-brand)] hover:underline"
                         >
                           {item.name}
                         </Link>
-                        <p className="text-xs text-stone-500">{item.slug}</p>
+                        <p className="text-xs text-[var(--admin-muted)]">{item.slug}</p>
                       </div>
                     </div>
                   </td>
-                  <td className="py-3 pr-4">{item.lifecycle}</td>
-                  <td className="py-3 pr-4">{item.availability}</td>
-                  <td className="py-3 pr-4">{item.price?.label ?? '—'}</td>
-                  <td className="py-3 pr-4 text-stone-500">
+                  <td>
+                    <span className="admin-chip">{item.lifecycle}</span>
+                  </td>
+                  <td>
+                    <span className="admin-chip admin-chip--muted">{item.availability}</span>
+                  </td>
+                  <td>{item.price?.label ?? '—'}</td>
+                  <td className="text-[var(--admin-muted)]">
                     {new Date(item.updatedAt).toLocaleString('ru-BY')}
                   </td>
                 </tr>

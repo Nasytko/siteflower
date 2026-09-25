@@ -28,8 +28,8 @@ export default async function AdminProductEditPage({ params }: Props) {
   return (
     <main id="main-content" className="space-y-6">
       <header>
-        <h1 className="text-3xl font-semibold text-stone-900">{product.name}</h1>
-        <p className="text-stone-600">
+        <h1 className="admin-page-title">{product.name}</h1>
+        <p className="admin-page-lead">
           {product.lifecycle} · {product.slug}
         </p>
       </header>

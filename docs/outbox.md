@@ -18,13 +18,22 @@ Shop PostgreSQL is the source of truth for accepted orders. External systems mus
 
 ## Atomicity
 
-`ORDER_CREATED` is inserted in the **same** `$transaction` as Order + OrderItems + OrderEvent.
+`ORDER_CREATED` is inserted in the **same** `$transaction` as Order + OrderItems + OrderEvent + IdempotencyRecord.
+
+Idempotency / request-hash / encrypted recovery live on `idempotency_records`, **not** in the outbox payload.
 
 ## Payload (v1)
 
-Includes: `orderId`, `orderNumber`, `status`, `fulfillmentType`, `fulfillmentDate`, `totalMinor`, `currency`, `itemCount`, `requestHash`, `createdAt`.
+Includes: `orderId`, `orderNumber`, `status`, `fulfillmentType`, `fulfillmentDate`, `totalMinor`, `currency`, `itemCount`, `createdAt`.
 
 Future consumers should tolerate additive fields; bump `schemaVersion` for breaking changes.
+
+## Future worker (not implemented)
+
+- Claim unprocessed rows (`processed_at IS NULL`) ordered by `created_at`
+- Lease / update `attempts`; exponential backoff
+- Idempotent consumer; dead-letter after N failures
+- Metrics on backlog age
 
 ## Non-goals (this phase)
 

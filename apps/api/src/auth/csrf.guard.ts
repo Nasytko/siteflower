@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import type { Request } from 'express';
 import { AppConfigService } from '../config/app-config.service';
+import { isAdminApiPath } from './admin-path.util';
 
 const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
 
@@ -21,7 +22,7 @@ export class AdminCsrfGuard implements CanActivate {
   canActivate(context: ExecutionContext): boolean {
     const request = context.switchToHttp().getRequest<Request>();
     const path = request.path ?? request.url ?? '';
-    if (!path.includes('/admin')) {
+    if (!isAdminApiPath(path)) {
       return true;
     }
     if (SAFE_METHODS.has(request.method.toUpperCase())) {

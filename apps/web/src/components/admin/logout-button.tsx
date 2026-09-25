@@ -2,7 +2,6 @@
 
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
-import { Button } from '@bouquet-one/ui';
 
 export function LogoutButton() {
   const router = useRouter();
@@ -20,8 +19,13 @@ export function LogoutButton() {
   }
 
   return (
-    <Button type="button" variant="outline" size="sm" disabled={pending} onClick={logout}>
-      Выйти
-    </Button>
+    <button
+      type="button"
+      className="admin-btn-ghost w-full"
+      disabled={pending}
+      onClick={logout}
+    >
+      {pending ? 'Выход…' : 'Выйти'}
+    </button>
   );
 }

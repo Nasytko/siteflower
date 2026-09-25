@@ -14,6 +14,7 @@
     "typecheck": "turbo run typecheck",
     "test": "turbo run test",
     "test:e2e": "playwright test",
+    "test:e2e:visual": "playwright test e2e/visual-qa.spec.ts",
     "db:generate": "pnpm --filter @bouquet-one/database generate",
     "db:migrate": "pnpm --filter @bouquet-one/database migrate:dev",
     "db:migrate:deploy": "pnpm --filter @bouquet-one/database migrate:deploy",

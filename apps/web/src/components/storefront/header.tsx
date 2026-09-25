@@ -1,19 +1,12 @@
 'use client';
 
 import Link from 'next/link';
-import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import { usePathname } from 'next/navigation';
 import { cartItemCount, readCart } from '@/lib/cart';
+import { MEGA_NAV } from './mega-nav-data';
+import { MegaNav } from './mega-nav';
 import { SearchDialog } from './search-dialog';
-
-const NAV = [
-  { href: '/bukety', label: 'Все букеты' },
-  { href: '/povod/den-rozhdeniya', label: 'Поводы' },
-  { href: '/komu/mame', label: 'Кому' },
-  { href: '/collections/izbrannoe', label: 'Подборки' },
-  { href: '/dostavka', label: 'Доставка' },
-  { href: '/o-nas', label: 'О нас' },
-] as const;
 
 type Props = {
   city: string;
@@ -43,7 +36,7 @@ export function StorefrontHeader({ city, brandName, phone, workingHours }: Props
   }, []);
 
   useEffect(() => {
-    const onScroll = () => setScrolled(window.scrollY > 24);
+    const onScroll = () => setScrolled(window.scrollY > 28);
     onScroll();
     window.addEventListener('scroll', onScroll, { passive: true });
     return () => window.removeEventListener('scroll', onScroll);
@@ -64,228 +57,195 @@ export function StorefrontHeader({ city, brandName, phone, workingHours }: Props
   return (
     <>
       <header
-        className={`sticky top-0 z-40 border-b border-border/70 bg-background/95 backdrop-blur-md transition-[box-shadow] duration-300 ${
+        className={`sticky top-0 z-40 bg-background/95 backdrop-blur-md transition-[box-shadow] duration-500 ease-[cubic-bezier(0.22,1,0.36,1)] ${
           scrolled ? 'shadow-[var(--shadow-soft)]' : ''
         }`}
       >
-        {/* Expanded two-row header */}
+        {/* Utility bar — collapses on scroll */}
         <div
-          className={`overflow-hidden transition-[max-height,opacity] duration-300 ease-out ${
-            scrolled ? 'max-h-0 opacity-0 pointer-events-none' : 'max-h-40 opacity-100'
+          className={`sf-utility-bar hidden overflow-hidden transition-[max-height,opacity] duration-500 ease-[cubic-bezier(0.22,1,0.36,1)] md:block ${
+            scrolled ? 'pointer-events-none max-h-0 opacity-0' : 'max-h-10 opacity-100'
           }`}
           aria-hidden={scrolled}
         >
-          <div className="sf-container-wide grid grid-cols-[1fr_auto_1fr] items-center gap-3 py-3 md:py-4">
-            <div className="flex min-w-0 flex-col gap-0.5 justify-self-start">
-              {telHref ? (
-                <a
-                  href={telHref}
-                  className="sf-small font-medium tracking-wide text-foreground hover:text-brand"
-                >
-                  {phone}
-                </a>
-              ) : (
-                <span className="sf-label">{city}</span>
-              )}
-              {workingHours ? (
-                <span className="hidden text-[0.7rem] text-muted sm:block">{workingHours}</span>
-              ) : (
-                <span className="hidden text-[0.7rem] text-muted sm:block">
-                  Доставка цветов · {city}
-                </span>
-              )}
-            </div>
-
-            <Link
-              href="/"
-              className="justify-self-center text-center transition hover:opacity-90"
-            >
-              <span className="block font-[family-name:var(--font-display)] text-[1.65rem] font-medium tracking-[0.18em] text-foreground md:text-[1.85rem]">
-                {brandName}
-              </span>
-              <span className="sf-label mt-0.5 block text-[0.65rem] tracking-[0.22em]">
-                {city}
-              </span>
-            </Link>
-
-            <div className="flex items-center justify-self-end gap-0.5 sm:gap-1">
-              <HeaderIconButton label="Найти букет" onClick={() => setSearchOpen(true)}>
-                <SearchIcon />
-              </HeaderIconButton>
-              <Link
-                href="/favorites"
-                className="inline-flex h-10 w-10 items-center justify-center text-foreground transition hover:text-brand"
-                aria-label="Избранное"
-              >
-                <HeartIcon />
+          <div className="sf-container-wide flex h-9 items-center justify-between gap-4">
+            <p className="inline-flex items-center gap-1.5 truncate">
+              <PinIcon />
+              {city}
+              {workingHours ? <span className="opacity-70"> · {workingHours}</span> : null}
+            </p>
+            <nav className="flex items-center gap-5" aria-label="Сервис">
+              <Link href="/o-nas" className="opacity-90 transition-opacity hover:opacity-100">
+                О нас
               </Link>
-              <Link
-                href="/cart"
-                className="relative inline-flex h-10 w-10 items-center justify-center text-foreground transition hover:text-brand"
-                aria-label="Корзина"
-              >
-                <CartIcon />
-                {cartCount > 0 ? (
-                  <span className="absolute right-1 top-1 flex h-4 min-w-4 items-center justify-center rounded-sm bg-foreground px-1 text-[0.65rem] font-medium text-background">
-                    {cartCount > 9 ? '9+' : cartCount}
-                  </span>
-                ) : null}
+              <Link href="/dostavka" className="opacity-90 transition-opacity hover:opacity-100">
+                Доставка и оплата
               </Link>
-              <button
-                type="button"
-                className="inline-flex h-10 w-10 items-center justify-center text-foreground transition hover:text-brand lg:hidden"
-                aria-expanded={menuOpen}
-                aria-controls={menuId}
-                aria-label={menuOpen ? 'Закрыть меню' : 'Открыть меню'}
-                onClick={() => setMenuOpen((open) => !open)}
-              >
-                <MenuIcon open={menuOpen} />
-              </button>
-            </div>
+              <Link href="/o-nas" className="opacity-90 transition-opacity hover:opacity-100">
+                Контакты
+              </Link>
+            </nav>
           </div>
-
-          <nav
-            aria-label="Основное"
-            className="hidden border-t border-border/50 lg:block"
-          >
-            <ul className="sf-container-wide flex flex-wrap items-center justify-center gap-x-7 gap-y-2 py-3">
-              {NAV.map((item) => (
-                <li key={item.label}>
-                  <Link
-                    href={item.href}
-                    className="sf-nav-link text-foreground/85 transition hover:text-brand"
-                  >
-                    {item.label}
-                  </Link>
-                </li>
-              ))}
-            </ul>
-          </nav>
         </div>
 
-        {/* Collapsed single-row header */}
+        {/* Main row */}
         <div
-          className={`overflow-hidden transition-[max-height,opacity] duration-300 ease-out ${
-            scrolled ? 'max-h-16 opacity-100' : 'max-h-0 opacity-0 pointer-events-none'
+          className={`sf-container-wide relative grid grid-cols-[1fr_auto_1fr] items-center gap-2 transition-[height] duration-500 ease-[cubic-bezier(0.22,1,0.36,1)] ${
+            scrolled ? 'h-14' : 'h-[4.5rem] sm:h-[5rem]'
           }`}
-          aria-hidden={!scrolled}
         >
-          <div className="sf-container-wide flex h-14 items-center justify-between gap-4">
-            <Link
-              href="/"
-              className="shrink-0 font-[family-name:var(--font-display)] text-lg font-medium tracking-[0.14em] text-foreground md:text-xl"
+          <div className="flex min-w-0 items-center gap-1 justify-self-start">
+            <button
+              type="button"
+              className="inline-flex h-10 w-10 items-center justify-center text-foreground transition-colors hover:text-brand lg:hidden"
+              aria-expanded={menuOpen}
+              aria-controls={menuId}
+              aria-label={menuOpen ? 'Закрыть меню' : 'Открыть меню'}
+              onClick={() => setMenuOpen((open) => !open)}
             >
-              {brandName}
-            </Link>
-            <nav aria-label="Основное (свёрнутое)" className="hidden items-center gap-5 lg:flex">
-              {NAV.map((item) => (
-                <Link
-                  key={item.label}
-                  href={item.href}
-                  className="sf-nav-link text-[0.8rem] text-foreground/80 transition hover:text-brand"
-                >
-                  {item.label}
-                </Link>
-              ))}
-            </nav>
-            <div className="flex items-center gap-0.5">
+              <MenuIcon open={menuOpen} />
+            </button>
+            <div
+              className={`hidden min-w-0 transition-opacity duration-400 sm:block ${
+                scrolled ? 'opacity-0 pointer-events-none lg:opacity-100 lg:pointer-events-auto' : 'opacity-100'
+              }`}
+            >
               {telHref ? (
-                <a
-                  href={telHref}
-                  className="sf-small mr-2 hidden font-medium text-muted hover:text-brand xl:inline"
-                >
-                  {phone}
-                </a>
-              ) : null}
-              <HeaderIconButton label="Найти букет" onClick={() => setSearchOpen(true)}>
-                <SearchIcon />
-              </HeaderIconButton>
-              <Link
-                href="/favorites"
-                className="inline-flex h-9 w-9 items-center justify-center text-foreground hover:text-brand"
-                aria-label="Избранное"
-              >
-                <HeartIcon />
-              </Link>
-              <Link
-                href="/cart"
-                className="relative inline-flex h-9 w-9 items-center justify-center text-foreground hover:text-brand"
-                aria-label="Корзина"
-              >
-                <CartIcon />
-                {cartCount > 0 ? (
-                  <span className="absolute right-0.5 top-0.5 flex h-4 min-w-4 items-center justify-center rounded-sm bg-foreground px-1 text-[0.65rem] font-medium text-background">
-                    {cartCount > 9 ? '9+' : cartCount}
-                  </span>
-                ) : null}
-              </Link>
-              <button
-                type="button"
-                className="inline-flex h-9 w-9 items-center justify-center text-foreground hover:text-brand lg:hidden"
-                aria-expanded={menuOpen}
-                aria-controls={menuId}
-                aria-label={menuOpen ? 'Закрыть меню' : 'Открыть меню'}
-                onClick={() => setMenuOpen((open) => !open)}
-              >
-                <MenuIcon open={menuOpen} />
-              </button>
+                <>
+                  <a
+                    href={telHref}
+                    className={`inline-flex items-center gap-1.5 font-semibold text-ink transition-all hover:text-brand ${
+                      scrolled ? 'text-xs' : 'text-sm'
+                    }`}
+                  >
+                    <PhoneIcon />
+                    <span className="truncate">{phone}</span>
+                  </a>
+                  {!scrolled ? (
+                    <p className="pl-5 text-xs text-brand">
+                      <a href={telHref} className="transition-opacity hover:underline">
+                        Обратный звонок
+                      </a>
+                    </p>
+                  ) : null}
+                </>
+              ) : (
+                <p className="sf-small text-muted">{city}</p>
+              )}
             </div>
           </div>
+
+          <Link href="/" className="justify-self-center text-center transition-transform duration-500 hover:opacity-90">
+            <span className="inline-flex items-center gap-2 text-brand sm:gap-2.5">
+              <BrandMark
+                className={`transition-all duration-500 ${scrolled ? 'h-6 w-6' : 'h-8 w-8 sm:h-9 sm:w-9'}`}
+              />
+              <span
+                className={`font-[family-name:var(--font-display)] font-semibold tracking-wide transition-all duration-500 ${
+                  scrolled ? 'text-[1.2rem]' : 'text-[1.45rem] sm:text-[1.75rem]'
+                }`}
+              >
+                {brandName}
+              </span>
+            </span>
+          </Link>
+
+          <div className="flex items-center justify-self-end gap-1 sm:gap-3">
+            <button
+              type="button"
+              className="inline-flex flex-col items-center gap-0.5 px-1 text-ink transition-colors hover:text-brand"
+              aria-label="Поиск"
+              onClick={() => setSearchOpen(true)}
+            >
+              <SearchIcon />
+              <span
+                className={`hidden text-[0.65rem] font-medium transition-opacity duration-300 sm:block ${
+                  scrolled ? 'opacity-0 h-0 overflow-hidden' : 'opacity-100'
+                }`}
+              >
+                Поиск
+              </span>
+            </button>
+            <Link
+              href="/favorites"
+              className="inline-flex flex-col items-center gap-0.5 px-1 text-ink transition-colors hover:text-brand"
+              aria-label="Избранное"
+            >
+              <UserIcon />
+              <span
+                className={`hidden text-[0.65rem] font-medium transition-opacity duration-300 sm:block ${
+                  scrolled ? 'opacity-0 h-0 overflow-hidden' : 'opacity-100'
+                }`}
+              >
+                Кабинет
+              </span>
+            </Link>
+            <Link
+              href="/cart"
+              className="relative inline-flex items-center px-1 text-ink transition-colors hover:text-brand"
+              aria-label="Корзина"
+            >
+              <BagIcon />
+              {cartCount > 0 ? (
+                <span className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-brand px-1 text-[0.65rem] font-semibold text-white transition-transform duration-300">
+                  {cartCount > 99 ? '99+' : cartCount}
+                </span>
+              ) : null}
+            </Link>
+          </div>
+        </div>
+
+        {/* Mega nav — compact when scrolled */}
+        <div
+          className={`hidden overflow-hidden border-t border-border/60 transition-[max-height,opacity] duration-500 ease-[cubic-bezier(0.22,1,0.36,1)] lg:block ${
+            scrolled ? 'max-h-11' : 'max-h-14'
+          }`}
+        >
+          <MegaNav compact={scrolled} />
         </div>
       </header>
 
       {menuOpen ? (
         <div
           id={menuId}
-          className="fixed inset-0 z-50 bg-background lg:hidden"
+          className="fixed inset-0 z-50 overflow-y-auto bg-background/98 backdrop-blur-sm lg:hidden"
           role="dialog"
           aria-modal="true"
           aria-label="Меню"
         >
           <div className="sf-container flex h-14 items-center justify-between">
-            <p className="font-[family-name:var(--font-display)] text-xl tracking-[0.12em]">
+            <p className="font-[family-name:var(--font-display)] text-lg font-semibold text-brand">
               {brandName}
             </p>
             <button
               ref={closeRef}
               type="button"
-              className="inline-flex h-10 w-10 items-center justify-center hover:text-brand"
+              className="inline-flex h-10 w-10 items-center justify-center"
               aria-label="Закрыть меню"
               onClick={() => setMenuOpen(false)}
             >
               <MenuIcon open />
             </button>
           </div>
-          <nav className="sf-container flex flex-col gap-1 pt-6" aria-label="Мобильное меню">
-            {NAV.map((item) => (
-              <Link
-                key={item.label}
-                href={item.href}
-                className="sf-nav-link rounded-[var(--radius-md)] px-3 py-3.5 text-foreground hover:bg-brand-soft"
-              >
-                {item.label}
-              </Link>
+          <nav className="sf-container flex flex-col gap-1 pb-16 pt-2" aria-label="Мобильное меню">
+            {MEGA_NAV.map((item) => (
+              <div key={item.id} className="border-b border-border py-1">
+                <Link
+                  href={item.href}
+                  className={`sf-nav-link block px-2 py-3 transition-colors ${
+                    item.accent ? 'text-accent' : 'text-foreground'
+                  }`}
+                  onClick={() => setMenuOpen(false)}
+                >
+                  {item.label}
+                </Link>
+              </div>
             ))}
             {telHref ? (
-              <a
-                href={telHref}
-                className="mt-4 px-3 py-3 text-lg font-medium text-foreground"
-              >
+              <a href={telHref} className="mt-4 px-2 py-3 text-base font-medium">
                 {phone}
               </a>
             ) : null}
-            <Link
-              href="/favorites"
-              className="rounded-[var(--radius-md)] px-3 py-3 text-lg text-foreground hover:bg-brand-soft"
-            >
-              Избранное
-            </Link>
-            <Link
-              href="/cart"
-              className="rounded-[var(--radius-md)] px-3 py-3 text-lg text-foreground hover:bg-brand-soft"
-            >
-              Корзина{cartCount > 0 ? ` (${cartCount})` : ''}
-            </Link>
           </nav>
         </div>
       ) : null}
@@ -295,24 +255,65 @@ export function StorefrontHeader({ city, brandName, phone, workingHours }: Props
   );
 }
 
-function HeaderIconButton({
-  label,
-  onClick,
-  children,
-}: {
-  label: string;
-  onClick: () => void;
-  children: ReactNode;
-}) {
+function BrandMark({ className }: { className?: string }) {
   return (
-    <button
-      type="button"
-      className="inline-flex h-10 w-10 items-center justify-center text-foreground transition hover:text-brand"
-      aria-label={label}
-      onClick={onClick}
-    >
-      {children}
-    </button>
+    <svg viewBox="0 0 32 32" className={className} fill="none" aria-hidden>
+      <path
+        d="M16 3.5c1.6 2.8 2.2 5.1 2 7.2-.2 2.3-1.2 4.1-2 5.1-.8-1-1.8-2.8-2-5.1-.2-2.1.4-4.4 2-7.2Z"
+        fill="currentColor"
+      />
+      <path
+        d="M16 3.5c1.6 2.8 2.2 5.1 2 7.2-.2 2.3-1.2 4.1-2 5.1-.8-1-1.8-2.8-2-5.1-.2-2.1.4-4.4 2-7.2Z"
+        fill="currentColor"
+        opacity="0.7"
+        transform="rotate(60 16 16)"
+      />
+      <path
+        d="M16 3.5c1.6 2.8 2.2 5.1 2 7.2-.2 2.3-1.2 4.1-2 5.1-.8-1-1.8-2.8-2-5.1-.2-2.1.4-4.4 2-7.2Z"
+        fill="currentColor"
+        opacity="0.55"
+        transform="rotate(120 16 16)"
+      />
+      <path
+        d="M16 3.5c1.6 2.8 2.2 5.1 2 7.2-.2 2.3-1.2 4.1-2 5.1-.8-1-1.8-2.8-2-5.1-.2-2.1.4-4.4 2-7.2Z"
+        fill="currentColor"
+        opacity="0.7"
+        transform="rotate(180 16 16)"
+      />
+      <path
+        d="M16 3.5c1.6 2.8 2.2 5.1 2 7.2-.2 2.3-1.2 4.1-2 5.1-.8-1-1.8-2.8-2-5.1-.2-2.1.4-4.4 2-7.2Z"
+        fill="currentColor"
+        opacity="0.55"
+        transform="rotate(240 16 16)"
+      />
+      <path
+        d="M16 3.5c1.6 2.8 2.2 5.1 2 7.2-.2 2.3-1.2 4.1-2 5.1-.8-1-1.8-2.8-2-5.1-.2-2.1.4-4.4 2-7.2Z"
+        fill="currentColor"
+        opacity="0.7"
+        transform="rotate(300 16 16)"
+      />
+      <circle cx="16" cy="16" r="2" fill="currentColor" />
+    </svg>
+  );
+}
+
+function PinIcon() {
+  return (
+    <svg viewBox="0 0 16 16" className="h-3.5 w-3.5" fill="currentColor" aria-hidden>
+      <path d="M8 1.5a4.5 4.5 0 0 0-4.5 4.5c0 3.2 4.5 8.5 4.5 8.5s4.5-5.3 4.5-8.5A4.5 4.5 0 0 0 8 1.5Zm0 6.2a1.7 1.7 0 1 1 0-3.4 1.7 1.7 0 0 1 0 3.4Z" />
+    </svg>
+  );
+}
+
+function PhoneIcon() {
+  return (
+    <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden>
+      <path
+        d="M7.2 4.8h2.4l1.2 3-1.6 1.2a11 11 0 0 0 5.6 5.6l1.2-1.6 3 1.2v2.4A1.6 1.6 0 0 1 17.4 18 13.2 13.2 0 0 1 6 6.6a1.6 1.6 0 0 1 1.2-1.8Z"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
   );
 }
 
@@ -325,20 +326,23 @@ function SearchIcon() {
   );
 }
 
-function HeartIcon() {
+function UserIcon() {
   return (
     <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden>
-      <path d="M12 20s-7-4.35-7-9.2A4.2 4.2 0 0 1 12 7.1a4.2 4.2 0 0 1 7 3.7C19 15.65 12 20 12 20Z" />
+      <circle cx="12" cy="9" r="3.2" />
+      <path d="M5.5 19.2c1.6-3 4-4.5 6.5-4.5s4.9 1.5 6.5 4.5" strokeLinecap="round" />
     </svg>
   );
 }
 
-function CartIcon() {
+function BagIcon() {
   return (
-    <svg viewBox="0 0 24 24" className="h-[1.15rem] w-[1.15rem]" fill="currentColor" aria-hidden>
-      <path d="M7.5 6h13.2l-1.1 7.2a1.6 1.6 0 0 1-1.6 1.35H9.4A1.6 1.6 0 0 1 7.8 13.1L6.2 4H4" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-      <circle cx="10.2" cy="19.2" r="1.15" />
-      <circle cx="16.8" cy="19.2" r="1.15" />
+    <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden>
+      <path
+        d="M6.5 8.5h11l-.8 10.2a1.6 1.6 0 0 1-1.6 1.5H8.9a1.6 1.6 0 0 1-1.6-1.5L6.5 8.5Z"
+        strokeLinejoin="round"
+      />
+      <path d="M9 8.5V7a3 3 0 0 1 6 0v1.5" strokeLinecap="round" />
     </svg>
   );
 }

@@ -9,8 +9,8 @@ export default async function AdminHomepageConfigPage() {
   return (
     <main id="main-content" className="space-y-6">
       <header>
-        <h1 className="text-3xl font-semibold text-stone-900">Главная витрины</h1>
-        <p className="text-stone-600">Hero и секции homepage (constrained CMS)</p>
+        <h1 className="admin-page-title">Главная витрины</h1>
+        <p className="admin-page-lead">Hero и секции homepage</p>
       </header>
       <HomepageEditor
         initial={initial}

@@ -14,11 +14,40 @@ import { formatPriceFromMinor } from '@/lib/media';
 import { trackEvent } from '@/lib/analytics';
 import { clearCart, readCart, writeCart, type CartState } from '@/lib/cart';
 
+const IDEMPOTENCY_STORAGE_KEY = 'bouquet-one:checkout-idempotency';
+
 function newIdempotencyKey(): string {
   if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) {
     return crypto.randomUUID();
   }
   return `idemp-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+}
+
+/** One checkout submission intent — survives refresh; cleared after confirmed success. */
+function readOrCreateIdempotencyKey(): string {
+  try {
+    const existing = sessionStorage.getItem(IDEMPOTENCY_STORAGE_KEY);
+    if (existing && existing.length >= 8 && existing.length <= 128) {
+      return existing;
+    }
+  } catch {
+    /* private mode */
+  }
+  const key = newIdempotencyKey();
+  try {
+    sessionStorage.setItem(IDEMPOTENCY_STORAGE_KEY, key);
+  } catch {
+    /* ignore */
+  }
+  return key;
+}
+
+function clearCheckoutIdempotencyKey(): void {
+  try {
+    sessionStorage.removeItem(IDEMPOTENCY_STORAGE_KEY);
+  } catch {
+    /* ignore */
+  }
 }
 
 export function CheckoutForm() {
@@ -28,7 +57,11 @@ export function CheckoutForm() {
   const [validated, setValidated] = useState<CheckoutValidateResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
-  const [idempotencyKey] = useState(newIdempotencyKey);
+  const [idempotencyKey, setIdempotencyKey] = useState(newIdempotencyKey);
+
+  useEffect(() => {
+    setIdempotencyKey(readOrCreateIdempotencyKey());
+  }, []);
 
   const [fulfillmentType, setFulfillmentType] = useState<FulfillmentType>('DELIVERY');
   const [dateMode, setDateMode] = useState<'today' | 'tomorrow' | 'pick'>('tomorrow');
@@ -176,12 +209,14 @@ export function CheckoutForm() {
         fulfillmentType: created.fulfillmentType,
       });
       writeCart(clearCart());
+      clearCheckoutIdempotencyKey();
 
       try {
         sessionStorage.setItem(
           'bouquet-one:last-order',
           JSON.stringify({
             orderNumber: created.orderNumber,
+            // Short-lived success page only — not long-term localStorage.
             trackingToken: created.trackingToken,
             totalMinor: created.totalMinor,
           }),
@@ -223,10 +258,10 @@ export function CheckoutForm() {
             {options?.deliveryEnabled !== false ? (
               <button
                 type="button"
-                className={`min-h-11 rounded-[var(--radius-md)] px-4 py-2 text-sm ${
+                className={`min-h-11 rounded-full px-4 py-2 text-sm transition ${
                   fulfillmentType === 'DELIVERY'
-                    ? 'bg-brand text-brand-foreground'
-                    : 'bg-brand-soft'
+                    ? 'bg-peach text-ink shadow-[var(--shadow-soft)]'
+                    : 'bg-white ring-1 ring-border hover:bg-brand-soft'
                 }`}
                 onClick={() => {
                   setFulfillmentType('DELIVERY');
@@ -239,10 +274,10 @@ export function CheckoutForm() {
             {options?.pickupEnabled !== false ? (
               <button
                 type="button"
-                className={`min-h-11 rounded-[var(--radius-md)] px-4 py-2 text-sm ${
+                className={`min-h-11 rounded-full px-4 py-2 text-sm transition ${
                   fulfillmentType === 'PICKUP'
-                    ? 'bg-brand text-brand-foreground'
-                    : 'bg-brand-soft'
+                    ? 'bg-peach text-ink shadow-[var(--shadow-soft)]'
+                    : 'bg-white ring-1 ring-border hover:bg-brand-soft'
                 }`}
                 onClick={() => {
                   setFulfillmentType('PICKUP');
@@ -268,8 +303,10 @@ export function CheckoutForm() {
               <button
                 key={mode}
                 type="button"
-                className={`min-h-11 rounded-[var(--radius-md)] px-4 py-2 text-sm ${
-                  dateMode === mode ? 'bg-brand text-brand-foreground' : 'bg-brand-soft'
+                className={`min-h-11 rounded-full px-4 py-2 text-sm transition ${
+                  dateMode === mode
+                    ? 'bg-peach text-ink shadow-[var(--shadow-soft)]'
+                    : 'bg-white ring-1 ring-border hover:bg-brand-soft'
                 }`}
                 onClick={() => setDateMode(mode)}
               >
@@ -283,7 +320,7 @@ export function CheckoutForm() {
               required
               value={fulfillmentDate}
               onChange={(e) => setFulfillmentDate(e.target.value)}
-              className="w-full max-w-xs rounded-[var(--radius-md)] border border-border bg-surface px-3 py-2"
+              className="w-full max-w-xs rounded-[var(--radius-lg)] border border-border bg-white px-3 py-2"
             />
           ) : (
             <p className="sf-small text-muted">{fulfillmentDate}</p>
@@ -294,7 +331,7 @@ export function CheckoutForm() {
               required
               value={timeWindowId}
               onChange={(e) => setTimeWindowId(e.target.value)}
-              className="mt-1 w-full rounded-[var(--radius-md)] border border-border bg-surface px-3 py-2"
+              className="mt-1 w-full rounded-[var(--radius-lg)] border border-border bg-white px-3 py-2"
             >
               {windows.map((w) => (
                 <option key={w.id} value={w.id}>
@@ -314,7 +351,7 @@ export function CheckoutForm() {
               autoComplete="name"
               value={purchaserName}
               onChange={(e) => setPurchaserName(e.target.value)}
-              className="mt-1 w-full rounded-[var(--radius-md)] border border-border bg-surface px-3 py-2"
+              className="mt-1 w-full rounded-[var(--radius-lg)] border border-border bg-white px-3 py-2"
             />
           </label>
           <label className="block text-sm">
@@ -327,7 +364,7 @@ export function CheckoutForm() {
               placeholder="+375 29 …"
               value={purchaserPhone}
               onChange={(e) => setPurchaserPhone(e.target.value)}
-              className="mt-1 w-full rounded-[var(--radius-md)] border border-border bg-surface px-3 py-2"
+              className="mt-1 w-full rounded-[var(--radius-lg)] border border-border bg-white px-3 py-2"
             />
           </label>
         </section>
@@ -351,7 +388,7 @@ export function CheckoutForm() {
                     required
                     value={recipientName}
                     onChange={(e) => setRecipientName(e.target.value)}
-                    className="mt-1 w-full rounded-[var(--radius-md)] border border-border bg-surface px-3 py-2"
+                    className="mt-1 w-full rounded-[var(--radius-lg)] border border-border bg-white px-3 py-2"
                   />
                 </label>
                 <label className="block text-sm">
@@ -362,7 +399,7 @@ export function CheckoutForm() {
                     inputMode="tel"
                     value={recipientPhone}
                     onChange={(e) => setRecipientPhone(e.target.value)}
-                    className="mt-1 w-full rounded-[var(--radius-md)] border border-border bg-surface px-3 py-2"
+                    className="mt-1 w-full rounded-[var(--radius-lg)] border border-border bg-white px-3 py-2"
                   />
                 </label>
               </>
@@ -390,7 +427,7 @@ export function CheckoutForm() {
                   required
                   value={deliveryAddress}
                   onChange={(e) => setDeliveryAddress(e.target.value)}
-                  className="mt-1 w-full rounded-[var(--radius-md)] border border-border bg-surface px-3 py-2"
+                  className="mt-1 w-full rounded-[var(--radius-lg)] border border-border bg-white px-3 py-2"
                 />
               </label>
             ) : null}
@@ -399,7 +436,7 @@ export function CheckoutForm() {
               <input
                 value={addressDetails}
                 onChange={(e) => setAddressDetails(e.target.value)}
-                className="mt-1 w-full rounded-[var(--radius-md)] border border-border bg-surface px-3 py-2"
+                className="mt-1 w-full rounded-[var(--radius-lg)] border border-border bg-white px-3 py-2"
               />
             </label>
           </section>
@@ -421,7 +458,7 @@ export function CheckoutForm() {
               rows={3}
               value={cardMessage}
               onChange={(e) => setCardMessage(e.target.value)}
-              className="mt-1 w-full rounded-[var(--radius-md)] border border-border bg-surface px-3 py-2"
+              className="mt-1 w-full rounded-[var(--radius-lg)] border border-border bg-white px-3 py-2"
             />
           </label>
           <label className="flex items-center gap-2 text-sm">
@@ -439,13 +476,13 @@ export function CheckoutForm() {
               rows={3}
               value={customerComment}
               onChange={(e) => setCustomerComment(e.target.value)}
-              className="mt-1 w-full rounded-[var(--radius-md)] border border-border bg-surface px-3 py-2"
+              className="mt-1 w-full rounded-[var(--radius-lg)] border border-border bg-white px-3 py-2"
             />
           </label>
         </section>
 
         {validated?.issues?.length ? (
-          <ul className="space-y-2 rounded-[var(--radius-md)] border border-border bg-brand-soft/40 p-4">
+          <ul className="space-y-2 rounded-[var(--radius-lg)] border border-border bg-brand-soft/40 p-4">
             {validated.issues.map((issue, idx) => (
               <li key={`${issue.code}-${idx}`} className="sf-small text-foreground">
                 {issue.message}
@@ -463,13 +500,13 @@ export function CheckoutForm() {
         <button
           type="submit"
           disabled={pending}
-          className="inline-flex min-h-12 w-full items-center justify-center rounded-[var(--radius-md)] bg-brand px-6 py-3 text-sm font-medium text-brand-foreground hover:opacity-90 disabled:opacity-50 lg:hidden"
+          className="sf-cta inline-flex min-h-12 w-full disabled:cursor-not-allowed disabled:opacity-50 lg:hidden"
         >
           {pending ? 'Отправка…' : 'Отправить заказ'}
         </button>
       </div>
 
-      <aside className="h-fit space-y-4 rounded-[var(--radius-md)] border border-border p-5 lg:sticky lg:top-24">
+      <aside className="sf-panel h-fit space-y-4 p-5 lg:sticky lg:top-24">
         <h2 className="sf-h3">Ваш заказ</h2>
         <ul className="space-y-3">
           {(validated?.items ?? []).length > 0
@@ -509,7 +546,7 @@ export function CheckoutForm() {
         <button
           type="submit"
           disabled={pending}
-          className="hidden min-h-12 w-full items-center justify-center rounded-[var(--radius-md)] bg-brand px-6 py-3 text-sm font-medium text-brand-foreground hover:opacity-90 disabled:opacity-50 lg:inline-flex"
+          className="sf-cta hidden w-full disabled:cursor-not-allowed disabled:opacity-50 lg:inline-flex"
         >
           {pending ? 'Отправка…' : 'Отправить заказ'}
         </button>

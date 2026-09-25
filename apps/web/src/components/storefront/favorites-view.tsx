@@ -21,7 +21,9 @@ async function fetchProductBySlug(slug: string): Promise<ProductListItemDto | nu
         name: string;
         availability: ProductListItemDto['availability'];
         featured: boolean;
+        heightCm: number | null;
         price: ProductListItemDto['price'];
+        variants: Array<{ id: string; name: string; priceMinor: string; sortOrder: number }>;
         media: Array<{ url: string; isPrimary: boolean }>;
         categories: ProductListItemDto['categories'];
       };
@@ -29,6 +31,11 @@ async function fetchProductBySlug(slug: string): Promise<ProductListItemDto | nu
     };
     const product = data.product;
     const primary = product.media.find((m) => m.isPrimary) ?? product.media[0];
+    const cheapest = [...product.variants].sort((a, b) => {
+      const byOrder = a.sortOrder - b.sortOrder;
+      if (byOrder !== 0) return byOrder;
+      return Number(a.priceMinor) - Number(b.priceMinor);
+    })[0];
     return {
       id: product.id,
       slug: data.canonicalSlug || product.slug,
@@ -36,7 +43,11 @@ async function fetchProductBySlug(slug: string): Promise<ProductListItemDto | nu
       lifecycle: 'PUBLISHED',
       availability: product.availability,
       featured: product.featured,
+      heightCm: product.heightCm ?? null,
       price: product.price,
+      defaultVariant: cheapest
+        ? { id: cheapest.id, name: cheapest.name, priceMinor: cheapest.priceMinor }
+        : null,
       primaryImageUrl: primary?.url ?? null,
       categories: product.categories,
       updatedAt: new Date().toISOString(),

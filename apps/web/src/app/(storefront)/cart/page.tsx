@@ -11,11 +11,14 @@ export const metadata: Metadata = buildPageMetadata({
 
 export default function CartPage() {
   return (
-    <main id="main-content" className="sf-container py-10 md:py-14">
-      <h1 className="sf-h1">Корзина</h1>
-      <div className="mt-8 max-w-3xl">
-        <CartView />
-      </div>
+    <main id="main-content" className="sf-container-wide py-8 sm:py-10 md:py-14">
+      <header className="mb-8 max-w-2xl sm:mb-10">
+        <p className="sf-label mb-2">Оформление</p>
+        <h1 className="sf-h1">Корзина</h1>
+        <div className="sf-rule mt-4" />
+        <p className="sf-body mt-3 text-muted">Проверьте букеты и переходите к доставке.</p>
+      </header>
+      <CartView />
     </main>
   );
 }

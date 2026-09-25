@@ -161,6 +161,27 @@ function primaryMedia(product: ProductWithRelations) {
   return product.media.find((item) => item.isPrimary) ?? product.media[0] ?? null;
 }
 
+function defaultVariantForList(
+  variants: ProductWithRelations['variants'],
+): ProductListItemDto['defaultVariant'] {
+  const active = variants
+    .filter((variant) => variant.status === 'ACTIVE')
+    .slice()
+    .sort((a, b) => {
+      const byOrder = a.sortOrder - b.sortOrder;
+      if (byOrder !== 0) return byOrder;
+      if (a.priceMinor === b.priceMinor) return 0;
+      return a.priceMinor < b.priceMinor ? -1 : 1;
+    });
+  const pick = active[0];
+  if (!pick) return null;
+  return {
+    id: pick.id,
+    name: pick.name,
+    priceMinor: pick.priceMinor.toString(),
+  };
+}
+
 export function toProductAdminDto(
   product: ProductWithRelations,
   urlFor: MediaUrlResolver,
@@ -174,6 +195,7 @@ export function toProductAdminDto(
     lifecycle: product.lifecycle,
     availability: product.availability,
     featured: product.featured,
+    heightCm: product.heightCm ?? null,
     currency: product.currency,
     publishedAt: product.publishedAt?.toISOString() ?? null,
     publishAt: product.publishAt?.toISOString() ?? null,
@@ -227,6 +249,7 @@ export function toProductPublicDto(
     description: product.description,
     availability: product.availability,
     featured: product.featured,
+    heightCm: product.heightCm ?? null,
     currency: product.currency,
     price,
     seo: toProductSeo(product),
@@ -276,7 +299,9 @@ export function toProductListItemDto(
     lifecycle: product.lifecycle,
     availability: product.availability,
     featured: product.featured,
+    heightCm: product.heightCm ?? null,
     price: activeVariantPrices(product.currency, product.variants),
+    defaultVariant: defaultVariantForList(product.variants),
     primaryImageUrl: primary ? urlFor(primary.mediaAsset.storageKey) : null,
     categories: product.categories.map((link) => toTaxonomyRef(link.category)),
     updatedAt: product.updatedAt.toISOString(),

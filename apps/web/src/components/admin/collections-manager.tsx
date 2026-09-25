@@ -62,43 +62,69 @@ export function CollectionsManager({ initial, canCreate, canUpdate }: Props) {
       method: 'POST',
       body: JSON.stringify({ rules: item.rules }),
     });
-    setMatchInfo(`${item.name}: Matches ${result.matchCount} products`);
+    setMatchInfo(`${item.name}: совпадений ${result.matchCount}`);
   }
 
   return (
-    <div className="space-y-6">
+    <main id="main-content" className="space-y-6">
       <header>
-        <h1 className="text-3xl font-semibold text-stone-900">Коллекции</h1>
+        <h1 className="admin-page-title">Коллекции</h1>
+        <p className="admin-page-lead">Ручные и rule-based подборки для витрины</p>
       </header>
-      {error ? <p className="text-sm text-red-700">{error}</p> : null}
-      {matchInfo ? <p className="text-sm text-stone-700">{matchInfo}</p> : null}
+
+      {error ? <p className="admin-error">{error}</p> : null}
+      {matchInfo ? <p className="text-sm text-[var(--admin-muted)]">{matchInfo}</p> : null}
+
       {canCreate ? (
-        <form onSubmit={onCreate} className="flex flex-wrap gap-3">
-          <input name="name" required placeholder="Название" className="rounded-md border border-stone-300 px-3 py-2" />
-          <select name="type" className="rounded-md border border-stone-300 px-3 py-2">
-            <option value="MANUAL">MANUAL</option>
-            <option value="RULE_BASED">RULE_BASED</option>
-          </select>
-          <Button type="submit">Создать</Button>
+        <form onSubmit={onCreate} className="admin-toolbar">
+          <label className="admin-field">
+            <span>Название</span>
+            <input name="name" required placeholder="Название" className="admin-input w-56" />
+          </label>
+          <label className="admin-field">
+            <span>Тип</span>
+            <select name="type" className="admin-select">
+              <option value="MANUAL">MANUAL</option>
+              <option value="RULE_BASED">RULE_BASED</option>
+            </select>
+          </label>
+          <label className="admin-field">
+            <span>Slug</span>
+            <input name="slug" placeholder="slug" className="admin-input w-48" />
+          </label>
+          <Button type="submit" className="!rounded-lg !bg-[var(--admin-brand)]">
+            Создать
+          </Button>
         </form>
       ) : null}
-      <ul className="divide-y divide-stone-100 rounded-md border border-stone-200">
-        {items.map((item) => (
-          <li key={item.id} className="flex items-center justify-between px-4 py-3 text-sm">
-            <div>
-              <p className="font-medium">{item.name}</p>
-              <p className="text-stone-500">
-                {item.type} · {item.productIds.length} products · v{item.version}
-              </p>
-            </div>
-            {canUpdate && item.type === 'RULE_BASED' ? (
-              <Button type="button" onClick={() => void previewRules(item)}>
-                Preview matches
-              </Button>
-            ) : null}
-          </li>
-        ))}
-      </ul>
-    </div>
+
+      <div className="admin-panel">
+        {items.length === 0 ? (
+          <p className="admin-empty">Коллекций пока нет</p>
+        ) : (
+          <ul className="admin-list">
+            {items.map((item) => (
+              <li key={item.id} className="admin-list__item">
+                <div>
+                  <p className="font-semibold text-[var(--admin-ink)]">{item.name}</p>
+                  <p className="mt-0.5 text-xs text-[var(--admin-muted)]">
+                    {item.type} · {item.productIds.length} товаров · v{item.version}
+                  </p>
+                </div>
+                {canUpdate && item.type === 'RULE_BASED' ? (
+                  <button
+                    type="button"
+                    className="admin-btn-ghost"
+                    onClick={() => void previewRules(item)}
+                  >
+                    Preview matches
+                  </button>
+                ) : null}
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+    </main>
   );
 }

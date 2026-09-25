@@ -22,7 +22,7 @@ import { hashIp } from '../auth/crypto.util';
 import { AppConfigService } from '../config/app-config.service';
 import { PrismaService } from '../database/prisma.service';
 import { MediaService } from '../media/media.service';
-import type { ActorContext } from './catalog.actor';
+import type { ActorContext } from '../common/actor.util';
 import {
   isEffectivelyPublished,
   matchesCollectionRules,

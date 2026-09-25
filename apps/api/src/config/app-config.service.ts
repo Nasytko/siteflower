@@ -1,6 +1,10 @@
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { decodeOrderRecoveryKey } from '../orders/recovery-crypto.util';
 import type { AppEnv } from './env.validation';
+
+/** Stable 32-byte all-zero key for local/test only — never use in production. */
+const DEV_RECOVERY_KEY = Buffer.alloc(32, 0);
 
 @Injectable()
 export class AppConfigService {
@@ -67,7 +71,8 @@ export class AppConfigService {
     if (this.nodeEnv === 'development') {
       return true;
     }
-    return configured;
+    // Production / test: off unless explicitly enabled
+    return configured === true;
   }
 
   get logLevel(): AppEnv['LOG_LEVEL'] {
@@ -91,6 +96,26 @@ export class AppConfigService {
       this.config.get('SESSION_HMAC_SECRET', { infer: true }) ??
       'dev-only-session-hmac-secret'
     );
+  }
+
+  /**
+   * AES-256-GCM key for checkout idempotency recovery.
+   * Dev fallback is stable (not regenerated) so local replays work across restarts.
+   * Production must set ORDER_RECOVERY_ENCRYPTION_KEY (validated at startup).
+   */
+  get orderRecoveryEncryptionKey(): Buffer {
+    const configured = this.config.get('ORDER_RECOVERY_ENCRYPTION_KEY', { infer: true });
+    if (configured) {
+      return decodeOrderRecoveryKey(configured);
+    }
+    if (this.isProduction) {
+      throw new Error('ORDER_RECOVERY_ENCRYPTION_KEY is required in production');
+    }
+    return DEV_RECOVERY_KEY;
+  }
+
+  get orderRecoveryTtlHours(): number {
+    return this.config.get('ORDER_RECOVERY_TTL_HOURS', { infer: true });
   }
 
   get mediaStorageDriver(): 'local' | 's3' {

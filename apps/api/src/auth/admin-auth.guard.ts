@@ -9,6 +9,7 @@ import { ADMIN_SESSION_COOKIE } from '@bouquet-one/contracts';
 import type { Request } from 'express';
 import { IS_PUBLIC_KEY } from './decorators';
 import type { AuthenticatedAdmin } from './current-admin.decorator';
+import { isAdminApiPath } from './admin-path.util';
 import { SessionService } from './session.service';
 
 @Injectable()
@@ -29,8 +30,7 @@ export class AdminAuthGuard implements CanActivate {
 
     const request = context.switchToHttp().getRequest<Request & { admin?: AuthenticatedAdmin }>();
     const path = request.path ?? request.url ?? '';
-    const isAdminRoute = path.includes('/admin');
-    if (!isAdminRoute) {
+    if (!isAdminApiPath(path)) {
       return true;
     }
 

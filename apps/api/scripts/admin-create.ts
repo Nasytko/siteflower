@@ -4,11 +4,15 @@
  * Never invents a default password. Never runs during app startup.
  *
  * Usage:
+ *   pnpm admin:create --email admin@example.com --name "Director"
+ *   # interactive password prompt (preferred — avoids shell history / process list)
  *   pnpm admin:create --email admin@example.com --name "Director" --password "..."
- *   # or omit --password to be prompted (interactive)
+ *   # --password is for automation only; prefer interactive or ADMIN_BOOTSTRAP_PASSWORD in CI
  *
  * Dev-only env fallback (rejected when NODE_ENV=production):
  *   ADMIN_BOOTSTRAP_PASSWORD
+ *
+ * Never print the password.
  */
 import { createInterface } from 'node:readline/promises';
 import { stdin as input, stdout as output } from 'node:process';

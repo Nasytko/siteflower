@@ -15,7 +15,7 @@ export const HOME_CATEGORY_NAV: CategoryNavItem[] = [
     id: 'po-shtuchno',
     label: 'Цветы поштучно',
     href: '/cvety/rozy',
-    imageSrc: '/categories/po-shtuchno.png',
+    imageSrc: '/categories/po-shtuchno.jpg',
     imageAlt: 'Красная роза',
   },
   {
@@ -43,7 +43,7 @@ export const HOME_CATEGORY_NAV: CategoryNavItem[] = [
     id: 'nevesta',
     label: 'Букет невесты',
     href: '/bukety?band=200-plus',
-    imageSrc: '/categories/nevesta.png',
+    imageSrc: '/categories/nevesta.jpg',
     imageAlt: 'Свадебный букет',
   },
   {
@@ -69,34 +69,42 @@ type Props = {
 
 export function CategoryNav({ city, items = HOME_CATEGORY_NAV }: Props) {
   return (
-    <section className="sf-category-nav border-b border-border/70 bg-background">
+    <section className="sf-category-nav">
       <div className="sf-container-wide py-12 md:py-16">
-        <h2 className="sf-h2 text-center md:text-left">
-          Доставка цветов и букетов в {city}
-        </h2>
+        <div className="mx-auto max-w-xl text-center md:mx-0 md:text-left">
+          <p className="sf-label mb-2">Каталог настроений</p>
+          <h2 className="sf-h2">Доставка цветов и букетов в {city}</h2>
+          <div className="sf-rule mx-auto mt-4 md:mx-0" />
+        </div>
 
-        <ul className="sf-category-nav__list mt-10 grid grid-cols-2 gap-x-4 gap-y-8 sm:grid-cols-3 md:mt-12 md:flex md:flex-wrap md:justify-between md:gap-6 lg:gap-4">
+        <ul className="sf-category-scroller mt-8 md:mt-12">
           {items.map((item, index) => (
             <li
               key={item.id}
-              className="sf-category-nav__item flex justify-center md:flex-1 md:basis-0"
-              style={{ animationDelay: `${0.05 + index * 0.06}s` }}
+              className="sf-category-nav__item"
+              style={{ animationDelay: `${0.05 + index * 0.05}s` }}
             >
               <Link
                 href={item.href}
-                className="group flex w-full max-w-[9.5rem] flex-col items-center text-center outline-offset-4"
+                className="group relative block h-full overflow-hidden rounded-[var(--radius-lg)] outline-offset-4"
               >
-                <span className="relative mb-3 block size-[5.5rem] overflow-hidden rounded-full bg-surface shadow-[var(--shadow-soft)] transition duration-500 ease-out group-hover:-translate-y-1 group-hover:shadow-md sm:size-[6.5rem] md:size-[7rem] motion-reduce:transition-none motion-reduce:group-hover:translate-y-0">
-                  <Image
-                    src={item.imageSrc}
-                    alt={item.imageAlt}
-                    fill
-                    sizes="112px"
-                    className="object-cover transition duration-700 ease-out group-hover:scale-110 motion-reduce:transition-none motion-reduce:group-hover:scale-100"
+                <span className="relative block aspect-[3/4] bg-surface md:aspect-[4/5]">
+                  <span className="sf-category-orb absolute inset-0">
+                    <Image
+                      src={item.imageSrc}
+                      alt={item.imageAlt}
+                      fill
+                      sizes="(max-width: 768px) 42vw, 12vw"
+                      className="object-cover transition duration-700 ease-out group-hover:scale-105 motion-reduce:transition-none motion-reduce:group-hover:scale-100"
+                    />
+                  </span>
+                  <span
+                    className="absolute inset-0 bg-gradient-to-t from-ink/55 via-ink/10 to-transparent"
+                    aria-hidden
                   />
-                </span>
-                <span className="sf-small max-w-[8.5rem] font-medium leading-snug text-foreground transition group-hover:text-brand">
-                  {item.label}
+                  <span className="absolute inset-x-0 bottom-0 p-2.5 text-left font-[family-name:var(--font-display)] text-[0.9rem] leading-snug tracking-wide text-white drop-shadow-sm sm:p-3 sm:text-[0.95rem] md:p-3.5 md:text-base">
+                    {item.label}
+                  </span>
                 </span>
               </Link>
             </li>

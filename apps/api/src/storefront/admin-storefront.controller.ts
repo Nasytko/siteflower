@@ -4,7 +4,7 @@ import type { Request } from 'express';
 import { CurrentAdmin, type AuthenticatedAdmin } from '../auth/current-admin.decorator';
 import { RequirePermissions } from '../auth/decorators';
 import { HomepageConfigService } from './homepage-config.service';
-import { actorFrom } from './storefront.actor';
+import { actorFrom } from '../common/actor.util';
 import { UpdateHomepageConfigDto, UpdateStorefrontSettingsDto } from './storefront.dto';
 import { StorefrontSettingsService } from './storefront-settings.service';
 

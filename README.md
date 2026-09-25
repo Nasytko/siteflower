@@ -2,34 +2,31 @@
 
 Flower commerce platform for Grodno, Belarus.
 
-This repository is a **modular monolith** monorepo. The storefront stays simple for customers; the platform underneath is built for long-term reliability and extension (admin/CMS, payments, ERP, mobile apps, AI assistants).
+Modular monolith: public storefront + admin CMS + commerce API. Orders are accepted without depending on ERP availability (see [docs/commerce-invariants.md](docs/commerce-invariants.md)).
 
-> Current phase: **Foundation only**. No catalog, cart, checkout, payments, ERP, or AI yet.
+> Current status: **Phase 4 commerce** (catalog, cart, checkout, tracking, admin orders) with Phase 4.2 security hardening. Payments / ERP / customer accounts are out of scope.
 
 ## Architecture (high level)
 
 ```
 Storefront (Next.js) ─┐
 Admin (/admin)        ├─→ Commerce API (NestJS) ─→ PostgreSQL
-Future Mobile App     ┘         │
-                                ├─→ future ERP (outbox)
-                                ├─→ future payments
-                                └─→ future AI gateway
+                      ┘         │
+                                ├─→ outbox (future ERP / notifications)
+                                └─→ local media (masters + derivatives)
 ```
-
-The customer website never depends on ERP availability for accepting orders. See [docs/commerce-invariants.md](docs/commerce-invariants.md).
 
 ## Repository layout
 
 ```
-apps/web          Next.js App Router — storefront + future /admin
+apps/web          Next.js App Router — storefront + /admin
 apps/api          NestJS REST API — /api/v1
-packages/database Prisma 7 + PostgreSQL conventions
+packages/database Prisma 7 + PostgreSQL
 packages/contracts Shared API contract types
-packages/ui       Shared UI primitives (shadcn-ready)
+packages/ui       Shared UI primitives
 packages/config   Shared TypeScript / ESLint baselines
 docs/             Architecture and operational documentation
-e2e/              Playwright smoke tests
+e2e/              Playwright (smoke, storefront, commerce)
 ```
 
 ## Prerequisites
@@ -46,14 +43,18 @@ cp .env.example .env
 docker compose up -d
 pnpm db:generate
 pnpm db:migrate
-pnpm dev
+pnpm admin:create
+pnpm seed:dev-catalog
+pnpm build
+pnpm --filter @bouquet-one/api start
+pnpm --filter @bouquet-one/web start
 ```
 
 Local Postgres is published on host port **5433** by default (see `POSTGRES_PORT` / `DATABASE_URL` in `.env.example`).
 
 - Web: http://localhost:3000
 - API health: http://localhost:3001/api/v1/health
-- Swagger (dev): http://localhost:3001/docs
+- Swagger (dev only): http://localhost:3001/docs
 
 ## Quality gates
 
@@ -64,10 +65,16 @@ pnpm test
 pnpm build
 ```
 
-Optional smoke E2E (requires prior `pnpm build`):
+E2E (requires built apps; system Chrome recommended on Windows):
 
 ```bash
-pnpm test:e2e
+PLAYWRIGHT_USE_SYSTEM_CHROME=true pnpm test:e2e
+```
+
+Optional visual screenshot matrix:
+
+```bash
+RUN_VISUAL_QA=true PLAYWRIGHT_USE_SYSTEM_CHROME=true pnpm exec playwright test e2e/visual-qa.spec.ts
 ```
 
 ## Documentation
@@ -76,14 +83,12 @@ pnpm test:e2e
 | --- | --- |
 | [docs/architecture.md](docs/architecture.md) | System design and module boundaries |
 | [docs/development.md](docs/development.md) | Local workflow |
-| [docs/database.md](docs/database.md) | Prisma/PostgreSQL conventions |
-| [docs/security.md](docs/security.md) | Security baseline and future auth |
-| [docs/seo.md](docs/seo.md) | SEO foundation |
-| [docs/admin-cms.md](docs/admin-cms.md) | Future admin/CMS design |
-| [docs/site-health.md](docs/site-health.md) | Future Site Health checks |
+| [docs/orders.md](docs/orders.md) | Order lifecycle + idempotency |
+| [docs/checkout.md](docs/checkout.md) | Checkout rules |
+| [docs/security.md](docs/security.md) | Security baseline |
+| [docs/security-hardening.md](docs/security-hardening.md) | Phase 4.2 hardening decisions |
+| [docs/production-readiness.md](docs/production-readiness.md) | Production checklist |
 | [docs/commerce-invariants.md](docs/commerce-invariants.md) | Non-negotiable commerce rules |
-| [docs/media.md](docs/media.md) | Future media/storage architecture |
-| [docs/ux-principles.md](docs/ux-principles.md) | Customer UX constraint |
 
 ## License
 

@@ -27,8 +27,8 @@ export default async function AdminAuditPage({
   return (
     <main id="main-content" className="space-y-6">
       <header>
-        <h1 className="text-3xl font-semibold text-stone-900">Аудит</h1>
-        <p className="text-stone-600">Журнал административных действий.</p>
+        <h1 className="admin-page-title">Аудит</h1>
+        <p className="admin-page-lead">Журнал административных действий</p>
       </header>
       <AuditViewer initial={data} currentAction={params.action} />
     </main>

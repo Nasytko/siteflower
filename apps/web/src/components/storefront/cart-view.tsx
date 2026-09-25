@@ -39,10 +39,13 @@ export function CartView() {
 
   if (cart.items.length === 0) {
     return (
-      <div className="space-y-4">
-        <p className="sf-body text-muted">Корзина пуста</p>
-        <Link href="/bukety" className="text-sm font-medium text-brand hover:underline">
-          Перейти в каталог
+      <div className="overflow-hidden rounded-[var(--radius-xl)] border border-border bg-gradient-to-br from-[#f6ecec] via-white to-[#e8f0ed] px-6 py-12 text-center shadow-[var(--shadow-soft)] sm:px-10 sm:py-14">
+        <p className="sf-display-script text-2xl text-brand sm:text-3xl">корзина ждёт букет</p>
+        <p className="sf-body mx-auto mt-3 max-w-sm text-muted">
+          Выберите свежий букет — мы бережно соберём и доставим.
+        </p>
+        <Link href="/bukety" className="sf-cta-soft mt-8 inline-flex">
+          Смотреть каталог
         </Link>
       </div>
     );
@@ -52,61 +55,95 @@ export function CartView() {
     const unit = BigInt(line.unitPriceMinor ?? '0');
     return sum + unit * BigInt(line.quantity);
   }, 0n);
+  const count = cartItemCount(cart);
 
   return (
-    <div className="space-y-8">
-      <ul className="divide-y divide-border">
+    <div className="grid gap-8 lg:grid-cols-[1fr_20rem] lg:items-start lg:gap-10">
+      <ul className="space-y-4">
         {cart.items.map((line) => {
           const unit = BigInt(line.unitPriceMinor ?? '0');
           const lineTotal = unit * BigInt(line.quantity);
           return (
-            <li key={line.variantId} className="flex gap-4 py-5">
-              <div className="relative h-24 w-20 shrink-0 overflow-hidden rounded-[var(--radius-md)] bg-brand-soft">
+            <li
+              key={line.variantId}
+              className="flex gap-4 rounded-[var(--radius-xl)] border border-border bg-white p-3 shadow-[var(--shadow-soft)] transition hover:border-brand/25 hover:shadow-[var(--shadow-lift)] sm:gap-5 sm:p-4"
+            >
+              <Link
+                href={`/bukety/${line.productSlug ?? ''}`}
+                className="relative h-28 w-24 shrink-0 overflow-hidden rounded-[var(--radius-lg)] bg-gradient-to-br from-accent-soft to-brand-soft sm:h-32 sm:w-28"
+              >
                 {line.primaryImageUrl ? (
                   <Image
                     src={line.primaryImageUrl}
                     alt={line.productName ?? ''}
                     fill
-                    className="object-cover"
-                    sizes="80px"
+                    className="object-cover transition duration-500 hover:scale-105"
+                    sizes="112px"
                   />
                 ) : null}
-              </div>
-              <div className="min-w-0 flex-1">
-                <Link
-                  href={`/bukety/${line.productSlug ?? ''}`}
-                  className="sf-h3 text-foreground hover:text-brand"
-                >
-                  {line.productName ?? 'Букет'}
-                </Link>
-                <p className="sf-small mt-1 text-muted">{line.variantName}</p>
-                <p className="sf-small mt-1 tabular-nums text-muted">
-                  {formatPriceFromMinor(unit.toString())} × {line.quantity}
+              </Link>
+
+              <div className="flex min-w-0 flex-1 flex-col">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <Link
+                      href={`/bukety/${line.productSlug ?? ''}`}
+                      className="sf-h3 text-foreground transition hover:text-brand"
+                    >
+                      {line.productName ?? 'Букет'}
+                    </Link>
+                    {line.variantName ? (
+                      <p className="sf-small mt-1 text-muted">{line.variantName}</p>
+                    ) : null}
+                  </div>
+                  <p className="sf-price shrink-0 text-brand">
+                    {formatPriceFromMinor(lineTotal.toString())}
+                  </p>
+                </div>
+
+                <p className="sf-small mt-2 tabular-nums text-muted">
+                  {formatPriceFromMinor(unit.toString())} за шт.
                 </p>
-                <div className="mt-3 flex flex-wrap items-center gap-3">
-                  <label className="sf-small text-muted">
-                    Кол-во
-                    <input
-                      type="number"
-                      inputMode="numeric"
-                      min={1}
-                      max={20}
-                      value={line.quantity}
-                      onChange={(e) =>
+
+                <div className="mt-auto flex flex-wrap items-center justify-between gap-3 pt-4">
+                  <div
+                    className="inline-flex items-center rounded-full bg-surface ring-1 ring-border"
+                    role="group"
+                    aria-label="Количество"
+                  >
+                    <button
+                      type="button"
+                      className="inline-flex h-10 w-10 items-center justify-center rounded-full text-lg text-foreground transition hover:bg-brand-soft"
+                      aria-label="Меньше"
+                      onClick={() =>
                         update(
-                          setCartQuantity(
-                            cart,
-                            line.variantId,
-                            Math.max(1, Math.min(20, Number(e.target.value) || 1)),
-                          ),
+                          setCartQuantity(cart, line.variantId, Math.max(1, line.quantity - 1)),
                         )
                       }
-                      className="ml-2 w-16 rounded-[var(--radius-md)] border border-border bg-surface px-2 py-1.5"
-                    />
-                  </label>
+                    >
+                      −
+                    </button>
+                    <span className="min-w-8 text-center text-sm font-semibold tabular-nums">
+                      {line.quantity}
+                    </span>
+                    <button
+                      type="button"
+                      className="inline-flex h-10 w-10 items-center justify-center rounded-full text-lg text-foreground transition hover:bg-brand-soft"
+                      aria-label="Больше"
+                      disabled={line.quantity >= 20}
+                      onClick={() =>
+                        update(
+                          setCartQuantity(cart, line.variantId, Math.min(20, line.quantity + 1)),
+                        )
+                      }
+                    >
+                      +
+                    </button>
+                  </div>
+
                   <button
                     type="button"
-                    className="sf-small text-muted underline-offset-2 hover:text-brand hover:underline"
+                    className="sf-small rounded-full px-3 py-2 text-muted transition hover:bg-accent-soft hover:text-accent"
                     onClick={() => {
                       trackEvent('remove_from_cart', { variantId: line.variantId });
                       update(removeFromCart(cart, line.variantId));
@@ -116,36 +153,46 @@ export function CartView() {
                   </button>
                 </div>
               </div>
-              <p className="sf-price shrink-0 tabular-nums">
-                {formatPriceFromMinor(lineTotal.toString())}
-              </p>
             </li>
           );
         })}
       </ul>
 
-      <div className="flex flex-col gap-4 border-t border-border pt-6 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <p className="sf-label">Итого</p>
-          <p className="sf-price mt-1 text-xl">{formatPriceFromMinor(subtotal.toString())}</p>
-          <p className="sf-small mt-1 text-muted">Точная сумма подтверждается при оформлении</p>
+      <aside className="rounded-[var(--radius-xl)] border border-border bg-gradient-to-b from-brand to-ink p-5 text-brand-foreground shadow-[var(--shadow-lift)] sm:p-6 lg:sticky lg:top-24">
+        <p className="sf-label text-brand-foreground/55">Ваш заказ</p>
+        <p className="mt-2 font-[family-name:var(--font-display)] text-2xl tracking-wide">
+          {count} {count === 1 ? 'букет' : count < 5 ? 'букета' : 'букетов'}
+        </p>
+        <div className="mt-5 flex items-end justify-between gap-3 border-t border-white/15 pt-5">
+          <div>
+            <p className="sf-label text-brand-foreground/55">Итого</p>
+            <p className="sf-price mt-1 text-2xl text-white">
+              {formatPriceFromMinor(subtotal.toString())}
+            </p>
+          </div>
         </div>
-        <div className="flex flex-wrap gap-3">
+        <p className="sf-small mt-3 text-brand-foreground/60">
+          Точная сумма подтверждается при оформлении
+        </p>
+        <Link href="/checkout" className="sf-cta-soft mt-6 w-full">
+          Оформить заказ
+        </Link>
+        <div className="mt-4 flex flex-wrap items-center justify-between gap-2">
+          <Link
+            href="/bukety"
+            className="sf-small text-brand-foreground/70 underline-offset-2 hover:text-white hover:underline"
+          >
+            ← В каталог
+          </Link>
           <button
             type="button"
-            className="sf-small text-muted underline-offset-2 hover:underline"
+            className="sf-small text-brand-foreground/55 underline-offset-2 hover:text-white hover:underline"
             onClick={() => update(clearCart())}
           >
             Очистить
           </button>
-          <Link
-            href="/checkout"
-            className="inline-flex min-h-11 items-center justify-center rounded-[var(--radius-md)] bg-brand px-6 py-3 text-sm font-medium text-brand-foreground hover:opacity-90"
-          >
-            Оформить заказ
-          </Link>
         </div>
-      </div>
+      </aside>
     </div>
   );
 }

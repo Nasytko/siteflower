@@ -11,8 +11,8 @@ export default async function AdminStorefrontSettingsPage() {
   return (
     <main id="main-content" className="space-y-6">
       <header>
-        <h1 className="text-3xl font-semibold text-stone-900">Настройки витрины</h1>
-        <p className="text-stone-600">Контакты, доставка и публичные тексты магазина</p>
+        <h1 className="admin-page-title">Настройки витрины</h1>
+        <p className="admin-page-lead">Контакты, доставка и публичные тексты магазина</p>
       </header>
       <StorefrontSettingsEditor
         initial={initial}

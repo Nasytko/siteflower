@@ -21,7 +21,16 @@ export default function robots(): MetadataRoute.Robots {
       userAgent: '*',
       allow: '/',
       // Filter query URLs (?flower=…) are handled via noindex metadata — robots cannot target query strings reliably.
-      disallow: ['/admin', '/api', '/favorites', '/preview'],
+      // Tracking bearer URLs and checkout surfaces must never be indexed.
+      disallow: [
+        '/admin',
+        '/api',
+        '/favorites',
+        '/preview',
+        '/order',
+        '/checkout',
+        '/cart',
+      ],
     },
     sitemap: `${siteUrl}/sitemap.xml`,
     host: siteUrl,

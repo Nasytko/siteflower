@@ -19,8 +19,8 @@ export default async function AdminUsersPage() {
   return (
     <main id="main-content" className="space-y-6">
       <header>
-        <h1 className="text-3xl font-semibold text-stone-900">Пользователи</h1>
-        <p className="text-stone-600">Управление администраторами магазина.</p>
+        <h1 className="admin-page-title">Пользователи</h1>
+        <p className="admin-page-lead">Управление администраторами магазина</p>
       </header>
       <UsersManager
         initial={data}

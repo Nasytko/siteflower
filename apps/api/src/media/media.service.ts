@@ -20,6 +20,11 @@ const DERIVATIVE_FORMATS: Array<{ format: MediaFormat; mime: string; sharp: 'web
   { format: 'AVIF', mime: 'image/avif', sharp: 'avif' },
 ];
 
+/** Decompression-bomb guard: ~25MP covers high-res bouquet photography. */
+export const MEDIA_MAX_INPUT_PIXELS = 25_000_000;
+/** Max edge after rotate — boutique product photos. */
+export const MEDIA_MAX_DIMENSION = 6000;
+
 @Injectable()
 export class MediaService {
   constructor(
@@ -33,6 +38,7 @@ export class MediaService {
   }
 
   async uploadImage(buffer: Buffer, originalName?: string) {
+    void originalName;
     if (buffer.byteLength > this.appConfig.mediaMaxBytes) {
       throw new BadRequestException('File exceeds maximum allowed size');
     }
@@ -43,17 +49,38 @@ export class MediaService {
     }
     const format = ALLOWED.get(detected.mime)!;
 
-    const image = sharp(buffer, { failOn: 'none' }).rotate();
+    let image: ReturnType<typeof sharp>;
+    try {
+      image = sharp(buffer, {
+        failOn: 'error',
+        limitInputPixels: MEDIA_MAX_INPUT_PIXELS,
+      }).rotate();
+    } catch {
+      throw new BadRequestException('Invalid or unsupported image');
+    }
+
     const meta = await image.metadata();
+    const width = meta.width ?? 0;
+    const height = meta.height ?? 0;
+    if (width <= 0 || height <= 0) {
+      throw new BadRequestException('Invalid image dimensions');
+    }
+    if (width > MEDIA_MAX_DIMENSION || height > MEDIA_MAX_DIMENSION) {
+      throw new BadRequestException(
+        `Image dimensions exceed ${MEDIA_MAX_DIMENSION}×${MEDIA_MAX_DIMENSION}`,
+      );
+    }
+    if (width * height > MEDIA_MAX_INPUT_PIXELS) {
+      throw new BadRequestException('Image pixel count exceeds allowed limit');
+    }
+
     const checksum = createHash('sha256').update(buffer).digest('hex');
     const assetId = randomUUID();
     const ext = detected.ext;
     const masterKey = `masters/${assetId}.${ext}`;
 
-    const masterBuffer = await image
-      .clone()
-      .withMetadata({ exif: undefined, icc: undefined })
-      .toBuffer();
+    // Strip EXIF/XMP/IPTC — do not call withMetadata().
+    const masterBuffer = await image.clone().toBuffer();
 
     await this.storage.put({
       key: masterKey,
@@ -68,8 +95,8 @@ export class MediaService {
         mimeType: detected.mime,
         format,
         byteSize: masterBuffer.byteLength,
-        width: meta.width ?? null,
-        height: meta.height ?? null,
+        width,
+        height,
         checksumSha256: checksum,
       },
     });
@@ -81,13 +108,13 @@ export class MediaService {
       byteSize: number;
     }> = [];
 
-    const sourceWidth = meta.width ?? 0;
-    for (const width of DERIVATIVE_WIDTHS) {
-      if (sourceWidth > 0 && sourceWidth < width) continue;
+    const sourceWidth = width;
+    for (const dw of DERIVATIVE_WIDTHS) {
+      if (sourceWidth > 0 && sourceWidth < dw) continue;
       for (const fmt of DERIVATIVE_FORMATS) {
         try {
-          let pipeline = sharp(masterBuffer).resize({
-            width,
+          let pipeline = sharp(masterBuffer, { limitInputPixels: MEDIA_MAX_INPUT_PIXELS }).resize({
+            width: dw,
             withoutEnlargement: true,
             fit: 'inside',
           });
@@ -96,10 +123,10 @@ export class MediaService {
               ? pipeline.webp({ quality: 82 })
               : pipeline.avif({ quality: 55 });
           const out = await pipeline.toBuffer();
-          const key = `derivatives/${assetId}/w${width}.${fmt.sharp}`;
+          const key = `derivatives/${assetId}/w${dw}.${fmt.sharp}`;
           await this.storage.put({ key, body: out, contentType: fmt.mime });
           derivatives.push({
-            width,
+            width: dw,
             format: fmt.format,
             storageKey: key,
             byteSize: out.byteLength,
@@ -122,7 +149,6 @@ export class MediaService {
       });
     }
 
-    void originalName;
     return this.getAssetDto(asset.id);
   }
 

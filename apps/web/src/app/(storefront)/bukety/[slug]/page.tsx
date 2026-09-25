@@ -88,7 +88,7 @@ export default async function ProductPage({ params }: { params: Params }) {
   const substitutionNote = settings?.substitutionNote ?? null;
 
   return (
-    <main id="main-content" className="sf-container py-8 md:py-12">
+    <main id="main-content" className="sf-container py-6 sm:py-8 md:py-12">
       <script
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: serializeJsonLd(productLd) }}
@@ -107,8 +107,12 @@ export default async function ProductPage({ params }: { params: Params }) {
         ]}
       />
 
-      <div className="grid gap-10 lg:grid-cols-2 lg:gap-14">
-        <ProductGallery media={product.media} productName={product.name} />
+      <div className="grid gap-8 lg:grid-cols-2 lg:gap-14">
+        <ProductGallery
+          media={product.media}
+          productName={product.name}
+          heightCm={product.heightCm}
+        />
 
         <div className="relative">
           <div className="absolute right-0 top-0">
@@ -121,7 +125,25 @@ export default async function ProductPage({ params }: { params: Params }) {
             <p className="sf-body mt-3 text-muted">{product.shortDescription}</p>
           ) : null}
 
-          <div className="mt-6">
+          <ul className="mt-5 flex flex-wrap gap-2">
+            <li className="rounded-[var(--radius-sm)] bg-surface px-2.5 py-1.5 text-sm text-foreground ring-1 ring-border">
+              Сборка в день заказа
+            </li>
+            <li className="rounded-[var(--radius-sm)] bg-surface px-2.5 py-1.5 text-sm text-foreground ring-1 ring-border">
+              Доставка или самовывоз
+            </li>
+            {product.heightCm != null ? (
+              <li className="rounded-[var(--radius-sm)] bg-surface px-2.5 py-1.5 text-sm font-semibold text-foreground ring-1 ring-border">
+                Высота ≈ {product.heightCm} см
+              </li>
+            ) : (
+              <li className="rounded-[var(--radius-sm)] bg-surface px-2.5 py-1.5 text-sm text-foreground ring-1 ring-border">
+                Несколько размеров
+              </li>
+            )}
+          </ul>
+
+          <div className="mt-6 pb-24 lg:pb-0">
             <ProductPurchasePanel
               product={product}
               variants={product.variants}

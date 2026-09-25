@@ -30,6 +30,8 @@ async function bootstrap(): Promise<void> {
   app.use(
     helmet({
       crossOriginResourcePolicy: { policy: 'cross-origin' },
+      referrerPolicy: { policy: 'strict-origin-when-cross-origin' },
+      contentSecurityPolicy: false, // deliberate: full CSP needs separate design for Next/admin/media
     }),
   );
 

@@ -1,7 +1,6 @@
 import { Module } from '@nestjs/common';
 import { APP_FILTER, APP_GUARD } from '@nestjs/core';
 import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
-import { randomUUID } from 'node:crypto';
 import { LoggerModule } from 'nestjs-pino';
 import { AdminUsersModule } from './admin-users/admin-users.module';
 import { AdminAuthGuard } from './auth/admin-auth.guard';
@@ -11,7 +10,7 @@ import { PermissionsGuard } from './auth/permissions.guard';
 import { AuditModule } from './audit/audit.module';
 import { CatalogModule } from './catalog/catalog.module';
 import { GlobalExceptionFilter } from './common/filters/global-exception.filter';
-import { setRequestId } from './common/middleware/request-id.middleware';
+import { sanitizeRequestId, setRequestId } from './common/middleware/request-id.middleware';
 import { AppConfigModule } from './config/app-config.module';
 import { AppConfigService } from './config/app-config.service';
 import { DatabaseModule } from './database/database.module';
@@ -19,6 +18,15 @@ import { HealthModule } from './health/health.module';
 import { MediaModule } from './media/media.module';
 import { StorefrontModule } from './storefront/storefront.module';
 import { OrdersModule } from './orders/orders.module';
+
+/** Redact tracking bearer tokens embedded in request URLs. */
+function sanitizeLoggedUrl(url: string | undefined): string | undefined {
+  if (!url) return url;
+  return url.replace(
+    /\/orders\/track\/[^/?#]+/gi,
+    '/orders/track/[REDACTED]',
+  );
+}
 
 @Module({
   imports: [
@@ -33,10 +41,7 @@ import { OrdersModule } from './orders/orders.module';
           genReqId: (req, res) => {
             const header = req.headers['x-request-id'];
             const existing = Array.isArray(header) ? header[0] : header;
-            const requestId =
-              existing && existing.trim().length > 0
-                ? existing.trim()
-                : randomUUID();
+            const requestId = sanitizeRequestId(existing);
             setRequestId(req as never, requestId);
             res.setHeader('x-request-id', requestId);
             return requestId;
@@ -62,6 +67,16 @@ import { OrdersModule } from './orders/orders.module';
               'req.params.token',
             ],
             remove: true,
+          },
+          serializers: {
+            req(req) {
+              const serialized = {
+                id: req.id,
+                method: req.method,
+                url: sanitizeLoggedUrl(req.url),
+              };
+              return serialized;
+            },
           },
           customProps: (req) => ({
             requestId: (req as { requestId?: string }).requestId,

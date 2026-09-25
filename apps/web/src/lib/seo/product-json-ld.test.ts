@@ -12,6 +12,7 @@ function baseProduct(overrides: Partial<ProductPublicDto> = {}): ProductPublicDt
     description: null,
     availability: 'AVAILABLE',
     featured: true,
+    heightCm: null,
     currency: 'BYN',
     price: { currency: 'BYN', minMinor: '8900', maxMinor: '14900', single: false, label: 'от 89,00 BYN' },
     seo: {

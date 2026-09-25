@@ -12,8 +12,8 @@ export default async function AdminProductsPage() {
   return (
     <main id="main-content" className="space-y-6">
       <header>
-        <h1 className="text-3xl font-semibold text-stone-900">Товары</h1>
-        <p className="text-stone-600">Каталог букетов и коммерческих предложений</p>
+        <h1 className="admin-page-title">Товары</h1>
+        <p className="admin-page-lead">Каталог букетов и коммерческих предложений</p>
       </header>
       <ProductsManager
         initial={initial}

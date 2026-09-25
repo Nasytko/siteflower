@@ -8,11 +8,12 @@ const webUrl = process.env.PLAYWRIGHT_WEB_URL ?? 'http://127.0.0.1:3000';
 test.describe('storefront catalog journey', () => {
   test('home → catalog → filter → product → variant → favorite → favorites', async ({ page }) => {
     await page.goto(webUrl);
-    await expect(page.getByRole('heading', { name: 'БУКЕТ №1' }).first()).toBeVisible();
+    await expect(page.getByText(/БУКЕТ\s*№?\s*1/i).first()).toBeVisible();
+    await expect(page.locator('#main-content')).toBeVisible();
 
     await page.goto(`${webUrl}/bukety`);
     await expect(page).toHaveURL(/\/bukety/);
-    await expect(page.getByRole('heading', { name: 'Каталог букетов' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Букеты' })).toBeVisible();
 
     // Search from header
     await page.getByRole('button', { name: /Найти букет/i }).click();
@@ -21,7 +22,7 @@ test.describe('storefront catalog journey', () => {
     await page.keyboard.press('Escape');
 
     await page.goto(`${webUrl}/bukety?band=100-150`);
-    await expect(page.getByRole('heading', { name: 'Каталог букетов' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Букеты' })).toBeVisible();
 
     const productLink = page.locator('main a[href^="/bukety/"]').first();
     const href = await productLink.getAttribute('href');
@@ -30,11 +31,12 @@ test.describe('storefront catalog journey', () => {
     await page.goto(`${webUrl}${href}`);
     await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
 
-    const variantOption = page.getByRole('option').nth(1);
+    const variantOption = page.getByRole('listbox', { name: 'Варианты букета' }).getByRole('option').nth(1);
     if (await variantOption.count()) {
       await variantOption.click();
       await expect(variantOption).toHaveAttribute('aria-selected', 'true');
     }
+    await expect(page.getByRole('listbox', { name: 'Упаковка' })).toBeVisible();
 
     const favorite = page.locator('main').first().locator('[data-favorite]').first();
     await favorite.click();
@@ -52,10 +54,10 @@ test.describe('storefront catalog journey', () => {
   test('mobile home → catalog → filters → product', async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 });
     await page.goto(webUrl);
-    await expect(page.getByRole('heading', { name: 'БУКЕТ №1' }).first()).toBeVisible();
+    await expect(page.getByText(/БУКЕТ\s*№?\s*1/i).first()).toBeVisible();
 
     await page.goto(`${webUrl}/bukety`);
-    await expect(page.getByRole('heading', { name: 'Каталог букетов' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Букеты' })).toBeVisible();
     await page.getByRole('button', { name: 'Фильтры' }).click();
     await expect(page.getByRole('dialog', { name: 'Фильтры каталога' })).toBeVisible();
     await page.getByRole('button', { name: 'Показать' }).click();

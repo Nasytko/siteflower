@@ -43,8 +43,8 @@ export default async function AdminOrdersPage({
   return (
     <main id="main-content" className="space-y-6">
       <header>
-        <h1 className="text-3xl font-semibold text-stone-900">Заказы</h1>
-        <p className="text-stone-600">Операционный список на дату выполнения</p>
+        <h1 className="admin-page-title">Заказы</h1>
+        <p className="admin-page-lead">Операционный список на дату выполнения</p>
       </header>
       <Suspense fallback={<p className="text-stone-500">Загрузка…</p>}>
         <OrdersManager

@@ -68,14 +68,5 @@ jobs:
       - name: Run migrations
         run: pnpm db:migrate:deploy
 
-      - name: Lint
-        run: pnpm lint
-
-      - name: Typecheck
-        run: pnpm typecheck
-
-      - name: Test
-        run: pnpm test
-
-      - name: Build
-        run: pnpm build
+      - name: Lint, typecheck, test, build
+        run: pnpm exec turbo run lint typecheck test build

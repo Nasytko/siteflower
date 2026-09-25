@@ -20,7 +20,7 @@ import type { Request } from 'express';
 import { memoryStorage } from 'multer';
 import { CurrentAdmin, type AuthenticatedAdmin } from '../auth/current-admin.decorator';
 import { RequirePermissions } from '../auth/decorators';
-import { actorFrom } from './catalog.actor';
+import { actorFrom } from '../common/actor.util';
 import {
   CreateProductDto,
   ExpectedVersionDto,

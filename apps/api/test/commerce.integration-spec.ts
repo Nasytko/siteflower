@@ -62,7 +62,10 @@ describe('Commerce orders (integration)', () => {
     await pool.query('DELETE FROM order_items');
     await pool.query('DELETE FROM orders');
     await pool.query('DELETE FROM order_number_sequences');
-    await pool.query('DELETE FROM audit_logs WHERE action LIKE \'ORDER_%\' OR action LIKE \'FULFILLMENT_%\'');
+    await pool.query('DELETE FROM idempotency_records');
+    await pool.query(
+      `DELETE FROM audit_logs WHERE action::text LIKE 'ORDER_%' OR action::text LIKE 'FULFILLMENT_%'`,
+    );
     await pool.query('DELETE FROM admin_sessions');
     // Keep catalog data for shared local DB / Playwright; only remove leftover commerce test products.
     await pool.query(`DELETE FROM product_media WHERE product_id IN (SELECT id FROM products WHERE slug LIKE 'commerce-ameli-%')`);
@@ -278,23 +281,42 @@ describe('Commerce orders (integration)', () => {
     expect(events.rows.map((r: { type: string }) => r.type)).toContain('ORDER_CREATED');
   });
 
-  it('replays same idempotency key and conflicts on different payload', async () => {
+  it('replays same idempotency key with recoverable tracking token and conflicts on different payload', async () => {
     const key = `idemp-replay-${randomBytes(6).toString('hex')}`;
     const body = orderPayload({ idempotencyKey: key });
     const first = await request(base).post('/api/v1/orders').send(body).expect(201);
+    expect(first.body.trackingToken).toBeTruthy();
+
+    // Lost-response recovery: same key + same payload must return usable original token
     const second = await request(base).post('/api/v1/orders').send(body).expect(201);
     expect(second.body.id).toBe(first.body.id);
+    expect(second.body.orderNumber).toBe(first.body.orderNumber);
     expect(second.body.replayed).toBe(true);
-    expect(second.body.trackingToken).toBeNull();
+    expect(second.body.trackingToken).toBe(first.body.trackingToken);
+    expect(second.body.trackingPath).toBe(`/order/${first.body.trackingToken}`);
+
+    await request(base).get(`/api/v1/orders/track/${second.body.trackingToken}`).expect(200);
+
+    const idemp = await pool.query(
+      `SELECT request_hash, encryption_key_version,
+              octet_length(encrypted_recovery_payload) AS blob_len
+       FROM idempotency_records WHERE scope = 'orders.create' AND idempotency_key = $1`,
+      [key],
+    );
+    expect(idemp.rows).toHaveLength(1);
+    expect(idemp.rows[0].blob_len).toBeGreaterThan(20);
+    // Ciphertext must not equal plaintext token
+    expect(String(idemp.rows[0].request_hash)).not.toContain(first.body.trackingToken);
 
     const conflict = await request(base)
       .post('/api/v1/orders')
       .send({ ...body, purchaserName: 'Другой Клиент' })
       .expect(409);
     expect(conflict.body.message).toMatch(/Idempotency|payload/i);
+    expect(conflict.body.trackingToken).toBeUndefined();
   });
 
-  it('creates exactly one order for concurrent identical idempotency keys', async () => {
+  it('creates exactly one order for concurrent identical idempotency keys with recoverable tokens', async () => {
     const key = `idemp-race-${randomBytes(6).toString('hex')}`;
     const body = orderPayload({ idempotencyKey: key });
     const results = await Promise.all(
@@ -304,10 +326,17 @@ describe('Commerce orders (integration)', () => {
     expect(ok.length).toBe(8);
     const ids = new Set(ok.map((r) => r.body.id));
     expect(ids.size).toBe(1);
+    const tokens = new Set(ok.map((r) => r.body.trackingToken).filter(Boolean));
+    expect(tokens.size).toBe(1);
     const count = await pool.query(`SELECT COUNT(*)::int AS c FROM orders WHERE idempotency_key = $1`, [
       key,
     ]);
     expect(count.rows[0].c).toBe(1);
+    const idempCount = await pool.query(
+      `SELECT COUNT(*)::int AS c FROM idempotency_records WHERE idempotency_key = $1`,
+      [key],
+    );
+    expect(idempCount.rows[0].c).toBe(1);
   });
 
   it('allocates unique order numbers under concurrency', async () => {

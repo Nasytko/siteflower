@@ -92,6 +92,12 @@ export function ProductEditor({ product, taxonomies, canUpdate, canPublish }: Pr
           description: form.get('description') || null,
           availability: form.get('availability'),
           featured: form.get('featured') === 'on',
+          heightCm: (() => {
+            const raw = String(form.get('heightCm') ?? '').trim();
+            if (!raw) return null;
+            const n = Number(raw);
+            return Number.isFinite(n) ? n : null;
+          })(),
           publishAt: form.get('publishAt') || null,
           unpublishAt: form.get('unpublishAt') || null,
           seoTitle: form.get('seoTitle') || null,
@@ -249,6 +255,23 @@ export function ProductEditor({ product, taxonomies, canUpdate, canPublish }: Pr
           <label className="flex items-center gap-2 text-sm">
             <input type="checkbox" name="featured" defaultChecked={local.featured} />
             Featured
+          </label>
+          <label className="block text-sm">
+            Высота букета (см)
+            <input
+              name="heightCm"
+              type="number"
+              min={15}
+              max={250}
+              step={1}
+              placeholder="не указана"
+              defaultValue={local.heightCm ?? ''}
+              className="mt-1 w-full rounded-md border border-stone-300 px-3 py-2"
+            />
+            <span className="mt-1 block text-xs text-stone-500">
+              Опционально. На карточке — при наведении; на странице товара — всегда у фото. Пусто =
+              скрыть.
+            </span>
           </label>
         </div>
       ) : null}
@@ -421,6 +444,7 @@ export function ProductEditor({ product, taxonomies, canUpdate, canPublish }: Pr
             <input name="shortDescription" defaultValue={local.shortDescription ?? ''} readOnly />
             <input name="description" defaultValue={local.description ?? ''} readOnly />
             <input name="availability" defaultValue={local.availability} readOnly />
+            <input name="heightCm" defaultValue={local.heightCm ?? ''} readOnly />
           </>
         ) : null}
       </div>

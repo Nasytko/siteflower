@@ -10,7 +10,7 @@ import { AuditService } from '../audit/audit.service';
 import { hashIp } from '../auth/crypto.util';
 import { AppConfigService } from '../config/app-config.service';
 import { PrismaService } from '../database/prisma.service';
-import type { ActorContext } from './storefront.actor';
+import type { ActorContext } from '../common/actor.util';
 
 const SINGLETON_ID = 1;
 const OCC_CONFLICT_MESSAGE =

@@ -9,9 +9,9 @@
     "start:prod": "node dist/main.js",
     "lint": "eslint .",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "pnpm run build && jest && jest --config ./test/jest-integration.json",
+    "test": "jest && jest --config ./test/jest-integration.json",
     "test:unit": "jest",
-    "test:integration": "pnpm run build && jest --config ./test/jest-integration.json",
+    "test:integration": "jest --config ./test/jest-integration.json",
     "admin:create": "tsx scripts/admin-create.ts",
     "seed:dev-catalog": "tsx scripts/seed-dev-catalog.ts",
     "clean": "rimraf dist"

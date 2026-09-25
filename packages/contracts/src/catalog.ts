@@ -126,7 +126,11 @@ export type ProductListItemDto = {
   lifecycle: ProductLifecycle;
   availability: CommercialAvailability;
   featured: boolean;
+  /** Approximate height in cm when set in admin; null = not shown. */
+  heightCm: number | null;
   price: PriceRangeDto | null;
+  /** Cheapest active variant for quick-add from catalog cards. */
+  defaultVariant: { id: string; name: string; priceMinor: string } | null;
   primaryImageUrl: string | null;
   categories: TaxonomyRefDto[];
   updatedAt: string;
@@ -141,6 +145,7 @@ export type ProductAdminDto = {
   lifecycle: ProductLifecycle;
   availability: CommercialAvailability;
   featured: boolean;
+  heightCm: number | null;
   currency: string;
   publishedAt: string | null;
   publishAt: string | null;
@@ -172,6 +177,7 @@ export type ProductPublicDto = {
   description: string | null;
   availability: CommercialAvailability;
   featured: boolean;
+  heightCm: number | null;
   currency: string;
   price: PriceRangeDto;
   seo: SeoFieldsDto;
@@ -276,21 +282,28 @@ export function isCommercialAvailability(value: string): value is CommercialAvai
   return (COMMERCIAL_AVAILABILITIES as readonly string[]).includes(value);
 }
 
+export function formatPriceFromMinor(
+  amountMinor: string | bigint,
+  currency = 'BYN',
+  fractionDigits = 2,
+): string {
+  const value = typeof amountMinor === 'bigint' ? amountMinor : BigInt(amountMinor);
+  const scale = 10n ** BigInt(fractionDigits);
+  const negative = value < 0n;
+  const abs = negative ? -value : value;
+  const whole = abs / scale;
+  const fraction = abs % scale;
+  const sign = negative ? '-' : '';
+  return `${sign}${whole.toString()},${fraction.toString().padStart(fractionDigits, '0')} ${currency}`;
+}
+
 export function formatPriceRangeLabel(
   currency: string,
   minMinor: bigint,
   maxMinor: bigint,
   fractionDigits = 2,
 ): { single: boolean; label: string; minMinor: string; maxMinor: string } {
-  const scale = 10n ** BigInt(fractionDigits);
-  const fmt = (n: bigint) => {
-    const negative = n < 0n;
-    const abs = negative ? -n : n;
-    const whole = abs / scale;
-    const fraction = abs % scale;
-    const sign = negative ? '-' : '';
-    return `${sign}${whole.toString()},${fraction.toString().padStart(fractionDigits, '0')} ${currency}`;
-  };
+  const fmt = (n: bigint) => formatPriceFromMinor(n, currency, fractionDigits);
   const single = minMinor === maxMinor;
   return {
     single,

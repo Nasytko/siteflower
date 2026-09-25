@@ -2,6 +2,8 @@
  * Prefer media derivatives for cards / LCP without downloading masters.
  */
 
+import { formatPriceFromMinor as formatPriceFromMinorContract } from '@bouquet-one/contracts';
+
 export type MediaDerivative = {
   width: number;
   format: string;
@@ -38,10 +40,8 @@ export function pickDerivativeUrl(
 }
 
 export function formatPriceFromMinor(amountMinor: string, currency = 'BYN'): string {
-  const value = BigInt(amountMinor);
-  const whole = value / 100n;
-  const fraction = value % 100n;
-  return `${whole.toString()},${fraction.toString().padStart(2, '0')} ${currency}`;
+  // Shared BYN display — single implementation lives in @bouquet-one/contracts.
+  return formatPriceFromMinorContract(amountMinor, currency);
 }
 
 /**

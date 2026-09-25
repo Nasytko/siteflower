@@ -1,2 +1,1 @@
-export { cn } from './cn';
-export { Button, type ButtonProps } from './components/button';
+export { Button } from './components/button';

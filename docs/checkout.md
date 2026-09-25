@@ -28,6 +28,13 @@ Time windows and lead time: Admin → `/admin/fulfillment` (`GET/PATCH /api/v1/a
 
 ## Submit
 
-`POST /api/v1/orders` with `idempotencyKey` (UUID). Rate-limited (60/min per IP on order create).
+`POST /api/v1/orders` with `idempotencyKey` (8–128 chars). Rate-limited (60/min per IP on order create).
 
-Success page says the order is **accepted** (RECEIVED), not confirmed. Tracking token returned once; stored in `sessionStorage` for the success link (not query-string PII).
+Idempotency (Phase 4.2):
+
+- One key = one checkout submission intent (storefront keeps it in `sessionStorage` until success).
+- Same key + same canonical payload → same Order; recovery returns the original **tracking token** (AES-GCM ciphertext in `idempotency_records`, TTL default 48h).
+- Same key + different payload → `409 Conflict` (no token).
+- Outbox is **not** used for idempotency/request-hash storage.
+
+Success page says the order is **accepted** (RECEIVED), not confirmed. Tracking token returned on create and on in-window replay; held briefly in `sessionStorage` for the success link (not query-string PII). Clear the idempotency key after confirmed success.

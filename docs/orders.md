@@ -45,4 +45,11 @@ Transitions via `OrdersService.transition` / `cancel` with optimistic `updateMan
 
 ## Idempotency
 
-Unique `idempotency_key` on Order. Same key + same payload hash → replay (`trackingToken: null`). Same key + different payload → 409. Concurrent duplicates converge to one row (unique + in-tx recheck).
+Unique `idempotency_key` on Order plus `idempotency_records` (AES-256-GCM recovery, separate from outbox).
+
+- Same key + same canonical payload hash → replay with **usable** `trackingToken` while recovery TTL is valid (default 48h).
+- Same key + different payload → 409 (no token).
+- Concurrent duplicates converge to one Order / one OutboxEvent / one IdempotencyRecord.
+- After TTL expiry, replay returns the same order without recovering the token.
+
+See `docs/security-hardening.md` and `docs/checkout.md`.

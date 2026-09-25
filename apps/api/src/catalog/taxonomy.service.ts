@@ -16,7 +16,7 @@ import { AuditService } from '../audit/audit.service';
 import { hashIp } from '../auth/crypto.util';
 import { AppConfigService } from '../config/app-config.service';
 import { PrismaService } from '../database/prisma.service';
-import type { ActorContext } from './catalog.actor';
+import type { ActorContext } from '../common/actor.util';
 import { OCC_CONFLICT_MESSAGE } from './catalog.logic';
 import { toTaxonomyAdminDto, type TaxonomyRecord } from './catalog.mapper';
 import { SlugRedirectsService } from './slug-redirects.service';

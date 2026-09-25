@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Post, Req } from '@nestjs/common';
+import { Body, Controller, Get, Header, Param, Post, Req } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import { Throttle } from '@nestjs/throttler';
 import type { Request } from 'express';
@@ -37,6 +37,14 @@ export class PublicCheckoutController {
   }
 
   @Public()
+  /**
+   * Tracking bearer URL — private, non-cacheable, noindex.
+   * Rate limit is a soft abuse brake; 32-byte tokens already make brute-force infeasible.
+   */
+  @Throttle({ default: { limit: 120, ttl: 60_000 } })
+  @Header('Cache-Control', 'private, no-store')
+  @Header('Referrer-Policy', 'no-referrer')
+  @Header('X-Robots-Tag', 'noindex, nofollow, noarchive')
   @Get('orders/track/:token')
   track(@Param('token') token: string) {
     return this.orders.trackByToken(token);

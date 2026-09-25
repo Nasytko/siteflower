@@ -14,6 +14,7 @@ import {
   MaxLength,
   Min,
   MinLength,
+  ValidateIf,
   ValidateNested,
 } from 'class-validator';
 import {
@@ -122,6 +123,18 @@ export class CreateProductDto {
   @IsBoolean()
   featured?: boolean;
 
+  /** Bouquet height in cm; omit/null = hide on storefront. */
+  @IsOptional()
+  @Transform(({ value }) => {
+    if (value === '' || value === null || value === undefined) return undefined;
+    const n = typeof value === 'number' ? value : Number(value);
+    return Number.isFinite(n) ? n : undefined;
+  })
+  @IsInt()
+  @Min(15)
+  @Max(250)
+  heightCm?: number;
+
   @IsOptional()
   @Matches(CURRENCY_PATTERN, { message: 'currency must be an ISO 4217 code' })
   currency?: string;
@@ -183,6 +196,20 @@ export class UpdateProductDto extends ExpectedVersionDto {
   @IsOptional()
   @IsBoolean()
   featured?: boolean;
+
+  /** Set null to clear height from storefront. */
+  @IsOptional()
+  @Transform(({ value }) => {
+    if (value === '' || value === null) return null;
+    if (value === undefined) return undefined;
+    const n = typeof value === 'number' ? value : Number(value);
+    return Number.isFinite(n) ? n : undefined;
+  })
+  @ValidateIf((_, v) => v !== null && v !== undefined)
+  @IsInt()
+  @Min(15)
+  @Max(250)
+  heightCm?: number | null;
 
   @IsOptional()
   @Matches(CURRENCY_PATTERN, { message: 'currency must be an ISO 4217 code' })
@@ -382,32 +409,32 @@ export class PublicProductListQueryDto {
 
   @IsOptional()
   @IsString()
-  @MaxLength(120)
+  @MaxLength(400)
   categorySlug?: string;
 
   @IsOptional()
   @IsString()
-  @MaxLength(120)
+  @MaxLength(400)
   occasionSlug?: string;
 
   @IsOptional()
   @IsString()
-  @MaxLength(120)
+  @MaxLength(400)
   recipientSlug?: string;
 
   @IsOptional()
   @IsString()
-  @MaxLength(120)
+  @MaxLength(400)
   styleSlug?: string;
 
   @IsOptional()
   @IsString()
-  @MaxLength(120)
+  @MaxLength(400)
   colorSlug?: string;
 
   @IsOptional()
   @IsString()
-  @MaxLength(120)
+  @MaxLength(400)
   flowerSlug?: string;
 
   @IsOptional()

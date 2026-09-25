@@ -16,8 +16,8 @@ export default async function AdminFulfillmentPage() {
   return (
     <main id="main-content" className="space-y-6">
       <header>
-        <h1 className="text-3xl font-semibold text-stone-900">Доставка и самовывоз</h1>
-        <p className="text-stone-600">
+        <h1 className="admin-page-title">Доставка и самовывоз</h1>
+        <p className="admin-page-lead">
           Окна времени, lead time и методы получения (Europe/Minsk)
         </p>
       </header>

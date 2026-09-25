@@ -120,20 +120,40 @@ export function UsersManager({ initial, permissions, currentUserId }: Props) {
   }
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-6">
       {error ? (
-        <p role="alert" className="text-sm text-red-700">
+        <p role="alert" className="admin-error">
           {error}
         </p>
       ) : null}
 
       {permissions.create ? (
-        <form onSubmit={onCreate} className="grid gap-3 rounded-lg border border-stone-200 bg-white p-5 sm:grid-cols-2">
-          <h2 className="sm:col-span-2 text-lg font-medium text-stone-900">Создать администратора</h2>
-          <input name="email" type="email" required placeholder="Email" className="rounded-md border px-3 py-2" />
-          <input name="displayName" required placeholder="Имя" className="rounded-md border px-3 py-2" />
-          <input name="password" type="password" required minLength={12} placeholder="Пароль" className="rounded-md border px-3 py-2" />
-          <select name="role" className="rounded-md border px-3 py-2" defaultValue="MANAGER">
+        <form onSubmit={onCreate} className="admin-card grid gap-3 sm:grid-cols-2">
+          <h2 className="sm:col-span-2 text-base font-semibold text-[var(--admin-ink)]">
+            Создать администратора
+          </h2>
+          <input
+            name="email"
+            type="email"
+            required
+            placeholder="Email"
+            className="admin-input"
+          />
+          <input
+            name="displayName"
+            required
+            placeholder="Имя"
+            className="admin-input"
+          />
+          <input
+            name="password"
+            type="password"
+            required
+            minLength={12}
+            placeholder="Пароль"
+            className="admin-input"
+          />
+          <select name="role" className="admin-select" defaultValue="MANAGER">
             {ADMIN_ROLES.map((role) => (
               <option key={role} value={role}>
                 {role}
@@ -141,7 +161,7 @@ export function UsersManager({ initial, permissions, currentUserId }: Props) {
             ))}
           </select>
           <div className="sm:col-span-2">
-            <Button type="submit" disabled={pending}>
+            <Button type="submit" disabled={pending} className="!rounded-lg !bg-[var(--admin-brand)]">
               Создать
             </Button>
           </div>
@@ -149,53 +169,74 @@ export function UsersManager({ initial, permissions, currentUserId }: Props) {
       ) : null}
 
       {users.length === 0 ? (
-        <p className="text-stone-600">Пока нет пользователей.</p>
+        <div className="admin-panel">
+          <p className="admin-empty">Пока нет пользователей.</p>
+        </div>
       ) : (
-        <div className="overflow-x-auto rounded-lg border border-stone-200 bg-white">
-          <table className="min-w-full text-left text-sm">
-            <thead className="border-b border-stone-200 bg-stone-50 text-stone-600">
+        <div className="admin-panel overflow-x-auto">
+          <table className="admin-table">
+            <thead>
               <tr>
-                <th className="px-4 py-3 font-medium">Имя</th>
-                <th className="px-4 py-3 font-medium">Email</th>
-                <th className="px-4 py-3 font-medium">Роль</th>
-                <th className="px-4 py-3 font-medium">Статус</th>
-                <th className="px-4 py-3 font-medium">Последний вход</th>
-                {canManage ? <th className="px-4 py-3 font-medium">Действия</th> : null}
+                <th>Имя</th>
+                <th>Email</th>
+                <th>Роль</th>
+                <th>Статус</th>
+                <th>Последний вход</th>
+                {canManage ? <th>Действия</th> : null}
               </tr>
             </thead>
             <tbody>
               {users.map((user) => (
-                <tr key={user.id} className="border-b border-stone-100">
-                  <td className="px-4 py-3">{user.displayName}</td>
-                  <td className="px-4 py-3">{user.email}</td>
-                  <td className="px-4 py-3">{user.role}</td>
-                  <td className="px-4 py-3">{user.status}</td>
-                  <td className="px-4 py-3">
+                <tr key={user.id}>
+                  <td className="font-semibold">{user.displayName}</td>
+                  <td>{user.email}</td>
+                  <td>
+                    <span className="admin-chip">{user.role}</span>
+                  </td>
+                  <td>
+                    <span
+                      className={`admin-chip ${
+                        user.status === 'ACTIVE' ? '' : 'admin-chip--muted'
+                      }`}
+                    >
+                      {user.status}
+                    </span>
+                  </td>
+                  <td className="text-[var(--admin-muted)]">
                     {user.lastLoginAt ? new Date(user.lastLoginAt).toLocaleString('ru-BY') : '—'}
                   </td>
                   {canManage ? (
-                    <td className="px-4 py-3">
+                    <td>
                       <div className="flex flex-wrap gap-2">
                         {permissions.disable && user.status === 'ACTIVE' ? (
-                          <Button
+                          <button
                             type="button"
-                            size="sm"
-                            variant="outline"
+                            className="admin-btn-ghost"
                             disabled={pending || user.id === currentUserId}
                             onClick={() => disableUser(user)}
                           >
                             Отключить
-                          </Button>
+                          </button>
                         ) : null}
                         {permissions.disable && user.status === 'DISABLED' ? (
-                          <Button type="button" size="sm" variant="outline" disabled={pending} onClick={() => enableUser(user)}>
+                          <button
+                            type="button"
+                            className="admin-btn-ghost"
+                            disabled={pending}
+                            onClick={() => enableUser(user)}
+                          >
                             Включить
-                          </Button>
+                          </button>
                         ) : null}
                         {permissions.resetPassword ? (
-                          <Button type="button" size="sm" variant="outline" disabled={pending} onClick={() => resetPassword(user)}>
+                          <button
+                            type="button"
+                            className="admin-btn-ghost"
+                            disabled={pending}
+                            onClick={() => resetPassword(user)}
+                          >
                             Сброс пароля
-                          </Button>
+                          </button>
                         ) : null}
                       </div>
                     </td>

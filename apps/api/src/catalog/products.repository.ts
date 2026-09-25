@@ -14,6 +14,7 @@ export type ProductListFilters = {
   availability?: CommercialAvailability;
   featured?: boolean;
   categoryId?: string;
+  /** Single slug or comma-separated list (OR within facet). */
   categorySlug?: string;
   occasionSlug?: string;
   recipientSlug?: string;
@@ -24,6 +25,19 @@ export type ProductListFilters = {
   maxPriceMinor?: string;
   publishedAt?: Date;
 };
+
+const SLUG_LIST_MAX = 16;
+
+/** Parse `a,b,c` (or a single slug) into a de-duplicated list. */
+export function parseSlugList(value?: string | null): string[] | undefined {
+  if (!value) return undefined;
+  const parts = value
+    .split(',')
+    .map((part) => part.trim())
+    .filter((part) => part.length > 0 && part.length <= 120);
+  if (parts.length === 0) return undefined;
+  return [...new Set(parts)].slice(0, SLUG_LIST_MAX);
+}
 
 /**
  * Mirrors `isEffectivelyPublished` in SQL: published lifecycle plus an open
@@ -326,23 +340,67 @@ export function buildProductWhere(filters: ProductListFilters): Prisma.ProductWh
   }
   if (filters.categoryId) {
     where.categories = { some: { categoryId: filters.categoryId } };
-  } else if (filters.categorySlug) {
-    where.categories = { some: { category: { slug: filters.categorySlug } } };
+  } else {
+    const categorySlugs = parseSlugList(filters.categorySlug);
+    if (categorySlugs) {
+      where.categories = {
+        some: {
+          category: {
+            slug: categorySlugs.length === 1 ? categorySlugs[0] : { in: categorySlugs },
+          },
+        },
+      };
+    }
   }
-  if (filters.occasionSlug) {
-    where.occasions = { some: { occasion: { slug: filters.occasionSlug } } };
+  const occasionSlugs = parseSlugList(filters.occasionSlug);
+  if (occasionSlugs) {
+    where.occasions = {
+      some: {
+        occasion: {
+          slug: occasionSlugs.length === 1 ? occasionSlugs[0] : { in: occasionSlugs },
+        },
+      },
+    };
   }
-  if (filters.recipientSlug) {
-    where.recipients = { some: { recipient: { slug: filters.recipientSlug } } };
+  const recipientSlugs = parseSlugList(filters.recipientSlug);
+  if (recipientSlugs) {
+    where.recipients = {
+      some: {
+        recipient: {
+          slug: recipientSlugs.length === 1 ? recipientSlugs[0] : { in: recipientSlugs },
+        },
+      },
+    };
   }
-  if (filters.styleSlug) {
-    where.styles = { some: { style: { slug: filters.styleSlug } } };
+  const styleSlugs = parseSlugList(filters.styleSlug);
+  if (styleSlugs) {
+    where.styles = {
+      some: {
+        style: {
+          slug: styleSlugs.length === 1 ? styleSlugs[0] : { in: styleSlugs },
+        },
+      },
+    };
   }
-  if (filters.colorSlug) {
-    where.colors = { some: { color: { slug: filters.colorSlug } } };
+  const colorSlugs = parseSlugList(filters.colorSlug);
+  if (colorSlugs) {
+    where.colors = {
+      some: {
+        color: {
+          slug: colorSlugs.length === 1 ? colorSlugs[0] : { in: colorSlugs },
+        },
+      },
+    };
   }
-  if (filters.flowerSlug) {
-    where.components = { some: { flower: { slug: filters.flowerSlug } } };
+  const flowerSlugs = parseSlugList(filters.flowerSlug);
+  if (flowerSlugs) {
+    where.components = {
+      some: {
+        flower: {
+          slug: flowerSlugs.length === 1 ? flowerSlugs[0] : { in: flowerSlugs },
+        },
+      },
+    };
   }
 
   if (filters.minPriceMinor !== undefined || filters.maxPriceMinor !== undefined) {

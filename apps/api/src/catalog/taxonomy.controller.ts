@@ -27,7 +27,7 @@ import { TAXONOMY_VISIBILITIES, type TaxonomyVisibility } from '@bouquet-one/con
 import type { Request } from 'express';
 import { CurrentAdmin, type AuthenticatedAdmin } from '../auth/current-admin.decorator';
 import { RequirePermissions } from '../auth/decorators';
-import { actorFrom } from './catalog.actor';
+import { actorFrom } from '../common/actor.util';
 import { ExpectedVersionDto } from './products.dto';
 import { TAXONOMY_KINDS, TaxonomyService, type TaxonomyKind } from './taxonomy.service';
 
