@@ -11,6 +11,7 @@ import { AuditModule } from './audit/audit.module';
 import { CatalogModule } from './catalog/catalog.module';
 import { GlobalExceptionFilter } from './common/filters/global-exception.filter';
 import { sanitizeRequestId, setRequestId } from './common/middleware/request-id.middleware';
+import { sanitizeSensitiveUrl } from './common/sanitize-sensitive-url.util';
 import { AppConfigModule } from './config/app-config.module';
 import { AppConfigService } from './config/app-config.service';
 import { DatabaseModule } from './database/database.module';
@@ -18,15 +19,6 @@ import { HealthModule } from './health/health.module';
 import { MediaModule } from './media/media.module';
 import { StorefrontModule } from './storefront/storefront.module';
 import { OrdersModule } from './orders/orders.module';
-
-/** Redact tracking bearer tokens embedded in request URLs. */
-function sanitizeLoggedUrl(url: string | undefined): string | undefined {
-  if (!url) return url;
-  return url.replace(
-    /\/orders\/track\/[^/?#]+/gi,
-    '/orders/track/[REDACTED]',
-  );
-}
 
 @Module({
   imports: [
@@ -73,7 +65,7 @@ function sanitizeLoggedUrl(url: string | undefined): string | undefined {
               const serialized = {
                 id: req.id,
                 method: req.method,
-                url: sanitizeLoggedUrl(req.url),
+                url: sanitizeSensitiveUrl(req.url),
               };
               return serialized;
             },

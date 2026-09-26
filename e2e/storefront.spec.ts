@@ -36,7 +36,9 @@ test.describe('storefront catalog journey', () => {
       await variantOption.click();
       await expect(variantOption).toHaveAttribute('aria-selected', 'true');
     }
-    await expect(page.getByRole('listbox', { name: 'Упаковка' })).toBeVisible();
+    // Packaging is not a commercial order option — only catalog variants are selectable.
+    await expect(page.getByRole('listbox', { name: 'Упаковка' })).toHaveCount(0);
+    await expect(page.getByTestId('add-to-cart')).toBeVisible();
 
     const favorite = page.locator('main').first().locator('[data-favorite]').first();
     await favorite.click();

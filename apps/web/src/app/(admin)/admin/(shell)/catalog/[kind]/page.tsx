@@ -1,5 +1,6 @@
 import { roleHasPermission, type TaxonomyAdminDto } from '@bouquet-one/contracts';
-import { adminFetch, fetchAdminMe } from '@/lib/admin-api';
+import { adminFetch } from '@/lib/admin-api';
+import { requireAdminPermission } from '@/lib/admin-page-auth';
 import { TaxonomyManager } from '@/components/admin/taxonomy-manager';
 
 const META: Record<string, string> = {
@@ -19,7 +20,7 @@ export default async function TaxonomyPage({ params }: Props) {
   if (!title) {
     return <p>Неизвестный раздел</p>;
   }
-  const me = await fetchAdminMe();
+  const me = await requireAdminPermission('CATALOG_READ');
   const initial = await adminFetch<TaxonomyAdminDto[]>(`/api/v1/admin/catalog/${kind}`);
 
   return (

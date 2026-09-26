@@ -1,6 +1,6 @@
 'use client';
 
-import { FormEvent, useMemo, useState } from 'react';
+import { FormEvent, useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import type { ProductAdminDto, TaxonomyAdminDto } from '@bouquet-one/contracts';
 import { Button } from '@bouquet-one/ui';
@@ -43,11 +43,22 @@ async function mutate(path: string, init?: RequestInit) {
   return body;
 }
 
+function variantsDefault(product: ProductAdminDto): string {
+  return product.variants.map((v) => `${v.name}|${v.priceMinor}|${v.status}`).join('\n');
+}
+
+function componentsDefault(product: ProductAdminDto): string {
+  return product.components
+    .map((c) => `${c.displayName}|${c.quantity ?? ''}|${c.flowerId ?? ''}`)
+    .join('\n');
+}
+
 export function ProductEditor({ product, taxonomies, canUpdate, canPublish }: Props) {
   const router = useRouter();
   const [tab, setTab] = useState('basic');
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
+  const [dirty, setDirty] = useState(false);
   const [version, setVersion] = useState(product.version);
   const [local, setLocal] = useState(product);
 
@@ -60,6 +71,16 @@ export function ProductEditor({ product, taxonomies, canUpdate, canPublish }: Pr
     if (local.media.some((m) => !m.alt)) warnings.push('Есть изображения без alt');
     return warnings;
   }, [local]);
+
+  useEffect(() => {
+    if (!dirty) return;
+    const onBeforeUnload = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      event.returnValue = '';
+    };
+    window.addEventListener('beforeunload', onBeforeUnload);
+    return () => window.removeEventListener('beforeunload', onBeforeUnload);
+  }, [dirty]);
 
   async function save(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -148,6 +169,7 @@ export function ProductEditor({ product, taxonomies, canUpdate, canPublish }: Pr
       });
       setLocal(current);
       setVersion(current.version);
+      setDirty(false);
       router.refresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Ошибка сохранения');
@@ -157,7 +179,7 @@ export function ProductEditor({ product, taxonomies, canUpdate, canPublish }: Pr
   }
 
   async function lifecycle(action: 'publish' | 'unpublish' | 'archive') {
-    if (!canPublish && action !== 'archive') return;
+    if (!canPublish) return;
     setPending(true);
     setError(null);
     try {
@@ -167,6 +189,7 @@ export function ProductEditor({ product, taxonomies, canUpdate, canPublish }: Pr
       });
       setLocal(updated);
       setVersion(updated.version);
+      setDirty(false);
       router.refresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Ошибка');
@@ -182,6 +205,7 @@ export function ProductEditor({ product, taxonomies, canUpdate, canPublish }: Pr
     try {
       const form = new FormData();
       form.append('file', file);
+      form.append('expectedVersion', String(version));
       const updated = await mutate(`/api/v1/admin/catalog/products/${product.id}/media`, {
         method: 'POST',
         body: form,
@@ -206,46 +230,86 @@ export function ProductEditor({ product, taxonomies, canUpdate, canPublish }: Pr
     ['publishing', 'Публикация'],
   ] as const;
 
+  const taxonomyGroups = [
+    ['categoryIds', 'Категории', taxonomies.categories, local.categories],
+    ['occasionIds', 'Поводы', taxonomies.occasions, local.occasions],
+    ['recipientIds', 'Кому', taxonomies.recipients, local.recipients],
+    ['styleIds', 'Стили', taxonomies.styles, local.styles],
+    ['colorIds', 'Цвета', taxonomies.colors, local.colors],
+  ] as const;
+
   return (
-    <form onSubmit={save} className="space-y-6">
+    <form
+      onSubmit={save}
+      onChange={() => setDirty(true)}
+      className="space-y-6"
+    >
+      {error ? (
+        <p role="alert" className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800">
+          {error}
+        </p>
+      ) : null}
+
       <div className="flex flex-wrap gap-2 border-b border-stone-200 pb-3">
         {tabs.map(([id, label]) => (
           <button
             key={id}
             type="button"
-            onClick={() => setTab(id)}
             className={`rounded-md px-3 py-1.5 text-sm ${
               tab === id ? 'bg-stone-900 text-white' : 'bg-stone-100 text-stone-700'
             }`}
+            onClick={() => setTab(id)}
           >
             {label}
           </button>
         ))}
       </div>
 
-      {error ? <p className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-800">{error}</p> : null}
-
       {tab === 'basic' ? (
         <div className="grid max-w-2xl gap-4">
           <label className="block text-sm">
             Название
-            <input name="name" defaultValue={local.name} required className="mt-1 w-full rounded-md border border-stone-300 px-3 py-2" />
+            <input
+              name="name"
+              required
+              defaultValue={local.name}
+              className="mt-1 w-full rounded-md border border-stone-300 px-3 py-2"
+            />
           </label>
           <label className="block text-sm">
-            Slug
-            <input name="slug" defaultValue={local.slug} required className="mt-1 w-full rounded-md border border-stone-300 px-3 py-2" />
+           Slug
+            <input
+              name="slug"
+              required
+              defaultValue={local.slug}
+              className="mt-1 w-full rounded-md border border-stone-300 px-3 py-2"
+            />
           </label>
           <label className="block text-sm">
             Краткое описание
-            <textarea name="shortDescription" defaultValue={local.shortDescription ?? ''} className="mt-1 w-full rounded-md border border-stone-300 px-3 py-2" rows={2} />
+            <textarea
+              name="shortDescription"
+              defaultValue={local.shortDescription ?? ''}
+              className="mt-1 w-full rounded-md border border-stone-300 px-3 py-2"
+              rows={2}
+            />
           </label>
           <label className="block text-sm">
             Описание
-            <textarea name="description" defaultValue={local.description ?? ''} className="mt-1 w-full rounded-md border border-stone-300 px-3 py-2" rows={6} />
+            <textarea
+              name="description"
+              defaultValue={local.description ?? ''}
+              className="mt-1 w-full rounded-md border border-stone-300 px-3 py-2"
+              rows={5}
+            />
           </label>
           <label className="block text-sm">
             Доступность
-            <select name="availability" defaultValue={local.availability} className="mt-1 w-full rounded-md border border-stone-300 px-3 py-2">
+            <select
+              name="availability"
+              defaultValue={local.availability}
+              className="mt-1 w-full rounded-md border border-stone-300 px-3 py-2"
+            >
               <option value="AVAILABLE">AVAILABLE</option>
               <option value="TEMPORARILY_UNAVAILABLE">TEMPORARILY_UNAVAILABLE</option>
               <option value="PREORDER">PREORDER</option>
@@ -283,9 +347,7 @@ export function ProductEditor({ product, taxonomies, canUpdate, canPublish }: Pr
             name="variants"
             className="mt-1 w-full rounded-md border border-stone-300 px-3 py-2 font-mono text-xs"
             rows={6}
-            defaultValue={local.variants
-              .map((v) => `${v.name}|${v.priceMinor}|${v.status}`)
-              .join('\n')}
+            defaultValue={variantsDefault(local)}
           />
           <span className="mt-1 block text-stone-500">Цена: {local.price?.label ?? '—'}</span>
         </label>
@@ -326,9 +388,7 @@ export function ProductEditor({ product, taxonomies, canUpdate, canPublish }: Pr
             name="components"
             className="mt-1 w-full rounded-md border border-stone-300 px-3 py-2 font-mono text-xs"
             rows={6}
-            defaultValue={local.components
-              .map((c) => `${c.displayName}|${c.quantity ?? ''}|${c.flowerId ?? ''}`)
-              .join('\n')}
+            defaultValue={componentsDefault(local)}
           />
           <span className="mt-1 block text-xs text-stone-500">
             Flowers: {taxonomies.flowers.map((f) => `${f.name}=${f.id}`).join(', ') || 'нет'}
@@ -338,15 +398,7 @@ export function ProductEditor({ product, taxonomies, canUpdate, canPublish }: Pr
 
       {tab === 'classification' ? (
         <div className="grid gap-4 sm:grid-cols-2">
-          {(
-            [
-              ['categoryIds', 'Категории', taxonomies.categories, local.categories],
-              ['occasionIds', 'Поводы', taxonomies.occasions, local.occasions],
-              ['recipientIds', 'Кому', taxonomies.recipients, local.recipients],
-              ['styleIds', 'Стили', taxonomies.styles, local.styles],
-              ['colorIds', 'Цвета', taxonomies.colors, local.colors],
-            ] as const
-          ).map(([name, label, options, selected]) => (
+          {taxonomyGroups.map(([name, label, options, selected]) => (
             <fieldset key={name} className="rounded-md border border-stone-200 p-3">
               <legend className="px-1 text-sm font-medium">{label}</legend>
               <div className="mt-2 max-h-40 space-y-1 overflow-y-auto text-sm">
@@ -371,11 +423,20 @@ export function ProductEditor({ product, taxonomies, canUpdate, canPublish }: Pr
         <div className="grid max-w-2xl gap-4">
           <label className="block text-sm">
             SEO title
-            <input name="seoTitle" defaultValue={local.seoTitle ?? ''} className="mt-1 w-full rounded-md border border-stone-300 px-3 py-2" />
+            <input
+              name="seoTitle"
+              defaultValue={local.seoTitle ?? ''}
+              className="mt-1 w-full rounded-md border border-stone-300 px-3 py-2"
+            />
           </label>
           <label className="block text-sm">
             SEO description
-            <textarea name="seoDescription" defaultValue={local.seoDescription ?? ''} className="mt-1 w-full rounded-md border border-stone-300 px-3 py-2" rows={3} />
+            <textarea
+              name="seoDescription"
+              defaultValue={local.seoDescription ?? ''}
+              className="mt-1 w-full rounded-md border border-stone-300 px-3 py-2"
+              rows={3}
+            />
           </label>
           <label className="flex items-center gap-2 text-sm">
             <input type="checkbox" name="noIndex" defaultChecked={local.noIndex} />
@@ -403,11 +464,19 @@ export function ProductEditor({ product, taxonomies, canUpdate, canPublish }: Pr
           </p>
           <label className="block text-sm">
             publishAt (ISO)
-            <input name="publishAt" defaultValue={local.publishAt ?? ''} className="mt-1 w-full rounded-md border border-stone-300 px-3 py-2" />
+            <input
+              name="publishAt"
+              defaultValue={local.publishAt ?? ''}
+              className="mt-1 w-full rounded-md border border-stone-300 px-3 py-2"
+            />
           </label>
           <label className="block text-sm">
             unpublishAt (ISO)
-            <input name="unpublishAt" defaultValue={local.unpublishAt ?? ''} className="mt-1 w-full rounded-md border border-stone-300 px-3 py-2" />
+            <input
+              name="unpublishAt"
+              defaultValue={local.unpublishAt ?? ''}
+              className="mt-1 w-full rounded-md border border-stone-300 px-3 py-2"
+            />
           </label>
           <div className="flex flex-wrap gap-2">
             {canPublish ? (
@@ -418,12 +487,10 @@ export function ProductEditor({ product, taxonomies, canUpdate, canPublish }: Pr
                 <Button type="button" disabled={pending} onClick={() => void lifecycle('unpublish')}>
                   Снять с публикации
                 </Button>
+                <Button type="button" disabled={pending} onClick={() => void lifecycle('archive')}>
+                  В архив
+                </Button>
               </>
-            ) : null}
-            {canPublish ? (
-              <Button type="button" disabled={pending} onClick={() => void lifecycle('archive')}>
-                В архив
-              </Button>
             ) : null}
             <a
               className="rounded-md border border-stone-300 px-3 py-2 text-sm"
@@ -435,7 +502,10 @@ export function ProductEditor({ product, taxonomies, canUpdate, canPublish }: Pr
         </div>
       ) : null}
 
-      {/* keep fields mounted for submit from any tab */}
+      {/*
+        Persist fields from inactive tabs so "Save" never sends empty variants/taxonomies
+        or nulls SEO / publish schedules by accident.
+      */}
       <div className="hidden" aria-hidden>
         {tab !== 'basic' ? (
           <>
@@ -445,13 +515,40 @@ export function ProductEditor({ product, taxonomies, canUpdate, canPublish }: Pr
             <input name="description" defaultValue={local.description ?? ''} readOnly />
             <input name="availability" defaultValue={local.availability} readOnly />
             <input name="heightCm" defaultValue={local.heightCm ?? ''} readOnly />
+            {local.featured ? <input type="checkbox" name="featured" defaultChecked readOnly /> : null}
+          </>
+        ) : null}
+        {tab !== 'variants' ? (
+          <textarea name="variants" defaultValue={variantsDefault(local)} readOnly />
+        ) : null}
+        {tab !== 'composition' ? (
+          <textarea name="components" defaultValue={componentsDefault(local)} readOnly />
+        ) : null}
+        {tab !== 'classification'
+          ? taxonomyGroups.flatMap(([name, , , selected]) =>
+              selected.map((item) => (
+                <input key={`${name}-${item.id}`} type="checkbox" name={name} value={item.id} defaultChecked readOnly />
+              )),
+            )
+          : null}
+        {tab !== 'seo' ? (
+          <>
+            <input name="seoTitle" defaultValue={local.seoTitle ?? ''} readOnly />
+            <input name="seoDescription" defaultValue={local.seoDescription ?? ''} readOnly />
+            {local.noIndex ? <input type="checkbox" name="noIndex" defaultChecked readOnly /> : null}
+          </>
+        ) : null}
+        {tab !== 'publishing' ? (
+          <>
+            <input name="publishAt" defaultValue={local.publishAt ?? ''} readOnly />
+            <input name="unpublishAt" defaultValue={local.unpublishAt ?? ''} readOnly />
           </>
         ) : null}
       </div>
 
       {canUpdate ? (
         <Button type="submit" disabled={pending}>
-          Сохранить черновик
+          {pending ? 'Сохранение…' : 'Сохранить черновик'}
         </Button>
       ) : null}
     </form>

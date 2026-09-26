@@ -1,11 +1,13 @@
 import { notFound } from 'next/navigation';
 import type { ProductAdminDto } from '@bouquet-one/contracts';
 import { AdminApiError, adminFetch } from '@/lib/admin-api';
+import { requireAdminPermission } from '@/lib/admin-page-auth';
 import { toSameOriginMediaUrl } from '@/lib/media';
 
 type Props = { params: Promise<{ id: string }> };
 
 export default async function ProductPreviewPage({ params }: Props) {
+  await requireAdminPermission('CATALOG_READ');
   const { id } = await params;
   let product: ProductAdminDto;
   try {

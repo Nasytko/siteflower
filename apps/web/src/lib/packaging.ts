@@ -7,7 +7,10 @@ export type PackagingOption = {
   label: string;
 };
 
-/** Infer packaging presentation from catalog categories (no schema change). */
+/**
+ * Category-derived merchandising badge only (not a customer-selectable order option).
+ * Packaging is not part of the order snapshot / checkout API.
+ */
 export function packagingFromCategories(
   categories: Array<Pick<TaxonomyRefDto, 'slug'>> | undefined | null,
 ): PackagingOption {
@@ -18,18 +21,4 @@ export function packagingFromCategories(
     return { kind: 'wrap', label: 'В упаковке' };
   }
   return { kind: 'none', label: 'Без упаковки' };
-}
-
-/** Options shown on PDP — box is fixed; wrap allows “without wrap”. */
-export function packagingChoicesFor(
-  categories: Array<Pick<TaxonomyRefDto, 'slug'>> | undefined | null,
-): PackagingOption[] {
-  const base = packagingFromCategories(categories);
-  if (base.kind === 'box') {
-    return [base];
-  }
-  return [
-    { kind: 'wrap', label: 'В упаковке' },
-    { kind: 'none', label: 'Без упаковки' },
-  ];
 }

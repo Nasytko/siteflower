@@ -5,11 +5,6 @@ import type { ProductPublicDto } from '@bouquet-one/contracts';
 import { formatPriceFromMinor } from '@/lib/media';
 import { trackEvent } from '@/lib/analytics';
 import { addToCart, readCart, writeCart } from '@/lib/cart';
-import {
-  packagingChoicesFor,
-  packagingFromCategories,
-  type PackagingKind,
-} from '@/lib/packaging';
 
 type Variant = ProductPublicDto['variants'][number];
 
@@ -24,10 +19,7 @@ type Props = {
 
 export function ProductPurchasePanel({ product, variants, phone }: Props) {
   const sorted = [...variants].sort((a, b) => a.sortOrder - b.sortOrder);
-  const packagingChoices = packagingChoicesFor(product.categories);
-  const defaultPackaging = packagingFromCategories(product.categories).kind;
   const [selectedId, setSelectedId] = useState(sorted[0]?.id ?? '');
-  const [packaging, setPackaging] = useState<PackagingKind>(defaultPackaging);
   const [qty, setQty] = useState(1);
   const [feedback, setFeedback] = useState<string | null>(null);
   const [cartCount, setCartCount] = useState(0);
@@ -39,9 +31,6 @@ export function ProductPurchasePanel({ product, variants, phone }: Props) {
     : product.price.label;
 
   const blocked = product.availability === 'TEMPORARILY_UNAVAILABLE' || !selected;
-  const packagingLabel =
-    packagingChoices.find((option) => option.kind === packaging)?.label ??
-    packagingFromCategories(product.categories).label;
 
   useEffect(() => {
     setHydrated(true);
@@ -67,7 +56,7 @@ export function ProductPurchasePanel({ product, variants, phone }: Props) {
       quantity: qty,
       productName: product.name,
       productSlug: product.slug,
-      variantName: `${selected.name} · ${packagingLabel}`,
+      variantName: selected.name,
       unitPriceMinor: selected.priceMinor,
       primaryImageUrl: primary,
     });
@@ -135,31 +124,6 @@ export function ProductPurchasePanel({ product, variants, phone }: Props) {
           </div>
         </div>
       ) : null}
-
-      <div>
-        <p className="sf-label mb-2">Упаковка</p>
-        <div className="flex flex-wrap gap-2" role="listbox" aria-label="Упаковка">
-          {packagingChoices.map((option) => {
-            const active = option.kind === packaging;
-            return (
-              <button
-                key={option.kind}
-                type="button"
-                role="option"
-                aria-selected={active}
-                className={`min-h-11 rounded-full px-4 py-2 text-sm transition ${
-                  active
-                    ? 'bg-[var(--color-peach)] text-white'
-                    : 'border border-border bg-white text-foreground hover:border-brand/30'
-                }`}
-                onClick={() => setPackaging(option.kind)}
-              >
-                {option.label}
-              </button>
-            );
-          })}
-        </div>
-      </div>
 
       <div className="flex flex-wrap items-center gap-3">
         <label className="sf-small text-muted">

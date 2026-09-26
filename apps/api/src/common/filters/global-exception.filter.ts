@@ -10,6 +10,7 @@ import {
 import type { Request, Response } from 'express';
 import { AppConfigService } from '../../config/app-config.service';
 import { REQUEST_ID_HEADER, getRequestId } from '../middleware/request-id.middleware';
+import { sanitizeSensitiveUrl } from '../sanitize-sensitive-url.util';
 
 type ErrorBody = {
   statusCode: number;
@@ -61,13 +62,15 @@ export class GlobalExceptionFilter implements ExceptionFilter {
       message = exception.message;
     }
 
+    const safePath = sanitizeSensitiveUrl(request.url) ?? request.url;
+
     const body: ErrorBody = {
       statusCode: status,
       error: errorName,
       message,
       ...(issues !== undefined ? { issues } : {}),
       requestId,
-      path: request.url,
+      path: safePath,
       timestamp: new Date().toISOString(),
     };
 
@@ -76,7 +79,7 @@ export class GlobalExceptionFilter implements ExceptionFilter {
         err: exception instanceof Error ? exception : undefined,
         requestId,
         statusCode: status,
-        path: request.url,
+        path: safePath,
       },
       'Request failed',
     );

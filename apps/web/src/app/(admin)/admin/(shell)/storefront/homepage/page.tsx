@@ -1,9 +1,10 @@
 import { roleHasPermission, type HomepageConfigAdminDto } from '@bouquet-one/contracts';
-import { adminFetch, fetchAdminMe } from '@/lib/admin-api';
+import { adminFetch } from '@/lib/admin-api';
+import { requireAdminPermission } from '@/lib/admin-page-auth';
 import { HomepageEditor } from '@/components/admin/homepage-editor';
 
 export default async function AdminHomepageConfigPage() {
-  const me = await fetchAdminMe();
+  const me = await requireAdminPermission('CONTENT_READ');
   const initial = await adminFetch<HomepageConfigAdminDto>('/api/v1/admin/storefront/homepage');
 
   return (

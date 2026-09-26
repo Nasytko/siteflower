@@ -15,7 +15,6 @@ import { CategoryNav } from '@/components/storefront/category-nav';
 import { HomeAnalytics } from '@/components/storefront/home-analytics';
 import { ProductGrid } from '@/components/storefront/product-grid';
 import { Reveal } from '@/components/storefront/reveal';
-import { ReviewsCarousel } from '@/components/storefront/reviews-carousel';
 import { TrustBar } from '@/components/storefront/trust-bar';
 import { PRICE_BANDS } from '@/lib/media';
 
@@ -225,8 +224,6 @@ export default async function StorefrontHomePage() {
           </div>
         </div>
       </section>
-
-      <ReviewsCarousel />
 
       {sections.map((section) => {
         switch (section.kind) {

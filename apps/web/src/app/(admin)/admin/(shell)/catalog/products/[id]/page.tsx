@@ -1,13 +1,14 @@
 import { notFound } from 'next/navigation';
 import { roleHasPermission, type ProductAdminDto, type TaxonomyAdminDto } from '@bouquet-one/contracts';
-import { AdminApiError, adminFetch, fetchAdminMe } from '@/lib/admin-api';
+import { AdminApiError, adminFetch } from '@/lib/admin-api';
+import { requireAdminPermission } from '@/lib/admin-page-auth';
 import { ProductEditor } from '@/components/admin/product-editor';
 
 type Props = { params: Promise<{ id: string }> };
 
 export default async function AdminProductEditPage({ params }: Props) {
   const { id } = await params;
-  const me = await fetchAdminMe();
+  const me = await requireAdminPermission('CATALOG_READ');
   let product: ProductAdminDto;
   try {
     product = await adminFetch<ProductAdminDto>(`/api/v1/admin/catalog/products/${id}`);

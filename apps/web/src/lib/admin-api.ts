@@ -1,5 +1,6 @@
 import type { AuthMeResponse, ApiErrorBody } from '@bouquet-one/contracts';
 import { cookies, headers } from 'next/headers';
+import { buildAdminCookieHeader } from './admin-cookie.util';
 
 export class AdminApiError extends Error {
   constructor(
@@ -26,10 +27,7 @@ export async function adminFetch<T>(
 ): Promise<T> {
   const cookieStore = await cookies();
   const headerStore = await headers();
-  const cookieHeader = cookieStore
-    .getAll()
-    .map((entry) => `${entry.name}=${entry.value}`)
-    .join('; ');
+  const cookieHeader = buildAdminCookieHeader(cookieStore.getAll());
 
   const response = await fetch(`${getApiBase()}${path}`, {
     ...init,

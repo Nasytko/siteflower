@@ -1,5 +1,6 @@
 import { ValidationPipe } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
+import { NestExpressApplication } from '@nestjs/platform-express';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import cookieParser from 'cookie-parser';
 import helmet from 'helmet';
@@ -9,8 +10,9 @@ import { requestIdMiddleware } from './common/middleware/request-id.middleware';
 import { AppConfigService } from './config/app-config.service';
 
 async function bootstrap(): Promise<void> {
-  const app = await NestFactory.create(AppModule, {
+  const app = await NestFactory.create<NestExpressApplication>(AppModule, {
     bufferLogs: true,
+    bodyParser: false,
   });
 
   const appConfig = app.get(AppConfigService);
@@ -21,6 +23,10 @@ async function bootstrap(): Promise<void> {
   if (appConfig.trustProxy && typeof httpAdapter.set === 'function') {
     httpAdapter.set('trust proxy', 1);
   }
+
+  // Bound JSON/urlencoded payloads for admin/checkout; media uploads use multipart separately.
+  app.useBodyParser('json', { limit: '256kb' });
+  app.useBodyParser('urlencoded', { limit: '256kb', extended: true });
 
   app.use(requestIdMiddleware);
   app.use(cookieParser());

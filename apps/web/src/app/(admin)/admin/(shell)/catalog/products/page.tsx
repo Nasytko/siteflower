@@ -1,10 +1,11 @@
 import { roleHasPermission } from '@bouquet-one/contracts';
 import type { PaginatedResponse, ProductListItemDto } from '@bouquet-one/contracts';
-import { adminFetch, fetchAdminMe } from '@/lib/admin-api';
+import { adminFetch } from '@/lib/admin-api';
+import { requireAdminPermission } from '@/lib/admin-page-auth';
 import { ProductsManager } from '@/components/admin/products-manager';
 
 export default async function AdminProductsPage() {
-  const me = await fetchAdminMe();
+  const me = await requireAdminPermission('CATALOG_READ');
   const initial = await adminFetch<PaginatedResponse<ProductListItemDto>>(
     '/api/v1/admin/catalog/products?page=1&pageSize=50',
   );

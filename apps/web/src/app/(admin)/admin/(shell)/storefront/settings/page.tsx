@@ -1,9 +1,10 @@
 import { roleHasPermission, type StorefrontSettingsAdminDto } from '@bouquet-one/contracts';
-import { adminFetch, fetchAdminMe } from '@/lib/admin-api';
+import { adminFetch } from '@/lib/admin-api';
+import { requireAdminPermission } from '@/lib/admin-page-auth';
 import { StorefrontSettingsEditor } from '@/components/admin/storefront-settings-editor';
 
 export default async function AdminStorefrontSettingsPage() {
-  const me = await fetchAdminMe();
+  const me = await requireAdminPermission('SETTINGS_READ');
   const initial = await adminFetch<StorefrontSettingsAdminDto>(
     '/api/v1/admin/storefront/settings',
   );
