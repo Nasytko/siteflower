@@ -1,20 +1,25 @@
 /**
  * Prisma row → DTO mapping for the catalog.
  * Media URLs arrive through a resolver so mapping stays free of storage details.
+ * Promotion pricing is always derived server-side (see promotion.util).
  */
 import type { Prisma } from '@bouquet-one/database';
 import {
   defaultProductSeoDescription,
   defaultProductSeoTitle,
   derivePriceRange,
-  type CollectionAdminDto,
-  type CollectionPublicDto,
-  type CollectionRulesDto,
-  type CommercialAvailability,
+  type BestsellerGroupAdminDto,
+  type BestsellerGroupPublicDto,
+  type BouquetSizeAdminDto,
+  type BouquetSizePublicDto,
+  type BudgetRangeDto,
+  type BudgetRangePublicDto,
+  type ColorAdminDto,
   type PriceRangeDto,
   type ProductAdminDto,
   type ProductListItemDto,
   type ProductMediaDto,
+  type ProductPromotionAdminDto,
   type ProductPublicDto,
   type SeoFieldsDto,
   type TaxonomyAdminDto,
@@ -23,33 +28,34 @@ import {
   type TaxonomyVisibility,
 } from '@bouquet-one/contracts';
 import { activeVariantPrices } from './catalog.logic';
+import {
+  buildPublicPromotionDto,
+  effectiveVariantPriceMinor,
+  isPromotionEffective,
+  type PromotionRow,
+} from './promotion.util';
 
 export type MediaUrlResolver = (storageKey: string) => string;
 
 export const PRODUCT_INCLUDE = {
+  bouquetSize: true,
   variants: { orderBy: { sortOrder: 'asc' } },
   components: { orderBy: { sortOrder: 'asc' }, include: { flower: true } },
   media: {
     orderBy: { sortOrder: 'asc' },
     include: { mediaAsset: { include: { derivatives: { orderBy: { width: 'asc' } } } } },
   },
-  categories: { include: { category: true } },
   occasions: { include: { occasion: true } },
   recipients: { include: { recipient: true } },
-  styles: { include: { style: true } },
   colors: { include: { color: true } },
+  productLines: { include: { productLine: true } },
+  promotion: { include: { variantPrices: true } },
+  bestsellerLinks: { select: { groupId: true, sortOrder: true } },
 } satisfies Prisma.ProductInclude;
 
-export const COLLECTION_INCLUDE = {
-  products: { orderBy: { sortOrder: 'asc' } },
-} satisfies Prisma.CollectionInclude;
-
 export type ProductWithRelations = Prisma.ProductGetPayload<{ include: typeof PRODUCT_INCLUDE }>;
-export type CollectionWithProducts = Prisma.CollectionGetPayload<{
-  include: typeof COLLECTION_INCLUDE;
-}>;
 
-/** Shared shape of every taxonomy table (flowers, categories, occasions, …). */
+/** Shared shape of the SEO-bearing taxonomy tables (flowers, occasions, recipients, colors). */
 export type TaxonomyRecord = {
   id: string;
   slug: string;
@@ -64,6 +70,12 @@ export type TaxonomyRecord = {
   createdAt: Date;
   updatedAt: Date;
 };
+
+/** BouquetSize / ProductLine have no SEO columns — filter facets, not landing pages. */
+export type BouquetSizeRecord = Omit<
+  TaxonomyRecord,
+  'seoTitle' | 'seoDescription' | 'noIndex'
+>;
 
 export function toTaxonomyRef(row: { id: string; slug: string; name: string }): TaxonomyRefDto {
   return { id: row.id, slug: row.slug, name: row.name };
@@ -86,6 +98,71 @@ export function toTaxonomyAdminDto(row: TaxonomyRecord): TaxonomyAdminDto {
   };
 }
 
+export function toColorAdminDto(row: TaxonomyRecord & { swatch: string | null }): ColorAdminDto {
+  return { ...toTaxonomyAdminDto(row), swatch: row.swatch };
+}
+
+export function toBouquetSizeAdminDto(row: BouquetSizeRecord): BouquetSizeAdminDto {
+  return {
+    id: row.id,
+    slug: row.slug,
+    name: row.name,
+    description: row.description,
+    sortOrder: row.sortOrder,
+    visibility: row.visibility,
+    version: row.version,
+    createdAt: row.createdAt.toISOString(),
+    updatedAt: row.updatedAt.toISOString(),
+  };
+}
+
+export function toBouquetSizePublicDto(row: {
+  id: string;
+  slug: string;
+  name: string;
+  description: string | null;
+}): BouquetSizePublicDto {
+  return { id: row.id, slug: row.slug, name: row.name, description: row.description };
+}
+
+export function toBudgetRangeAdminDto(row: {
+  id: string;
+  label: string;
+  minMinor: bigint | null;
+  maxMinor: bigint | null;
+  sortOrder: number;
+  active: boolean;
+  version: number;
+  createdAt: Date;
+  updatedAt: Date;
+}): BudgetRangeDto {
+  return {
+    id: row.id,
+    label: row.label,
+    minMinor: row.minMinor?.toString() ?? null,
+    maxMinor: row.maxMinor?.toString() ?? null,
+    sortOrder: row.sortOrder,
+    active: row.active,
+    version: row.version,
+    createdAt: row.createdAt.toISOString(),
+    updatedAt: row.updatedAt.toISOString(),
+  };
+}
+
+export function toBudgetRangePublicDto(row: {
+  id: string;
+  label: string;
+  minMinor: bigint | null;
+  maxMinor: bigint | null;
+}): BudgetRangePublicDto {
+  return {
+    id: row.id,
+    label: row.label,
+    minMinor: row.minMinor?.toString() ?? null,
+    maxMinor: row.maxMinor?.toString() ?? null,
+  };
+}
+
 export function toTaxonomyPublicDto(
   row: TaxonomyRecord,
   kind: TaxonomyPublicDto['kind'],
@@ -100,12 +177,28 @@ export function toTaxonomyPublicDto(
       seoTitle: row.seoTitle,
       seoDescription: row.seoDescription,
       noIndex: row.noIndex,
-      resolvedTitle: row.seoTitle ?? `${row.name} | БУКЕТ №1`,
+      resolvedTitle: row.seoTitle ?? `${row.name} | BUKET №1`,
       resolvedDescription:
         row.seoDescription ??
         row.description ??
-        `${row.name} — доставка цветов по Гродно | БУКЕТ №1`,
+        `${row.name} — доставка цветов по Гродно | BUKET №1`,
     },
+  };
+}
+
+/** Promotion row in the shape the pricing helpers expect. */
+export function toPromotionRow(product: ProductWithRelations): PromotionRow | null {
+  if (!product.promotion) return null;
+  return {
+    enabled: product.promotion.enabled,
+    type: product.promotion.type,
+    percentOff: product.promotion.percentOff,
+    startsAt: product.promotion.startsAt,
+    endsAt: product.promotion.endsAt,
+    variantPrices: product.promotion.variantPrices.map((row) => ({
+      variantId: row.variantId,
+      salePriceMinor: row.salePriceMinor,
+    })),
   };
 }
 
@@ -118,19 +211,6 @@ function toProductSeo(product: ProductWithRelations): SeoFieldsDto {
     resolvedDescription:
       product.seoDescription ??
       defaultProductSeoDescription(product.name, product.shortDescription),
-  };
-}
-
-function toCollectionSeo(collection: CollectionWithProducts): SeoFieldsDto {
-  return {
-    seoTitle: collection.seoTitle,
-    seoDescription: collection.seoDescription,
-    noIndex: collection.noIndex,
-    resolvedTitle: collection.seoTitle ?? `${collection.name} | БУКЕТ №1`,
-    resolvedDescription:
-      collection.seoDescription ??
-      collection.description ??
-      `Подборка «${collection.name}» — доставка цветов по Гродно.`,
   };
 }
 
@@ -161,10 +241,24 @@ function primaryMedia(product: ProductWithRelations) {
   return product.media.find((item) => item.isPrimary) ?? product.media[0] ?? null;
 }
 
+/** Flowers are a derived facet: the composition is the single source of truth. */
+export function derivedFlowers(product: ProductWithRelations): TaxonomyRefDto[] {
+  const seen = new Set<string>();
+  const flowers: TaxonomyRefDto[] = [];
+  for (const component of product.components) {
+    if (!component.flower || seen.has(component.flower.id)) continue;
+    seen.add(component.flower.id);
+    flowers.push(toTaxonomyRef(component.flower));
+  }
+  return flowers;
+}
+
 function defaultVariantForList(
-  variants: ProductWithRelations['variants'],
+  product: ProductWithRelations,
+  now: Date,
 ): ProductListItemDto['defaultVariant'] {
-  const active = variants
+  const promo = toPromotionRow(product);
+  const active = product.variants
     .filter((variant) => variant.status === 'ACTIVE')
     .slice()
     .sort((a, b) => {
@@ -178,13 +272,47 @@ function defaultVariantForList(
   return {
     id: pick.id,
     name: pick.name,
-    priceMinor: pick.priceMinor.toString(),
+    priceMinor: effectiveVariantPriceMinor(pick, promo, now).toString(),
+  };
+}
+
+function toVariantDtos(product: ProductWithRelations, now: Date) {
+  const promo = toPromotionRow(product);
+  return product.variants.map((variant) => ({
+    id: variant.id,
+    name: variant.name,
+    priceMinor: variant.priceMinor.toString(),
+    effectivePriceMinor: effectiveVariantPriceMinor(variant, promo, now).toString(),
+    sortOrder: variant.sortOrder,
+    status: variant.status,
+  }));
+}
+
+export function toPromotionAdminDto(
+  product: ProductWithRelations,
+  now: Date,
+): ProductPromotionAdminDto | null {
+  if (!product.promotion) return null;
+  const promo = toPromotionRow(product);
+  return {
+    enabled: product.promotion.enabled,
+    type: product.promotion.type,
+    percentOff: product.promotion.percentOff,
+    startsAt: product.promotion.startsAt?.toISOString() ?? null,
+    endsAt: product.promotion.endsAt?.toISOString() ?? null,
+    variantSalePrices: product.promotion.variantPrices.map((row) => ({
+      variantId: row.variantId,
+      salePriceMinor: row.salePriceMinor.toString(),
+    })),
+    version: product.promotion.version,
+    currentlyEffective: isPromotionEffective(promo, now),
   };
 }
 
 export function toProductAdminDto(
   product: ProductWithRelations,
   urlFor: MediaUrlResolver,
+  now = new Date(),
 ): ProductAdminDto {
   return {
     id: product.id,
@@ -194,8 +322,9 @@ export function toProductAdminDto(
     description: product.description,
     lifecycle: product.lifecycle,
     availability: product.availability,
-    featured: product.featured,
     heightCm: product.heightCm ?? null,
+    bouquetSize: product.bouquetSize ? toTaxonomyRef(product.bouquetSize) : null,
+    bouquetSizeId: product.bouquetSizeId,
     currency: product.currency,
     publishedAt: product.publishedAt?.toISOString() ?? null,
     publishAt: product.publishAt?.toISOString() ?? null,
@@ -206,13 +335,8 @@ export function toProductAdminDto(
     noIndex: product.noIndex,
     seo: toProductSeo(product),
     price: activeVariantPrices(product.currency, product.variants),
-    variants: product.variants.map((variant) => ({
-      id: variant.id,
-      name: variant.name,
-      priceMinor: variant.priceMinor.toString(),
-      sortOrder: variant.sortOrder,
-      status: variant.status,
-    })),
+    promotion: toPromotionAdminDto(product, now),
+    variants: toVariantDtos(product, now),
     components: product.components.map((component) => ({
       id: component.id,
       flowerId: component.flowerId,
@@ -223,11 +347,12 @@ export function toProductAdminDto(
       sortOrder: component.sortOrder,
     })),
     media: product.media.map((media) => toProductMediaDto(media, urlFor)),
-    categories: product.categories.map((link) => toTaxonomyRef(link.category)),
     occasions: product.occasions.map((link) => toTaxonomyRef(link.occasion)),
     recipients: product.recipients.map((link) => toTaxonomyRef(link.recipient)),
-    styles: product.styles.map((link) => toTaxonomyRef(link.style)),
     colors: product.colors.map((link) => toTaxonomyRef(link.color)),
+    productLines: product.productLines.map((link) => toTaxonomyRef(link.productLine)),
+    flowers: derivedFlowers(product),
+    bestsellerGroupIds: product.bestsellerLinks.map((link) => link.groupId),
     createdAt: product.createdAt.toISOString(),
     updatedAt: product.updatedAt.toISOString(),
   };
@@ -236,10 +361,12 @@ export function toProductAdminDto(
 export function toProductPublicDto(
   product: ProductWithRelations,
   urlFor: MediaUrlResolver,
+  now = new Date(),
 ): ProductPublicDto {
   const price: PriceRangeDto =
     activeVariantPrices(product.currency, product.variants) ??
     derivePriceRange(product.currency, [0n])!;
+  const promo = toPromotionRow(product);
 
   return {
     id: product.id,
@@ -248,10 +375,11 @@ export function toProductPublicDto(
     shortDescription: product.shortDescription,
     description: product.description,
     availability: product.availability,
-    featured: product.featured,
     heightCm: product.heightCm ?? null,
+    bouquetSize: product.bouquetSize ? toTaxonomyRef(product.bouquetSize) : null,
     currency: product.currency,
     price,
+    promotion: buildPublicPromotionDto(product.currency, product.variants, promo, now),
     seo: toProductSeo(product),
     variants: product.variants
       .filter((variant) => variant.status === 'ACTIVE')
@@ -259,6 +387,7 @@ export function toProductPublicDto(
         id: variant.id,
         name: variant.name,
         priceMinor: variant.priceMinor.toString(),
+        effectivePriceMinor: effectiveVariantPriceMinor(variant, promo, now).toString(),
         sortOrder: variant.sortOrder,
       })),
     components: product.components.map((component) => ({
@@ -279,17 +408,18 @@ export function toProductPublicDto(
         derivatives: dto.derivatives,
       };
     }),
-    categories: product.categories.map((link) => toTaxonomyRef(link.category)),
     occasions: product.occasions.map((link) => toTaxonomyRef(link.occasion)),
     recipients: product.recipients.map((link) => toTaxonomyRef(link.recipient)),
-    styles: product.styles.map((link) => toTaxonomyRef(link.style)),
     colors: product.colors.map((link) => toTaxonomyRef(link.color)),
+    productLines: product.productLines.map((link) => toTaxonomyRef(link.productLine)),
+    flowers: derivedFlowers(product),
   };
 }
 
 export function toProductListItemDto(
   product: ProductWithRelations,
   urlFor: MediaUrlResolver,
+  now = new Date(),
 ): ProductListItemDto {
   const primary = primaryMedia(product);
   return {
@@ -298,89 +428,74 @@ export function toProductListItemDto(
     name: product.name,
     lifecycle: product.lifecycle,
     availability: product.availability,
-    featured: product.featured,
     heightCm: product.heightCm ?? null,
+    bouquetSize: product.bouquetSize ? toTaxonomyRef(product.bouquetSize) : null,
     price: activeVariantPrices(product.currency, product.variants),
-    defaultVariant: defaultVariantForList(product.variants),
+    promotion: buildPublicPromotionDto(
+      product.currency,
+      product.variants,
+      toPromotionRow(product),
+      now,
+    ),
+    defaultVariant: defaultVariantForList(product, now),
     primaryImageUrl: primary ? urlFor(primary.mediaAsset.storageKey) : null,
-    categories: product.categories.map((link) => toTaxonomyRef(link.category)),
+    flowers: derivedFlowers(product),
+    colors: product.colors.map((link) => toTaxonomyRef(link.color)),
+    productLines: product.productLines.map((link) => toTaxonomyRef(link.productLine)),
     updatedAt: product.updatedAt.toISOString(),
+    bestsellerGroupIds: product.bestsellerLinks.map((link) => link.groupId),
   };
 }
 
-/** Flattens a product into the slug/price shape consumed by collection rules. */
-export function toRuleCandidate(product: ProductWithRelations): {
-  availability: CommercialAvailability;
-  lifecycle: string;
-  categorySlugs: string[];
-  occasionSlugs: string[];
-  recipientSlugs: string[];
-  styleSlugs: string[];
-  flowerSlugs: string[];
-  colorSlugs: string[];
-  minActivePriceMinor: bigint | null;
-} {
-  const activePrices = product.variants
-    .filter((variant) => variant.status === 'ACTIVE')
-    .map((variant) => variant.priceMinor);
+export type BestsellerGroupWithProducts = {
+  id: string;
+  slug: string;
+  name: string;
+  title: string | null;
+  sortOrder: number;
+  active: boolean;
+  version: number;
+  createdAt: Date;
+  updatedAt: Date;
+  products: Array<{ productId: string; sortOrder: number }>;
+};
 
+export function toBestsellerGroupAdminDto(
+  group: BestsellerGroupWithProducts,
+  productsById: Map<string, ProductListItemDto>,
+): BestsellerGroupAdminDto {
   return {
-    availability: product.availability,
-    lifecycle: product.lifecycle,
-    categorySlugs: product.categories.map((link) => link.category.slug),
-    occasionSlugs: product.occasions.map((link) => link.occasion.slug),
-    recipientSlugs: product.recipients.map((link) => link.recipient.slug),
-    styleSlugs: product.styles.map((link) => link.style.slug),
-    flowerSlugs: product.components
-      .map((component) => component.flower?.slug)
-      .filter((slug): slug is string => Boolean(slug)),
-    colorSlugs: product.colors.map((link) => link.color.slug),
-    minActivePriceMinor:
-      activePrices.length > 0
-        ? activePrices.reduce((min, price) => (price < min ? price : min), activePrices[0]!)
-        : null,
+    id: group.id,
+    slug: group.slug,
+    name: group.name,
+    title: group.title,
+    sortOrder: group.sortOrder,
+    active: group.active,
+    version: group.version,
+    products: [...group.products]
+      .sort((a, b) => a.sortOrder - b.sortOrder)
+      .map((link) => ({
+        productId: link.productId,
+        sortOrder: link.sortOrder,
+        product: productsById.get(link.productId) ?? null,
+      })),
+    createdAt: group.createdAt.toISOString(),
+    updatedAt: group.updatedAt.toISOString(),
   };
 }
 
-export function asCollectionRules(value: unknown): CollectionRulesDto | null {
-  return (value as CollectionRulesDto | null) ?? null;
-}
-
-export function toCollectionAdminDto(
-  collection: CollectionWithProducts,
-  matchCount?: number,
-): CollectionAdminDto {
+export function toBestsellerGroupPublicDto(
+  group: BestsellerGroupWithProducts,
+  productsById: Map<string, ProductListItemDto>,
+): BestsellerGroupPublicDto {
   return {
-    id: collection.id,
-    slug: collection.slug,
-    name: collection.name,
-    description: collection.description,
-    type: collection.type,
-    rules: asCollectionRules(collection.rules),
-    sortOrder: collection.sortOrder,
-    visibility: collection.visibility,
-    version: collection.version,
-    seoTitle: collection.seoTitle,
-    seoDescription: collection.seoDescription,
-    noIndex: collection.noIndex,
-    productIds: collection.products.map((link) => link.productId),
-    ...(matchCount === undefined ? {} : { matchCount }),
-    createdAt: collection.createdAt.toISOString(),
-    updatedAt: collection.updatedAt.toISOString(),
-  };
-}
-
-export function toCollectionPublicDto(
-  collection: CollectionWithProducts,
-  products: ProductWithRelations[],
-  urlFor: MediaUrlResolver,
-): CollectionPublicDto {
-  return {
-    id: collection.id,
-    slug: collection.slug,
-    name: collection.name,
-    description: collection.description,
-    seo: toCollectionSeo(collection),
-    products: products.map((product) => toProductListItemDto(product, urlFor)),
+    id: group.id,
+    slug: group.slug,
+    name: group.name,
+    title: group.title,
+    products: [...group.products]
+      .sort((a, b) => a.sortOrder - b.sortOrder)
+      .map((link) => productsById.get(link.productId))
+      .filter((product): product is ProductListItemDto => Boolean(product)),
   };
 }

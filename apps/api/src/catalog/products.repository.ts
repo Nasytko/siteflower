@@ -1,34 +1,47 @@
 import { Injectable } from '@nestjs/common';
-import type {
-  CommercialAvailability,
-  Prisma,
-  ProductLifecycle,
-} from '@bouquet-one/database';
-import type { ProductSort } from '@bouquet-one/contracts';
+import type { CommercialAvailability, Prisma, ProductLifecycle } from '@bouquet-one/database';
+import { budgetRangeMatchesPrice, type ProductSort } from '@bouquet-one/contracts';
 import { PrismaService } from '../database/prisma.service';
 import { PRODUCT_INCLUDE, type ProductWithRelations } from './catalog.mapper';
+import {
+  buildPublicPromotionDto,
+  effectiveVariantPriceMinor,
+  type PromotionRow,
+} from './promotion.util';
+
+/** Inclusive budget bounds resolved from `BudgetRange` rows (null = open bound). */
+export type BudgetBound = { minMinor: bigint | null; maxMinor: bigint | null };
 
 export type ProductListFilters = {
   search?: string;
   lifecycle?: ProductLifecycle;
   availability?: CommercialAvailability;
-  featured?: boolean;
-  categoryId?: string;
-  /** Single slug or comma-separated list (OR within facet). */
-  categorySlug?: string;
-  occasionSlug?: string;
-  recipientSlug?: string;
-  styleSlug?: string;
-  colorSlug?: string;
-  flowerSlug?: string;
+  /** Discovery facets — OR within a facet, AND across facets. */
+  occasionIds?: string[];
+  occasionSlugs?: string[];
+  recipientIds?: string[];
+  recipientSlugs?: string[];
+  colorIds?: string[];
+  colorSlugs?: string[];
+  flowerIds?: string[];
+  flowerSlugs?: string[];
+  bouquetSizeIds?: string[];
+  bouquetSizeSlugs?: string[];
+  budgetRanges?: BudgetBound[];
+  bestsellerGroupIds?: string[];
+  /** Only products with a currently effective promotion (used by /akcii). */
+  promotionalOnly?: boolean;
   minPriceMinor?: string;
   maxPriceMinor?: string;
+  /** When set, restricts to effectively published products at that instant. */
   publishedAt?: Date;
 };
 
 const SLUG_LIST_MAX = 16;
+/** Boutique catalog: in-memory refinement stays bounded and predictable. */
+const IN_MEMORY_CANDIDATE_CAP = 2_000;
 
-/** Parse `a,b,c` (or a single slug) into a de-duplicated list. */
+/** Parse `a,b,c` (or a single value) into a de-duplicated list. */
 export function parseSlugList(value?: string | null): string[] | undefined {
   if (!value) return undefined;
   const parts = value
@@ -37,6 +50,11 @@ export function parseSlugList(value?: string | null): string[] | undefined {
     .filter((part) => part.length > 0 && part.length <= 120);
   if (parts.length === 0) return undefined;
   return [...new Set(parts)].slice(0, SLUG_LIST_MAX);
+}
+
+function nonEmpty(values?: string[]): string[] | undefined {
+  if (!values || values.length === 0) return undefined;
+  return [...new Set(values)].slice(0, SLUG_LIST_MAX);
 }
 
 /**
@@ -59,18 +77,102 @@ export function effectivelyPublishedWhere(now: Date): Prisma.ProductWhereInput {
   };
 }
 
-function minActivePrice(variants: Array<{ priceMinor: bigint }>): bigint | null {
-  if (variants.length === 0) return null;
-  return variants.reduce(
-    (min, variant) => (variant.priceMinor < min ? variant.priceMinor : min),
-    variants[0]!.priceMinor,
+/** SQL approximation of `isPromotionEffective` (actual discount is verified in memory). */
+export function promotionScheduleWhere(now: Date): Prisma.ProductWhereInput {
+  return {
+    promotion: {
+      is: {
+        enabled: true,
+        AND: [
+          { OR: [{ startsAt: null }, { startsAt: { lte: now } }] },
+          { OR: [{ endsAt: null }, { endsAt: { gt: now } }] },
+        ],
+      },
+    },
+  };
+}
+
+type CandidateRow = {
+  id: string;
+  currency: string;
+  publishedAt: Date | null;
+  updatedAt: Date;
+  variants: Array<{ id: string; priceMinor: bigint; status: string }>;
+  promotion: {
+    enabled: boolean;
+    type: PromotionRow['type'];
+    percentOff: number | null;
+    startsAt: Date | null;
+    endsAt: Date | null;
+    variantPrices: Array<{ variantId: string; salePriceMinor: bigint }>;
+  } | null;
+  _count: { bestsellerLinks: number };
+};
+
+const CANDIDATE_SELECT = {
+  id: true,
+  currency: true,
+  publishedAt: true,
+  updatedAt: true,
+  variants: { select: { id: true, priceMinor: true, status: true } },
+  promotion: {
+    select: {
+      enabled: true,
+      type: true,
+      percentOff: true,
+      startsAt: true,
+      endsAt: true,
+      variantPrices: { select: { variantId: true, salePriceMinor: true } },
+    },
+  },
+  _count: { select: { bestsellerLinks: true } },
+} satisfies Prisma.ProductSelect;
+
+function promotionRowOf(candidate: CandidateRow): PromotionRow | null {
+  return candidate.promotion ? { ...candidate.promotion } : null;
+}
+
+function activeVariants(candidate: CandidateRow) {
+  return candidate.variants.filter((variant) => variant.status === 'ACTIVE');
+}
+
+/** Lowest price a customer would actually pay (drives price sorting). */
+function minEffectivePrice(candidate: CandidateRow, now: Date): bigint | null {
+  const promo = promotionRowOf(candidate);
+  const prices = activeVariants(candidate).map((variant) =>
+    effectiveVariantPriceMinor(variant, promo, now),
+  );
+  if (prices.length === 0) return null;
+  return prices.reduce((min, price) => (price < min ? price : min), prices[0]!);
+}
+
+function matchesBudget(candidate: CandidateRow, ranges: BudgetBound[], now: Date): boolean {
+  const promo = promotionRowOf(candidate);
+  return activeVariants(candidate).some((variant) => {
+    const effective = effectiveVariantPriceMinor(variant, promo, now);
+    return ranges.some(
+      (range) =>
+        budgetRangeMatchesPrice(variant.priceMinor, range.minMinor, range.maxMinor) ||
+        budgetRangeMatchesPrice(effective, range.minMinor, range.maxMinor),
+    );
+  });
+}
+
+function hasEffectivePromotion(candidate: CandidateRow, now: Date): boolean {
+  return (
+    buildPublicPromotionDto(
+      candidate.currency,
+      candidate.variants,
+      promotionRowOf(candidate),
+      now,
+    ) !== null
   );
 }
 
 /**
- * Prisma relation `orderBy` only exposes `_count` (not `_min` on variant price).
- * Price sorts therefore load matching rows, order by min ACTIVE variant price
- * in memory, then paginate — fine for a boutique catalog size.
+ * Prisma relation `orderBy` cannot aggregate variant prices, so price sorts are
+ * resolved in memory (see `list`). `recommended` puts merchandised (bestseller)
+ * products first — a curated signal, not fake popularity.
  */
 function buildOrderBy(sort: ProductSort | undefined): Prisma.ProductOrderByWithRelationInput[] {
   switch (sort) {
@@ -79,11 +181,42 @@ function buildOrderBy(sort: ProductSort | undefined): Prisma.ProductOrderByWithR
     case 'price_asc':
     case 'price_desc':
       // Handled separately in list(); fallback only if misrouted.
-      return [{ featured: 'desc' }, { updatedAt: 'desc' }];
-    case 'featured':
+      return [{ updatedAt: 'desc' }];
+    case 'recommended':
     default:
-      return [{ featured: 'desc' }, { updatedAt: 'desc' }];
+      return [
+        { bestsellerLinks: { _count: 'desc' } },
+        { publishedAt: { sort: 'desc', nulls: 'last' } },
+        { updatedAt: 'desc' },
+      ];
   }
+}
+
+function compareCandidates(
+  a: CandidateRow,
+  b: CandidateRow,
+  sort: ProductSort,
+  now: Date,
+): number {
+  if (sort === 'price_asc' || sort === 'price_desc') {
+    const aMin = minEffectivePrice(a, now);
+    const bMin = minEffectivePrice(b, now);
+    if (aMin !== null || bMin !== null) {
+      if (aMin === null) return 1;
+      if (bMin === null) return -1;
+      if (aMin !== bMin) {
+        const ascending = aMin < bMin ? -1 : 1;
+        return sort === 'price_asc' ? ascending : -ascending;
+      }
+    }
+  }
+  if (sort === 'recommended' && a._count.bestsellerLinks !== b._count.bestsellerLinks) {
+    return b._count.bestsellerLinks - a._count.bestsellerLinks;
+  }
+  const aPublished = a.publishedAt?.getTime() ?? 0;
+  const bPublished = b.publishedAt?.getTime() ?? 0;
+  if (aPublished !== bPublished) return bPublished - aPublished;
+  return b.updatedAt.getTime() - a.updatedAt.getTime();
 }
 
 @Injectable()
@@ -111,51 +244,45 @@ export class ProductsRepository {
     skip: number;
     take: number;
     sort?: ProductSort;
+    now?: Date;
   }): Promise<{ items: ProductWithRelations[]; total: number }> {
-    const where = buildProductWhere(params.filters);
-    const sort = params.sort ?? 'featured';
+    const now = params.now ?? new Date();
+    const where = buildProductWhere(params.filters, now);
+    const sort = params.sort ?? 'recommended';
+    const budgetRanges = params.filters.budgetRanges ?? [];
+    const needsRefinement =
+      sort === 'price_asc' ||
+      sort === 'price_desc' ||
+      budgetRanges.length > 0 ||
+      params.filters.promotionalOnly === true;
 
-    if (sort === 'price_asc' || sort === 'price_desc') {
-      // Boutique catalogs are small; sort by min ACTIVE variant price then paginate.
-      // Cap protects against accidental unbounded loads if filters are too broad.
-      const candidates = await this.db().product.findMany({
+    if (needsRefinement) {
+      const candidates = (await this.db().product.findMany({
         where,
-        select: {
-          id: true,
-          updatedAt: true,
-          featured: true,
-          variants: {
-            where: { status: 'ACTIVE' },
-            select: { priceMinor: true },
-          },
-        },
-        take: 2_000,
-      });
-      const direction = sort === 'price_asc' ? 1 : -1;
-      candidates.sort((a, b) => {
-        const aMin = minActivePrice(a.variants);
-        const bMin = minActivePrice(b.variants);
-        if (aMin === null && bMin === null) {
-          if (a.featured !== b.featured) return a.featured ? -1 : 1;
-          return b.updatedAt.getTime() - a.updatedAt.getTime();
+        select: CANDIDATE_SELECT,
+        take: IN_MEMORY_CANDIDATE_CAP,
+      })) as CandidateRow[];
+
+      const refined = candidates.filter((candidate) => {
+        if (params.filters.promotionalOnly && !hasEffectivePromotion(candidate, now)) {
+          return false;
         }
-        if (aMin === null) return 1;
-        if (bMin === null) return -1;
-        if (aMin !== bMin) {
-          return aMin < bMin ? -direction : direction;
+        if (budgetRanges.length > 0 && !matchesBudget(candidate, budgetRanges, now)) {
+          return false;
         }
-        if (a.featured !== b.featured) return a.featured ? -1 : 1;
-        return b.updatedAt.getTime() - a.updatedAt.getTime();
+        return true;
       });
-      const pageIds = candidates.slice(params.skip, params.skip + params.take).map((row) => row.id);
+
+      refined.sort((a, b) => compareCandidates(a, b, sort, now));
+      const pageIds = refined.slice(params.skip, params.skip + params.take).map((row) => row.id);
       if (pageIds.length === 0) {
-        return { items: [], total: candidates.length };
+        return { items: [], total: refined.length };
       }
       const items = await this.findManyByIds(pageIds);
       const byId = new Map(items.map((item) => [item.id, item]));
       return {
-        items: pageIds.map((id) => byId.get(id)!).filter(Boolean),
-        total: candidates.length,
+        items: pageIds.map((id) => byId.get(id)).filter((item): item is ProductWithRelations => Boolean(item)),
+        total: refined.length,
       };
     }
 
@@ -176,7 +303,7 @@ export class ProductsRepository {
     return this.db().product.findMany({
       where,
       include: PRODUCT_INCLUDE,
-      orderBy: [{ featured: 'desc' }, { updatedAt: 'desc' }],
+      orderBy: [{ bestsellerLinks: { _count: 'desc' } }, { updatedAt: 'desc' }],
     });
   }
 
@@ -198,7 +325,7 @@ export class ProductsRepository {
   async updateWithVersion(
     id: string,
     expectedVersion: number,
-    data: Prisma.ProductUpdateManyMutationInput,
+    data: Prisma.ProductUncheckedUpdateManyInput,
     tx?: Prisma.TransactionClient,
   ): Promise<number> {
     const result = await this.db(tx).product.updateMany({
@@ -257,19 +384,6 @@ export class ProductsRepository {
     }
   }
 
-  async replaceCategories(
-    productId: string,
-    categoryIds: string[],
-    tx: Prisma.TransactionClient,
-  ): Promise<void> {
-    await tx.productCategory.deleteMany({ where: { productId } });
-    if (categoryIds.length > 0) {
-      await tx.productCategory.createMany({
-        data: categoryIds.map((categoryId) => ({ productId, categoryId })),
-      });
-    }
-  }
-
   async replaceOccasions(
     productId: string,
     occasionIds: string[],
@@ -296,19 +410,6 @@ export class ProductsRepository {
     }
   }
 
-  async replaceStyles(
-    productId: string,
-    styleIds: string[],
-    tx: Prisma.TransactionClient,
-  ): Promise<void> {
-    await tx.productStyle.deleteMany({ where: { productId } });
-    if (styleIds.length > 0) {
-      await tx.productStyle.createMany({
-        data: styleIds.map((styleId) => ({ productId, styleId })),
-      });
-    }
-  }
-
   async replaceColors(
     productId: string,
     colorIds: string[],
@@ -321,14 +422,30 @@ export class ProductsRepository {
       });
     }
   }
+
+  async replaceProductLines(
+    productId: string,
+    productLineIds: string[],
+    tx: Prisma.TransactionClient,
+  ): Promise<void> {
+    await tx.productProductLine.deleteMany({ where: { productId } });
+    if (productLineIds.length > 0) {
+      await tx.productProductLine.createMany({
+        data: productLineIds.map((productLineId) => ({ productId, productLineId })),
+      });
+    }
+  }
 }
 
-export function buildProductWhere(filters: ProductListFilters): Prisma.ProductWhereInput {
+export function buildProductWhere(
+  filters: ProductListFilters,
+  now = new Date(),
+): Prisma.ProductWhereInput {
+  const and: Prisma.ProductWhereInput[] = [];
   const where: Prisma.ProductWhereInput = {
     ...(filters.publishedAt ? effectivelyPublishedWhere(filters.publishedAt) : {}),
     ...(filters.lifecycle ? { lifecycle: filters.lifecycle } : {}),
     ...(filters.availability ? { availability: filters.availability } : {}),
-    ...(filters.featured === undefined ? {} : { featured: filters.featured }),
   };
 
   if (filters.search) {
@@ -338,69 +455,102 @@ export function buildProductWhere(filters: ProductListFilters): Prisma.ProductWh
       { shortDescription: { contains: filters.search, mode: 'insensitive' } },
     ];
   }
-  if (filters.categoryId) {
-    where.categories = { some: { categoryId: filters.categoryId } };
+
+  const occasionIds = nonEmpty(filters.occasionIds);
+  if (occasionIds) {
+    and.push({ occasions: { some: { occasionId: { in: occasionIds } } } });
   } else {
-    const categorySlugs = parseSlugList(filters.categorySlug);
-    if (categorySlugs) {
-      where.categories = {
-        some: {
-          category: {
-            slug: categorySlugs.length === 1 ? categorySlugs[0] : { in: categorySlugs },
-          },
-        },
-      };
+    const occasionSlugs = nonEmpty(filters.occasionSlugs);
+    if (occasionSlugs) {
+      and.push({ occasions: { some: { occasion: { slug: { in: occasionSlugs } } } } });
     }
   }
-  const occasionSlugs = parseSlugList(filters.occasionSlug);
-  if (occasionSlugs) {
-    where.occasions = {
-      some: {
-        occasion: {
-          slug: occasionSlugs.length === 1 ? occasionSlugs[0] : { in: occasionSlugs },
-        },
-      },
-    };
+
+  const recipientIds = nonEmpty(filters.recipientIds);
+  if (recipientIds) {
+    and.push({ recipients: { some: { recipientId: { in: recipientIds } } } });
+  } else {
+    const recipientSlugs = nonEmpty(filters.recipientSlugs);
+    if (recipientSlugs) {
+      and.push({ recipients: { some: { recipient: { slug: { in: recipientSlugs } } } } });
+    }
   }
-  const recipientSlugs = parseSlugList(filters.recipientSlug);
-  if (recipientSlugs) {
-    where.recipients = {
-      some: {
-        recipient: {
-          slug: recipientSlugs.length === 1 ? recipientSlugs[0] : { in: recipientSlugs },
-        },
-      },
-    };
+
+  const colorIds = nonEmpty(filters.colorIds);
+  if (colorIds) {
+    and.push({ colors: { some: { colorId: { in: colorIds } } } });
+  } else {
+    const colorSlugs = nonEmpty(filters.colorSlugs);
+    if (colorSlugs) {
+      and.push({ colors: { some: { color: { slug: { in: colorSlugs } } } } });
+    }
   }
-  const styleSlugs = parseSlugList(filters.styleSlug);
-  if (styleSlugs) {
-    where.styles = {
-      some: {
-        style: {
-          slug: styleSlugs.length === 1 ? styleSlugs[0] : { in: styleSlugs },
-        },
-      },
-    };
+
+  const flowerIds = nonEmpty(filters.flowerIds);
+  if (flowerIds) {
+    and.push({ components: { some: { flowerId: { in: flowerIds } } } });
+  } else {
+    const flowerSlugs = nonEmpty(filters.flowerSlugs);
+    if (flowerSlugs) {
+      and.push({ components: { some: { flower: { slug: { in: flowerSlugs } } } } });
+    }
   }
-  const colorSlugs = parseSlugList(filters.colorSlug);
-  if (colorSlugs) {
-    where.colors = {
-      some: {
-        color: {
-          slug: colorSlugs.length === 1 ? colorSlugs[0] : { in: colorSlugs },
-        },
-      },
-    };
+
+  const bouquetSizeIds = nonEmpty(filters.bouquetSizeIds);
+  if (bouquetSizeIds) {
+    and.push({ bouquetSizeId: { in: bouquetSizeIds } });
+  } else {
+    const bouquetSizeSlugs = nonEmpty(filters.bouquetSizeSlugs);
+    if (bouquetSizeSlugs) {
+      and.push({ bouquetSize: { slug: { in: bouquetSizeSlugs } } });
+    }
   }
-  const flowerSlugs = parseSlugList(filters.flowerSlug);
-  if (flowerSlugs) {
-    where.components = {
-      some: {
-        flower: {
-          slug: flowerSlugs.length === 1 ? flowerSlugs[0] : { in: flowerSlugs },
+
+  const bestsellerGroupIds = nonEmpty(filters.bestsellerGroupIds);
+  if (bestsellerGroupIds) {
+    and.push({ bestsellerLinks: { some: { groupId: { in: bestsellerGroupIds } } } });
+  }
+
+  if (filters.promotionalOnly) {
+    and.push(promotionScheduleWhere(now));
+  }
+
+  if (filters.budgetRanges && filters.budgetRanges.length > 0) {
+    const ranges = filters.budgetRanges;
+    const candidates: Prisma.ProductWhereInput[] = ranges.map((range) => ({
+      variants: {
+        some: {
+          status: 'ACTIVE',
+          priceMinor: {
+            ...(range.minMinor === null ? {} : { gte: range.minMinor }),
+            ...(range.maxMinor === null ? {} : { lte: range.maxMinor }),
+          },
         },
       },
-    };
+    }));
+
+    // A promotion can only lower a price, so a discounted product may fall into a
+    // range its regular price overshoots. Keep those candidates and refine in memory.
+    const lowestMin = ranges.some((range) => range.minMinor === null)
+      ? null
+      : ranges.reduce<bigint>(
+          (min, range) => (range.minMinor! < min ? range.minMinor! : min),
+          ranges[0]!.minMinor!,
+        );
+    candidates.push({
+      AND: [
+        { promotion: { is: { enabled: true } } },
+        ...(lowestMin === null
+          ? []
+          : [
+              {
+                variants: { some: { status: 'ACTIVE', priceMinor: { gte: lowestMin } } },
+              } satisfies Prisma.ProductWhereInput,
+            ]),
+      ],
+    });
+
+    and.push({ OR: candidates });
   }
 
   if (filters.minPriceMinor !== undefined || filters.maxPriceMinor !== undefined) {
@@ -411,12 +561,11 @@ export function buildProductWhere(filters: ProductListFilters): Prisma.ProductWh
     if (filters.maxPriceMinor !== undefined) {
       priceMinor.lte = BigInt(filters.maxPriceMinor);
     }
-    where.variants = {
-      some: {
-        status: 'ACTIVE',
-        priceMinor,
-      },
-    };
+    and.push({ variants: { some: { status: 'ACTIVE', priceMinor } } });
+  }
+
+  if (and.length > 0) {
+    where.AND = [...(Array.isArray(where.AND) ? where.AND : where.AND ? [where.AND] : []), ...and];
   }
 
   return where;

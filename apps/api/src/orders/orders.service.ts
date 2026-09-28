@@ -25,7 +25,12 @@ import {
 import type { OrderEventType, Prisma } from '@bouquet-one/database';
 import { createHash } from 'node:crypto';
 import { AuditService } from '../audit/audit.service';
+import { toPromotionRow } from '../catalog/catalog.mapper';
 import { ProductsRepository } from '../catalog/products.repository';
+import {
+  effectiveVariantPriceMinor,
+  isPromotionEffective,
+} from '../catalog/promotion.util';
 import { AppConfigService } from '../config/app-config.service';
 import { PrismaService } from '../database/prisma.service';
 import { MediaService } from '../media/media.service';
@@ -97,7 +102,11 @@ export class OrdersService {
     return primary ? this.media.getPublicUrl(primary.mediaAsset.storageKey) : null;
   }
 
-  private async buildResolver(lines: CheckoutCartLineInput[]) {
+  /**
+   * Resolver snapshots server-side pricing for a fixed `now`, so promotion
+   * effectiveness cannot drift between validation and order creation.
+   */
+  private async buildResolver(lines: CheckoutCartLineInput[], now: Date) {
     const productIds = [...new Set(lines.map((l) => l.productId))];
     const loaded = await Promise.all(productIds.map((id) => this.products.findById(id)));
     const byId = new Map(loaded.filter(Boolean).map((p) => [p!.id, p!]));
@@ -106,6 +115,8 @@ export class OrdersService {
       const product = byId.get(productId);
       if (!product) return null;
       const variant = product.variants.find((v) => v.id === variantId) ?? null;
+      const promotion = toPromotionRow(product);
+      const promotionApplies = isPromotionEffective(promotion, now);
       return {
         product: {
           id: product.id,
@@ -125,6 +136,8 @@ export class OrdersService {
               name: variant.name,
               status: variant.status,
               priceMinor: variant.priceMinor,
+              effectivePriceMinor: effectiveVariantPriceMinor(variant, promotion, now),
+              promotionType: promotionApplies ? (promotion?.type ?? null) : null,
             }
           : null,
       };
@@ -132,8 +145,9 @@ export class OrdersService {
   }
 
   async validateCart(dto: CheckoutValidateRequest): Promise<CheckoutValidateResponse> {
+    const now = new Date();
     const settings = await this.fulfillment.getOrCreate();
-    const resolve = await this.buildResolver(dto.items);
+    const resolve = await this.buildResolver(dto.items, now);
     const prior = new Map<string, bigint>();
     for (const p of dto.priorUnitPrices ?? []) {
       try {
@@ -146,6 +160,7 @@ export class OrdersService {
       lines: dto.items,
       resolve,
       priorUnitPrices: prior,
+      now,
     });
     const deliveryFee =
       result.ok && result.items.length > 0 ? settings.deliveryFeeMinor : 0n;
@@ -268,7 +283,7 @@ export class OrdersService {
     }
     const anonymousCard = Boolean(dto.anonymousCard);
 
-    const resolve = await this.buildResolver(dto.items);
+    const resolve = await this.buildResolver(dto.items, now);
     const priced = validateCartLines({ lines: dto.items, resolve, now });
     if (!priced.ok) {
       throw new BadRequestException({
@@ -346,6 +361,11 @@ export class OrdersService {
                 variantName: item.variantName,
                 primaryImageUrl: item.primaryImageUrl,
                 unitPriceMinor: BigInt(item.unitPriceMinor),
+                originalUnitPriceMinor:
+                  item.originalUnitPriceMinor === null
+                    ? null
+                    : BigInt(item.originalUnitPriceMinor),
+                promotionType: item.promotionType,
                 quantity: item.quantity,
                 lineTotalMinor: BigInt(item.lineTotalMinor),
                 currency: 'BYN',

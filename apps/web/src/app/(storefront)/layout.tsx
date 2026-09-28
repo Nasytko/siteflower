@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react';
+import { defaultStorefrontSettings } from '@bouquet-one/contracts';
 import { FavoritesProvider } from '@/components/storefront/favorites-provider';
 import { StorefrontFooter } from '@/components/storefront/footer';
 import { StorefrontHeader } from '@/components/storefront/header';
@@ -14,24 +15,16 @@ export default async function StorefrontLayout({ children }: { children: ReactNo
   try {
     settings = await getStorefrontSettings();
   } catch {
-    settings = {
-      brandName: 'БУКЕТ №1',
-      city: 'Гродно',
-      phone: null,
-      email: null,
-      address: null,
-      workingHours: null,
-      deliverySummary: null,
-      aboutSummary: null,
-      instagramUrl: null,
-      telegramUrl: null,
-      substitutionNote: null,
-    };
+    settings = defaultStorefrontSettings();
   }
 
   const orgLd = buildOrganizationJsonLd({
     name: settings.brandName,
     url: getSiteUrl(),
+    logoUrl: `${getSiteUrl()}/brand/logo.png`,
+    phone: settings.phone,
+    address: settings.address,
+    city: settings.city,
   });
 
   return (

@@ -1,5 +1,5 @@
 /**
- * Phase 3 storefront catalog filters / taxonomies / sitemap / related.
+ * Storefront catalog filters / taxonomies / promotions / bestsellers / sitemap.
  */
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
@@ -43,23 +43,23 @@ describe('Storefront catalog (integration)', () => {
 
   beforeAll(async () => {
     pool = new pg.Pool({ connectionString: databaseUrl });
-    await pool.query('DELETE FROM collection_products');
-    await pool.query('DELETE FROM collections');
+    await pool.query('DELETE FROM bestseller_group_products');
+    await pool.query('DELETE FROM bestseller_groups');
+    await pool.query('DELETE FROM product_promotion_variant_prices');
+    await pool.query('DELETE FROM product_promotions');
     await pool.query('DELETE FROM product_media');
     await pool.query('DELETE FROM media_derivatives');
     await pool.query('DELETE FROM media_assets');
     await pool.query('DELETE FROM product_variants');
     await pool.query('DELETE FROM product_components');
-    await pool.query('DELETE FROM product_categories');
     await pool.query('DELETE FROM product_occasions');
     await pool.query('DELETE FROM product_recipients');
-    await pool.query('DELETE FROM product_styles');
     await pool.query('DELETE FROM product_colors');
     await pool.query('DELETE FROM products');
-    await pool.query('DELETE FROM categories');
+    await pool.query('DELETE FROM budget_ranges');
+    await pool.query('DELETE FROM bouquet_sizes');
     await pool.query('DELETE FROM occasions');
     await pool.query('DELETE FROM recipients');
-    await pool.query('DELETE FROM styles');
     await pool.query('DELETE FROM colors');
     await pool.query('DELETE FROM flowers');
     await pool.query('DELETE FROM slug_redirects');
@@ -140,10 +140,10 @@ describe('Storefront catalog (integration)', () => {
     name: string;
     slug?: string;
     priceMinor: string;
-    featured?: boolean;
-    categoryIds?: string[];
-    styleIds?: string[];
+    occasionIds?: string[];
+    recipientIds?: string[];
     colorIds?: string[];
+    bouquetSizeId?: string;
     flowerId?: string;
   }) {
     let product = await http
@@ -159,7 +159,7 @@ describe('Storefront catalog (integration)', () => {
         expectedVersion: product.body.version,
         shortDescription: `${input.name} short`,
         description: `${input.name} long description`,
-        ...(input.featured === undefined ? {} : { featured: input.featured }),
+        ...(input.bouquetSizeId ? { bouquetSizeId: input.bouquetSizeId } : {}),
       })
       .expect(200);
 
@@ -191,15 +191,16 @@ describe('Storefront catalog (integration)', () => {
         .expect(200);
     }
 
-    if (input.categoryIds || input.styleIds || input.colorIds) {
+    if (input.occasionIds || input.recipientIds || input.colorIds || input.bouquetSizeId) {
       product = await http
         .put(`/api/v1/admin/catalog/products/${product.body.id}/taxonomies`)
         .set('Origin', origin)
         .send({
           expectedVersion: product.body.version,
-          categoryIds: input.categoryIds ?? [],
-          styleIds: input.styleIds ?? [],
+          occasionIds: input.occasionIds ?? [],
+          recipientIds: input.recipientIds ?? [],
           colorIds: input.colorIds ?? [],
+          ...(input.bouquetSizeId ? { bouquetSizeId: input.bouquetSizeId } : {}),
         })
         .expect(200);
     }
@@ -222,7 +223,12 @@ describe('Storefront catalog (integration)', () => {
       .send({ expectedVersion: product.body.version })
       .expect(201);
 
-    return product.body as { id: string; slug: string; version: number };
+    return product.body as {
+      id: string;
+      slug: string;
+      version: number;
+      variants: Array<{ id: string; priceMinor: string; effectivePriceMinor: string }>;
+    };
   }
 
   it('filters by price and sorts by price_asc', async () => {
@@ -254,58 +260,287 @@ describe('Storefront catalog (integration)', () => {
     }
   });
 
-  it('serves taxonomy page, related products, and sitemap without drafts', async () => {
-    const style = await http
-      .post('/api/v1/admin/catalog/styles')
+  it('filters by budget, multi color/flower/occasion/recipient/size', async () => {
+    const stamp = Date.now();
+
+    const occasionA = await http
+      .post('/api/v1/admin/catalog/occasions')
       .set('Origin', origin)
-      .send({ name: 'Romantic Style', slug: `romantic-${Date.now()}`, description: 'Soft' })
+      .send({ name: 'Birthday', slug: `birthday-${stamp}` })
+      .expect(201);
+    const occasionB = await http
+      .post('/api/v1/admin/catalog/occasions')
+      .set('Origin', origin)
+      .send({ name: 'Just Because', slug: `just-${stamp}` })
+      .expect(201);
+
+    const recipient = await http
+      .post('/api/v1/admin/catalog/recipients')
+      .set('Origin', origin)
+      .send({ name: 'For Mom', slug: `mom-${stamp}` })
+      .expect(201);
+
+    const colorPink = await http
+      .post('/api/v1/admin/catalog/colors')
+      .set('Origin', origin)
+      .send({ name: 'Pink', slug: `pink-${stamp}`, swatch: '#f3c4d4' })
+      .expect(201);
+    const colorWhite = await http
+      .post('/api/v1/admin/catalog/colors')
+      .set('Origin', origin)
+      .send({ name: 'White', slug: `white-${stamp}`, swatch: '#f5f2ea' })
+      .expect(201);
+
+    const flowerRose = await http
+      .post('/api/v1/admin/catalog/flowers')
+      .set('Origin', origin)
+      .send({ name: 'Rose', slug: `rose-${stamp}` })
+      .expect(201);
+    const flowerPeony = await http
+      .post('/api/v1/admin/catalog/flowers')
+      .set('Origin', origin)
+      .send({ name: 'Peony', slug: `peony-${stamp}` })
+      .expect(201);
+
+    const sizeM = await http
+      .post('/api/v1/admin/catalog/bouquet-sizes')
+      .set('Origin', origin)
+      .send({ name: 'Medium', slug: `medium-${stamp}` })
+      .expect(201);
+    const sizeL = await http
+      .post('/api/v1/admin/catalog/bouquet-sizes')
+      .set('Origin', origin)
+      .send({ name: 'Large', slug: `large-${stamp}` })
+      .expect(201);
+
+    const budgetMid = await http
+      .post('/api/v1/admin/catalog/budget-ranges')
+      .set('Origin', origin)
+      .send({ label: `Mid ${stamp}`, minMinor: '7000', maxMinor: '12000', sortOrder: 10 })
+      .expect(201);
+
+    const match = await publishProduct({
+      name: 'Facet Match',
+      slug: `facet-match-${stamp}`,
+      priceMinor: '9000',
+      occasionIds: [occasionA.body.id],
+      recipientIds: [recipient.body.id],
+      colorIds: [colorPink.body.id],
+      bouquetSizeId: sizeM.body.id,
+      flowerId: flowerRose.body.id,
+    });
+    const orMatch = await publishProduct({
+      name: 'Facet Or Color',
+      slug: `facet-or-${stamp}`,
+      priceMinor: '9500',
+      occasionIds: [occasionB.body.id],
+      colorIds: [colorWhite.body.id],
+      bouquetSizeId: sizeL.body.id,
+      flowerId: flowerPeony.body.id,
+    });
+    const miss = await publishProduct({
+      name: 'Facet Miss',
+      slug: `facet-miss-${stamp}`,
+      priceMinor: '20000',
+      colorIds: [colorPink.body.id],
+      bouquetSizeId: sizeL.body.id,
+    });
+
+    const byBudget = await request(base)
+      .get('/api/v1/catalog/products')
+      .query({ budgetRangeIds: budgetMid.body.id })
+      .expect(200);
+    const budgetSlugs = byBudget.body.items.map((item: { slug: string }) => item.slug);
+    expect(budgetSlugs).toContain(match.slug);
+    expect(budgetSlugs).toContain(orMatch.slug);
+    expect(budgetSlugs).not.toContain(miss.slug);
+
+    const byMultiColor = await request(base)
+      .get('/api/v1/catalog/products')
+      .query({ colorSlugs: `${colorPink.body.slug},${colorWhite.body.slug}` })
+      .expect(200);
+    const colorSlugs = byMultiColor.body.items.map((item: { slug: string }) => item.slug);
+    expect(colorSlugs).toContain(match.slug);
+    expect(colorSlugs).toContain(orMatch.slug);
+
+    const byFlower = await request(base)
+      .get('/api/v1/catalog/products')
+      .query({ flowerSlugs: flowerRose.body.slug })
+      .expect(200);
+    const flowerSlugs = byFlower.body.items.map((item: { slug: string }) => item.slug);
+    expect(flowerSlugs).toContain(match.slug);
+    expect(flowerSlugs).not.toContain(orMatch.slug);
+
+    const byOccasion = await request(base)
+      .get('/api/v1/catalog/products')
+      .query({ occasionSlugs: `${occasionA.body.slug},${occasionB.body.slug}` })
+      .expect(200);
+    const occasionSlugs = byOccasion.body.items.map((item: { slug: string }) => item.slug);
+    expect(occasionSlugs).toContain(match.slug);
+    expect(occasionSlugs).toContain(orMatch.slug);
+
+    const byRecipient = await request(base)
+      .get('/api/v1/catalog/products')
+      .query({ recipientSlugs: recipient.body.slug })
+      .expect(200);
+    expect(byRecipient.body.items.map((item: { slug: string }) => item.slug)).toContain(match.slug);
+
+    const bySize = await request(base)
+      .get('/api/v1/catalog/products')
+      .query({ bouquetSizeSlugs: sizeM.body.slug })
+      .expect(200);
+    const sizeSlugs = bySize.body.items.map((item: { slug: string }) => item.slug);
+    expect(sizeSlugs).toContain(match.slug);
+    expect(sizeSlugs).not.toContain(orMatch.slug);
+
+    const budgetRanges = await request(base).get('/api/v1/catalog/budget-ranges').expect(200);
+    expect(budgetRanges.body.some((item: { id: string }) => item.id === budgetMid.body.id)).toBe(
+      true,
+    );
+
+    const sizes = await request(base).get('/api/v1/catalog/bouquet-sizes').expect(200);
+    expect(sizes.body.some((item: { slug: string }) => item.slug === sizeM.body.slug)).toBe(true);
+  });
+
+  it('exposes promotion effective pricing on list and detail', async () => {
+    const stamp = Date.now();
+    const product = await publishProduct({
+      name: 'Promo Bloom',
+      slug: `promo-bloom-${stamp}`,
+      priceMinor: '10000',
+    });
+
+    await http
+      .put(`/api/v1/admin/catalog/products/${product.id}/promotion`)
+      .set('Origin', origin)
+      .send({
+        expectedVersion: product.version,
+        enabled: true,
+        type: 'PERCENT',
+        percentOff: 20,
+      })
+      .expect(200);
+
+    const list = await request(base)
+      .get('/api/v1/catalog/products')
+      .query({ search: product.slug })
+      .expect(200);
+    const listed = list.body.items.find((item: { slug: string }) => item.slug === product.slug);
+    expect(listed).toBeDefined();
+    expect(listed.promotion).toBeTruthy();
+    expect(listed.promotion.type).toBe('PERCENT');
+    // List `price` stays regular; sale lives on promotion + defaultVariant.
+    expect(listed.price.minMinor).toBe('10000');
+    expect(listed.promotion.originalPrice.minMinor).toBe('10000');
+    expect(listed.promotion.salePrice.minMinor).toBe('8000');
+    expect(listed.defaultVariant.priceMinor).toBe('8000');
+
+    const detail = await request(base).get(`/api/v1/catalog/products/${product.slug}`).expect(200);
+    expect(detail.body.product.promotion.type).toBe('PERCENT');
+    expect(detail.body.product.variants[0].priceMinor).toBe('10000');
+    expect(detail.body.product.variants[0].effectivePriceMinor).toBe('8000');
+
+    const promotions = await request(base).get('/api/v1/catalog/promotions').expect(200);
+    expect(promotions.body.some((item: { slug: string }) => item.slug === product.slug)).toBe(true);
+  });
+
+  it('serves bestsellers public endpoint', async () => {
+    const stamp = Date.now();
+    const a = await publishProduct({
+      name: 'Best A',
+      slug: `best-a-${stamp}`,
+      priceMinor: '7000',
+    });
+    const b = await publishProduct({
+      name: 'Best B',
+      slug: `best-b-${stamp}`,
+      priceMinor: '7500',
+    });
+
+    const group = await http
+      .post('/api/v1/admin/catalog/bestsellers')
+      .set('Origin', origin)
+      .send({ name: 'Все', slug: `vse-${stamp}`, title: 'Все', sortOrder: 10 })
+      .expect(201);
+
+    await http
+      .put(`/api/v1/admin/catalog/bestsellers/${group.body.id}/products`)
+      .set('Origin', origin)
+      .send({
+        expectedVersion: group.body.version,
+        productIds: [a.id, b.id],
+      })
+      .expect(200);
+
+    const list = await request(base).get('/api/v1/catalog/bestsellers').expect(200);
+    const found = list.body.find((item: { slug: string }) => item.slug === group.body.slug);
+    expect(found).toBeDefined();
+    expect(found.products.map((p: { slug: string }) => p.slug)).toEqual(
+      expect.arrayContaining([a.slug, b.slug]),
+    );
+
+    const one = await request(base)
+      .get(`/api/v1/catalog/bestsellers/${group.body.slug}`)
+      .expect(200);
+    expect(one.body.slug).toBe(group.body.slug);
+    expect(one.body.products.length).toBe(2);
+  });
+
+  it('serves taxonomy page, related products, and sitemap without drafts', async () => {
+    const stamp = Date.now();
+    const occasion = await http
+      .post('/api/v1/admin/catalog/occasions')
+      .set('Origin', origin)
+      .send({ name: 'Romantic Day', slug: `romantic-${stamp}`, description: 'Soft' })
       .expect(201);
 
     const flower = await http
       .post('/api/v1/admin/catalog/flowers')
       .set('Origin', origin)
-      .send({ name: 'Peony', slug: `peony-${Date.now()}` })
+      .send({ name: 'Peony Rel', slug: `peony-rel-${stamp}` })
       .expect(201);
 
-    const category = await http
-      .post('/api/v1/admin/catalog/categories')
+    const color = await http
+      .post('/api/v1/admin/catalog/colors')
       .set('Origin', origin)
-      .send({ name: 'Bouquets', slug: `bouquets-${Date.now()}` })
+      .send({ name: 'Blush', slug: `blush-${stamp}` })
       .expect(201);
 
     const primary = await publishProduct({
       name: 'Primary Related',
       priceMinor: '7000',
-      styleIds: [style.body.id],
-      categoryIds: [category.body.id],
+      occasionIds: [occasion.body.id],
+      colorIds: [color.body.id],
       flowerId: flower.body.id,
     });
     const sibling = await publishProduct({
       name: 'Sibling Related',
       priceMinor: '7500',
-      styleIds: [style.body.id],
+      occasionIds: [occasion.body.id],
     });
     await publishProduct({ name: 'Unrelated Other', priceMinor: '9000' });
 
     const draft = await http
       .post('/api/v1/admin/catalog/products')
       .set('Origin', origin)
-      .send({ name: 'Draft Hidden', slug: `draft-hidden-${Date.now()}` })
+      .send({ name: 'Draft Hidden', slug: `draft-hidden-${stamp}` })
       .expect(201);
 
     const taxonomy = await request(base)
-      .get(`/api/v1/catalog/taxonomies/style/${style.body.slug}`)
+      .get(`/api/v1/catalog/taxonomies/occasion/${occasion.body.slug}`)
       .expect(200);
-    expect(taxonomy.body.kind).toBe('style');
-    expect(taxonomy.body.slug).toBe(style.body.slug);
-    expect(taxonomy.body.seo.resolvedTitle).toContain(style.body.name);
+    expect(taxonomy.body.kind).toBe('occasion');
+    expect(taxonomy.body.slug).toBe(occasion.body.slug);
+    expect(taxonomy.body.seo.resolvedTitle).toContain(occasion.body.name);
 
     await request(base)
-      .get(`/api/v1/catalog/taxonomies/style/missing-${Date.now()}`)
+      .get(`/api/v1/catalog/taxonomies/occasion/missing-${stamp}`)
       .expect(404);
 
-    const styles = await request(base).get('/api/v1/catalog/styles').expect(200);
-    expect(styles.body.some((item: { slug: string }) => item.slug === style.body.slug)).toBe(true);
+    const occasions = await request(base).get('/api/v1/catalog/occasions').expect(200);
+    expect(occasions.body.some((item: { slug: string }) => item.slug === occasion.body.slug)).toBe(
+      true,
+    );
 
     const related = await request(base)
       .get(`/api/v1/catalog/products/${primary.slug}/related`)
@@ -319,6 +554,7 @@ describe('Storefront catalog (integration)', () => {
     const paths = sitemap.body.map((entry: { path: string }) => entry.path);
     expect(paths).toContain(`/bukety/${primary.slug}`);
     expect(paths).toContain(`/cvety/${flower.body.slug}`);
+    expect(paths).toContain(`/povod/${occasion.body.slug}`);
     expect(paths).not.toContain(`/bukety/${draft.body.slug}`);
   });
 

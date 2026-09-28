@@ -18,7 +18,9 @@ export function FavoriteButton({ productId, slug, className = '' }: Props) {
       aria-pressed={ready ? active : false}
       aria-label={active ? 'Убрать из избранного' : 'Добавить в избранное'}
       data-favorite={active ? '1' : '0'}
-      className={`inline-flex h-10 w-10 items-center justify-center rounded-full bg-surface/90 text-foreground shadow-[var(--shadow-soft)] ring-1 ring-border transition hover:text-brand ${className}`}
+      className={`inline-flex h-9 w-9 items-center justify-center rounded-full bg-surface/85 backdrop-blur-[2px] transition-colors ${
+        active ? 'text-accent' : 'text-muted hover:text-accent'
+      } ${className}`}
       onClick={(event) => {
         event.preventDefault();
         event.stopPropagation();
@@ -27,11 +29,11 @@ export function FavoriteButton({ productId, slug, className = '' }: Props) {
     >
       <svg
         viewBox="0 0 24 24"
-        className="h-5 w-5"
+        className="h-[1.15rem] w-[1.15rem]"
         aria-hidden="true"
         fill={active ? 'currentColor' : 'none'}
         stroke="currentColor"
-        strokeWidth="1.8"
+        strokeWidth="1.6"
       >
         <path d="M12 20s-7-4.35-7-9.2A4.2 4.2 0 0 1 12 7.1a4.2 4.2 0 0 1 7 3.7C19 15.65 12 20 12 20Z" />
       </svg>

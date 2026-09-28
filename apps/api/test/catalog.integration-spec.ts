@@ -42,14 +42,19 @@ describe('Catalog (integration)', () => {
 
   beforeAll(async () => {
     pool = new pg.Pool({ connectionString: databaseUrl });
+    await pool.query('DELETE FROM bestseller_group_products');
+    await pool.query('DELETE FROM bestseller_groups');
+    await pool.query('DELETE FROM product_promotion_variant_prices');
+    await pool.query('DELETE FROM product_promotions');
     await pool.query('DELETE FROM product_media');
     await pool.query('DELETE FROM media_derivatives');
     await pool.query('DELETE FROM media_assets');
     await pool.query('DELETE FROM product_variants');
     await pool.query('DELETE FROM product_components');
-    await pool.query('DELETE FROM product_categories');
+    await pool.query('DELETE FROM product_occasions');
+    await pool.query('DELETE FROM product_recipients');
+    await pool.query('DELETE FROM product_colors');
     await pool.query('DELETE FROM products');
-    await pool.query('DELETE FROM categories');
     await pool.query('DELETE FROM slug_redirects');
     await pool.query('DELETE FROM audit_logs');
     await pool.query('DELETE FROM admin_sessions');

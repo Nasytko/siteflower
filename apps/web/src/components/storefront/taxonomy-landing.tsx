@@ -1,10 +1,12 @@
+import Link from 'next/link';
 import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 import type { TaxonomyLandingKind } from '@bouquet-one/contracts';
 import { Breadcrumbs } from '@/components/storefront/breadcrumbs';
-import { EmptyState } from '@/components/storefront/empty-state';
 import { ProductGrid } from '@/components/storefront/product-grid';
+import { bouquetCountLabel } from '@/lib/catalog-search-params';
 import {
+  EMPTY_PRODUCT_PAGE,
   getTaxonomy,
   listProducts,
   PublicApiError,
@@ -14,11 +16,12 @@ import { buildPageMetadata } from '@/lib/seo/metadata';
 
 const KIND_META: Record<
   TaxonomyLandingKind,
-  { pathPrefix: string; filterKey: keyof CatalogListParams; catalogLabel: string }
+  { pathPrefix: string; filterKey: keyof CatalogListParams; hubLabel: string; hubHref: string }
 > = {
-  flower: { pathPrefix: '/cvety', filterKey: 'flowerSlug', catalogLabel: 'Цветы' },
-  occasion: { pathPrefix: '/povod', filterKey: 'occasionSlug', catalogLabel: 'Поводы' },
-  recipient: { pathPrefix: '/komu', filterKey: 'recipientSlug', catalogLabel: 'Кому' },
+  flower: { pathPrefix: '/cvety', filterKey: 'flower', hubLabel: 'Цветы', hubHref: '/cvety' },
+  occasion: { pathPrefix: '/povod', filterKey: 'occasion', hubLabel: 'Повод', hubHref: '/povod' },
+  recipient: { pathPrefix: '/komu', filterKey: 'recipient', hubLabel: 'Кому', hubHref: '/bukety' },
+  color: { pathPrefix: '/bukety', filterKey: 'color', hubLabel: 'Цвет', hubHref: '/bukety' },
 };
 
 export async function generateTaxonomyMetadata(
@@ -36,7 +39,7 @@ export async function generateTaxonomyMetadata(
     });
   } catch {
     return buildPageMetadata({
-      title: meta.catalogLabel,
+      title: meta.hubLabel,
       description: 'Подборка букетов',
       path: `${meta.pathPrefix}/${slug}`,
       noIndex: true,
@@ -66,32 +69,51 @@ export async function TaxonomyLandingPage({
   const products = await listProducts({
     [meta.filterKey]: taxonomy.slug,
     pageSize: 24,
-    sort: 'featured',
-  });
+    sort: 'recommended',
+  }).catch(() => EMPTY_PRODUCT_PAGE);
+
+  /** Deep-link into the catalog with this dimension preselected. */
+  const catalogHref = `/bukety?${meta.filterKey}=${encodeURIComponent(taxonomy.slug)}`;
 
   return (
-    <main id="main-content" className="sf-container py-10 md:py-14">
+    <main id="main-content" className="sf-container-wide py-5 sm:py-7">
       <Breadcrumbs
-        className="mb-6"
+        className="mb-3"
         items={[
           { name: 'Главная', href: '/' },
-          { name: 'Каталог', href: '/bukety' },
+          { name: meta.hubLabel, href: meta.hubHref },
           { name: taxonomy.name },
         ]}
       />
 
-      <header className="mb-10 max-w-2xl">
+      <header className="mb-6">
         <h1 className="sf-h1">{taxonomy.name}</h1>
         {taxonomy.description ? (
-          <p className="sf-body mt-3 text-muted">{taxonomy.description}</p>
+          <p className="sf-body mt-1.5 max-w-xl text-muted">{taxonomy.description}</p>
         ) : null}
+        <div className="mt-3 flex flex-wrap items-center gap-4">
+          {products.total > 0 ? (
+            <p className="sf-small text-muted">Найдено {bouquetCountLabel(products.total)}</p>
+          ) : null}
+          <Link
+            href={catalogHref}
+            className="sf-small text-brand underline-offset-2 hover:underline"
+          >
+            Уточнить фильтрами
+          </Link>
+        </div>
       </header>
 
       {products.items.length === 0 ? (
-        <EmptyState
-          title="Букетов пока нет"
-          description="Загляните в полный каталог — там всегда есть свежие варианты."
-        />
+        <div className="sf-panel flex flex-col items-center gap-3 px-6 py-14 text-center">
+          <p className="sf-h2">Пока здесь нет букетов</p>
+          <p className="sf-body max-w-md text-muted">
+            Витрина обновляется каждый день — загляните в полный каталог.
+          </p>
+          <Link href="/bukety" className="sf-cta mt-2">
+            Все букеты
+          </Link>
+        </div>
       ) : (
         <ProductGrid products={products.items} />
       )}

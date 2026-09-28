@@ -60,11 +60,3 @@ export function toSameOriginMediaUrl(url: string | null | undefined): string | n
     return url;
   }
 }
-
-/** BYN price band presets for catalog UI (customer thinks in major units). */
-export const PRICE_BANDS = [
-  { id: 'under-100', label: 'До 100 BYN', minMinor: undefined, maxMinor: '10000' },
-  { id: '100-150', label: '100–150 BYN', minMinor: '10000', maxMinor: '15000' },
-  { id: '150-200', label: '150–200 BYN', minMinor: '15000', maxMinor: '20000' },
-  { id: '200-plus', label: '200+ BYN', minMinor: '20000', maxMinor: undefined },
-] as const;

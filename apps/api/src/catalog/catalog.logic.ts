@@ -1,10 +1,10 @@
 /**
- * Catalog helpers: publication, slugs, rules, publish validation.
+ * Catalog helpers: publication, slugs, publish validation.
+ * Collection rule engine removed — merchandising is Bestsellers + Promotions.
  */
 import {
   derivePriceRange,
-  type CollectionRulesDto,
-  type CommercialAvailability,
+  type PriceRangeDto,
   type PublishValidationIssue,
 } from '@bouquet-one/contracts';
 
@@ -12,12 +12,26 @@ import {
 export const OCC_CONFLICT_MESSAGE =
   'This item was changed by another user. Reload before saving.';
 
-export function isEffectivelyPublished(product: {
-  lifecycle: string;
-  publishAt: Date | null;
-  publishedAt: Date | null;
-  unpublishAt: Date | null;
-}, now = new Date()): boolean {
+/** Price range of ACTIVE variants only — inactive sizes never shape the storefront price. */
+export function activeVariantPrices(
+  currency: string,
+  variants: ReadonlyArray<{ status: string; priceMinor: bigint }>,
+): PriceRangeDto | null {
+  return derivePriceRange(
+    currency,
+    variants.filter((variant) => variant.status === 'ACTIVE').map((variant) => variant.priceMinor),
+  );
+}
+
+export function isEffectivelyPublished(
+  product: {
+    lifecycle: string;
+    publishAt: Date | null;
+    publishedAt: Date | null;
+    unpublishAt: Date | null;
+  },
+  now = new Date(),
+): boolean {
   if (product.lifecycle !== 'PUBLISHED') return false;
   const start = product.publishAt ?? product.publishedAt;
   if (start && start.getTime() > now.getTime()) return false;
@@ -95,57 +109,4 @@ export function wouldCreateRedirectLoop(
     if (seen.size > 50) return true;
   }
   return false;
-}
-
-export function matchesCollectionRules(
-  product: {
-    availability: CommercialAvailability;
-    lifecycle: string;
-    categorySlugs: string[];
-    occasionSlugs: string[];
-    recipientSlugs: string[];
-    styleSlugs: string[];
-    flowerSlugs: string[];
-    colorSlugs: string[];
-    minActivePriceMinor: bigint | null;
-  },
-  rules: CollectionRulesDto,
-): boolean {
-  if (rules.requirePublished !== false && product.lifecycle !== 'PUBLISHED') {
-    return false;
-  }
-  const includesAny = (needles: string[] | undefined, hay: string[]) => {
-    if (!needles || needles.length === 0) return true;
-    return needles.some((n) => hay.includes(n));
-  };
-  if (!includesAny(rules.categorySlugs, product.categorySlugs)) return false;
-  if (!includesAny(rules.occasionSlugs, product.occasionSlugs)) return false;
-  if (!includesAny(rules.recipientSlugs, product.recipientSlugs)) return false;
-  if (!includesAny(rules.styleSlugs, product.styleSlugs)) return false;
-  if (!includesAny(rules.flowerSlugs, product.flowerSlugs)) return false;
-  if (!includesAny(rules.colorSlugs, product.colorSlugs)) return false;
-  if (rules.availabilities?.length && !rules.availabilities.includes(product.availability)) {
-    return false;
-  }
-  if (product.minActivePriceMinor != null) {
-    if (rules.minPriceMinor !== undefined && product.minActivePriceMinor < BigInt(rules.minPriceMinor)) {
-      return false;
-    }
-    if (rules.maxPriceMinor !== undefined && product.minActivePriceMinor > BigInt(rules.maxPriceMinor)) {
-      return false;
-    }
-  } else if (rules.minPriceMinor !== undefined || rules.maxPriceMinor !== undefined) {
-    return false;
-  }
-  return true;
-}
-
-export function activeVariantPrices(
-  currency: string,
-  variants: Array<{ status: string; priceMinor: bigint }>,
-) {
-  return derivePriceRange(
-    currency,
-    variants.filter((v) => v.status === 'ACTIVE').map((v) => v.priceMinor),
-  );
 }

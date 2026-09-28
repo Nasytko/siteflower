@@ -1,6 +1,10 @@
 /**
- * Catalog domain contracts — shared by API, admin web, and future storefront.
+ * Catalog domain contracts — shared by API, admin web, and storefront.
  * No Prisma types.
+ *
+ * Discovery dimensions: Budget, Occasion/Recipient, Color, Flower, BouquetSize, ProductLine.
+ * Merchandising: Promotions, Bestsellers.
+ * Removed: Category, Style, Collection / rule engine.
  */
 
 export const PRODUCT_LIFECYCLES = ['DRAFT', 'PUBLISHED', 'ARCHIVED'] as const;
@@ -20,23 +24,25 @@ export type VariantStatus = (typeof VARIANT_STATUSES)[number];
 export const TAXONOMY_VISIBILITIES = ['VISIBLE', 'HIDDEN'] as const;
 export type TaxonomyVisibility = (typeof TAXONOMY_VISIBILITIES)[number];
 
-export const COLLECTION_TYPES = ['MANUAL', 'RULE_BASED'] as const;
-export type CollectionType = (typeof COLLECTION_TYPES)[number];
-
 export const COMPONENT_UNITS = ['PIECE', 'STEM', 'BUNCH', 'UNSPECIFIED'] as const;
 export type ComponentUnit = (typeof COMPONENT_UNITS)[number];
 
 export const SLUG_ENTITY_TYPES = [
   'PRODUCT',
-  'CATEGORY',
   'OCCASION',
   'RECIPIENT',
-  'STYLE',
   'COLOR',
   'FLOWER',
-  'COLLECTION',
+  'BOUQUET_SIZE',
 ] as const;
 export type SlugEntityType = (typeof SLUG_ENTITY_TYPES)[number];
+
+export const PROMOTION_TYPES = ['PERCENT', 'FIXED'] as const;
+export type PromotionType = (typeof PROMOTION_TYPES)[number];
+
+/** Catalog sorts — "recommended" = Admin merchandising / newest fallback (not fake popularity). */
+export const PRODUCT_SORTS = ['recommended', 'price_asc', 'price_desc', 'newest'] as const;
+export type ProductSort = (typeof PRODUCT_SORTS)[number];
 
 export type MoneyMinorDto = {
   currency: string;
@@ -83,10 +89,54 @@ export type TaxonomyAdminDto = {
   updatedAt: string;
 };
 
+export type ColorAdminDto = TaxonomyAdminDto & {
+  swatch: string | null;
+};
+
+export type BouquetSizeAdminDto = {
+  id: string;
+  slug: string;
+  name: string;
+  description: string | null;
+  sortOrder: number;
+  visibility: TaxonomyVisibility;
+  version: number;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type BouquetSizePublicDto = {
+  id: string;
+  slug: string;
+  name: string;
+  description: string | null;
+};
+
+export type BudgetRangeDto = {
+  id: string;
+  label: string;
+  minMinor: string | null;
+  maxMinor: string | null;
+  sortOrder: number;
+  active: boolean;
+  version: number;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type BudgetRangePublicDto = {
+  id: string;
+  label: string;
+  minMinor: string | null;
+  maxMinor: string | null;
+};
+
 export type ProductVariantDto = {
   id: string;
   name: string;
   priceMinor: string;
+  /** Effective price after active promotion (equals priceMinor when none). */
+  effectivePriceMinor: string;
   sortOrder: number;
   status: VariantStatus;
 };
@@ -119,21 +169,50 @@ export type ProductMediaDto = {
   }>;
 };
 
+/** Server-authoritative promotion display for a product (null when not effective). */
+export type ProductPromotionPublicDto = {
+  type: PromotionType;
+  /** Display percent off (1–99), derived for FIXED when meaningful. */
+  percentOff: number | null;
+  /** Original (regular) price range before promotion. */
+  originalPrice: PriceRangeDto;
+  /** Effective promotional price range. */
+  salePrice: PriceRangeDto;
+};
+
+export type ProductPromotionAdminDto = {
+  enabled: boolean;
+  type: PromotionType;
+  percentOff: number | null;
+  startsAt: string | null;
+  endsAt: string | null;
+  /** Required when type = FIXED: sale price per variant id. */
+  variantSalePrices: Array<{ variantId: string; salePriceMinor: string }>;
+  version: number;
+  /** Whether currently effective (Europe/Minsk clock at read time). */
+  currentlyEffective: boolean;
+};
+
 export type ProductListItemDto = {
   id: string;
   slug: string;
   name: string;
   lifecycle: ProductLifecycle;
   availability: CommercialAvailability;
-  featured: boolean;
-  /** Approximate height in cm when set in admin; null = not shown. */
+  /** Optional factual height in cm; not a filter. */
   heightCm: number | null;
+  bouquetSize: TaxonomyRefDto | null;
   price: PriceRangeDto | null;
-  /** Cheapest active variant for quick-add from catalog cards. */
+  promotion: ProductPromotionPublicDto | null;
+  /** Cheapest active variant for quick-add (effective promotional price). */
   defaultVariant: { id: string; name: string; priceMinor: string } | null;
   primaryImageUrl: string | null;
-  categories: TaxonomyRefDto[];
+  flowers: TaxonomyRefDto[];
+  colors: TaxonomyRefDto[];
+  productLines: TaxonomyRefDto[];
   updatedAt: string;
+  /** Admin list helpers */
+  bestsellerGroupIds?: string[];
 };
 
 export type ProductAdminDto = {
@@ -144,8 +223,9 @@ export type ProductAdminDto = {
   description: string | null;
   lifecycle: ProductLifecycle;
   availability: CommercialAvailability;
-  featured: boolean;
   heightCm: number | null;
+  bouquetSize: TaxonomyRefDto | null;
+  bouquetSizeId: string | null;
   currency: string;
   publishedAt: string | null;
   publishAt: string | null;
@@ -156,14 +236,17 @@ export type ProductAdminDto = {
   noIndex: boolean;
   seo: SeoFieldsDto;
   price: PriceRangeDto | null;
+  promotion: ProductPromotionAdminDto | null;
   variants: ProductVariantDto[];
   components: ProductComponentDto[];
   media: ProductMediaDto[];
-  categories: TaxonomyRefDto[];
   occasions: TaxonomyRefDto[];
   recipients: TaxonomyRefDto[];
-  styles: TaxonomyRefDto[];
   colors: TaxonomyRefDto[];
+  productLines: TaxonomyRefDto[];
+  /** Derived from composition (ProductComponent.flowerId). */
+  flowers: TaxonomyRefDto[];
+  bestsellerGroupIds: string[];
   createdAt: string;
   updatedAt: string;
 };
@@ -176,15 +259,17 @@ export type ProductPublicDto = {
   shortDescription: string | null;
   description: string | null;
   availability: CommercialAvailability;
-  featured: boolean;
   heightCm: number | null;
+  bouquetSize: TaxonomyRefDto | null;
   currency: string;
   price: PriceRangeDto;
+  promotion: ProductPromotionPublicDto | null;
   seo: SeoFieldsDto;
   variants: Array<{
     id: string;
     name: string;
     priceMinor: string;
+    effectivePriceMinor: string;
     sortOrder: number;
   }>;
   components: Array<{
@@ -202,52 +287,35 @@ export type ProductPublicDto = {
     height: number | null;
     derivatives: Array<{ width: number; format: string; url: string }>;
   }>;
-  categories: TaxonomyRefDto[];
   occasions: TaxonomyRefDto[];
   recipients: TaxonomyRefDto[];
-  styles: TaxonomyRefDto[];
   colors: TaxonomyRefDto[];
+  productLines: TaxonomyRefDto[];
+  flowers: TaxonomyRefDto[];
 };
 
-export type CollectionRulesDto = {
-  categorySlugs?: string[];
-  occasionSlugs?: string[];
-  recipientSlugs?: string[];
-  styleSlugs?: string[];
-  flowerSlugs?: string[];
-  colorSlugs?: string[];
-  minPriceMinor?: string;
-  maxPriceMinor?: string;
-  availabilities?: CommercialAvailability[];
-  /** Only PUBLISHED considered for public matching */
-  requirePublished?: boolean;
-};
-
-export type CollectionAdminDto = {
+export type BestsellerGroupAdminDto = {
   id: string;
   slug: string;
   name: string;
-  description: string | null;
-  type: CollectionType;
-  rules: CollectionRulesDto | null;
+  title: string | null;
   sortOrder: number;
-  visibility: TaxonomyVisibility;
+  active: boolean;
   version: number;
-  seoTitle: string | null;
-  seoDescription: string | null;
-  noIndex: boolean;
-  productIds: string[];
-  matchCount?: number;
+  products: Array<{
+    productId: string;
+    sortOrder: number;
+    product: ProductListItemDto | null;
+  }>;
   createdAt: string;
   updatedAt: string;
 };
 
-export type CollectionPublicDto = {
+export type BestsellerGroupPublicDto = {
   id: string;
   slug: string;
   name: string;
-  description: string | null;
-  seo: SeoFieldsDto;
+  title: string | null;
   products: ProductListItemDto[];
 };
 
@@ -280,6 +348,14 @@ export function isProductLifecycle(value: string): value is ProductLifecycle {
 
 export function isCommercialAvailability(value: string): value is CommercialAvailability {
   return (COMMERCIAL_AVAILABILITIES as readonly string[]).includes(value);
+}
+
+export function isProductSort(value: string): value is ProductSort {
+  return (PRODUCT_SORTS as readonly string[]).includes(value);
+}
+
+export function isPromotionType(value: string): value is PromotionType {
+  return (PROMOTION_TYPES as readonly string[]).includes(value);
 }
 
 export function formatPriceFromMinor(
@@ -334,15 +410,52 @@ export function derivePriceRange(
   };
 }
 
+/**
+ * Apply percentage discount to a minor-unit price.
+ * Rounds half-up to nearest minor unit; never returns <= 0 when input > 0.
+ */
+export function applyPercentOff(priceMinor: bigint, percentOff: number): bigint {
+  if (percentOff < 1 || percentOff > 99) {
+    throw new Error('percentOff must be 1–99');
+  }
+  if (priceMinor <= 0n) {
+    throw new Error('price must be positive');
+  }
+  const discounted = (priceMinor * BigInt(100 - percentOff) + 50n) / 100n;
+  return discounted < 1n ? 1n : discounted;
+}
+
+/** Derive display percent from regular vs sale (null if not meaningful). */
+export function deriveDisplayPercentOff(regularMinor: bigint, saleMinor: bigint): number | null {
+  if (regularMinor <= 0n || saleMinor <= 0n || saleMinor >= regularMinor) return null;
+  const pct = Number(((regularMinor - saleMinor) * 100n) / regularMinor);
+  if (pct < 1 || pct > 99) return null;
+  return pct;
+}
+
+/**
+ * Budget range match: product price (any active variant effective price) intersects range.
+ * Range bounds are inclusive. Null min/max = open bound.
+ */
+export function budgetRangeMatchesPrice(
+  priceMinor: bigint,
+  minMinor: bigint | null,
+  maxMinor: bigint | null,
+): boolean {
+  if (minMinor !== null && priceMinor < minMinor) return false;
+  if (maxMinor !== null && priceMinor > maxMinor) return false;
+  return true;
+}
+
 export function defaultProductSeoTitle(name: string): string {
-  return `Букет «${name}» с доставкой по Гродно | БУКЕТ №1`;
+  return `Букет «${name}» с доставкой по Гродно | BUKET №1`;
 }
 
 export function defaultProductSeoDescription(name: string, shortDescription?: string | null): string {
   if (shortDescription && shortDescription.trim().length > 0) {
     return shortDescription.trim().slice(0, 500);
   }
-  return `Закажите букет «${name}» в БУКЕТ №1 — доставка цветов по Гродно.`;
+  return `Закажите букет «${name}» в BUKET №1 — доставка цветов по Гродно.`;
 }
 
 export function normalizeSlug(input: string): string {

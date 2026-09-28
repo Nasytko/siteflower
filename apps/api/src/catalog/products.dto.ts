@@ -22,21 +22,35 @@ import {
   COMPONENT_UNITS,
   PRODUCT_LIFECYCLES,
   PRODUCT_SORTS,
+  PROMOTION_TYPES,
   VARIANT_STATUSES,
   type CommercialAvailability,
   type ComponentUnit,
   type ProductLifecycle,
   type ProductSort,
+  type PromotionType,
   type VariantStatus,
 } from '@bouquet-one/contracts';
 
 const PRICE_MINOR_PATTERN = /^\d{1,15}$/;
 const CURRENCY_PATTERN = /^[A-Z]{3}$/;
+const FACET_LIST_MAX = 16;
 
 /** Multipart and query values arrive as strings; keep `undefined` absent. */
 export const toOptionalBoolean = ({ value }: { value: unknown }): boolean | undefined => {
   if (value === undefined || value === null || value === '') return undefined;
   return value === true || value === 'true' || value === '1';
+};
+
+/** Accepts `?a=1,2` and repeated `?a=1&a=2` for multi-select facets. */
+export const toStringList = ({ value }: { value: unknown }): string[] | undefined => {
+  if (value === undefined || value === null || value === '') return undefined;
+  const raw = Array.isArray(value) ? value : String(value).split(',');
+  const parts = raw
+    .map((entry) => String(entry).trim())
+    .filter((entry) => entry.length > 0 && entry.length <= 120);
+  if (parts.length === 0) return undefined;
+  return [...new Set(parts)].slice(0, FACET_LIST_MAX);
 };
 
 export class ExpectedVersionDto {
@@ -119,10 +133,6 @@ export class CreateProductDto {
   @IsIn(COMMERCIAL_AVAILABILITIES)
   availability?: CommercialAvailability;
 
-  @IsOptional()
-  @IsBoolean()
-  featured?: boolean;
-
   /** Bouquet height in cm; omit/null = hide on storefront. */
   @IsOptional()
   @Transform(({ value }) => {
@@ -134,6 +144,10 @@ export class CreateProductDto {
   @Min(15)
   @Max(250)
   heightCm?: number;
+
+  @IsOptional()
+  @IsUUID()
+  bouquetSizeId?: string;
 
   @IsOptional()
   @Matches(CURRENCY_PATTERN, { message: 'currency must be an ISO 4217 code' })
@@ -164,7 +178,25 @@ export class CreateProductDto {
   @IsArray()
   @ArrayMaxSize(50)
   @IsUUID(undefined, { each: true })
-  categoryIds?: string[];
+  occasionIds?: string[];
+
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(50)
+  @IsUUID(undefined, { each: true })
+  recipientIds?: string[];
+
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(50)
+  @IsUUID(undefined, { each: true })
+  colorIds?: string[];
+
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(50)
+  @IsUUID(undefined, { each: true })
+  productLineIds?: string[];
 }
 
 export class UpdateProductDto extends ExpectedVersionDto {
@@ -193,10 +225,6 @@ export class UpdateProductDto extends ExpectedVersionDto {
   @IsIn(COMMERCIAL_AVAILABILITIES)
   availability?: CommercialAvailability;
 
-  @IsOptional()
-  @IsBoolean()
-  featured?: boolean;
-
   /** Set null to clear height from storefront. */
   @IsOptional()
   @Transform(({ value }) => {
@@ -210,6 +238,12 @@ export class UpdateProductDto extends ExpectedVersionDto {
   @Min(15)
   @Max(250)
   heightCm?: number | null;
+
+  /** Set null to detach the bouquet size. */
+  @IsOptional()
+  @ValidateIf((_, value) => value !== null)
+  @IsUUID()
+  bouquetSizeId?: string | null;
 
   @IsOptional()
   @Matches(CURRENCY_PATTERN, { message: 'currency must be an ISO 4217 code' })
@@ -259,12 +293,6 @@ export class SetProductTaxonomiesDto extends ExpectedVersionDto {
   @IsArray()
   @ArrayMaxSize(50)
   @IsUUID(undefined, { each: true })
-  categoryIds?: string[];
-
-  @IsOptional()
-  @IsArray()
-  @ArrayMaxSize(50)
-  @IsUUID(undefined, { each: true })
   occasionIds?: string[];
 
   @IsOptional()
@@ -277,13 +305,72 @@ export class SetProductTaxonomiesDto extends ExpectedVersionDto {
   @IsArray()
   @ArrayMaxSize(50)
   @IsUUID(undefined, { each: true })
-  styleIds?: string[];
+  colorIds?: string[];
 
   @IsOptional()
   @IsArray()
   @ArrayMaxSize(50)
   @IsUUID(undefined, { each: true })
-  colorIds?: string[];
+  productLineIds?: string[];
+
+  /** Explicit null detaches the bouquet size; omit to leave unchanged. */
+  @IsOptional()
+  @ValidateIf((_, value) => value !== null)
+  @IsUUID()
+  bouquetSizeId?: string | null;
+}
+
+export class SetProductBestsellerGroupsDto extends ExpectedVersionDto {
+  @IsArray()
+  @ArrayMaxSize(20)
+  @IsUUID(undefined, { each: true })
+  groupIds!: string[];
+}
+
+export class PromotionVariantPriceInputDto {
+  @IsUUID()
+  variantId!: string;
+
+  @IsString()
+  @Matches(PRICE_MINOR_PATTERN, {
+    message: 'salePriceMinor must be integer minor units as a string',
+  })
+  salePriceMinor!: string;
+}
+
+export class UpsertProductPromotionDto extends ExpectedVersionDto {
+  @IsBoolean()
+  enabled!: boolean;
+
+  @IsIn(PROMOTION_TYPES)
+  type!: PromotionType;
+
+  /** Required for PERCENT promotions (1–99). */
+  @IsOptional()
+  @ValidateIf((_, value) => value !== null)
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(99)
+  percentOff?: number | null;
+
+  @IsOptional()
+  @ValidateIf((_, value) => value !== null)
+  @IsDateString()
+  startsAt?: string | null;
+
+  @IsOptional()
+  @ValidateIf((_, value) => value !== null)
+  @IsDateString()
+  endsAt?: string | null;
+
+  /** Required for FIXED promotions: sale price per active variant. */
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(50)
+  @ValidateNested({ each: true })
+  @Type(() => PromotionVariantPriceInputDto)
+  variantSalePrices?: PromotionVariantPriceInputDto[];
 }
 
 export class PublishProductDto extends ExpectedVersionDto {
@@ -342,7 +429,92 @@ export class ReorderProductMediaDto {
   mediaIds!: string[];
 }
 
-export class ProductListQueryDto {
+/** Facet filters shared by admin and public product lists (OR within, AND across). */
+class ProductFacetQueryDto {
+  @IsOptional()
+  @Transform(toStringList)
+  @IsArray()
+  @ArrayMaxSize(FACET_LIST_MAX)
+  @IsUUID(undefined, { each: true })
+  budgetRangeIds?: string[];
+
+  @IsOptional()
+  @Transform(toStringList)
+  @IsArray()
+  @ArrayMaxSize(FACET_LIST_MAX)
+  @IsUUID(undefined, { each: true })
+  occasionIds?: string[];
+
+  @IsOptional()
+  @Transform(toStringList)
+  @IsArray()
+  @ArrayMaxSize(FACET_LIST_MAX)
+  @MaxLength(120, { each: true })
+  occasionSlugs?: string[];
+
+  @IsOptional()
+  @Transform(toStringList)
+  @IsArray()
+  @ArrayMaxSize(FACET_LIST_MAX)
+  @IsUUID(undefined, { each: true })
+  recipientIds?: string[];
+
+  @IsOptional()
+  @Transform(toStringList)
+  @IsArray()
+  @ArrayMaxSize(FACET_LIST_MAX)
+  @MaxLength(120, { each: true })
+  recipientSlugs?: string[];
+
+  @IsOptional()
+  @Transform(toStringList)
+  @IsArray()
+  @ArrayMaxSize(FACET_LIST_MAX)
+  @IsUUID(undefined, { each: true })
+  colorIds?: string[];
+
+  @IsOptional()
+  @Transform(toStringList)
+  @IsArray()
+  @ArrayMaxSize(FACET_LIST_MAX)
+  @MaxLength(120, { each: true })
+  colorSlugs?: string[];
+
+  @IsOptional()
+  @Transform(toStringList)
+  @IsArray()
+  @ArrayMaxSize(FACET_LIST_MAX)
+  @IsUUID(undefined, { each: true })
+  flowerIds?: string[];
+
+  @IsOptional()
+  @Transform(toStringList)
+  @IsArray()
+  @ArrayMaxSize(FACET_LIST_MAX)
+  @MaxLength(120, { each: true })
+  flowerSlugs?: string[];
+
+  @IsOptional()
+  @Transform(toStringList)
+  @IsArray()
+  @ArrayMaxSize(FACET_LIST_MAX)
+  @IsUUID(undefined, { each: true })
+  bouquetSizeIds?: string[];
+
+  @IsOptional()
+  @Transform(toStringList)
+  @IsArray()
+  @ArrayMaxSize(FACET_LIST_MAX)
+  @MaxLength(120, { each: true })
+  bouquetSizeSlugs?: string[];
+
+  @IsOptional()
+  @Transform(toOptionalBoolean)
+  @IsBoolean()
+  promotionalOnly?: boolean;
+}
+
+export class ProductListQueryDto extends ProductFacetQueryDto {
   @IsOptional()
   @Type(() => Number)
   @IsInt()
@@ -370,16 +542,18 @@ export class ProductListQueryDto {
   availability?: CommercialAvailability;
 
   @IsOptional()
-  @Transform(toOptionalBoolean)
-  @IsBoolean()
-  featured?: boolean;
+  @Transform(toStringList)
+  @IsArray()
+  @ArrayMaxSize(FACET_LIST_MAX)
+  @IsUUID(undefined, { each: true })
+  bestsellerGroupIds?: string[];
 
   @IsOptional()
-  @IsUUID()
-  categoryId?: string;
+  @IsIn(PRODUCT_SORTS)
+  sort?: ProductSort = 'recommended';
 }
 
-export class PublicProductListQueryDto {
+export class PublicProductListQueryDto extends ProductFacetQueryDto {
   @IsOptional()
   @Type(() => Number)
   @IsInt()
@@ -403,53 +577,22 @@ export class PublicProductListQueryDto {
   availability?: CommercialAvailability;
 
   @IsOptional()
-  @Transform(toOptionalBoolean)
-  @IsBoolean()
-  featured?: boolean;
-
-  @IsOptional()
   @IsString()
-  @MaxLength(400)
-  categorySlug?: string;
-
-  @IsOptional()
-  @IsString()
-  @MaxLength(400)
-  occasionSlug?: string;
-
-  @IsOptional()
-  @IsString()
-  @MaxLength(400)
-  recipientSlug?: string;
-
-  @IsOptional()
-  @IsString()
-  @MaxLength(400)
-  styleSlug?: string;
-
-  @IsOptional()
-  @IsString()
-  @MaxLength(400)
-  colorSlug?: string;
-
-  @IsOptional()
-  @IsString()
-  @MaxLength(400)
-  flowerSlug?: string;
-
-  @IsOptional()
-  @IsString()
-  @Matches(PRICE_MINOR_PATTERN, { message: 'minPriceMinor must be integer minor units as a string' })
+  @Matches(PRICE_MINOR_PATTERN, {
+    message: 'minPriceMinor must be integer minor units as a string',
+  })
   minPriceMinor?: string;
 
   @IsOptional()
   @IsString()
-  @Matches(PRICE_MINOR_PATTERN, { message: 'maxPriceMinor must be integer minor units as a string' })
+  @Matches(PRICE_MINOR_PATTERN, {
+    message: 'maxPriceMinor must be integer minor units as a string',
+  })
   maxPriceMinor?: string;
 
   @IsOptional()
   @IsIn(PRODUCT_SORTS)
-  sort?: ProductSort = 'featured';
+  sort?: ProductSort = 'recommended';
 }
 
 export class RelatedProductsQueryDto {

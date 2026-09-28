@@ -3,7 +3,7 @@ import { getSitemapEntries } from '@/lib/public-api';
 import { getIndexingPolicy } from '@/lib/seo/indexing';
 import { getSiteUrl } from '@/lib/seo/site-url';
 
-const STATIC_PATHS = ['/', '/bukety', '/dostavka', '/o-nas'] as const;
+const STATIC_PATHS = ['/', '/bukety', '/akcii', '/cvety', '/povod', '/dostavka', '/o-nas'] as const;
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const indexing = getIndexingPolicy();
@@ -15,8 +15,8 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const staticEntries: MetadataRoute.Sitemap = STATIC_PATHS.map((path) => ({
     url: path === '/' ? `${siteUrl}/` : `${siteUrl}${path}`,
     lastModified: new Date(),
-    changeFrequency: path === '/' || path === '/bukety' ? 'daily' : 'weekly',
-    priority: path === '/' ? 1 : path === '/bukety' ? 0.9 : 0.6,
+    changeFrequency: path === '/' || path === '/bukety' || path === '/akcii' ? 'daily' : 'weekly',
+    priority: path === '/' ? 1 : path === '/bukety' ? 0.9 : path === '/akcii' ? 0.8 : 0.6,
   }));
 
   let dynamicEntries: MetadataRoute.Sitemap = [];

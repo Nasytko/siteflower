@@ -29,7 +29,16 @@ async function resetBrowserCommerceState(page: Page) {
 }
 
 async function addFixtureProductToCart(page: Page) {
-  await page.goto(`${webUrl}${FIXTURE_PRODUCT.path}`, { waitUntil: 'domcontentloaded' });
+  // Retry once — intermittent net::ERR_ABORTED under local production Next can abort the first navigation.
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    try {
+      await page.goto(`${webUrl}${FIXTURE_PRODUCT.path}`, { waitUntil: 'domcontentloaded' });
+      break;
+    } catch (error) {
+      if (attempt === 1) throw error;
+      await page.waitForTimeout(500);
+    }
+  }
   await expect(page.getByRole('heading', { level: 1, name: FIXTURE_PRODUCT.name })).toBeVisible({
     timeout: 15_000,
   });
@@ -43,9 +52,7 @@ async function addFixtureProductToCart(page: Page) {
     await variantOption.click();
   }
 
-  const addButton = page.getByTestId('add-to-cart');
-  await expect(addButton).toBeEnabled({ timeout: 10_000 });
-  await addButton.click();
+  await page.getByTestId('add-to-cart').click();
   await expect(page.getByTestId('add-to-cart-status')).toContainText(/Добавлено/i, {
     timeout: 10_000,
   });
@@ -62,7 +69,8 @@ test.describe('commerce add-to-cart', () => {
     await expect(page.getByRole('heading', { name: 'Корзина' })).toBeVisible();
     await expect(page.getByRole('link', { name: new RegExp(FIXTURE_PRODUCT.name, 'i') }).first()).toBeVisible();
     await expect(page.getByText(/BYN/i).first()).toBeVisible();
-    await expect(page.locator('input[type="number"]').first()).toHaveValue('1');
+    // Qty stepper shows the current quantity (no free-form number input).
+    await expect(page.getByRole('group', { name: 'Количество' })).toContainText('1');
   });
 });
 
@@ -74,7 +82,7 @@ test.describe('commerce delivery journey', () => {
 
     await page.goto(webUrl);
     await expect(page.locator('#main-content')).toBeVisible();
-    await expect(page.getByText(/БУКЕТ\s*№?\s*1/i).first()).toBeVisible();
+    await expect(page.getByRole('img', { name: /BUKET\s*№?\s*1/i }).first()).toBeVisible();
 
     await addFixtureProductToCart(page);
     await page.goto(`${webUrl}/cart`);

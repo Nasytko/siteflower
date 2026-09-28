@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import type { ProductListItemDto } from '@bouquet-one/contracts';
+import type { ProductListItemDto, ProductResolveDto } from '@bouquet-one/contracts';
 import { EmptyState } from '@/components/storefront/empty-state';
 import { ProductGrid } from '@/components/storefront/product-grid';
 import { useFavorites } from '@/components/storefront/favorites-provider';
@@ -14,27 +14,14 @@ async function fetchProductBySlug(slug: string): Promise<ProductListItemDto | nu
     });
     if (response.status === 404) return null;
     if (!response.ok) throw new PublicApiError('Favorites fetch failed', response.status);
-    const data = (await response.json()) as {
-      product: {
-        id: string;
-        slug: string;
-        name: string;
-        availability: ProductListItemDto['availability'];
-        featured: boolean;
-        heightCm: number | null;
-        price: ProductListItemDto['price'];
-        variants: Array<{ id: string; name: string; priceMinor: string; sortOrder: number }>;
-        media: Array<{ url: string; isPrimary: boolean }>;
-        categories: ProductListItemDto['categories'];
-      };
-      canonicalSlug: string;
-    };
+    const data = (await response.json()) as ProductResolveDto;
     const product = data.product;
     const primary = product.media.find((m) => m.isPrimary) ?? product.media[0];
+    // Cheapest active variant, priced at its effective (post-promotion) amount.
     const cheapest = [...product.variants].sort((a, b) => {
       const byOrder = a.sortOrder - b.sortOrder;
       if (byOrder !== 0) return byOrder;
-      return Number(a.priceMinor) - Number(b.priceMinor);
+      return Number(a.effectivePriceMinor) - Number(b.effectivePriceMinor);
     })[0];
     return {
       id: product.id,
@@ -42,14 +29,17 @@ async function fetchProductBySlug(slug: string): Promise<ProductListItemDto | nu
       name: product.name,
       lifecycle: 'PUBLISHED',
       availability: product.availability,
-      featured: product.featured,
       heightCm: product.heightCm ?? null,
+      bouquetSize: product.bouquetSize,
       price: product.price,
+      promotion: product.promotion,
       defaultVariant: cheapest
-        ? { id: cheapest.id, name: cheapest.name, priceMinor: cheapest.priceMinor }
+        ? { id: cheapest.id, name: cheapest.name, priceMinor: cheapest.effectivePriceMinor }
         : null,
       primaryImageUrl: primary?.url ?? null,
-      categories: product.categories,
+      flowers: product.flowers,
+      colors: product.colors,
+      productLines: product.productLines,
       updatedAt: new Date().toISOString(),
     };
   } catch {
@@ -100,7 +90,7 @@ export function FavoritesView() {
     return (
       <div className="grid grid-cols-2 gap-4 md:grid-cols-3 lg:grid-cols-4" aria-busy="true">
         {Array.from({ length: 4 }).map((_, index) => (
-          <div key={index} className="sf-skeleton aspect-[4/5] rounded-[var(--radius-md)]" />
+          <div key={index} className="sf-skeleton aspect-[4/5] rounded-[var(--radius-lg)]" />
         ))}
       </div>
     );

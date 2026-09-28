@@ -2,15 +2,19 @@
  * Storefront configuration contracts — constrained CMS, not a page builder.
  */
 
-export const PRODUCT_SORTS = ['featured', 'price_asc', 'price_desc', 'newest'] as const;
-export type ProductSort = (typeof PRODUCT_SORTS)[number];
+import type { ProductSort } from './catalog';
 
-export const TAXONOMY_LANDING_KINDS = ['flower', 'occasion', 'recipient'] as const;
+export type { ProductSort };
+/** `PRODUCT_SORTS` / `isProductSort` live in ./catalog and are re-exported by the package index. */
+
+export const TAXONOMY_LANDING_KINDS = ['flower', 'occasion', 'recipient', 'color'] as const;
 export type TaxonomyLandingKind = (typeof TAXONOMY_LANDING_KINDS)[number];
 
 export const HOMEPAGE_SECTION_KINDS = [
-  'featured',
-  'collection',
+  'promotions',
+  'bestsellers',
+  'gifts',
+  'instagram',
   'occasions',
   'recipients',
   'discovery',
@@ -33,8 +37,6 @@ export type HomepageSectionDto = {
   kind: HomepageSectionKind;
   enabled: boolean;
   heading: string;
-  /** Collection slug when kind === 'collection' */
-  collectionSlug?: string | null;
   sortOrder: number;
 };
 
@@ -77,12 +79,78 @@ export type UpdateHomepageConfigDto = {
   sections: HomepageSectionDto[];
 };
 
+/** Curated Instagram post (admin + public share the same shape). */
+export type InstagramPostDto = {
+  id: string;
+  imageUrl: string;
+  postUrl: string | null;
+  caption: string | null;
+  enabled: boolean;
+  sortOrder: number;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type InstagramFeedPublicDto = {
+  brandName: string;
+  /** Absolute profile URL when configured. */
+  profileUrl: string | null;
+  /** Display handle including @, or null when Instagram is not configured. */
+  handle: string | null;
+  posts: InstagramPostDto[];
+};
+
+export type CreateInstagramPostDto = {
+  imageUrl: string;
+  postUrl?: string | null;
+  caption?: string | null;
+  enabled?: boolean;
+  sortOrder?: number;
+};
+
+export type UpdateInstagramPostDto = {
+  imageUrl?: string;
+  postUrl?: string | null;
+  caption?: string | null;
+  enabled?: boolean;
+  sortOrder?: number;
+};
+
+export type ReorderInstagramPostsDto = {
+  orderedIds: string[];
+};
+
+/**
+ * Extract `@handle` from a profile URL or raw handle string.
+ * Returns null when nothing usable is found.
+ */
+export function parseInstagramHandle(raw: string | null | undefined): string | null {
+  if (!raw) return null;
+  const trimmed = raw.trim();
+  if (!trimmed) return null;
+  const atMatch = trimmed.match(/^@([A-Za-z0-9._]{1,30})$/);
+  if (atMatch) return `@${atMatch[1]}`;
+  try {
+    const url = new URL(trimmed.startsWith('http') ? trimmed : `https://${trimmed}`);
+    if (!/instagram\.com$/i.test(url.hostname.replace(/^www\./, ''))) {
+      // Still allow bare host forms
+      if (!url.hostname.toLowerCase().includes('instagram.com')) return null;
+    }
+    const part = url.pathname.split('/').filter(Boolean)[0];
+    if (!part || part.length > 30) return null;
+    if (!/^[A-Za-z0-9._]+$/.test(part)) return null;
+    return `@${part}`;
+  } catch {
+    return null;
+  }
+}
+
 export type TaxonomyPublicDto = {
   id: string;
   slug: string;
   name: string;
   description: string | null;
-  kind: TaxonomyLandingKind | 'category' | 'style' | 'color';
+  kind: TaxonomyLandingKind | 'bouquet_size';
   seo: {
     seoTitle: string | null;
     seoDescription: string | null;
@@ -106,10 +174,6 @@ export type ProductResolveDto = {
   canonicalSlug: string;
 };
 
-export function isProductSort(value: string): value is ProductSort {
-  return (PRODUCT_SORTS as readonly string[]).includes(value);
-}
-
 export function defaultHomepageConfig(): HomepageConfigDto {
   return {
     hero: {
@@ -121,25 +185,32 @@ export function defaultHomepageConfig(): HomepageConfigDto {
     },
     sections: [
       {
-        id: 'featured',
-        kind: 'featured',
+        id: 'promotions',
+        kind: 'promotions',
         enabled: true,
-        heading: 'Популярное',
+        heading: 'Акционные предложения',
         sortOrder: 10,
       },
       {
-        id: 'discovery',
-        kind: 'discovery',
+        id: 'bestsellers',
+        kind: 'bestsellers',
         enabled: true,
-        heading: 'Быстрый выбор',
+        heading: 'Наши бестселлеры',
         sortOrder: 20,
       },
       {
-        id: 'occasions',
-        kind: 'occasions',
+        id: 'gifts',
+        kind: 'gifts',
         enabled: true,
-        heading: 'Поводы',
+        heading: 'Подарки',
         sortOrder: 30,
+      },
+      {
+        id: 'instagram',
+        kind: 'instagram',
+        enabled: true,
+        heading: 'В Instagram',
+        sortOrder: 35,
       },
       {
         id: 'help',
@@ -161,16 +232,16 @@ export function defaultHomepageConfig(): HomepageConfigDto {
 
 export function defaultStorefrontSettings(): StorefrontSettingsPublicDto {
   return {
-    brandName: 'БУКЕТ №1',
+    brandName: 'BUKET №1',
     city: 'Гродно',
-    phone: null,
+    phone: '+375 (29) 798-22-22',
     email: null,
-    address: null,
-    workingHours: null,
+    address: 'пр-т Янки Купалы, 67А, г. Гродно, 230000',
+    workingHours: '9:00–21:00',
     deliverySummary:
       'Доставляем букеты по Гродно. После оформления заказа менеджер свяжется для подтверждения деталей.',
     aboutSummary:
-      'БУКЕТ №1 — цветочный магазин в Гродно. Собираем букеты, которые хочется дарить: свежие цветы, аккуратная сборка, понятная доставка.',
+      'BUKET №1 — цветочный магазин в Гродно. Собираем букеты, которые хочется дарить: свежие цветы, аккуратная сборка, понятная доставка.',
     instagramUrl: null,
     telegramUrl: null,
     substitutionNote:

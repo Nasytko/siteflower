@@ -1,35 +1,27 @@
-import { roleHasPermission, type TaxonomyAdminDto } from '@bouquet-one/contracts';
-import { adminFetch } from '@/lib/admin-api';
+import { notFound } from 'next/navigation';
+import { roleHasPermission } from '@bouquet-one/contracts';
+import { fetchTaxonomy } from '@/lib/admin-catalog-api';
+import { isTaxonomyKind, TAXONOMY_KIND_META } from '@/lib/admin-endpoints';
 import { requireAdminPermission } from '@/lib/admin-page-auth';
-import { TaxonomyManager } from '@/components/admin/taxonomy-manager';
-
-const META: Record<string, string> = {
-  categories: 'Категории',
-  flowers: 'Цветы',
-  occasions: 'Поводы',
-  recipients: 'Кому',
-  styles: 'Стили',
-  colors: 'Цвета',
-};
+import { TaxonomyCrud } from '@/components/admin/taxonomy-crud';
 
 type Props = { params: Promise<{ kind: string }> };
 
-export default async function TaxonomyPage({ params }: Props) {
+export default async function CatalogDictionaryPage({ params }: Props) {
   const { kind } = await params;
-  const title = META[kind];
-  if (!title) {
-    return <p>Неизвестный раздел</p>;
+  if (!isTaxonomyKind(kind)) {
+    notFound();
   }
+
   const me = await requireAdminPermission('CATALOG_READ');
-  const initial = await adminFetch<TaxonomyAdminDto[]>(`/api/v1/admin/catalog/${kind}`);
+  const items = await fetchTaxonomy(kind);
 
   return (
-    <TaxonomyManager
-      kind={kind}
-      title={title}
-      initial={initial}
-      canCreate={Boolean(me && roleHasPermission(me.user.role, 'CATALOG_CREATE'))}
-      canUpdate={Boolean(me && roleHasPermission(me.user.role, 'CATALOG_UPDATE'))}
+    <TaxonomyCrud
+      meta={TAXONOMY_KIND_META[kind]}
+      initial={items}
+      canCreate={roleHasPermission(me.user.role, 'CATALOG_CREATE')}
+      canUpdate={roleHasPermission(me.user.role, 'CATALOG_UPDATE')}
     />
   );
 }

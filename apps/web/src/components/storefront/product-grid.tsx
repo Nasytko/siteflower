@@ -10,7 +10,7 @@ export function ProductGrid({ products, priorityCount = 4 }: Props) {
   if (products.length === 0) return null;
 
   return (
-    <ul className="grid grid-cols-2 gap-x-3 gap-y-8 sm:gap-x-6 sm:gap-y-10 md:grid-cols-3 md:gap-x-8 md:gap-y-12 lg:grid-cols-4 lg:gap-x-10">
+    <ul className="grid grid-cols-2 gap-x-3 gap-y-6 sm:gap-x-5 sm:gap-y-8 md:grid-cols-3 lg:grid-cols-4 lg:gap-x-6 lg:gap-y-10">
       {products.map((product, index) => (
         <li key={product.id}>
           <ProductCard product={product} priority={index < priorityCount} />

@@ -18,10 +18,12 @@ import {
   IsInt,
   IsOptional,
   IsString,
+  Matches,
   Max,
   MaxLength,
   Min,
   MinLength,
+  ValidateIf,
 } from 'class-validator';
 import { TAXONOMY_VISIBILITIES, type TaxonomyVisibility } from '@bouquet-one/contracts';
 import type { Request } from 'express';
@@ -54,6 +56,9 @@ class TaxonomyListQueryDto {
   @IsIn(TAXONOMY_VISIBILITIES)
   visibility?: TaxonomyVisibility;
 }
+
+/** Hex color or a plain CSS keyword — complex palettes may leave it empty. */
+const SWATCH_PATTERN = /^(#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})|[a-z]{3,24})$/;
 
 class CreateTaxonomyDto {
   @IsString()
@@ -94,6 +99,14 @@ class CreateTaxonomyDto {
   @IsOptional()
   @IsBoolean()
   noIndex?: boolean;
+
+  /** Colors only; ignored for other kinds. */
+  @IsOptional()
+  @ValidateIf((_, value) => value !== null)
+  @IsString()
+  @MaxLength(32)
+  @Matches(SWATCH_PATTERN, { message: 'swatch must be a hex color or CSS color keyword' })
+  swatch?: string | null;
 }
 
 class UpdateTaxonomyDto extends ExpectedVersionDto {
@@ -136,12 +149,20 @@ class UpdateTaxonomyDto extends ExpectedVersionDto {
   @IsOptional()
   @IsBoolean()
   noIndex?: boolean;
+
+  /** Colors only; ignored for other kinds. Explicit null clears the swatch. */
+  @IsOptional()
+  @ValidateIf((_, value) => value !== null)
+  @IsString()
+  @MaxLength(32)
+  @Matches(SWATCH_PATTERN, { message: 'swatch must be a hex color or CSS color keyword' })
+  swatch?: string | null;
 }
 
 /**
- * One controller for every taxonomy: `/admin/catalog/{flowers|categories|…}`.
- * Registered after the product and collection controllers so their concrete
- * paths win over the `:kind` parameter.
+ * One controller for every taxonomy: `/admin/catalog/{flowers|occasions|recipients|colors|bouquet-sizes|product-lines}`.
+ * Registered after the product, promotion, bestseller and budget-range controllers
+ * so their concrete paths win over the `:kind` parameter.
  */
 @ApiTags('admin-catalog-taxonomy')
 @Controller('admin/catalog')

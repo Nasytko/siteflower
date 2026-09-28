@@ -2,7 +2,6 @@ import { derivePriceRange } from '@bouquet-one/contracts';
 import {
   activeVariantPrices,
   isEffectivelyPublished,
-  matchesCollectionRules,
   validatePublishRequirements,
   wouldCreateRedirectLoop,
 } from './catalog.logic';
@@ -14,18 +13,6 @@ const publishReady = {
   description: 'Букет из 15 роз с доставкой по Гродно.',
   variants: [{ status: 'ACTIVE', priceMinor: 9900n }],
   hasPrimaryImage: true,
-};
-
-const ruleCandidate = {
-  availability: 'AVAILABLE' as const,
-  lifecycle: 'PUBLISHED',
-  categorySlugs: ['bukety'],
-  occasionSlugs: ['den-rozhdeniya'],
-  recipientSlugs: [],
-  styleSlugs: [],
-  flowerSlugs: ['rose'],
-  colorSlugs: ['red'],
-  minActivePriceMinor: 9900n,
 };
 
 describe('isEffectivelyPublished', () => {
@@ -178,51 +165,5 @@ describe('price derivation', () => {
 
   it('pads minor units below one unit', () => {
     expect(derivePriceRange('BYN', [5n])?.label).toBe('0,05 BYN');
-  });
-});
-
-describe('matchesCollectionRules', () => {
-  it('matches when every listed facet overlaps', () => {
-    expect(
-      matchesCollectionRules(ruleCandidate, {
-        categorySlugs: ['bukety'],
-        flowerSlugs: ['rose', 'peony'],
-        minPriceMinor: '5000',
-        maxPriceMinor: '20000',
-        availabilities: ['AVAILABLE'],
-      }),
-    ).toBe(true);
-  });
-
-  it('treats empty rules as match-all', () => {
-    expect(matchesCollectionRules(ruleCandidate, {})).toBe(true);
-  });
-
-  it('rejects a non-overlapping facet', () => {
-    expect(matchesCollectionRules(ruleCandidate, { categorySlugs: ['podarki'] })).toBe(false);
-  });
-
-  it('rejects prices outside the range', () => {
-    expect(matchesCollectionRules(ruleCandidate, { minPriceMinor: '10000' })).toBe(false);
-    expect(matchesCollectionRules(ruleCandidate, { maxPriceMinor: '5000' })).toBe(false);
-  });
-
-  it('rejects priceless products when a price bound is set', () => {
-    expect(
-      matchesCollectionRules(
-        { ...ruleCandidate, minActivePriceMinor: null },
-        { minPriceMinor: '1' },
-      ),
-    ).toBe(false);
-  });
-
-  it('excludes unpublished products unless explicitly allowed', () => {
-    const draft = { ...ruleCandidate, lifecycle: 'DRAFT' };
-    expect(matchesCollectionRules(draft, {})).toBe(false);
-    expect(matchesCollectionRules(draft, { requirePublished: false })).toBe(true);
-  });
-
-  it('filters by availability', () => {
-    expect(matchesCollectionRules(ruleCandidate, { availabilities: ['PREORDER'] })).toBe(false);
   });
 });

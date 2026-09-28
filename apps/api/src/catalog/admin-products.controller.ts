@@ -27,19 +27,25 @@ import {
   ProductListQueryDto,
   PublishProductDto,
   ReorderProductMediaDto,
+  SetProductBestsellerGroupsDto,
   SetProductComponentsDto,
   SetProductTaxonomiesDto,
   SetProductVariantsDto,
   UpdateProductDto,
   UpdateProductMediaDto,
   UploadProductMediaDto,
+  UpsertProductPromotionDto,
 } from './products.dto';
 import { ProductsService } from './products.service';
+import { PromotionsService } from './promotions.service';
 
 @ApiTags('admin-catalog-products')
 @Controller('admin/catalog/products')
 export class AdminProductsController {
-  constructor(private readonly products: ProductsService) {}
+  constructor(
+    private readonly products: ProductsService,
+    private readonly promotions: PromotionsService,
+  ) {}
 
   @Get()
   @RequirePermissions('CATALOG_READ')
@@ -111,6 +117,45 @@ export class AdminProductsController {
     @Req() req: Request,
   ) {
     return this.products.setTaxonomies(id, body, actorFrom(admin, req));
+  }
+
+  @Put(':id/bestseller-groups')
+  @RequirePermissions('CATALOG_UPDATE')
+  setBestsellerGroups(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() body: SetProductBestsellerGroupsDto,
+    @CurrentAdmin() admin: AuthenticatedAdmin,
+    @Req() req: Request,
+  ) {
+    return this.products.setBestsellerGroups(id, body, actorFrom(admin, req));
+  }
+
+  @Get(':id/promotion')
+  @RequirePermissions('CATALOG_READ')
+  getPromotion(@Param('id', ParseUUIDPipe) id: string) {
+    return this.promotions.getForProduct(id);
+  }
+
+  @Put(':id/promotion')
+  @RequirePermissions('CATALOG_UPDATE')
+  upsertPromotion(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() body: UpsertProductPromotionDto,
+    @CurrentAdmin() admin: AuthenticatedAdmin,
+    @Req() req: Request,
+  ) {
+    return this.promotions.upsertForProduct(id, body, actorFrom(admin, req));
+  }
+
+  @Delete(':id/promotion')
+  @RequirePermissions('CATALOG_UPDATE')
+  removePromotion(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() body: ExpectedVersionDto,
+    @CurrentAdmin() admin: AuthenticatedAdmin,
+    @Req() req: Request,
+  ) {
+    return this.promotions.removeForProduct(id, body.expectedVersion, actorFrom(admin, req));
   }
 
   @Post(':id/publish')

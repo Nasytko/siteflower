@@ -8,6 +8,8 @@ function source(overrides?: {
   availability?: VariantPriceSource['product']['availability'];
   variantStatus?: string;
   priceMinor?: bigint;
+  effectivePriceMinor?: bigint;
+  promotionType?: 'PERCENT' | 'FIXED' | null;
   name?: string;
 }): VariantPriceSource {
   return {
@@ -28,6 +30,8 @@ function source(overrides?: {
       name: 'M',
       status: overrides?.variantStatus ?? 'ACTIVE',
       priceMinor: overrides?.priceMinor ?? 15900n,
+      effectivePriceMinor: overrides?.effectivePriceMinor ?? overrides?.priceMinor ?? 15900n,
+      promotionType: overrides?.promotionType ?? null,
     },
   };
 }
@@ -112,5 +116,22 @@ describe('validateCartLines', () => {
     expect(result.items).toHaveLength(1);
     expect(result.items[0]?.quantity).toBe(5);
     expect(result.subtotalMinor).toBe(5000n);
+  });
+
+  it('charges effective promotional price and snapshots original', () => {
+    const result = validateCartLines({
+      lines: [{ productId: 'p1', variantId: 'v1', quantity: 2 }],
+      resolve: () =>
+        source({
+          priceMinor: 20000n,
+          effectivePriceMinor: 15000n,
+          promotionType: 'PERCENT',
+        }),
+    });
+    expect(result.ok).toBe(true);
+    expect(result.items[0]?.unitPriceMinor).toBe('15000');
+    expect(result.items[0]?.originalUnitPriceMinor).toBe('20000');
+    expect(result.items[0]?.promotionType).toBe('PERCENT');
+    expect(result.subtotalMinor).toBe(30000n);
   });
 });

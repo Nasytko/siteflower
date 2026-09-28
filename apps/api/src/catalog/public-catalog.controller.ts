@@ -1,8 +1,19 @@
 import { Controller, Get, Param, Query } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
+import { Type } from 'class-transformer';
+import { IsInt, IsOptional, Max, Min } from 'class-validator';
 import { Public } from '../auth/decorators';
 import { PublicProductListQueryDto, RelatedProductsQueryDto } from './products.dto';
 import { PublicCatalogService } from './public-catalog.service';
+
+class PromotionalProductsQueryDto {
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(48)
+  limit?: number = 24;
+}
 
 @ApiTags('catalog')
 @Controller('catalog')
@@ -28,12 +39,6 @@ export class PublicCatalogController {
   }
 
   @Public()
-  @Get('categories')
-  listCategories() {
-    return this.catalog.listCategories();
-  }
-
-  @Public()
   @Get('occasions')
   listOccasions() {
     return this.catalog.listOccasions();
@@ -52,33 +57,51 @@ export class PublicCatalogController {
   }
 
   @Public()
-  @Get('styles')
-  listStyles() {
-    return this.catalog.listStyles();
-  }
-
-  @Public()
   @Get('colors')
   listColors() {
     return this.catalog.listColors();
   }
 
   @Public()
+  @Get('product-lines')
+  listProductLines() {
+    return this.catalog.listProductLines();
+  }
+
+  @Public()
+  @Get('bouquet-sizes')
+  listBouquetSizes() {
+    return this.catalog.listBouquetSizes();
+  }
+
+  @Public()
+  @Get('budget-ranges')
+  listBudgetRanges() {
+    return this.catalog.listBudgetRanges();
+  }
+
+  @Public()
+  @Get('promotions')
+  listPromotions(@Query() query: PromotionalProductsQueryDto) {
+    return this.catalog.listPromotionalProducts(query.limit ?? 24);
+  }
+
+  @Public()
+  @Get('bestsellers')
+  listBestsellers() {
+    return this.catalog.listBestsellers();
+  }
+
+  @Public()
+  @Get('bestsellers/:slug')
+  getBestsellerGroup(@Param('slug') slug: string) {
+    return this.catalog.getBestsellerGroup(slug);
+  }
+
+  @Public()
   @Get('taxonomies/:kind/:slug')
   getTaxonomy(@Param('kind') kind: string, @Param('slug') slug: string) {
     return this.catalog.getTaxonomyPublic(kind, slug);
-  }
-
-  @Public()
-  @Get('collections')
-  listCollections() {
-    return this.catalog.listCollections();
-  }
-
-  @Public()
-  @Get('collections/:slug')
-  getCollection(@Param('slug') slug: string) {
-    return this.catalog.getCollectionBySlug(slug);
   }
 
   @Public()

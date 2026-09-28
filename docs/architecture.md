@@ -33,7 +33,7 @@ Logical modules (folders / Nest modules) should own their persistence access and
 
 | Module (future) | Responsibility |
 | --- | --- |
-| `catalog` | Products, variants, taxonomy, collections, media, publication |
+| `catalog` | Products, variants, taxonomies, promotions, bestsellers, budget ranges, media, publication — see [catalog-simplification-and-merchandising.md](./catalog-simplification-and-merchandising.md) |
 | `checkout` | Carts, quotes, order submission |
 | `orders` | Order lifecycle, snapshots, tracking tokens |
 | `customers` | Optional accounts, addresses |

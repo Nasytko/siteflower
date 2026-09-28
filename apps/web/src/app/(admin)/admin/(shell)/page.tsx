@@ -1,74 +1,154 @@
 import Link from 'next/link';
 import { roleHasPermission } from '@bouquet-one/contracts';
 import { fetchAdminMe } from '@/lib/admin-api';
+import { fetchTotal } from '@/lib/admin-catalog-api';
+import { adminEndpoints } from '@/lib/admin-endpoints';
 
 const SHORTCUTS = [
   {
     href: '/admin/orders',
     label: 'Заказы',
-    hint: 'Обработка и статусы',
+    hint: 'Список на дату выполнения',
     permission: 'ORDERS_READ' as const,
   },
   {
     href: '/admin/catalog/products',
     label: 'Товары',
-    hint: 'Каталог и публикация',
+    hint: 'Цены, фото, публикация',
+    permission: 'CATALOG_READ' as const,
+  },
+  {
+    href: '/admin/promotions',
+    label: 'Акции',
+    hint: 'Скидки и сроки',
+    permission: 'CATALOG_READ' as const,
+  },
+  {
+    href: '/admin/bestsellers',
+    label: 'Бестселлеры',
+    hint: 'Подборки для главной',
     permission: 'CATALOG_READ' as const,
   },
   {
     href: '/admin/storefront/homepage',
     label: 'Главная',
-    hint: 'Hero и секции витрины',
+    hint: 'Первый экран и блоки',
     permission: 'CONTENT_READ' as const,
   },
   {
-    href: '/admin/storefront/settings',
-    label: 'Настройки',
-    hint: 'Контакты и бренд',
+    href: '/admin/fulfillment',
+    label: 'Получение и доставка',
+    hint: 'Окна времени и способы',
     permission: 'SETTINGS_READ' as const,
   },
 ];
 
+function Metric({
+  label,
+  value,
+  hint,
+  href,
+}: {
+  label: string;
+  value: number | null;
+  hint: string;
+  href?: string;
+}) {
+  const body = (
+    <>
+      <p className="admin-card__label">{label}</p>
+      <p className="admin-metric">{value === null ? '—' : value}</p>
+      <p className="text-sm text-[var(--admin-muted)]">{value === null ? 'Нет данных' : hint}</p>
+    </>
+  );
+  return href ? (
+    <Link href={href} className="admin-card admin-card--link">
+      {body}
+    </Link>
+  ) : (
+    <div className="admin-card">{body}</div>
+  );
+}
+
 export default async function AdminDashboardPage() {
   const me = await fetchAdminMe();
   const role = me?.user.role;
+  const canReadOrders = Boolean(role && roleHasPermission(role, 'ORDERS_READ'));
+  const canReadCatalog = Boolean(role && roleHasPermission(role, 'CATALOG_READ'));
 
-  const shortcuts = SHORTCUTS.filter(
-    (item) => role && roleHasPermission(role, item.permission),
-  );
+  const [ordersToday, ordersTomorrow, ordersNew, publishedProducts, promotedProducts] =
+    await Promise.all([
+      canReadOrders ? fetchTotal(adminEndpoints.orders, { date: 'today' }) : null,
+      canReadOrders ? fetchTotal(adminEndpoints.orders, { date: 'tomorrow' }) : null,
+      canReadOrders
+        ? fetchTotal(adminEndpoints.orders, { date: 'all', status: 'RECEIVED' })
+        : null,
+      canReadCatalog
+        ? fetchTotal(adminEndpoints.products, { lifecycle: 'PUBLISHED' })
+        : null,
+      canReadCatalog ? fetchTotal(adminEndpoints.products, { promotion: 'active' }) : null,
+    ]);
+
+  const shortcuts = SHORTCUTS.filter((item) => role && roleHasPermission(role, item.permission));
 
   return (
     <main id="main-content" className="space-y-8">
       <header>
-        <h1 className="admin-page-title">Панель</h1>
+        <h1 className="admin-page-title">Сводка</h1>
         <p className="admin-page-lead">
-          Добро пожаловать{me?.user.displayName ? `, ${me.user.displayName}` : ''}. Управляйте
-          каталогом, заказами и витриной.
+          {me?.user.displayName ? `${me.user.displayName}, ` : ''}вот что в магазине прямо сейчас.
         </p>
       </header>
 
-      <section className="grid gap-4 sm:grid-cols-2">
-        <div className="admin-card">
-          <p className="admin-card__label">Пользователь</p>
-          <p className="mt-2 text-lg font-semibold text-[var(--admin-ink)]">
-            {me?.user.displayName}
-          </p>
-          <p className="text-sm text-[var(--admin-muted)]">{me?.user.email}</p>
-        </div>
-        <div className="admin-card">
-          <p className="admin-card__label">Роль</p>
-          <p className="mt-2 text-lg font-semibold text-[var(--admin-ink)]">{me?.user.role}</p>
-          <p className="text-sm text-[var(--admin-muted)]">
-            {me?.user.permissions.length ?? 0} разрешений
-          </p>
-        </div>
-      </section>
+      {canReadOrders ? (
+        <section className="space-y-3">
+          <h2 className="admin-section__eyebrow">Заказы</h2>
+          <div className="grid gap-4 sm:grid-cols-3">
+            <Metric
+              label="На сегодня"
+              value={ordersToday}
+              hint="Выдача и доставка сегодня"
+              href="/admin/orders?date=today"
+            />
+            <Metric
+              label="На завтра"
+              value={ordersTomorrow}
+              hint="Готовим заранее"
+              href="/admin/orders?date=tomorrow"
+            />
+            <Metric
+              label="Требуют внимания"
+              value={ordersNew}
+              hint="Новые, ещё не подтверждены"
+              href="/admin/orders?date=all&status=RECEIVED"
+            />
+          </div>
+        </section>
+      ) : null}
+
+      {canReadCatalog ? (
+        <section className="space-y-3">
+          <h2 className="admin-section__eyebrow">Каталог</h2>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <Metric
+              label="Товары на витрине"
+              value={publishedProducts}
+              hint="Опубликованные букеты"
+              href="/admin/catalog/products?lifecycle=PUBLISHED"
+            />
+            <Metric
+              label="Товары в акции"
+              value={promotedProducts}
+              hint="Скидка активна сейчас"
+              href="/admin/promotions"
+            />
+          </div>
+        </section>
+      ) : null}
 
       {shortcuts.length > 0 ? (
-        <section>
-          <h2 className="mb-3 text-sm font-semibold uppercase tracking-[0.1em] text-[var(--admin-muted)]">
-            Быстрые переходы
-          </h2>
+        <section className="space-y-3">
+          <h2 className="admin-section__eyebrow">Быстрые переходы</h2>
           <ul className="grid gap-3 sm:grid-cols-2">
             {shortcuts.map((item) => (
               <li key={item.href}>
@@ -86,16 +166,6 @@ export default async function AdminDashboardPage() {
           </ul>
         </section>
       ) : null}
-
-      <section className="admin-card">
-        <p className="admin-card__label">Статус</p>
-        <p className="mt-2 text-[var(--admin-ink)]">
-          Session auth · RBAC · audit · catalog CMS
-        </p>
-        <p className="mt-1 text-sm text-[var(--admin-muted)]">
-          Показаны только реальные operational-данные — без выдуманных метрик продаж.
-        </p>
-      </section>
     </main>
   );
 }

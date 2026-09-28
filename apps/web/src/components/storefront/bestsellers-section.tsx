@@ -1,79 +1,124 @@
 'use client';
 
-import { useMemo, useState } from 'react';
-import Link from 'next/link';
-import type { ProductListItemDto } from '@bouquet-one/contracts';
-import { ProductGrid } from './product-grid';
-
-type Tab = {
-  id: string;
-  label: string;
-  /** Match against category name/slug substrings (lowercase). */
-  match?: string[];
-};
-
-const TABS: Tab[] = [
-  { id: 'all', label: 'Букеты' },
-  { id: 'rozy', label: 'Моно букеты Роза', match: ['роз', 'rozy'] },
-  { id: 'box', label: 'Композиции в коробке', match: ['короб', 'box', 'композ'] },
-  { id: 'piony', label: 'Моно букеты Пион', match: ['пион', 'piony'] },
-  { id: 'eustoma', label: 'Моно букеты Эустома', match: ['эустом', 'eustom'] },
-];
+import { useRef, useState } from 'react';
+import type { BestsellerGroupPublicDto } from '@bouquet-one/contracts';
+import { ProductCard } from './product-card';
+import { SectionRail } from './section-rail';
 
 type Props = {
-  products: ProductListItemDto[];
+  heading: string;
+  /** Admin-curated groups; each group already carries its products. */
+  groups: BestsellerGroupPublicDto[];
 };
 
-export function BestsellersSection({ products }: Props) {
-  const [tabId, setTabId] = useState('all');
+const MAX_PER_GROUP = 8;
 
-  const filtered = useMemo(() => {
-    const tab = TABS.find((t) => t.id === tabId) ?? TABS[0];
-    if (!tab?.match?.length) return products;
-    const needles = tab.match;
-    return products.filter((product) =>
-      product.categories.some((cat) => {
-        const hay = `${cat.name} ${cat.slug}`.toLowerCase();
-        return needles.some((n) => hay.includes(n));
-      }),
-    );
-  }, [products, tabId]);
+export function BestsellersSection({ heading, groups }: Props) {
+  const usable = groups.filter((group) => group.products.length > 0);
+  const [activeId, setActiveId] = useState(usable[0]?.id ?? '');
+  const scrollerRef = useRef<HTMLUListElement>(null);
 
-  const shown = filtered.length > 0 ? filtered : products;
+  if (usable.length === 0) return null;
+
+  const active = usable.find((group) => group.id === activeId) ?? usable[0]!;
+  const showNav = active.products.length > 4;
+
+  function scrollByCard(direction: 1 | -1) {
+    const el = scrollerRef.current;
+    if (!el) return;
+    const amount = Math.max(el.clientWidth * 0.85, 280);
+    el.scrollBy({ left: direction * amount, behavior: 'smooth' });
+  }
 
   return (
-    <section className="sf-container-wide py-12 md:py-16">
-      <div className="sf-section-title">
-        <h2 className="sf-h2">Наши бестселлеры</h2>
-      </div>
+    <section className="sf-band-surface py-12 md:py-16">
+      <div className="sf-container-wide">
+        <SectionRail title={heading} href="/bukety" linkLabel="Смотреть все" />
 
-      <div
-        className="mb-8 flex gap-1 overflow-x-auto pb-1"
-        role="tablist"
-        aria-label="Тип букета"
-      >
-        {TABS.map((tab) => (
-          <button
-            key={tab.id}
-            type="button"
-            role="tab"
-            className="sf-tab"
-            aria-selected={tabId === tab.id}
-            data-active={tabId === tab.id}
-            onClick={() => setTabId(tab.id)}
+        {usable.length > 1 ? (
+          <div
+            className="mb-7 flex justify-center gap-1 overflow-x-auto px-1 pb-1"
+            role="tablist"
+            aria-label="Подборки бестселлеров"
           >
-            {tab.label}
-          </button>
-        ))}
-      </div>
+            {usable.map((group) => {
+              const selected = group.id === active.id;
+              return (
+                <button
+                  key={group.id}
+                  type="button"
+                  role="tab"
+                  className="sf-tab"
+                  aria-selected={selected}
+                  tabIndex={selected ? 0 : -1}
+                  onClick={() => setActiveId(group.id)}
+                >
+                  {group.name}
+                </button>
+              );
+            })}
+          </div>
+        ) : null}
 
-      <ProductGrid products={shown.slice(0, 8)} />
+        <div className="sf-carousel">
+          {showNav ? (
+            <>
+              <button
+                type="button"
+                className="sf-carousel__nav sf-carousel__nav--prev"
+                aria-label="Предыдущие букеты"
+                onClick={() => scrollByCard(-1)}
+              >
+                <Chevron direction="left" />
+              </button>
+              <button
+                type="button"
+                className="sf-carousel__nav sf-carousel__nav--next"
+                aria-label="Следующие букеты"
+                onClick={() => scrollByCard(1)}
+              >
+                <Chevron direction="right" />
+              </button>
+            </>
+          ) : null}
 
-      <div className="mt-10 text-center">
-        <Link href="/bukety" className="sf-cta-ghost">
-          Смотреть все букеты
-        </Link>
+          <ul
+            ref={scrollerRef}
+            className="sf-scroll-row"
+            aria-label={active.title || active.name}
+            role="tabpanel"
+          >
+            {active.products.slice(0, MAX_PER_GROUP).map((product, index) => (
+              <li key={product.id}>
+                <ProductCard
+                  product={product}
+                  priority={index < 2}
+                  sizes="(max-width: 640px) 72vw, (max-width: 1024px) 45vw, 22vw"
+                />
+              </li>
+            ))}
+          </ul>
+        </div>
       </div>
     </section>
+  );
+}
+
+function Chevron({ direction }: { direction: 'left' | 'right' }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      className="size-5"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      aria-hidden
+    >
+      {direction === 'left' ? (
+        <path d="M14.5 6 9 12l5.5 6" strokeLinecap="round" strokeLinejoin="round" />
+      ) : (
+        <path d="M9.5 6 15 12l-5.5 6" strokeLinecap="round" strokeLinejoin="round" />
+      )}
+    </svg>
   );
 }

@@ -7,6 +7,7 @@ import type {
   CheckoutValidateIssueDto,
   CheckoutValidatedLineDto,
   CommercialAvailability,
+  PromotionType,
 } from '@bouquet-one/contracts';
 import { formatPriceFromMinor } from '@bouquet-one/contracts';
 import { isEffectivelyPublished } from '../catalog/catalog.logic';
@@ -31,8 +32,18 @@ export type VariantPriceSource = {
     id: string;
     name: string;
     status: string;
+    /** Regular price. */
     priceMinor: bigint;
+    /** Price after any currently effective promotion (equals priceMinor when none). */
+    effectivePriceMinor: bigint;
+    promotionType: PromotionType | null;
   } | null;
+};
+
+/** Adds the promotion snapshot the order aggregate persists on each item. */
+export type ValidatedCartLine = CheckoutValidatedLineDto & {
+  originalUnitPriceMinor: string | null;
+  promotionType: PromotionType | null;
 };
 
 export function validateCartLines(input: {
@@ -42,13 +53,13 @@ export function validateCartLines(input: {
   now?: Date;
 }): {
   ok: boolean;
-  items: CheckoutValidatedLineDto[];
+  items: ValidatedCartLine[];
   issues: CheckoutValidateIssueDto[];
   subtotalMinor: bigint;
 } {
   const now = input.now ?? new Date();
   const issues: CheckoutValidateIssueDto[] = [];
-  const items: CheckoutValidatedLineDto[] = [];
+  const items: ValidatedCartLine[] = [];
   let subtotal = 0n;
 
   if (input.lines.length === 0) {
@@ -149,7 +160,9 @@ export function validateCartLines(input: {
       continue;
     }
 
-    const unit = variant.priceMinor;
+    // Promotional price is commercial truth at checkout time.
+    const unit = variant.effectivePriceMinor;
+    const promoted = unit < variant.priceMinor;
     const lineTotal = unit * BigInt(line.quantity);
     const prior = input.priorUnitPrices?.get(variant.id);
     if (prior != null && prior !== unit) {
@@ -176,6 +189,8 @@ export function validateCartLines(input: {
       unitPriceMinor: unit.toString(),
       lineTotalMinor: lineTotal.toString(),
       currency: 'BYN',
+      originalUnitPriceMinor: promoted ? variant.priceMinor.toString() : null,
+      promotionType: promoted ? variant.promotionType : null,
     });
     subtotal += lineTotal;
   }

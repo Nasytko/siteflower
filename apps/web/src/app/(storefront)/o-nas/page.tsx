@@ -5,7 +5,7 @@ import { buildPageMetadata } from '@/lib/seo/metadata';
 
 export const metadata: Metadata = buildPageMetadata({
   title: 'О нас',
-  description: 'БУКЕТ №1 — цветочный магазин в Гродно.',
+  description: 'BUKET №1 — цветочный магазин в Гродно.',
   path: '/o-nas',
 });
 
@@ -13,13 +13,13 @@ export default async function AboutPage() {
   const settings = await getStorefrontSettings().catch(() => null);
   const about =
     settings?.aboutSummary ??
-    'БУКЕТ №1 — цветочный магазин в Гродно. Собираем букеты, которые хочется дарить: свежие цветы, аккуратная сборка, понятная доставка.';
+    'BUKET №1 — цветочный магазин в Гродно. Собираем букеты, которые хочется дарить: свежие цветы, аккуратная сборка, понятная доставка.';
 
   return (
     <main id="main-content" className="sf-container py-12 md:py-16">
       <header className="max-w-2xl">
         <p className="sf-label mb-3">{settings?.city ?? 'Гродно'}</p>
-        <h1 className="sf-display">{settings?.brandName ?? 'БУКЕТ №1'}</h1>
+        <h1 className="sf-display">{settings?.brandName ?? 'BUKET №1'}</h1>
         <p className="sf-body mt-6 whitespace-pre-line text-muted">{about}</p>
       </header>
 
@@ -29,6 +29,8 @@ export default async function AboutPage() {
             <a href={`tel:${settings.phone.replace(/\s+/g, '')}`}>{settings.phone}</a>
           </li>
         ) : null}
+        {settings?.workingHours ? <li>{settings.workingHours}</li> : null}
+        {settings?.address ? <li>{settings.address}</li> : null}
         {settings?.email ? (
           <li>
             <a href={`mailto:${settings.email}`}>{settings.email}</a>

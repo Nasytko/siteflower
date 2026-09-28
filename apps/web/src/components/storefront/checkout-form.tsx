@@ -13,6 +13,7 @@ import type {
 import { formatPriceFromMinor } from '@/lib/media';
 import { trackEvent } from '@/lib/analytics';
 import { clearCart, readCart, writeCart, type CartState } from '@/lib/cart';
+import { clearCheckoutIntent, readCheckoutIntent } from '@/lib/checkout-intent';
 
 const IDEMPOTENCY_STORAGE_KEY = 'bouquet-one:checkout-idempotency';
 
@@ -76,9 +77,22 @@ export function CheckoutForm() {
   const [addressKnown, setAddressKnown] = useState(true);
   const [deliveryAddress, setDeliveryAddress] = useState('');
   const [addressDetails, setAddressDetails] = useState('');
+  const [wantCard, setWantCard] = useState(false);
   const [cardMessage, setCardMessage] = useState('');
   const [anonymousCard, setAnonymousCard] = useState(false);
   const [customerComment, setCustomerComment] = useState('');
+
+  useEffect(() => {
+    const intent = readCheckoutIntent();
+    if (intent.isGift) {
+      setRecipientIsMe(false);
+    }
+    if (intent.wantCard || intent.cardDraft) {
+      setWantCard(true);
+      if (intent.cardDraft) setCardMessage(intent.cardDraft);
+    }
+    clearCheckoutIntent();
+  }, []);
 
   useEffect(() => {
     const c = readCart();
@@ -167,8 +181,8 @@ export function CheckoutForm() {
       fulfillmentDate,
       timeWindowId,
       surprise,
-      cardMessage: cardMessage || null,
-      anonymousCard,
+      cardMessage: wantCard && cardMessage.trim() ? cardMessage.trim() : null,
+      anonymousCard: wantCard ? anonymousCard : false,
       customerComment: customerComment || null,
     };
 
@@ -258,10 +272,10 @@ export function CheckoutForm() {
             {options?.deliveryEnabled !== false ? (
               <button
                 type="button"
-                className={`min-h-11 rounded-full px-4 py-2 text-sm transition ${
+                className={`min-h-11 rounded-full border px-4 py-2 text-sm transition ${
                   fulfillmentType === 'DELIVERY'
-                    ? 'bg-peach text-ink shadow-[var(--shadow-soft)]'
-                    : 'bg-white ring-1 ring-border hover:bg-brand-soft'
+                    ? 'border-brand bg-brand text-brand-foreground'
+                    : 'border-border-strong bg-surface hover:border-brand hover:text-brand'
                 }`}
                 onClick={() => {
                   setFulfillmentType('DELIVERY');
@@ -274,10 +288,10 @@ export function CheckoutForm() {
             {options?.pickupEnabled !== false ? (
               <button
                 type="button"
-                className={`min-h-11 rounded-full px-4 py-2 text-sm transition ${
+                className={`min-h-11 rounded-full border px-4 py-2 text-sm transition ${
                   fulfillmentType === 'PICKUP'
-                    ? 'bg-peach text-ink shadow-[var(--shadow-soft)]'
-                    : 'bg-white ring-1 ring-border hover:bg-brand-soft'
+                    ? 'border-brand bg-brand text-brand-foreground'
+                    : 'border-border-strong bg-surface hover:border-brand hover:text-brand'
                 }`}
                 onClick={() => {
                   setFulfillmentType('PICKUP');
@@ -303,10 +317,10 @@ export function CheckoutForm() {
               <button
                 key={mode}
                 type="button"
-                className={`min-h-11 rounded-full px-4 py-2 text-sm transition ${
+                className={`min-h-11 rounded-full border px-4 py-2 text-sm transition ${
                   dateMode === mode
-                    ? 'bg-peach text-ink shadow-[var(--shadow-soft)]'
-                    : 'bg-white ring-1 ring-border hover:bg-brand-soft'
+                    ? 'border-brand bg-brand text-brand-foreground'
+                    : 'border-border-strong bg-surface hover:border-brand hover:text-brand'
                 }`}
                 onClick={() => setDateMode(mode)}
               >
@@ -372,14 +386,24 @@ export function CheckoutForm() {
         {fulfillmentType === 'DELIVERY' ? (
           <section className="space-y-4">
             <h2 className="sf-h3">Получатель</h2>
-            <label className="flex items-center gap-2 text-sm">
-              <input
-                type="checkbox"
-                checked={recipientIsMe}
-                onChange={(e) => setRecipientIsMe(e.target.checked)}
-              />
-              Получатель — я
-            </label>
+            <div className="sf-pdp-intent" role="group" aria-label="Тип заказа">
+              <button
+                type="button"
+                className={`sf-pdp-intent__btn ${recipientIsMe ? 'sf-pdp-intent__btn--active' : ''}`}
+                aria-pressed={recipientIsMe}
+                onClick={() => setRecipientIsMe(true)}
+              >
+                Себе
+              </button>
+              <button
+                type="button"
+                className={`sf-pdp-intent__btn ${!recipientIsMe ? 'sf-pdp-intent__btn--active' : ''}`}
+                aria-pressed={!recipientIsMe}
+                onClick={() => setRecipientIsMe(false)}
+              >
+                Подарок
+              </button>
+            </div>
             {!recipientIsMe ? (
               <>
                 <label className="block text-sm">
@@ -451,24 +475,42 @@ export function CheckoutForm() {
 
         <section className="space-y-4">
           <h2 className="sf-h3">Открытка и пожелания</h2>
-          <label className="block text-sm">
-            Текст открытки
-            <textarea
-              maxLength={500}
-              rows={3}
-              value={cardMessage}
-              onChange={(e) => setCardMessage(e.target.value)}
-              className="mt-1 w-full rounded-[var(--radius-lg)] border border-border bg-white px-3 py-2"
-            />
-          </label>
           <label className="flex items-center gap-2 text-sm">
             <input
               type="checkbox"
-              checked={anonymousCard}
-              onChange={(e) => setAnonymousCard(e.target.checked)}
+              checked={wantCard}
+              onChange={(e) => {
+                setWantCard(e.target.checked);
+                if (!e.target.checked) {
+                  setCardMessage('');
+                  setAnonymousCard(false);
+                }
+              }}
             />
-            Не указывать отправителя на открытке
+            Добавить открытку
           </label>
+          {wantCard ? (
+            <>
+              <label className="block text-sm">
+                Текст открытки
+                <textarea
+                  maxLength={500}
+                  rows={3}
+                  value={cardMessage}
+                  onChange={(e) => setCardMessage(e.target.value)}
+                  className="mt-1 w-full rounded-[var(--radius-lg)] border border-border bg-white px-3 py-2"
+                />
+              </label>
+              <label className="flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={anonymousCard}
+                  onChange={(e) => setAnonymousCard(e.target.checked)}
+                />
+                Не указывать отправителя на открытке
+              </label>
+            </>
+          ) : null}
           <label className="block text-sm">
             Комментарий к заказу
             <textarea

@@ -3,6 +3,26 @@ import test from 'node:test';
 import type { ProductPublicDto } from '@bouquet-one/contracts';
 import { buildProductJsonLd } from './product-json-ld';
 
+function priceRange(minMinor: string, maxMinor: string) {
+  return {
+    currency: 'BYN',
+    minMinor,
+    maxMinor,
+    single: minMinor === maxMinor,
+    label: minMinor === maxMinor ? '119,00 BYN' : `от ${Number(minMinor) / 100},00 BYN`,
+  };
+}
+
+function variant(id: string, name: string, priceMinor: string, sortOrder: number, saleMinor?: string) {
+  return {
+    id,
+    name,
+    priceMinor,
+    effectivePriceMinor: saleMinor ?? priceMinor,
+    sortOrder,
+  };
+}
+
 function baseProduct(overrides: Partial<ProductPublicDto> = {}): ProductPublicDto {
   return {
     id: '11111111-1111-1111-1111-111111111111',
@@ -11,10 +31,11 @@ function baseProduct(overrides: Partial<ProductPublicDto> = {}): ProductPublicDt
     shortDescription: 'Нежный букет',
     description: null,
     availability: 'AVAILABLE',
-    featured: true,
     heightCm: null,
+    bouquetSize: null,
     currency: 'BYN',
-    price: { currency: 'BYN', minMinor: '8900', maxMinor: '14900', single: false, label: 'от 89,00 BYN' },
+    price: priceRange('8900', '14900'),
+    promotion: null,
     seo: {
       seoTitle: null,
       seoDescription: null,
@@ -23,17 +44,17 @@ function baseProduct(overrides: Partial<ProductPublicDto> = {}): ProductPublicDt
       resolvedDescription: 'Нежный букет',
     },
     variants: [
-      { id: 'v1', name: 'S', priceMinor: '8900', sortOrder: 0 },
-      { id: 'v2', name: 'M', priceMinor: '11900', sortOrder: 1 },
-      { id: 'v3', name: 'L', priceMinor: '14900', sortOrder: 2 },
+      variant('v1', 'S', '8900', 0),
+      variant('v2', 'M', '11900', 1),
+      variant('v3', 'L', '14900', 2),
     ],
     components: [],
     media: [],
-    categories: [],
     occasions: [],
     recipients: [],
-    styles: [],
     colors: [],
+    productLines: [],
+    flowers: [],
     ...overrides,
   };
 }
@@ -53,14 +74,32 @@ test('buildProductJsonLd uses Offer for a single variant', () => {
   process.env.NEXT_PUBLIC_SITE_URL = 'http://localhost:3000';
   const jsonLd = buildProductJsonLd(
     baseProduct({
-      variants: [{ id: 'v1', name: 'M', priceMinor: '11900', sortOrder: 0 }],
-      price: { currency: 'BYN', minMinor: '11900', maxMinor: '11900', single: true, label: '119,00 BYN' },
+      variants: [variant('v1', 'M', '11900', 0)],
+      price: priceRange('11900', '11900'),
     }),
   );
   const offers = jsonLd.offers as Record<string, unknown>;
   assert.equal(offers['@type'], 'Offer');
   assert.equal(offers.price, '119.00');
   assert.equal(offers.availability, 'https://schema.org/InStock');
+});
+
+test('buildProductJsonLd advertises the promotional price, not the regular one', () => {
+  process.env.NEXT_PUBLIC_SITE_URL = 'http://localhost:3000';
+  const jsonLd = buildProductJsonLd(
+    baseProduct({
+      variants: [variant('v1', 'M', '11900', 0, '8900')],
+      price: priceRange('11900', '11900'),
+      promotion: {
+        type: 'PERCENT',
+        percentOff: 25,
+        originalPrice: priceRange('11900', '11900'),
+        salePrice: priceRange('8900', '8900'),
+      },
+    }),
+  );
+  const offers = jsonLd.offers as Record<string, unknown>;
+  assert.equal(offers.price, '89.00');
 });
 
 test('buildProductJsonLd maps commercial availability truthfully', () => {
@@ -77,7 +116,7 @@ test('buildProductJsonLd maps commercial availability truthfully', () => {
     const jsonLd = buildProductJsonLd(
       baseProduct({
         availability,
-        variants: [{ id: 'v1', name: 'M', priceMinor: '10000', sortOrder: 0 }],
+        variants: [variant('v1', 'M', '10000', 0)],
       }),
     );
     const offers = jsonLd.offers as Record<string, unknown>;

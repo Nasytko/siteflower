@@ -11,16 +11,22 @@ export function buildOrganizationJsonLd(input: {
   name: string;
   url: string;
   logoUrl?: string;
+  phone?: string | null;
+  address?: string | null;
+  city?: string | null;
 }): JsonLd {
   return buildJsonLd({
     '@type': 'Florist',
     name: input.name,
     url: input.url,
     ...(input.logoUrl ? { logo: input.logoUrl } : {}),
+    ...(input.phone ? { telephone: input.phone } : {}),
     address: {
       '@type': 'PostalAddress',
-      addressLocality: 'Гродно',
+      ...(input.address ? { streetAddress: input.address } : {}),
+      addressLocality: input.city || 'Гродно',
       addressCountry: 'BY',
+      postalCode: '230000',
     },
   });
 }

@@ -139,9 +139,9 @@ export function StorefrontSettingsEditor({ initial, canUpdate }: Props) {
         {FIELDS.map((field) => (
           <label
             key={field.key}
-            className={`block text-sm ${field.multiline ? 'md:col-span-2' : ''}`}
+            className={`admin-field ${field.multiline ? 'md:col-span-2' : ''}`}
           >
-            <span className="text-stone-600">{field.label}</span>
+            <span>{field.label}</span>
             {field.multiline ? (
               <textarea
                 required={field.required}
@@ -149,7 +149,7 @@ export function StorefrontSettingsEditor({ initial, canUpdate }: Props) {
                 rows={3}
                 value={form[field.key]}
                 onChange={(e) => setForm((prev) => ({ ...prev, [field.key]: e.target.value }))}
-                className="mt-1 block w-full rounded-md border border-stone-300 px-3 py-2"
+                className="admin-input"
               />
             ) : (
               <input
@@ -157,25 +157,30 @@ export function StorefrontSettingsEditor({ initial, canUpdate }: Props) {
                 disabled={!canUpdate}
                 value={form[field.key]}
                 onChange={(e) => setForm((prev) => ({ ...prev, [field.key]: e.target.value }))}
-                className="mt-1 block w-full rounded-md border border-stone-300 px-3 py-2"
+                className="admin-input"
               />
             )}
           </label>
         ))}
       </div>
 
-      <div className="flex flex-wrap items-center gap-4">
+      <div className="admin-savebar">
         {canUpdate ? (
-          <Button type="submit" disabled={pending}>
+          <Button type="submit" disabled={pending} className="!rounded-lg !bg-[var(--admin-brand)]">
             {pending ? 'Сохранение…' : 'Сохранить'}
           </Button>
         ) : (
-          <p className="text-sm text-stone-500">Только просмотр (нет SETTINGS_UPDATE)</p>
+          <p className="admin-help">Только просмотр: нет прав на изменение настроек.</p>
         )}
-        <p className="text-sm text-stone-500">Версия {version}</p>
-        {savedAt ? <p className="text-sm text-green-700">Сохранено: {savedAt}</p> : null}
+        {savedAt ? (
+          <span className="text-sm text-[var(--admin-muted)]">Сохранено: {savedAt}</span>
+        ) : null}
       </div>
-      {error ? <p className="text-sm text-red-700">{error}</p> : null}
+      {error ? (
+        <p role="alert" className="admin-error">
+          {error}
+        </p>
+      ) : null}
     </form>
   );
 }

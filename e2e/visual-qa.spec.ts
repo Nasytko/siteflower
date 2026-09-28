@@ -43,12 +43,20 @@ test('visual QA capture matrix', async ({ page }, testInfo) => {
 
   await page.setViewportSize(VIEWPORTS['desktop-1440']);
   await page.goto(webUrl, { waitUntil: 'domcontentloaded' });
-  await expect(page.getByRole('heading', { name: 'БУКЕТ №1' }).first()).toBeVisible();
+  await expect(page.getByRole('img', { name: 'BUKET №1' }).first()).toBeVisible();
   await shot(page, 'desktop-1440-home');
 
   await page.goto(`${webUrl}/bukety`, { waitUntil: 'domcontentloaded' });
-  await expect(page.getByRole('heading', { name: 'Каталог букетов' })).toBeVisible();
+  await expect(page.getByRole('heading', { level: 1, name: 'Букеты' })).toBeVisible();
   await shot(page, 'desktop-1440-catalog');
+
+  // Desktop filter popover — one of the five discovery pills.
+  const budgetPill = page.getByRole('button', { name: /^Бюджет/ });
+  if (await budgetPill.count()) {
+    await budgetPill.first().click();
+    await shot(page, 'desktop-1440-catalog-filter-open', false);
+    await page.keyboard.press('Escape');
+  }
 
   await page.goto(`${webUrl}/bukety/ameli`, { waitUntil: 'domcontentloaded' });
   await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
@@ -72,8 +80,14 @@ test('visual QA capture matrix', async ({ page }, testInfo) => {
   await page.goto(`${webUrl}/o-nas`, { waitUntil: 'domcontentloaded' });
   await shot(page, 'desktop-1440-o-nas');
 
-  await page.goto(`${webUrl}/collections/izbrannoe`, { waitUntil: 'domcontentloaded' });
-  await shot(page, 'desktop-1440-collection');
+  await page.goto(`${webUrl}/akcii`, { waitUntil: 'domcontentloaded' });
+  await shot(page, 'desktop-1440-akcii');
+
+  await page.goto(`${webUrl}/cvety`, { waitUntil: 'domcontentloaded' });
+  await shot(page, 'desktop-1440-cvety-hub');
+
+  await page.goto(`${webUrl}/povod`, { waitUntil: 'domcontentloaded' });
+  await shot(page, 'desktop-1440-povod-hub');
 
   await page.goto(`${webUrl}/povod/den-rozhdeniya`, { waitUntil: 'domcontentloaded' });
   await shot(page, 'desktop-1440-occasion');
@@ -180,6 +194,16 @@ test('admin visual QA capture', async ({ page }, testInfo) => {
   await page.goto(`${webUrl}/admin/storefront/homepage`);
   await expect(page.getByRole('heading', { name: 'Главная витрины' })).toBeVisible({ timeout: 15_000 });
   await shot(page, 'desktop-1440-admin-homepage');
+
+  await page.goto(`${webUrl}/admin/bestsellers`);
+  if (await page.getByRole('heading', { name: /Бестселлер/i }).count()) {
+    await shot(page, 'desktop-1440-admin-bestsellers');
+  }
+
+  await page.goto(`${webUrl}/admin/promotions`);
+  if (await page.getByRole('heading', { name: /Акци/i }).count()) {
+    await shot(page, 'desktop-1440-admin-promotions');
+  }
 
   await page.goto(`${webUrl}/admin/storefront/settings`);
   await expect(page.getByRole('heading', { name: 'Настройки витрины' })).toBeVisible({ timeout: 15_000 });

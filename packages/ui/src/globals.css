@@ -1,67 +1,81 @@
-/* Dicentra-like florist chrome — БУКЕТ №1 (Grodno), forest green commercial. */
+/**
+ * БУКЕТ №1 design tokens — warm milk base, clean white surfaces,
+ * deep botanical green primary, restrained dusty rose / sage accents.
+ *
+ * Components must consume these semantic variables (or the Tailwind theme
+ * colors derived from them) instead of literal hex values.
+ */
 :root {
-  --color-background: #ffffff;
-  --color-surface: #f7f6f4;
-  --color-ink: #1c2a27;
-  --color-foreground: #2a3330;
-  --color-muted: #6b726f;
-  --color-border: #e6e4e0;
+  /* Base */
+  --color-background: #fbf9f5;
+  --color-surface: #ffffff;
+  --color-surface-muted: #f3efe8;
 
-  /* Forest green — Dicentra primary */
-  --color-brand: #00473e;
+  /* Text */
+  --color-ink: #171614;
+  --color-foreground: #2a2824;
+  --color-muted: #6f6a61;
+
+  /* Lines */
+  --color-border: #e7e0d5;
+  --color-border-strong: #d6cdbe;
+
+  /* Primary — deep botanical green */
+  --color-brand: #1e4636;
+  --color-brand-mid: #2a5b46;
+  --color-brand-soft: #e9efea;
   --color-brand-foreground: #ffffff;
-  --color-brand-soft: #e8f0ee;
-  --color-brand-mid: #0a5c51;
 
-  /* Promo / sale */
-  --color-accent: #8b3c4a;
-  --color-accent-soft: #f6ecee;
-  /* Beige CTA (hero button) */
-  --color-peach: #b89d89;
+  /* Accents — used sparingly (sale prices, promo nav) */
+  --color-accent: #b45a68;
+  --color-accent-soft: #f7ecee;
+  --color-blush: #e9d4d0;
+  --color-sage: #8f9e8a;
+  --color-sage-soft: #eef1ea;
 
-  --color-danger: #8b3c4a;
-  --color-success: #2f6b4f;
+  --color-danger: #9b4a4a;
+  --color-success: #3d7a58;
 
-  --radius-sm: 0.375rem;
-  --radius-md: 0.75rem;
-  --radius-lg: 1rem;
-  --radius-xl: 1.25rem;
+  /* Soft radii — boutique cards */
+  --radius-sm: 0.5rem;
+  --radius-md: 0.875rem;
+  --radius-lg: 1.125rem;
+  --radius-xl: 1.75rem;
 
   --font-sans: var(--font-body), 'Manrope', 'Segoe UI', ui-sans-serif, system-ui, sans-serif;
-  --font-display: var(--font-display), 'Cormorant Garamond', 'Times New Roman', ui-serif, Georgia, serif;
-  --font-script: var(--font-display), Georgia, serif;
+  /* Headings share Manrope — no decorative wedding serif. */
+  --font-display: var(--font-body), 'Manrope', 'Segoe UI', ui-sans-serif, system-ui, sans-serif;
 
-  --shadow-soft: 0 6px 28px -12px rgb(0 71 62 / 0.1);
-  --shadow-lift: 0 18px 40px -18px rgb(0 71 62 / 0.16);
+  /* Restrained elevation */
+  --shadow-soft: 0 2px 10px -6px rgb(23 22 20 / 0.14);
+  --shadow-lift: 0 14px 32px -18px rgb(23 22 20 / 0.28);
 
   --header-expanded: 8rem;
-  --header-collapsed: 4.5rem;
-
-  --wash-mint: radial-gradient(ellipse 80% 50% at 100% 0%, #eef5f3 0%, transparent 55%);
-  --wash-blush: radial-gradient(ellipse 60% 40% at 0% 10%, #f8f1f0 0%, transparent 50%);
-  --wash-ink: linear-gradient(160deg, #00473e 0%, #0a5c51 100%);
-  --hero-panel: #3e504e;
+  --header-collapsed: 4.25rem;
 }
 
 @theme inline {
   --color-background: var(--color-background);
   --color-surface: var(--color-surface);
+  --color-surface-muted: var(--color-surface-muted);
   --color-ink: var(--color-ink);
   --color-foreground: var(--color-foreground);
   --color-muted: var(--color-muted);
   --color-border: var(--color-border);
+  --color-border-strong: var(--color-border-strong);
   --color-brand: var(--color-brand);
   --color-brand-foreground: var(--color-brand-foreground);
   --color-brand-soft: var(--color-brand-soft);
   --color-brand-mid: var(--color-brand-mid);
   --color-accent: var(--color-accent);
   --color-accent-soft: var(--color-accent-soft);
-  --color-peach: var(--color-peach);
+  --color-blush: var(--color-blush);
+  --color-sage: var(--color-sage);
+  --color-sage-soft: var(--color-sage-soft);
   --color-danger: var(--color-danger);
   --color-success: var(--color-success);
   --font-sans: var(--font-sans);
   --font-display: var(--font-display);
-  --font-script: var(--font-script);
   --radius-sm: var(--radius-sm);
   --radius-md: var(--radius-md);
   --radius-lg: var(--radius-lg);
@@ -69,11 +83,7 @@
 }
 
 body {
-  background:
-    var(--wash-mint),
-    var(--wash-blush),
-    var(--color-background);
-  background-attachment: fixed;
+  background: var(--color-background);
   color: var(--color-foreground);
   font-family: var(--font-sans);
 }

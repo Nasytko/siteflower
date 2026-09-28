@@ -24,30 +24,34 @@ export function buildRootMetadata(): Metadata {
   return {
     metadataBase: new URL(siteUrl),
     title: {
-      default: 'БУКЕТ №1',
-      template: '%s · БУКЕТ №1',
+      default: 'BUKET №1',
+      template: '%s · BUKET №1',
     },
     description: 'Цветочный магазин в Гродно. Современная платформа доставки букетов.',
-    applicationName: 'БУКЕТ №1',
-    authors: [{ name: 'БУКЕТ №1' }],
-    creator: 'БУКЕТ №1',
-    publisher: 'БУКЕТ №1',
+    applicationName: 'BUKET №1',
+    authors: [{ name: 'BUKET №1' }],
+    creator: 'BUKET №1',
+    publisher: 'BUKET №1',
     robots: indexing.robots,
     openGraph: {
       type: 'website',
       locale: 'ru_BY',
-      siteName: 'БУКЕТ №1',
+      siteName: 'BUKET №1',
       url: siteUrl,
-      title: 'БУКЕТ №1',
+      title: 'BUKET №1',
       description: 'Цветочный магазин в Гродно.',
     },
     twitter: {
       card: 'summary_large_image',
-      title: 'БУКЕТ №1',
+      title: 'BUKET №1',
       description: 'Цветочный магазин в Гродно.',
     },
     alternates: {
       canonical: '/',
+    },
+    icons: {
+      icon: '/brand/logo.png',
+      apple: '/brand/logo.png',
     },
   };
 }
@@ -70,7 +74,7 @@ export function buildPageMetadata(input: PageSeoInput): Metadata {
     openGraph: {
       type: input.type ?? 'website',
       locale: 'ru_BY',
-      siteName: 'БУКЕТ №1',
+      siteName: 'BUKET №1',
       url: canonical,
       title: input.title,
       description: input.description,
@@ -95,10 +99,10 @@ export function buildPageMetadata(input: PageSeoInput): Metadata {
  * Home           → `/`
  * Catalog        → `/bukety` (filtered URLs: same canonical, noIndex true)
  * Product        → `/bukety/${slug}`
- * Collection     → `/collections/${slug}`
- * Occasion       → `/povod/${slug}`
+ * Promotions     → `/akcii`
+ * Flower hub     → `/cvety`, flower landing → `/cvety/${slug}`
+ * Occasion hub   → `/povod`, occasion landing → `/povod/${slug}`
  * Recipient      → `/komu/${slug}`
- * Flower         → `/cvety/${slug}`
  * Delivery/About → `/dostavka`, `/o-nas`
  * Favorites      → `/favorites` (disallow in robots; client-only)
  *

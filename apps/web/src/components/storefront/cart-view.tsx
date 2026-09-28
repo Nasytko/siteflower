@@ -39,12 +39,12 @@ export function CartView() {
 
   if (cart.items.length === 0) {
     return (
-      <div className="overflow-hidden rounded-[var(--radius-xl)] border border-border bg-gradient-to-br from-[#f6ecec] via-white to-[#e8f0ed] px-6 py-12 text-center shadow-[var(--shadow-soft)] sm:px-10 sm:py-14">
-        <p className="sf-display-script text-2xl text-brand sm:text-3xl">корзина ждёт букет</p>
+      <div className="sf-panel px-6 py-12 text-center sm:px-10 sm:py-14">
+        <p className="sf-h2">Корзина ждёт букет</p>
         <p className="sf-body mx-auto mt-3 max-w-sm text-muted">
           Выберите свежий букет — мы бережно соберём и доставим.
         </p>
-        <Link href="/bukety" className="sf-cta-soft mt-8 inline-flex">
+        <Link href="/bukety" className="sf-cta mt-8 inline-flex">
           Смотреть каталог
         </Link>
       </div>
@@ -66,11 +66,11 @@ export function CartView() {
           return (
             <li
               key={line.variantId}
-              className="flex gap-4 rounded-[var(--radius-xl)] border border-border bg-white p-3 shadow-[var(--shadow-soft)] transition hover:border-brand/25 hover:shadow-[var(--shadow-lift)] sm:gap-5 sm:p-4"
+              className="flex gap-4 rounded-[var(--radius-lg)] border border-border bg-surface p-3 transition-colors hover:border-border-strong sm:gap-5 sm:p-4"
             >
               <Link
                 href={`/bukety/${line.productSlug ?? ''}`}
-                className="relative h-28 w-24 shrink-0 overflow-hidden rounded-[var(--radius-lg)] bg-gradient-to-br from-accent-soft to-brand-soft sm:h-32 sm:w-28"
+                className="relative h-28 w-24 shrink-0 overflow-hidden rounded-[var(--radius-md)] bg-surface-muted sm:h-32 sm:w-28"
               >
                 {line.primaryImageUrl ? (
                   <Image
@@ -158,9 +158,9 @@ export function CartView() {
         })}
       </ul>
 
-      <aside className="rounded-[var(--radius-xl)] border border-border bg-gradient-to-b from-brand to-ink p-5 text-brand-foreground shadow-[var(--shadow-lift)] sm:p-6 lg:sticky lg:top-24">
+      <aside className="sf-panel-ink p-5 sm:p-6 lg:sticky lg:top-24">
         <p className="sf-label text-brand-foreground/55">Ваш заказ</p>
-        <p className="mt-2 font-[family-name:var(--font-display)] text-2xl tracking-wide">
+        <p className="sf-h2 mt-2 text-white">
           {count} {count === 1 ? 'букет' : count < 5 ? 'букета' : 'букетов'}
         </p>
         <div className="mt-5 flex items-end justify-between gap-3 border-t border-white/15 pt-5">
@@ -174,7 +174,7 @@ export function CartView() {
         <p className="sf-small mt-3 text-brand-foreground/60">
           Точная сумма подтверждается при оформлении
         </p>
-        <Link href="/checkout" className="sf-cta-soft mt-6 w-full">
+        <Link href="/checkout" className="sf-cta-light mt-6 w-full">
           Оформить заказ
         </Link>
         <div className="mt-4 flex flex-wrap items-center justify-between gap-2">

@@ -18,7 +18,7 @@ async function adminLogin(page: import('@playwright/test').Page) {
 
 test('web storefront home loads with brand', async ({ page }) => {
   await page.goto(webUrl);
-  await expect(page.getByText('БУКЕТ №1').first()).toBeVisible();
+  await expect(page.getByRole('img', { name: 'BUKET №1' }).first()).toBeVisible();
   await expect(page.locator('#main-content')).toBeVisible();
 });
 
@@ -38,7 +38,7 @@ test('admin login → dashboard → users → logout', async ({ page }) => {
   await expect(page.getByRole('heading', { name: 'Пользователи' })).toBeVisible({ timeout: 15_000 });
   await page.getByRole('button', { name: 'Выйти' }).click();
   await page.waitForURL(/\/admin\/login/, { timeout: 15_000 });
-  await expect(page.getByRole('heading', { name: 'БУКЕТ №1' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'BUKET №1' })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Войти' })).toBeVisible();
 });
 

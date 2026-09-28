@@ -492,4 +492,108 @@ describe('Commerce orders (integration)', () => {
     expect(track.body.status).toBe('CANCELLED');
     expect(JSON.stringify(track.body)).not.toMatch(/Нет курьера/);
   });
+
+  it('checkout uses promotional effective price and snapshots original', async () => {
+    const http = request.agent(base);
+    await http
+      .post('/api/v1/admin/auth/login')
+      .set('Origin', origin)
+      .send({ email: superEmail, password })
+      .expect(201);
+
+    let product = await http
+      .post('/api/v1/admin/catalog/products')
+      .set('Origin', origin)
+      .send({ name: 'Promo Commerce', slug: `commerce-promo-${Date.now()}` })
+      .expect(201);
+
+    product = await http
+      .patch(`/api/v1/admin/catalog/products/${product.body.id}`)
+      .set('Origin', origin)
+      .send({
+        expectedVersion: product.body.version,
+        shortDescription: 'Акционный букет',
+        description: 'Описание для promo commerce',
+      })
+      .expect(200);
+
+    product = await http
+      .put(`/api/v1/admin/catalog/products/${product.body.id}/variants`)
+      .set('Origin', origin)
+      .send({
+        expectedVersion: product.body.version,
+        variants: [{ name: 'M', priceMinor: '20000', sortOrder: 0, status: 'ACTIVE' }],
+      })
+      .expect(200);
+
+    const png = await sharp({
+      create: { width: 400, height: 400, channels: 3, background: { r: 120, g: 40, b: 80 } },
+    })
+      .png()
+      .toBuffer();
+
+    product = await http
+      .post(`/api/v1/admin/catalog/products/${product.body.id}/media`)
+      .set('Origin', origin)
+      .attach('file', png, 'promo.png')
+      .expect(201);
+
+    product = await http
+      .post(`/api/v1/admin/catalog/products/${product.body.id}/publish`)
+      .set('Origin', origin)
+      .send({ expectedVersion: product.body.version })
+      .expect(201);
+
+    product = await http
+      .put(`/api/v1/admin/catalog/products/${product.body.id}/promotion`)
+      .set('Origin', origin)
+      .send({
+        expectedVersion: product.body.version,
+        enabled: true,
+        type: 'PERCENT',
+        percentOff: 25,
+      })
+      .expect(200);
+
+    const promoProductId = product.body.id as string;
+    const promoVariantId = product.body.variants[0].id as string;
+    // 20000 * 0.75 = 15000
+    expect(product.body.variants[0].effectivePriceMinor).toBe('15000');
+
+    const validated = await request(base)
+      .post('/api/v1/checkout/validate')
+      .send({
+        items: [{ productId: promoProductId, variantId: promoVariantId, quantity: 1 }],
+      })
+      .expect(201);
+
+    expect(validated.body.ok).toBe(true);
+    expect(validated.body.items[0].unitPriceMinor).toBe('15000');
+    expect(validated.body.items[0].originalUnitPriceMinor).toBe('20000');
+    expect(validated.body.items[0].promotionType).toBe('PERCENT');
+    expect(validated.body.subtotalMinor).toBe('15000');
+
+    const created = await request(base)
+      .post('/api/v1/orders')
+      .send(
+        orderPayload({
+          items: [{ productId: promoProductId, variantId: promoVariantId, quantity: 1 }],
+        }),
+      )
+      .expect(201);
+
+    const track = await request(base)
+      .get(`/api/v1/orders/track/${created.body.trackingToken}`)
+      .expect(200);
+    expect(track.body.items[0].unitPriceMinor).toBe('15000');
+
+    const row = await pool.query(
+      `SELECT unit_price_minor::text AS unit, original_unit_price_minor::text AS original, promotion_type
+       FROM order_items WHERE order_id = $1`,
+      [created.body.id],
+    );
+    expect(row.rows[0].unit).toBe('15000');
+    expect(row.rows[0].original).toBe('20000');
+    expect(row.rows[0].promotion_type).toBe('PERCENT');
+  });
 });

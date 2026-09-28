@@ -17,15 +17,12 @@ export function EmptyState({
   children,
 }: Props) {
   return (
-    <div className="flex flex-col items-start gap-4 py-16">
+    <div className="sf-panel flex flex-col items-center gap-3 px-6 py-14 text-center">
       <h2 className="sf-h2 text-foreground">{title}</h2>
       {description ? <p className="sf-body max-w-md text-muted">{description}</p> : null}
       {children}
       {actionHref && actionLabel ? (
-        <Link
-          href={actionHref}
-          className="mt-2 inline-flex items-center rounded-[var(--radius-md)] bg-brand px-5 py-2.5 text-sm font-medium text-brand-foreground transition hover:opacity-90"
-        >
+        <Link href={actionHref} className="sf-cta mt-2">
           {actionLabel}
         </Link>
       ) : null}

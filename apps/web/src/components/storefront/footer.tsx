@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import type { StorefrontSettingsPublicDto } from '@bouquet-one/contracts';
+import { BrandLogo } from './brand-logo';
 
 type Props = {
   settings: StorefrontSettingsPublicDto;
@@ -34,9 +35,7 @@ export function StorefrontFooter({ settings }: Props) {
       <div className="bg-brand text-white">
         <div className="sf-container-wide grid gap-10 py-12 sm:grid-cols-2 lg:grid-cols-4">
           <div>
-            <p className="font-[family-name:var(--font-display)] text-xl font-semibold">
-              {settings.brandName}
-            </p>
+            <BrandLogo alt={settings.brandName} className="sf-brand-logo--on-brand" />
             <p className="sf-small mt-3 text-white/70">
               {settings.aboutSummary ??
                 `Мы обожаем цветы и чувствуем их особую роль в жизни города. В ${settings.city} собираем современные букеты для современных людей.`}
@@ -54,7 +53,7 @@ export function StorefrontFooter({ settings }: Props) {
                 </Link>
               </li>
               <li>
-                <Link href="/bukety?featured=1" className="hover:text-white">
+                <Link href="/akcii" className="hover:text-white">
                   Акции
                 </Link>
               </li>
@@ -84,8 +83,13 @@ export function StorefrontFooter({ settings }: Props) {
                 </Link>
               </li>
               <li>
-                <Link href="/collections/izbrannoe" className="hover:text-white">
-                  Подборки
+                <Link href="/cvety" className="hover:text-white">
+                  Цветы
+                </Link>
+              </li>
+              <li>
+                <Link href="/povod" className="hover:text-white">
+                  Поводы
                 </Link>
               </li>
             </ul>

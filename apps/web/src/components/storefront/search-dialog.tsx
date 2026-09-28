@@ -93,7 +93,7 @@ export function SearchDialog({ open, onClose }: Props) {
         aria-label="Закрыть поиск"
         onClick={onClose}
       />
-      <div className="relative mx-auto mt-10 w-[min(100%-1.5rem,36rem)] rounded-[var(--radius-md)] bg-surface p-4 shadow-lg ring-1 ring-border sm:mt-16 sm:p-5">
+      <div className="relative mx-auto mt-10 w-[min(100%-1.5rem,36rem)] rounded-[var(--radius-lg)] border border-border bg-surface p-4 shadow-[var(--shadow-lift)] sm:mt-16 sm:p-5">
         <div className="flex items-start justify-between gap-3">
           <div>
             <h2 id={titleId} className="sf-h3">

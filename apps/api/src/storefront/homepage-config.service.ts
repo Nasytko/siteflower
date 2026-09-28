@@ -9,6 +9,7 @@ import {
   type HomepageConfigAdminDto,
   type HomepageConfigDto,
   type HomepageSectionDto,
+  type HomepageSectionKind,
   type UpdateHomepageConfigDto,
 } from '@bouquet-one/contracts';
 import type { Prisma } from '@bouquet-one/database';
@@ -41,7 +42,6 @@ const sectionSchema = z
     kind: z.enum(HOMEPAGE_SECTION_KINDS),
     enabled: z.boolean(),
     heading: z.string().trim().min(1).max(200),
-    collectionSlug: z.string().trim().min(1).max(160).nullable().optional(),
     sortOrder: z.number().int().min(0).max(10_000),
   })
   .strict();
@@ -53,9 +53,67 @@ const homepageConfigSchema = z
   })
   .strict();
 
+/**
+ * Catalog simplification retired the rule-based collections and the `featured`
+ * flag, so stored configs may still name sections that no longer exist.
+ */
+const LEGACY_SECTION_KINDS: Record<string, HomepageSectionKind> = {
+  featured: 'bestsellers',
+  collection: 'promotions',
+  collections: 'promotions',
+};
+
+export function migrateLegacyHomepageConfig(value: unknown): unknown {
+  if (!value || typeof value !== 'object') return value;
+  const raw = value as { sections?: unknown };
+  if (!Array.isArray(raw.sections)) return value;
+
+  const migratedKinds = new Set<HomepageSectionKind>();
+  const ids = new Set<string>();
+  const sections: Array<Record<string, unknown>> = [];
+
+  for (const entry of raw.sections) {
+    if (!entry || typeof entry !== 'object') continue;
+    const rest = { ...(entry as Record<string, unknown>) };
+    delete rest.collectionSlug;
+    const originalKind = typeof rest.kind === 'string' ? rest.kind : '';
+    const replacement = LEGACY_SECTION_KINDS[originalKind];
+    if (replacement) {
+      // Several collection sections collapse into a single promotions section.
+      if (migratedKinds.has(replacement)) continue;
+      migratedKinds.add(replacement);
+      rest.kind = replacement;
+      rest.id = replacement;
+    }
+    const id = typeof rest.id === 'string' ? rest.id : '';
+    if (!id || ids.has(id)) continue;
+    ids.add(id);
+    sections.push(rest);
+    if (typeof rest.kind === 'string') {
+      migratedKinds.add(rest.kind as HomepageSectionKind);
+    }
+  }
+
+  // Ensure gifts shelf exists for configs created before catalog simplification.
+  if (!migratedKinds.has('gifts') && !ids.has('gifts')) {
+    const bestsellers = sections.find((section) => section.kind === 'bestsellers');
+    const sortOrder =
+      typeof bestsellers?.sortOrder === 'number' ? bestsellers.sortOrder + 5 : 30;
+    sections.push({
+      id: 'gifts',
+      kind: 'gifts',
+      enabled: true,
+      heading: 'Подарки',
+      sortOrder,
+    });
+  }
+
+  return { ...(value as Record<string, unknown>), sections };
+}
+
 /** Constrained homepage JSON — known fields only, no HTML blobs. */
 export function parseHomepageConfig(value: unknown): HomepageConfigDto {
-  const result = homepageConfigSchema.safeParse(value);
+  const result = homepageConfigSchema.safeParse(migrateLegacyHomepageConfig(value));
   if (!result.success) {
     throw new BadRequestException(
       result.error.issues.map(
@@ -70,34 +128,13 @@ export function parseHomepageConfig(value: unknown): HomepageConfigDto {
     throw new BadRequestException('sections[].id must be unique');
   }
 
-  const sections: HomepageSectionDto[] = result.data.sections.map((section) => {
-    if (section.kind === 'collection') {
-      if (!section.collectionSlug) {
-        throw new BadRequestException(
-          'sections[].collectionSlug is required when kind is collection',
-        );
-      }
-      return {
-        id: section.id,
-        kind: section.kind,
-        enabled: section.enabled,
-        heading: section.heading,
-        collectionSlug: section.collectionSlug,
-        sortOrder: section.sortOrder,
-      };
-    }
-
-    return {
-      id: section.id,
-      kind: section.kind,
-      enabled: section.enabled,
-      heading: section.heading,
-      sortOrder: section.sortOrder,
-      ...(section.collectionSlug === undefined || section.collectionSlug === null
-        ? {}
-        : { collectionSlug: section.collectionSlug }),
-    };
-  });
+  const sections: HomepageSectionDto[] = result.data.sections.map((section) => ({
+    id: section.id,
+    kind: section.kind,
+    enabled: section.enabled,
+    heading: section.heading,
+    sortOrder: section.sortOrder,
+  }));
 
   return {
     hero: {

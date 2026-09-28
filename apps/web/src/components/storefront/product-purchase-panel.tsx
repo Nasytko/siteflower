@@ -2,35 +2,79 @@
 
 import { useEffect, useState } from 'react';
 import type { ProductPublicDto } from '@bouquet-one/contracts';
+import type { FulfillmentSettingsPublicDto } from '@bouquet-one/contracts';
 import { formatPriceFromMinor } from '@/lib/media';
 import { trackEvent } from '@/lib/analytics';
 import { addToCart, readCart, writeCart } from '@/lib/cart';
+import { writeCheckoutIntent } from '@/lib/checkout-intent';
 
 type Variant = ProductPublicDto['variants'][number];
 
 type Props = {
   product: Pick<
     ProductPublicDto,
-    'id' | 'name' | 'slug' | 'currency' | 'availability' | 'price' | 'media' | 'categories'
+    'id' | 'name' | 'slug' | 'currency' | 'availability' | 'price' | 'promotion' | 'media'
   >;
   variants: Variant[];
   phone?: string | null;
+  city?: string | null;
+  fulfillment?: FulfillmentSettingsPublicDto | null;
+  deliverySummary?: string | null;
 };
 
-export function ProductPurchasePanel({ product, variants, phone }: Props) {
+function formatFee(minor: string, currency: string): string {
+  const value = Number(minor);
+  if (!Number.isFinite(value) || value <= 0) return 'бесплатно';
+  return `${(value / 100).toFixed(0)} ${currency}`;
+}
+
+function deliveryOneLiner(
+  fulfillment: FulfillmentSettingsPublicDto | null | undefined,
+  deliverySummary: string | null | undefined,
+  city: string | null | undefined,
+): string {
+  if (fulfillment?.deliveryEnabled) {
+    const fee = formatFee(fulfillment.deliveryFeeMinor, fulfillment.currency);
+    const windows = fulfillment.timeWindows
+      .slice(0, 2)
+      .map((w) => w.label)
+      .join(', ');
+    return windows ? `Доставка — ${fee} · ${windows}` : `Доставка — ${fee}`;
+  }
+  if (deliverySummary?.trim()) return deliverySummary.trim();
+  return city ? `Доставка по ${city}` : 'Доставка по городу';
+}
+
+export function ProductPurchasePanel({
+  product,
+  variants,
+  phone,
+  city,
+  fulfillment,
+  deliverySummary,
+}: Props) {
   const sorted = [...variants].sort((a, b) => a.sortOrder - b.sortOrder);
   const [selectedId, setSelectedId] = useState(sorted[0]?.id ?? '');
   const [qty, setQty] = useState(1);
+  const [isGift, setIsGift] = useState(true);
+  const [wantCard, setWantCard] = useState(false);
+  const [cardDraft, setCardDraft] = useState('');
+  const [quickPhone, setQuickPhone] = useState('');
   const [feedback, setFeedback] = useState<string | null>(null);
   const [cartCount, setCartCount] = useState(0);
   const [hydrated, setHydrated] = useState(false);
 
   const selected = sorted.find((v) => v.id === selectedId) ?? sorted[0];
   const priceLabel = selected
-    ? formatPriceFromMinor(selected.priceMinor, product.currency)
+    ? formatPriceFromMinor(selected.effectivePriceMinor, product.currency)
     : product.price.label;
-
+  const discounted =
+    selected != null && selected.effectivePriceMinor !== selected.priceMinor;
+  const originalLabel =
+    discounted && selected ? formatPriceFromMinor(selected.priceMinor, product.currency) : null;
+  const percentOff = product.promotion?.percentOff ?? null;
   const blocked = product.availability === 'TEMPORARILY_UNAVAILABLE' || !selected;
+  const deliveryLine = deliveryOneLiner(fulfillment, deliverySummary, city);
 
   useEffect(() => {
     setHydrated(true);
@@ -46,8 +90,17 @@ export function ProductPurchasePanel({ product, variants, phone }: Props) {
     return () => window.removeEventListener('bouquet:cart', sync as EventListener);
   }, []);
 
+  function persistIntent() {
+    writeCheckoutIntent({
+      isGift,
+      wantCard: isGift && wantCard,
+      cardDraft: isGift && wantCard ? cardDraft.trim() : '',
+    });
+  }
+
   function onAdd() {
     if (!selected || blocked) return;
+    persistIntent();
     const primary =
       product.media.find((m) => m.isPrimary)?.url ?? product.media[0]?.url ?? null;
     const next = addToCart(readCart(), {
@@ -57,7 +110,7 @@ export function ProductPurchasePanel({ product, variants, phone }: Props) {
       productName: product.name,
       productSlug: product.slug,
       variantName: selected.name,
-      unitPriceMinor: selected.priceMinor,
+      unitPriceMinor: selected.effectivePriceMinor,
       primaryImageUrl: primary,
     });
     writeCart(next);
@@ -66,58 +119,56 @@ export function ProductPurchasePanel({ product, variants, phone }: Props) {
       variantId: selected.id,
       quantity: qty,
     });
-    setFeedback('Добавлено в корзину');
-    window.setTimeout(() => setFeedback(null), 2500);
+    setFeedback(isGift ? 'Добавлено · оформим как подарок' : 'Добавлено в корзину');
+    window.setTimeout(() => setFeedback(null), 2800);
+  }
+
+  function onQuickOrder(event: React.FormEvent) {
+    event.preventDefault();
+    if (!phone) return;
+    const digits = quickPhone.replace(/\D/g, '');
+    if (digits.length < 7) {
+      setFeedback('Укажите телефон для быстрого заказа');
+      return;
+    }
+    window.location.href = `tel:${phone.replace(/\s+/g, '')}`;
   }
 
   return (
-    <div className="space-y-5" data-purchase-ready={hydrated ? 'true' : 'false'}>
-      {product.availability === 'AVAILABLE' ? (
-        <p className="sf-small flex items-center gap-2 text-success">
-          <span className="inline-flex size-4 items-center justify-center rounded-full bg-success/15" aria-hidden>
-            <svg className="h-2.5 w-2.5" viewBox="0 0 12 12" fill="none" aria-hidden>
-              <path
-                d="M2.5 6.2L4.8 8.5 9.5 3.5"
-                stroke="currentColor"
-                strokeWidth="1.6"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
-            </svg>
-          </span>
-          В наличии · можно заказать сегодня
-        </p>
-      ) : null}
-
-      <p className="sf-price text-[1.85rem] tracking-tight text-ink" aria-live="polite">
-        {priceLabel}
-      </p>
+    <div className="sf-pdp-buy" data-purchase-ready={hydrated ? 'true' : 'false'}>
+      <div className="sf-pdp-buy__meta">
+        {product.availability === 'AVAILABLE' ? (
+          <span className="sf-pdp-badge sf-pdp-badge--ok">В наличии</span>
+        ) : (
+          <span className="sf-pdp-badge">Временно нет</span>
+        )}
+        <span className="sf-pdp-buy__delivery">{deliveryLine}</span>
+      </div>
 
       {sorted.length > 1 ? (
-        <div>
-          <p className="sf-label mb-2">Вариант</p>
-          <div className="flex flex-wrap gap-2" role="listbox" aria-label="Варианты букета">
+        <div className="sf-pdp-buy__block">
+          <p className="sf-label mb-2.5">Размер</p>
+          <div className="sf-pdp-variants" role="listbox" aria-label="Размер букета">
             {sorted.map((variant) => {
               const active = variant.id === selected?.id;
+              const compact = variant.name.trim().length <= 3;
               return (
                 <button
                   key={variant.id}
                   type="button"
                   role="option"
                   aria-selected={active}
-                  className={`min-h-11 rounded-full px-4 py-2 text-left text-sm transition ${
-                    active
-                      ? 'bg-[var(--color-peach)] text-white'
-                      : 'border border-border bg-white text-foreground hover:border-brand/30'
+                  className={`sf-pdp-variant ${compact ? 'sf-pdp-variant--round' : ''} ${
+                    active ? 'sf-pdp-variant--active' : ''
                   }`}
                   onClick={() => setSelectedId(variant.id)}
                 >
-                  <span className="font-medium">{variant.name}</span>
-                  <span
-                    className={`mt-0.5 block tabular-nums ${active ? 'text-white/85' : 'text-muted'}`}
-                  >
-                    {formatPriceFromMinor(variant.priceMinor, product.currency)}
-                  </span>
+                  <span className="sf-pdp-variant__name">{variant.name}</span>
+                  {!compact ? (
+                    <span className="sf-pdp-variant__price">
+                      {formatPriceFromMinor(variant.effectivePriceMinor, product.currency)}
+                    </span>
+                  ) : null}
                 </button>
               );
             })}
@@ -125,41 +176,117 @@ export function ProductPurchasePanel({ product, variants, phone }: Props) {
         </div>
       ) : null}
 
-      <div className="flex flex-wrap items-center gap-3">
-        <label className="sf-small text-muted">
-          Кол-во
-          <input
-            type="number"
-            inputMode="numeric"
-            min={1}
-            max={20}
-            value={qty}
-            disabled={blocked}
-            onChange={(e) => setQty(Math.max(1, Math.min(20, Number(e.target.value) || 1)))}
-            className="ml-2 w-16 rounded-full border border-border bg-white px-2 py-2 text-center text-foreground"
-          />
-        </label>
+      <div className="sf-pdp-buy__price" aria-live="polite">
+        <p className={`sf-price sf-pdp-buy__amount ${discounted ? 'sf-price--sale' : ''}`}>
+          {priceLabel}
+        </p>
+        {originalLabel ? (
+          <p className="sf-price-was">
+            <span className="sr-only">Обычная цена </span>
+            {originalLabel}
+          </p>
+        ) : null}
+        {percentOff != null ? <span className="sf-sale-chip">−{percentOff}%</span> : null}
       </div>
 
-      <div className="flex flex-wrap items-center gap-3 pt-1">
-        <button
-          type="button"
-          disabled={blocked || !hydrated}
-          onClick={onAdd}
-          data-testid="add-to-cart"
-          className="sf-cta disabled:cursor-not-allowed disabled:opacity-50 disabled:shadow-none disabled:transform-none"
-        >
-          Добавить в корзину
-        </button>
-        {phone ? (
-          <a
-            href={`tel:${phone.replace(/\s+/g, '')}`}
-            className="sf-small text-muted underline-offset-2 hover:text-brand hover:underline"
+      <div className="sf-pdp-buy__block">
+        <div className="sf-pdp-intent" role="group" aria-label="Тип заказа">
+          <button
+            type="button"
+            className={`sf-pdp-intent__btn ${!isGift ? 'sf-pdp-intent__btn--active' : ''}`}
+            aria-pressed={!isGift}
+            onClick={() => setIsGift(false)}
           >
-            Или уточнить по телефону
-          </a>
+            Себе
+          </button>
+          <button
+            type="button"
+            className={`sf-pdp-intent__btn ${isGift ? 'sf-pdp-intent__btn--active' : ''}`}
+            aria-pressed={isGift}
+            onClick={() => setIsGift(true)}
+          >
+            Подарок
+          </button>
+        </div>
+        {isGift ? (
+          <div className="sf-pdp-card-opt">
+            <label className="sf-pdp-card-opt__check">
+              <input
+                type="checkbox"
+                checked={wantCard}
+                onChange={(e) => setWantCard(e.target.checked)}
+              />
+              Открытка с текстом
+            </label>
+            {wantCard ? (
+              <textarea
+                className="sf-pdp-card-opt__text"
+                rows={2}
+                maxLength={500}
+                placeholder="Текст для открытки"
+                value={cardDraft}
+                onChange={(e) => setCardDraft(e.target.value)}
+              />
+            ) : null}
+          </div>
         ) : null}
       </div>
+
+      <div className="sf-pdp-buy__qty">
+        <span className="sf-label">Кол-во</span>
+        <div className="sf-stepper">
+          <button
+            type="button"
+            aria-label="Меньше"
+            disabled={blocked || qty <= 1}
+            onClick={() => setQty((n) => Math.max(1, n - 1))}
+          >
+            −
+          </button>
+          <span aria-live="polite">{qty}</span>
+          <button
+            type="button"
+            aria-label="Больше"
+            disabled={blocked || qty >= 20}
+            onClick={() => setQty((n) => Math.min(20, n + 1))}
+          >
+            +
+          </button>
+        </div>
+      </div>
+
+      <button
+        type="button"
+        disabled={blocked || !hydrated}
+        onClick={onAdd}
+        data-testid="add-to-cart"
+        className="sf-cta-block w-full disabled:cursor-not-allowed disabled:opacity-50"
+      >
+        Добавить в корзину
+      </button>
+
+      {phone ? (
+        <form className="sf-pdp-quick" onSubmit={onQuickOrder}>
+          <span className="sf-label">Быстрый заказ</span>
+          <div className="sf-pdp-quick__row">
+            <input
+              type="tel"
+              inputMode="tel"
+              placeholder="+375 …"
+              value={quickPhone}
+              onChange={(e) => setQuickPhone(e.target.value)}
+              className="sf-pdp-quick__input"
+              aria-label="Телефон для быстрого заказа"
+            />
+            <button type="submit" className="sf-pdp-quick__go" aria-label="Позвонить">
+              →
+            </button>
+          </div>
+          <a href={`tel:${phone.replace(/\s+/g, '')}`} className="sf-pdp-buy__call">
+            или {phone}
+          </a>
+        </form>
+      ) : null}
 
       {feedback ? (
         <p className="sf-small text-brand" role="status" data-testid="add-to-cart-status">
@@ -176,10 +303,9 @@ export function ProductPurchasePanel({ product, variants, phone }: Props) {
       ) : null}
 
       <div className="pointer-events-none fixed inset-x-0 bottom-0 z-30 p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] lg:hidden">
-        <div className="pointer-events-auto mx-auto flex max-w-lg items-center gap-3 rounded-[var(--radius-lg)] border border-border bg-background/95 p-2.5 shadow-[var(--shadow-lift)] backdrop-blur-md">
+        <div className="pointer-events-auto mx-auto flex max-w-lg items-center gap-3 rounded-2xl border border-border/80 bg-white/95 p-2.5 shadow-[var(--shadow-soft)] backdrop-blur">
           <div className="min-w-0 flex-1 pl-1">
-            <p className="truncate text-sm font-medium text-foreground">{product.name}</p>
-            <p className="sf-price text-base text-brand">{priceLabel}</p>
+            <p className={`sf-price text-base ${discounted ? 'sf-price--sale' : ''}`}>{priceLabel}</p>
           </div>
           <button
             type="button"

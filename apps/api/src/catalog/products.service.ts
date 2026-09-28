@@ -19,20 +19,16 @@ import { AppConfigService } from '../config/app-config.service';
 import { PrismaService } from '../database/prisma.service';
 import { MediaService } from '../media/media.service';
 import type { ActorContext } from '../common/actor.util';
-import {
-  OCC_CONFLICT_MESSAGE,
-  validatePublishRequirements,
-} from './catalog.logic';
-import {
-  toProductAdminDto,
-  toProductListItemDto,
-  toProductPublicDto,
-} from './catalog.mapper';
+import { BestsellersService } from './bestsellers.service';
+import { BudgetRangesService } from './budget-ranges.service';
+import { OCC_CONFLICT_MESSAGE, validatePublishRequirements } from './catalog.logic';
+import { toProductAdminDto, toProductListItemDto, toProductPublicDto } from './catalog.mapper';
 import type {
   CreateProductDto,
   ProductListQueryDto,
   PublishProductDto,
   ReorderProductMediaDto,
+  SetProductBestsellerGroupsDto,
   SetProductComponentsDto,
   SetProductTaxonomiesDto,
   SetProductVariantsDto,
@@ -43,7 +39,13 @@ import type {
 import { ProductsRepository } from './products.repository';
 import { SlugRedirectsService } from './slug-redirects.service';
 
-type TaxonomyReference = 'category' | 'occasion' | 'recipient' | 'style' | 'color' | 'flower';
+type CatalogReference =
+  | 'occasion'
+  | 'recipient'
+  | 'color'
+  | 'flower'
+  | 'bouquetSize'
+  | 'productLine';
 
 export type UploadedImage = {
   buffer: Buffer;
@@ -69,6 +71,8 @@ export class ProductsService {
   constructor(
     private readonly products: ProductsRepository,
     private readonly slugRedirects: SlugRedirectsService,
+    private readonly bestsellers: BestsellersService,
+    private readonly budgetRanges: BudgetRangesService,
     private readonly media: MediaService,
     private readonly audit: AuditService,
     private readonly prisma: PrismaService,
@@ -80,19 +84,36 @@ export class ProductsService {
   async list(query: ProductListQueryDto): Promise<PaginatedResponse<ProductListItemDto>> {
     const page = query.page ?? 1;
     const pageSize = query.pageSize ?? 20;
+    const now = new Date();
+    const budgetRanges = query.budgetRangeIds?.length
+      ? await this.budgetRanges.resolveBounds(query.budgetRangeIds)
+      : [];
     const { items, total } = await this.products.list({
       filters: {
         search: query.search,
         lifecycle: query.lifecycle,
         availability: query.availability,
-        featured: query.featured,
-        categoryId: query.categoryId,
+        occasionIds: query.occasionIds,
+        occasionSlugs: query.occasionSlugs,
+        recipientIds: query.recipientIds,
+        recipientSlugs: query.recipientSlugs,
+        colorIds: query.colorIds,
+        colorSlugs: query.colorSlugs,
+        flowerIds: query.flowerIds,
+        flowerSlugs: query.flowerSlugs,
+        bouquetSizeIds: query.bouquetSizeIds,
+        bouquetSizeSlugs: query.bouquetSizeSlugs,
+        bestsellerGroupIds: query.bestsellerGroupIds,
+        promotionalOnly: query.promotionalOnly,
+        budgetRanges,
       },
       skip: (page - 1) * pageSize,
       take: pageSize,
+      sort: query.sort ?? 'recommended',
+      now,
     });
     return {
-      items: items.map((product) => toProductListItemDto(product, this.urlFor)),
+      items: items.map((product) => toProductListItemDto(product, this.urlFor, now)),
       total,
       page,
       pageSize,
@@ -127,7 +148,14 @@ export class ProductsService {
     }
 
     const created = await this.prisma.client.$transaction(async (tx) => {
-      await this.assertReferencesExist(tx, 'category', input.categoryIds ?? []);
+      if (input.bouquetSizeId) {
+        await this.assertReferencesExist(tx, 'bouquetSize', [input.bouquetSizeId]);
+      }
+      await this.assertReferencesExist(tx, 'occasion', input.occasionIds ?? []);
+      await this.assertReferencesExist(tx, 'recipient', input.recipientIds ?? []);
+      await this.assertReferencesExist(tx, 'color', input.colorIds ?? []);
+      await this.assertReferencesExist(tx, 'productLine', input.productLineIds ?? []);
+
       const product = await this.products.create(
         {
           name,
@@ -138,8 +166,10 @@ export class ProductsService {
           description: input.description ? trimmedOrNull(input.description) : null,
           lifecycle: 'DRAFT',
           ...(input.availability ? { availability: input.availability } : {}),
-          ...(input.featured === undefined ? {} : { featured: input.featured }),
           ...(input.heightCm === undefined ? {} : { heightCm: input.heightCm }),
+          ...(input.bouquetSizeId
+            ? { bouquetSize: { connect: { id: input.bouquetSizeId } } }
+            : {}),
           ...(input.currency ? { currency: input.currency } : {}),
           seoTitle: input.seoTitle ? trimmedOrNull(input.seoTitle) : null,
           seoDescription: input.seoDescription ? trimmedOrNull(input.seoDescription) : null,
@@ -160,8 +190,17 @@ export class ProductsService {
           tx,
         );
       }
-      if (input.categoryIds?.length) {
-        await this.products.replaceCategories(product.id, input.categoryIds, tx);
+      if (input.occasionIds?.length) {
+        await this.products.replaceOccasions(product.id, input.occasionIds, tx);
+      }
+      if (input.recipientIds?.length) {
+        await this.products.replaceRecipients(product.id, input.recipientIds, tx);
+      }
+      if (input.colorIds?.length) {
+        await this.products.replaceColors(product.id, input.colorIds, tx);
+      }
+      if (input.productLineIds?.length) {
+        await this.products.replaceProductLines(product.id, input.productLineIds, tx);
       }
 
       await this.recordAudit(tx, actor, 'PRODUCT_CREATED', product.id, { slug, name });
@@ -195,8 +234,11 @@ export class ProductsService {
         }
         await this.slugRedirects.record(tx, 'PRODUCT', product.slug, nextSlug);
       }
+      if (input.bouquetSizeId) {
+        await this.assertReferencesExist(tx, 'bouquetSize', [input.bouquetSizeId]);
+      }
 
-      const data: Prisma.ProductUpdateManyMutationInput = {
+      const data: Prisma.ProductUncheckedUpdateManyInput = {
         ...(input.name === undefined ? {} : { name: input.name.trim() }),
         ...(slugChanged ? { slug: nextSlug } : {}),
         ...(input.shortDescription === undefined
@@ -206,8 +248,8 @@ export class ProductsService {
           ? {}
           : { description: trimmedOrNull(input.description) }),
         ...(input.availability === undefined ? {} : { availability: input.availability }),
-        ...(input.featured === undefined ? {} : { featured: input.featured }),
         ...(input.heightCm === undefined ? {} : { heightCm: input.heightCm }),
+        ...(input.bouquetSizeId === undefined ? {} : { bouquetSizeId: input.bouquetSizeId }),
         ...(input.currency === undefined ? {} : { currency: input.currency }),
         ...(input.seoTitle === undefined ? {} : { seoTitle: trimmedOrNull(input.seoTitle) }),
         ...(input.seoDescription === undefined
@@ -255,6 +297,10 @@ export class ProductsService {
     return this.getById(id);
   }
 
+  /**
+   * Composition is also the flower facet: filters read `ProductComponent.flowerId`,
+   * so there is no separate product↔flower link to keep in sync.
+   */
   async setComponents(
     id: string,
     input: SetProductComponentsDto,
@@ -292,12 +338,13 @@ export class ProductsService {
     actor: ActorContext,
   ): Promise<ProductAdminDto> {
     await this.prisma.client.$transaction(async (tx) => {
-      await this.guardVersion(tx, id, input.expectedVersion);
-
-      if (input.categoryIds) {
-        await this.assertReferencesExist(tx, 'category', input.categoryIds);
-        await this.products.replaceCategories(id, input.categoryIds, tx);
+      const data: Prisma.ProductUncheckedUpdateManyInput =
+        input.bouquetSizeId === undefined ? {} : { bouquetSizeId: input.bouquetSizeId };
+      if (input.bouquetSizeId) {
+        await this.assertReferencesExist(tx, 'bouquetSize', [input.bouquetSizeId]);
       }
+      await this.guardVersion(tx, id, input.expectedVersion, data);
+
       if (input.occasionIds) {
         await this.assertReferencesExist(tx, 'occasion', input.occasionIds);
         await this.products.replaceOccasions(id, input.occasionIds, tx);
@@ -306,16 +353,32 @@ export class ProductsService {
         await this.assertReferencesExist(tx, 'recipient', input.recipientIds);
         await this.products.replaceRecipients(id, input.recipientIds, tx);
       }
-      if (input.styleIds) {
-        await this.assertReferencesExist(tx, 'style', input.styleIds);
-        await this.products.replaceStyles(id, input.styleIds, tx);
-      }
       if (input.colorIds) {
         await this.assertReferencesExist(tx, 'color', input.colorIds);
         await this.products.replaceColors(id, input.colorIds, tx);
       }
+      if (input.productLineIds) {
+        await this.assertReferencesExist(tx, 'productLine', input.productLineIds);
+        await this.products.replaceProductLines(id, input.productLineIds, tx);
+      }
 
       await this.recordAudit(tx, actor, 'PRODUCT_UPDATED', id, { taxonomies: true });
+    });
+
+    return this.getById(id);
+  }
+
+  async setBestsellerGroups(
+    id: string,
+    input: SetProductBestsellerGroupsDto,
+    actor: ActorContext,
+  ): Promise<ProductAdminDto> {
+    await this.prisma.client.$transaction(async (tx) => {
+      await this.guardVersion(tx, id, input.expectedVersion);
+      await this.bestsellers.setGroupsForProduct(id, input.groupIds, tx);
+      await this.recordAudit(tx, actor, 'BESTSELLER_UPDATED', id, {
+        groups: input.groupIds.length,
+      });
     });
 
     return this.getById(id);
@@ -539,7 +602,7 @@ export class ProductsService {
     tx: Prisma.TransactionClient,
     id: string,
     expectedVersion: number,
-    data: Prisma.ProductUpdateManyMutationInput = {},
+    data: Prisma.ProductUncheckedUpdateManyInput = {},
   ): Promise<void> {
     const changed = await this.products.updateWithVersion(id, expectedVersion, data, tx);
     if (changed > 0) {
@@ -553,7 +616,7 @@ export class ProductsService {
 
   private async assertReferencesExist(
     tx: Prisma.TransactionClient,
-    kind: TaxonomyReference,
+    kind: CatalogReference,
     ids: string[],
   ): Promise<void> {
     const unique = [...new Set(ids)];
@@ -561,13 +624,13 @@ export class ProductsService {
       return;
     }
     const where = { id: { in: unique } };
-    const counters: Record<TaxonomyReference, () => Promise<number>> = {
-      category: () => tx.category.count({ where }),
+    const counters: Record<CatalogReference, () => Promise<number>> = {
       occasion: () => tx.occasion.count({ where }),
       recipient: () => tx.recipient.count({ where }),
-      style: () => tx.style.count({ where }),
       color: () => tx.color.count({ where }),
       flower: () => tx.flower.count({ where }),
+      bouquetSize: () => tx.bouquetSize.count({ where }),
+      productLine: () => tx.productLine.count({ where }),
     };
     if ((await counters[kind]()) !== unique.length) {
       throw new BadRequestException(`Unknown ${kind} reference`);

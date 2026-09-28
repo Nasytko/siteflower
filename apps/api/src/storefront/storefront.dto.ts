@@ -133,12 +133,6 @@ export class HomepageSectionInputDto {
   @MaxLength(200)
   heading!: string;
 
-  @IsOptional()
-  @ValidateIf((_, value) => value !== null && value !== undefined)
-  @IsString()
-  @MaxLength(160)
-  collectionSlug?: string | null;
-
   @Type(() => Number)
   @IsInt()
   @Min(0)
@@ -161,4 +155,72 @@ export class UpdateHomepageConfigDto {
   @ValidateNested({ each: true })
   @Type(() => HomepageSectionInputDto)
   sections!: HomepageSectionInputDto[];
+}
+
+export class CreateInstagramPostDto {
+  @IsString()
+  @MinLength(1)
+  @MaxLength(1000)
+  imageUrl!: string;
+
+  @IsOptional()
+  @ValidateIf((_, value) => value !== null)
+  @IsString()
+  @MaxLength(1000)
+  postUrl?: string | null;
+
+  @IsOptional()
+  @ValidateIf((_, value) => value !== null)
+  @IsString()
+  @MaxLength(500)
+  caption?: string | null;
+
+  @IsOptional()
+  @IsBoolean()
+  enabled?: boolean;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  @Max(10_000)
+  sortOrder?: number;
+}
+
+export class UpdateInstagramPostDto {
+  @IsOptional()
+  @IsString()
+  @MinLength(1)
+  @MaxLength(1000)
+  imageUrl?: string;
+
+  @IsOptional()
+  @ValidateIf((_, value) => value !== null)
+  @IsString()
+  @MaxLength(1000)
+  postUrl?: string | null;
+
+  @IsOptional()
+  @ValidateIf((_, value) => value !== null)
+  @IsString()
+  @MaxLength(500)
+  caption?: string | null;
+
+  @IsOptional()
+  @IsBoolean()
+  enabled?: boolean;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  @Max(10_000)
+  sortOrder?: number;
+}
+
+export class ReorderInstagramPostsDto {
+  @IsArray()
+  @ArrayMaxSize(100)
+  @IsString({ each: true })
+  orderedIds!: string[];
 }

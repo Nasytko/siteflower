@@ -71,6 +71,30 @@ const nextConfig: NextConfig = {
       },
     ];
   },
+  async redirects() {
+    return [
+      // Collections were retired: merchandising now lives on /akcii and homepage
+      // bestseller groups. Send the link equity to the catalog instead of
+      // keeping thin ghost pages alive.
+      {
+        source: '/collections',
+        destination: '/bukety',
+        permanent: true,
+      },
+      {
+        source: '/collections/:slug',
+        destination: '/bukety',
+        permanent: true,
+      },
+      // Legacy promo catalog URL → the dedicated promotions destination.
+      {
+        source: '/bukety',
+        has: [{ type: 'query', key: 'featured' }],
+        destination: '/akcii',
+        permanent: true,
+      },
+    ];
+  },
   async headers() {
     return [
       {

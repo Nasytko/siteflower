@@ -1,6 +1,8 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import type {
-  CollectionPublicDto,
+  BestsellerGroupPublicDto,
+  BouquetSizePublicDto,
+  BudgetRangePublicDto,
   PaginatedResponse,
   ProductListItemDto,
   ProductResolveDto,
@@ -11,27 +13,30 @@ import type {
 import type { Prisma } from '@bouquet-one/database';
 import { PrismaService } from '../database/prisma.service';
 import { MediaService } from '../media/media.service';
+import { BestsellersService } from './bestsellers.service';
+import { BudgetRangesService } from './budget-ranges.service';
 import { isEffectivelyPublished } from './catalog.logic';
 import {
   PRODUCT_INCLUDE,
+  toBouquetSizePublicDto,
   toProductListItemDto,
   toProductPublicDto,
   toTaxonomyPublicDto,
   toTaxonomyRef,
   type TaxonomyRecord,
 } from './catalog.mapper';
-import { CollectionsService } from './collections.service';
 import type { PublicProductListQueryDto } from './products.dto';
 import { effectivelyPublishedWhere, ProductsRepository } from './products.repository';
+import { PromotionsService } from './promotions.service';
 import { SlugRedirectsService } from './slug-redirects.service';
 
+/** Landing-page taxonomies (bouquet size resolves for filter labels, not SEO pages). */
 const PUBLIC_TAXONOMY_KINDS = [
   'flower',
   'occasion',
   'recipient',
-  'category',
-  'style',
   'color',
+  'bouquet_size',
 ] as const;
 
 type PublicTaxonomyKind = (typeof PUBLIC_TAXONOMY_KINDS)[number];
@@ -40,11 +45,15 @@ function isPublicTaxonomyKind(value: string): value is PublicTaxonomyKind {
   return (PUBLIC_TAXONOMY_KINDS as readonly string[]).includes(value);
 }
 
+type ColorPublicDto = TaxonomyRefDto & { swatch: string | null };
+
 @Injectable()
 export class PublicCatalogService {
   constructor(
     private readonly products: ProductsRepository,
-    private readonly collections: CollectionsService,
+    private readonly bestsellers: BestsellersService,
+    private readonly budgetRanges: BudgetRangesService,
+    private readonly promotions: PromotionsService,
     private readonly slugRedirects: SlugRedirectsService,
     private readonly media: MediaService,
     private readonly prisma: PrismaService,
@@ -57,27 +66,37 @@ export class PublicCatalogService {
   ): Promise<PaginatedResponse<ProductListItemDto>> {
     const page = query.page ?? 1;
     const pageSize = query.pageSize ?? 24;
+    const now = new Date();
+    const budgetRanges = query.budgetRangeIds?.length
+      ? await this.budgetRanges.resolveBounds(query.budgetRangeIds)
+      : [];
     const { items, total } = await this.products.list({
       filters: {
-        publishedAt: new Date(),
+        publishedAt: now,
         search: query.search,
         availability: query.availability,
-        featured: query.featured,
-        categorySlug: query.categorySlug,
-        occasionSlug: query.occasionSlug,
-        recipientSlug: query.recipientSlug,
-        styleSlug: query.styleSlug,
-        colorSlug: query.colorSlug,
-        flowerSlug: query.flowerSlug,
+        occasionIds: query.occasionIds,
+        occasionSlugs: query.occasionSlugs,
+        recipientIds: query.recipientIds,
+        recipientSlugs: query.recipientSlugs,
+        colorIds: query.colorIds,
+        colorSlugs: query.colorSlugs,
+        flowerIds: query.flowerIds,
+        flowerSlugs: query.flowerSlugs,
+        bouquetSizeIds: query.bouquetSizeIds,
+        bouquetSizeSlugs: query.bouquetSizeSlugs,
+        promotionalOnly: query.promotionalOnly,
+        budgetRanges,
         minPriceMinor: query.minPriceMinor,
         maxPriceMinor: query.maxPriceMinor,
       },
       skip: (page - 1) * pageSize,
       take: pageSize,
-      sort: query.sort ?? 'featured',
+      sort: query.sort ?? 'recommended',
+      now,
     });
     return {
-      items: items.map((product) => toProductListItemDto(product, this.urlFor)),
+      items: items.map((product) => toProductListItemDto(product, this.urlFor, now)),
       total,
       page,
       pageSize,
@@ -106,19 +125,22 @@ export class PublicCatalogService {
       throw new NotFoundException('Product not found');
     }
 
-    const categoryIds = product.categories.map((link) => link.categoryId);
-    const styleIds = product.styles.map((link) => link.styleId);
+    const occasionIds = product.occasions.map((link) => link.occasionId);
+    const recipientIds = product.recipients.map((link) => link.recipientId);
     const colorIds = product.colors.map((link) => link.colorId);
     const flowerIds = product.components
       .map((component) => component.flowerId)
       .filter((id): id is string => Boolean(id));
 
     const overlap: Prisma.ProductWhereInput[] = [];
-    if (categoryIds.length > 0) {
-      overlap.push({ categories: { some: { categoryId: { in: categoryIds } } } });
+    if (product.bouquetSizeId) {
+      overlap.push({ bouquetSizeId: product.bouquetSizeId });
     }
-    if (styleIds.length > 0) {
-      overlap.push({ styles: { some: { styleId: { in: styleIds } } } });
+    if (occasionIds.length > 0) {
+      overlap.push({ occasions: { some: { occasionId: { in: occasionIds } } } });
+    }
+    if (recipientIds.length > 0) {
+      overlap.push({ recipients: { some: { recipientId: { in: recipientIds } } } });
     }
     if (colorIds.length > 0) {
       overlap.push({ colors: { some: { colorId: { in: colorIds } } } });
@@ -130,40 +152,73 @@ export class PublicCatalogService {
       return [];
     }
 
+    const now = new Date();
     const items = await this.prisma.client.product.findMany({
       where: {
-        AND: [effectivelyPublishedWhere(new Date()), { id: { not: product.id }, OR: overlap }],
+        AND: [effectivelyPublishedWhere(now), { id: { not: product.id }, OR: overlap }],
       },
       include: PRODUCT_INCLUDE,
-      orderBy: [{ featured: 'desc' }, { updatedAt: 'desc' }],
+      orderBy: [{ bestsellerLinks: { _count: 'desc' } }, { updatedAt: 'desc' }],
       take: limit,
     });
 
-    return items.map((item) => toProductListItemDto(item, this.urlFor));
+    return items.map((item) => toProductListItemDto(item, this.urlFor, now));
   }
 
-  async listCategories(): Promise<TaxonomyRefDto[]> {
-    return this.listVisibleTaxonomyRefs('category');
-  }
-
-  async listOccasions(): Promise<TaxonomyRefDto[]> {
+  listOccasions(): Promise<TaxonomyRefDto[]> {
     return this.listVisibleTaxonomyRefs('occasion');
   }
 
-  async listRecipients(): Promise<TaxonomyRefDto[]> {
+  listRecipients(): Promise<TaxonomyRefDto[]> {
     return this.listVisibleTaxonomyRefs('recipient');
   }
 
-  async listFlowers(): Promise<TaxonomyRefDto[]> {
+  listFlowers(): Promise<TaxonomyRefDto[]> {
     return this.listVisibleTaxonomyRefs('flower');
   }
 
-  async listStyles(): Promise<TaxonomyRefDto[]> {
-    return this.listVisibleTaxonomyRefs('style');
+  async listProductLines(): Promise<TaxonomyRefDto[]> {
+    const rows = await this.prisma.client.productLine.findMany({
+      where: { visibility: 'VISIBLE' },
+      orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }],
+      select: { id: true, slug: true, name: true },
+    });
+    return rows.map(toTaxonomyRef);
   }
 
-  async listColors(): Promise<TaxonomyRefDto[]> {
-    return this.listVisibleTaxonomyRefs('color');
+  /** Colors carry an optional swatch so filter chips can render a dot. */
+  async listColors(): Promise<ColorPublicDto[]> {
+    const rows = await this.prisma.client.color.findMany({
+      where: { visibility: 'VISIBLE' },
+      orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }],
+      select: { id: true, slug: true, name: true, swatch: true },
+    });
+    return rows.map((row) => ({ ...toTaxonomyRef(row), swatch: row.swatch }));
+  }
+
+  async listBouquetSizes(): Promise<BouquetSizePublicDto[]> {
+    const rows = await this.prisma.client.bouquetSize.findMany({
+      where: { visibility: 'VISIBLE' },
+      orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }],
+      select: { id: true, slug: true, name: true, description: true },
+    });
+    return rows.map(toBouquetSizePublicDto);
+  }
+
+  listBudgetRanges(): Promise<BudgetRangePublicDto[]> {
+    return this.budgetRanges.listPublic();
+  }
+
+  listBestsellers(): Promise<BestsellerGroupPublicDto[]> {
+    return this.bestsellers.listPublic();
+  }
+
+  getBestsellerGroup(slug: string): Promise<BestsellerGroupPublicDto> {
+    return this.bestsellers.getPublicBySlug(slug);
+  }
+
+  listPromotionalProducts(limit = 24): Promise<ProductListItemDto[]> {
+    return this.promotions.listPublicPromotionalProducts(limit);
   }
 
   async getTaxonomyPublic(kind: string, slug: string): Promise<TaxonomyPublicDto> {
@@ -174,36 +229,22 @@ export class PublicCatalogService {
     if (!row || row.visibility !== 'VISIBLE') {
       throw new NotFoundException('Taxonomy entry not found');
     }
-    return toTaxonomyPublicDto(row, kind);
-  }
-
-  async listCollections(): Promise<Array<{ slug: string; name: string; description?: string }>> {
-    const collections = await this.prisma.client.collection.findMany({
-      where: { visibility: 'VISIBLE' },
-      orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }],
-      select: { slug: true, name: true, description: true },
-    });
-    return collections.map((collection) => ({
-      slug: collection.slug,
-      name: collection.name,
-      ...(collection.description ? { description: collection.description } : {}),
-    }));
-  }
-
-  getCollectionBySlug(slug: string): Promise<CollectionPublicDto> {
-    return this.collections.findPublicBySlug(slug);
+    return toTaxonomyPublicDto(
+      {
+        ...row,
+        seoTitle: row.seoTitle ?? null,
+        seoDescription: row.seoDescription ?? null,
+        noIndex: row.noIndex ?? false,
+      },
+      kind,
+    );
   }
 
   async getSitemap(): Promise<SitemapEntryDto[]> {
     const now = new Date();
-    const [products, collections, flowers, occasions, recipients] = await Promise.all([
+    const [products, flowers, occasions, recipients] = await Promise.all([
       this.prisma.client.product.findMany({
         where: { ...effectivelyPublishedWhere(now), noIndex: false },
-        select: { slug: true, updatedAt: true },
-        orderBy: { updatedAt: 'desc' },
-      }),
-      this.prisma.client.collection.findMany({
-        where: { visibility: 'VISIBLE', noIndex: false },
         select: { slug: true, updatedAt: true },
         orderBy: { updatedAt: 'desc' },
       }),
@@ -224,14 +265,14 @@ export class PublicCatalogService {
       }),
     ]);
 
-    const entries: SitemapEntryDto[] = [
+    const newestProductUpdate = products[0]?.updatedAt.toISOString() ?? null;
+
+    return [
+      { path: '/bukety', updatedAt: newestProductUpdate },
+      { path: '/akcii', updatedAt: newestProductUpdate },
       ...products.map((product) => ({
         path: `/bukety/${product.slug}`,
         updatedAt: product.updatedAt.toISOString(),
-      })),
-      ...collections.map((collection) => ({
-        path: `/collections/${collection.slug}`,
-        updatedAt: collection.updatedAt.toISOString(),
       })),
       ...flowers.map((flower) => ({
         path: `/cvety/${flower.slug}`,
@@ -246,8 +287,6 @@ export class PublicCatalogService {
         updatedAt: recipient.updatedAt.toISOString(),
       })),
     ];
-
-    return entries;
   }
 
   private async listVisibleTaxonomyRefs(kind: PublicTaxonomyKind): Promise<TaxonomyRefDto[]> {
@@ -259,30 +298,31 @@ export class PublicCatalogService {
     return rows.map(toTaxonomyRef);
   }
 
-  private taxonomyDelegate(kind: PublicTaxonomyKind): {
-    findUnique(args: { where: { slug: string } }): Promise<TaxonomyRecord | null>;
-    findMany(args: {
-      where?: { visibility?: 'VISIBLE' | 'HIDDEN' };
-      orderBy?: Array<{ sortOrder?: 'asc' | 'desc'; name?: 'asc' | 'desc' }>;
-      select?: { id: true; slug: true; name: true };
-    }): Promise<Array<{ id: string; slug: string; name: string }>>;
-  } {
+  private taxonomyDelegate(kind: PublicTaxonomyKind): PublicTaxonomyDelegate {
     const db = this.prisma.client;
     const delegates = {
       flower: db.flower,
       occasion: db.occasion,
       recipient: db.recipient,
-      category: db.category,
-      style: db.style,
       color: db.color,
+      bouquet_size: db.bouquetSize,
     };
-    return delegates[kind] as unknown as {
-      findUnique(args: { where: { slug: string } }): Promise<TaxonomyRecord | null>;
-      findMany(args: {
-        where?: { visibility?: 'VISIBLE' | 'HIDDEN' };
-        orderBy?: Array<{ sortOrder?: 'asc' | 'desc'; name?: 'asc' | 'desc' }>;
-        select?: { id: true; slug: true; name: true };
-      }): Promise<Array<{ id: string; slug: string; name: string }>>;
-    };
+    return delegates[kind] as unknown as PublicTaxonomyDelegate;
   }
 }
+
+/** Columns present on every public taxonomy row (SEO columns are optional). */
+type PublicTaxonomyRow = Omit<TaxonomyRecord, 'seoTitle' | 'seoDescription' | 'noIndex'> & {
+  seoTitle?: string | null;
+  seoDescription?: string | null;
+  noIndex?: boolean;
+};
+
+type PublicTaxonomyDelegate = {
+  findUnique(args: { where: { slug: string } }): Promise<PublicTaxonomyRow | null>;
+  findMany(args: {
+    where?: { visibility?: 'VISIBLE' | 'HIDDEN' };
+    orderBy?: Array<{ sortOrder?: 'asc' | 'desc'; name?: 'asc' | 'desc' }>;
+    select?: { id: true; slug: true; name: true };
+  }): Promise<Array<{ id: string; slug: string; name: string }>>;
+};

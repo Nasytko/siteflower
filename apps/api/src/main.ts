@@ -61,7 +61,7 @@ async function bootstrap(): Promise<void> {
 
   if (appConfig.swaggerEnabled) {
     const swaggerConfig = new DocumentBuilder()
-      .setTitle('БУКЕТ №1 Commerce API')
+      .setTitle('BUKET №1 Commerce API')
       .setDescription('Commerce API contract for storefront, admin, and future mobile clients.')
       .setVersion(appConfig.appVersion)
       .addServer(`http://localhost:${appConfig.port}`, 'Local')

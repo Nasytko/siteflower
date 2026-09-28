@@ -1,5 +1,7 @@
 # Catalog domain
 
+> **Current model:** florist-first dimensions (budget, occasion, recipient, color, flower, size) plus promotions and bestsellers. Full product direction and migration notes: [catalog-simplification-and-merchandising.md](./catalog-simplification-and-merchandising.md).
+
 ## Product vs ERP
 
 A **Product** is a commercial storefront offering. It is **not** ERP inventory.
@@ -26,51 +28,66 @@ Checkout enforcement comes in a later phase; catalog stores and exposes the valu
 
 Prices live on **ProductVariant** as integer minor units (`price_minor` BIGINT) + product `currency` (default `BYN`).
 
-Display price is **derived** from active variants:
+Display price is **derived** from active variants (after any effective promotion):
 
-- single price when all active prices equal
+- single price when all active effective prices equal
 - otherwise `от {min}` (`PriceRangeDto`)
 
-Never denormalize a stale `product.price`.
+Never denormalize a stale `product.price`. Checkout uses `effectiveVariantPriceMinor` — never browser math. See [commerce-invariants.md](./commerce-invariants.md).
 
 ## Composition
 
-`ProductComponent` references optional `Flower` taxonomy + `displayName`, nullable `quantity`, `unit`.
+`ProductComponent` references optional `Flower` taxonomy + `displayName`, nullable `quantity`, `unit`. Linking a flower on a component makes the bouquet discoverable under that flower filter (no separate `ProductFlower` table).
 
-## Taxonomies
+## Taxonomies & merchandising dimensions
 
-Managed entities (slug, name, sortOrder, visibility VISIBLE|HIDDEN, SEO fields, version):
+Managed taxonomy entities (slug, name, sortOrder, visibility `VISIBLE`|`HIDDEN`, SEO fields, version):
 
-Flowers, Categories (flat M2M), Occasions, Recipients, Styles, Colors.
+| Entity | Role |
+| --- | --- |
+| Flowers | Composition + flower filter facet |
+| Occasions | «Повод» |
+| Recipients | «Кому» |
+| Colors | Merchandising colors (optional `swatch`) |
 
-## Collections
+Additional catalog config (not generic CMS taxonomies):
 
-- **MANUAL** — explicit `CollectionProduct` ordering
-- **RULE_BASED** — structured JSON rules (category/occasion/…/price/availability); validated server-side; no arbitrary SQL
+| Entity | Role |
+| --- | --- |
+| **BouquetSize** | Customer-facing size; optional FK on product |
+| **BudgetRange** | Admin-managed min/max minor BYN filter labels |
+| **ProductPromotion** | Sale (`PERCENT` or `FIXED`) with optional schedule |
+| **BestsellerGroup** | Manual homepage tabs + product membership |
+
+`heightCm` remains an optional factual attribute on the product; it is **not** a customer filter.
+
+## Removed (not current product)
+
+Category, Style, Collection (manual + rule-based), and product `featured` were removed end-to-end. Historical phase reports may still mention them; do not treat those as the live model.
 
 ## Public vs admin API
 
-- Admin: `/api/v1/admin/catalog/...` (RBAC)
+- Admin: `/api/v1/admin/catalog/...` (RBAC); also promotions, bestsellers, budget ranges
 - Public: `/api/v1/catalog/...` — only **effectively published** products
 
 Effective publication: `lifecycle=PUBLISHED` AND schedule window includes now.
 
 ## Optimistic concurrency
 
-`version` integer on Product / Collection / taxonomies. Updates send `expectedVersion`; mismatch → HTTP 409.
+`version` integer on Product / taxonomies / promotions / bestseller groups / budget ranges. Updates send `expectedVersion`; mismatch → HTTP 409.
 
 ## Cache readiness (future)
 
-Invalidate storefront cache on: `PRODUCT_PUBLISHED`, `PRODUCT_UPDATED`, `COLLECTION_UPDATED`. No Redis in this phase.
+Invalidate storefront cache on product publish/update and merchandising changes (promotions, bestsellers, homepage). No Redis in this phase.
 
-## Future storefront URLs
+## Storefront URLs
 
 | Path | Entity |
 | --- | --- |
-| `/bukety`, `/bukety/[slug]` | categories / products |
-| `/cvety/[slug]` | flowers |
-| `/povod/[slug]` | occasions |
-| `/komu/[slug]` | recipients |
-| `/collections/[slug]` | collections |
+| `/bukety`, `/bukety/[slug]` | Catalog listing / products |
+| `/akcii` | Effective promotions |
+| `/cvety`, `/cvety/[slug]` | Flowers hub / landing |
+| `/povod`, `/povod/[slug]` | Occasions hub / landing |
+| `/komu/[slug]` | Recipients |
 
-Filter query URLs are **not** SEO landing pages.
+Filter query URLs on `/bukety` are **not** SEO landing pages (canonical to `/bukety`, typically noindex). Legacy `/collections/*` permanently redirects away.

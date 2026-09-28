@@ -33,6 +33,8 @@ Package: `packages/database`
 - `pnpm db:migrate:deploy` for CI/production-like applies
 - Never edit applied migrations on shared branches; add a new migration instead
 
+Catalog simplification migration: `20260926120000_catalog_simplification` — see [catalog-simplification-and-merchandising.md](./catalog-simplification-and-merchandising.md).
+
 ## Transactions
 
 - Use Prisma interactive transactions for multi-step writes that must commit atomically
@@ -56,17 +58,35 @@ Chosen strategy:
 
 Server calculates all commercial totals (see commerce invariants).
 
-## Catalog tables (Phase 2)
+## Catalog tables
 
-See [docs/catalog.md](catalog.md), [docs/media.md](media.md), [docs/publishing.md](publishing.md).
+See [docs/catalog.md](catalog.md), [catalog-simplification-and-merchandising.md](catalog-simplification-and-merchandising.md), [docs/media.md](media.md), [docs/publishing.md](publishing.md).
 
-- `products`, `product_variants`, `product_components`, join tables for taxonomies
-- `flowers`, `categories`, `occasions`, `recipients`, `styles`, `colors`
-- `collections`, `collection_products`
+**Products & composition**
+
+- `products` (optional `bouquet_size_id`, optional `height_cm`; no `featured`)
+- `product_variants`, `product_components`
+- Join tables: `product_occasions`, `product_recipients`, `product_colors`
+
+**Taxonomies & size**
+
+- `flowers`, `occasions`, `recipients`, `colors` (optional `swatch`)
+- `bouquet_sizes`
+
+**Merchandising**
+
+- `budget_ranges`
+- `product_promotions`, `product_promotion_variant_prices`
+- `bestseller_groups`, `bestseller_group_products`
+
+**Media & redirects**
+
 - `media_assets`, `media_derivatives`, `product_media` (partial unique primary image)
 - `slug_redirects`
 
-Money: `product_variants.price_minor` BIGINT with CHECK >= 0.
+Money: `product_variants.price_minor` BIGINT with CHECK >= 0. Promotion sale prices and order line prices likewise use minor units.
+
+**Removed tables** (historical migrations retained): `categories`, `styles`, `collections`, `collection_products`, and related join tables.
 
 - Default for commerce entities: **soft delete** via `deleted_at timestamptz null` when historical references matter (orders must keep snapshots regardless)
 - Hard delete only for disposable operational data with no audit/reference need
@@ -82,13 +102,13 @@ Last active `SUPER_ADMIN` protection uses `SELECT … FOR UPDATE` inside a trans
 
 ## Commerce tables (Phase 4)
 
-Migration: `20260921120000_orders_commerce`.
+Migration: `20260921120000_orders_commerce` (+ catalog simplification columns on `order_items`).
 
 - `fulfillment_settings` — singleton (id=1), time windows JSON, lead time, fees
 - `order_number_sequences` — per Europe/Minsk business date counter
 - `orders` — unique `order_number`, `tracking_token_hash`, `idempotency_key`; money BIGINTs with CHECKs
-- `order_items` — immutable snapshots; quantity > 0
+- `order_items` — immutable snapshots; quantity > 0; optional `original_unit_price_minor` + `promotion_type` when a promotion applied
 - `order_events` — operational history
 - `outbox_events` — transactional outbox for `ORDER_CREATED`
 
-See [orders.md](orders.md).
+See [orders.md](orders.md) and [commerce-invariants.md](commerce-invariants.md).

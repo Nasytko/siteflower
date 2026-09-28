@@ -50,8 +50,16 @@ export default function AdminLoginForm() {
           <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[var(--admin-muted,#5f6b67)]">
             Админ-панель
           </p>
-          <h1 className="admin-login__title">БУКЕТ №1</h1>
-          <p className="admin-login__lead">Войдите, чтобы управлять каталогом и заказами</p>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src="/brand/logo.png"
+            alt="BUKET №1"
+            width={125}
+            height={78}
+            className="mt-3 h-14 w-auto rounded-sm"
+          />
+          <h1 className="sr-only">BUKET №1</h1>
+          <p className="admin-login__lead mt-4">Войдите, чтобы управлять каталогом и заказами</p>
         </header>
 
         <form onSubmit={onSubmit} className="space-y-4" noValidate>

@@ -4,7 +4,7 @@ import { buildPageMetadata } from '@/lib/seo/metadata';
 
 export const metadata: Metadata = buildPageMetadata({
   title: 'Admin',
-  description: 'БУКЕТ №1 administration',
+  description: 'BUKET №1 administration',
   path: '/admin',
   noIndex: true,
 });

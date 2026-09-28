@@ -1,13 +1,14 @@
-import Link from 'next/link';
 import type { Metadata } from 'next';
 import { notFound, permanentRedirect } from 'next/navigation';
-import type { ComponentUnit } from '@bouquet-one/contracts';
 import { Breadcrumbs } from '@/components/storefront/breadcrumbs';
 import { FavoriteButton } from '@/components/storefront/favorite-button';
+import { ProductDetailTabs } from '@/components/storefront/product-detail-tabs';
 import { ProductGallery } from '@/components/storefront/product-gallery';
 import { ProductGrid } from '@/components/storefront/product-grid';
 import { ProductPurchasePanel } from '@/components/storefront/product-purchase-panel';
+import { SectionRail } from '@/components/storefront/section-rail';
 import {
+  getFulfillmentOptions,
   getProductBySlug,
   getStorefrontSettings,
   listRelatedProducts,
@@ -18,18 +19,6 @@ import { buildPageMetadata } from '@/lib/seo/metadata';
 import { buildBreadcrumbJsonLd, buildProductJsonLd } from '@/lib/seo/product-json-ld';
 
 type Params = Promise<{ slug: string }>;
-
-function unitLabel(unit: ComponentUnit): string {
-  switch (unit) {
-    case 'PIECE':
-    case 'STEM':
-      return 'шт.';
-    case 'BUNCH':
-      return 'пуч.';
-    default:
-      return '';
-  }
-}
 
 export async function generateMetadata({ params }: { params: Params }): Promise<Metadata> {
   const { slug } = await params;
@@ -72,9 +61,10 @@ export default async function ProductPage({ params }: { params: Params }) {
   }
 
   const product = resolved.product;
-  const [related, settings] = await Promise.all([
+  const [related, settings, fulfillment] = await Promise.all([
     listRelatedProducts(product.slug, 8).catch(() => []),
     getStorefrontSettings().catch(() => null),
+    getFulfillmentOptions().catch(() => null),
   ]);
 
   const productLd = buildProductJsonLd(product);
@@ -85,10 +75,12 @@ export default async function ProductPage({ params }: { params: Params }) {
   ]);
 
   const phone = settings?.phone ?? null;
+  const city = settings?.city ?? null;
   const substitutionNote = settings?.substitutionNote ?? null;
+  const deliverySummary = settings?.deliverySummary ?? null;
 
   return (
-    <main id="main-content" className="sf-container py-6 sm:py-8 md:py-12">
+    <main id="main-content" className="sf-pdp">
       <script
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: serializeJsonLd(productLd) }}
@@ -98,113 +90,132 @@ export default async function ProductPage({ params }: { params: Params }) {
         dangerouslySetInnerHTML={{ __html: serializeJsonLd(breadcrumbLd) }}
       />
 
-      <Breadcrumbs
-        className="mb-6"
-        items={[
-          { name: 'Главная', href: '/' },
-          { name: 'Каталог', href: '/bukety' },
-          { name: product.name },
-        ]}
-      />
-
-      <div className="grid gap-8 lg:grid-cols-2 lg:gap-14">
-        <ProductGallery
-          media={product.media}
-          productName={product.name}
-          heightCm={product.heightCm}
+      <div className="sf-container-wide sf-pdp__inner">
+        <Breadcrumbs
+          className="mb-4 text-center"
+          items={[
+            { name: 'Главная', href: '/' },
+            { name: 'Букеты', href: '/bukety' },
+            { name: product.name },
+          ]}
         />
 
-        <div className="relative">
-          <div className="absolute right-0 top-0">
-            <FavoriteButton productId={product.id} slug={product.slug} />
+        <article className="sf-pdp-shell">
+          <header className="sf-pdp-shell__head">
+            <h1 className="sf-h1">{product.name}</h1>
+            <div className="sf-pdp-shell__fav">
+              <FavoriteButton productId={product.id} slug={product.slug} />
+            </div>
+          </header>
+
+          <div className="sf-pdp-layout">
+            <div className="sf-pdp-layout__media">
+              <ProductGallery
+                media={product.media}
+                productName={product.name}
+                heightCm={product.heightCm}
+                bouquetSizeName={product.bouquetSize?.name ?? null}
+                promotionPercent={product.promotion?.percentOff ?? null}
+              />
+            </div>
+
+            <div className="sf-pdp-layout__buy pb-24 lg:pb-0">
+              <ProductPurchasePanel
+                product={product}
+                variants={product.variants}
+                phone={phone}
+                city={city}
+                fulfillment={fulfillment}
+                deliverySummary={deliverySummary}
+              />
+
+              <ProductDetailTabs
+                product={product}
+                fulfillment={fulfillment}
+                deliverySummary={deliverySummary}
+                substitutionNote={substitutionNote}
+                city={city}
+              />
+            </div>
           </div>
+        </article>
 
-          <h1 className="sf-h1 pr-12">{product.name}</h1>
-
-          {product.shortDescription ? (
-            <p className="sf-body mt-3 text-muted">{product.shortDescription}</p>
-          ) : null}
-
-          <ul className="mt-5 flex flex-wrap gap-2">
-            <li className="rounded-[var(--radius-sm)] bg-surface px-2.5 py-1.5 text-sm text-foreground ring-1 ring-border">
-              Сборка в день заказа
+        <section className="sf-pdp-perks-bar" aria-label="Преимущества">
+          <ul className="sf-pdp-perks">
+            <li>
+              <TruckIcon />
+              <span>
+                <strong>Доставка</strong>
+                <em>курьером по городу</em>
+              </span>
             </li>
-            <li className="rounded-[var(--radius-sm)] bg-surface px-2.5 py-1.5 text-sm text-foreground ring-1 ring-border">
-              Доставка или самовывоз
+            <li>
+              <GiftIcon />
+              <span>
+                <strong>Подарок</strong>
+                <em>открытка по запросу</em>
+              </span>
             </li>
-            {product.heightCm != null ? (
-              <li className="rounded-[var(--radius-sm)] bg-surface px-2.5 py-1.5 text-sm font-semibold text-foreground ring-1 ring-border">
-                Высота ≈ {product.heightCm} см
-              </li>
-            ) : (
-              <li className="rounded-[var(--radius-sm)] bg-surface px-2.5 py-1.5 text-sm text-foreground ring-1 ring-border">
-                Несколько размеров
-              </li>
-            )}
+            <li>
+              <StoreIcon />
+              <span>
+                <strong>Магазин</strong>
+                <em>{city ? `в ${city}` : 'самовывоз'}</em>
+              </span>
+            </li>
+            <li>
+              <CameraIcon />
+              <span>
+                <strong>Фото</strong>
+                <em>до отправки по запросу</em>
+              </span>
+            </li>
           </ul>
-
-          <div className="mt-6 pb-24 lg:pb-0">
-            <ProductPurchasePanel
-              product={product}
-              variants={product.variants}
-              phone={phone}
-            />
-          </div>
-
-          {product.availability === 'TEMPORARILY_UNAVAILABLE' ? (
-            <p className="sf-small mt-4 text-muted">Временно недоступен</p>
-          ) : product.availability === 'PREORDER' ? (
-            <p className="sf-small mt-4 text-muted">Под заказ</p>
-          ) : product.availability === 'SEASONAL' ? (
-            <p className="sf-small mt-4 text-muted">Сезонный букет</p>
-          ) : null}
-
-          {product.components.length > 0 ? (
-            <div className="mt-10">
-              <h2 className="sf-h3">Состав</h2>
-              <ul className="mt-3 space-y-2">
-                {product.components.map((item, index) => {
-                  const qty =
-                    item.quantity != null
-                      ? `${item.quantity}${unitLabel(item.unit) ? ` ${unitLabel(item.unit)}` : ''}`
-                      : null;
-                  return (
-                    <li key={`${item.displayName}-${index}`} className="sf-small flex justify-between gap-4 text-foreground">
-                      <span>{item.displayName}</span>
-                      {qty ? <span className="text-muted tabular-nums">{qty}</span> : null}
-                    </li>
-                  );
-                })}
-              </ul>
-            </div>
-          ) : null}
-
-          {substitutionNote ? (
-            <p className="sf-small mt-8 max-w-md text-muted">{substitutionNote}</p>
-          ) : null}
-
-          {product.description ? (
-            <div className="mt-10">
-              <h2 className="sf-h3">Описание</h2>
-              <p className="sf-body mt-3 whitespace-pre-line text-muted">{product.description}</p>
-            </div>
-          ) : null}
-        </div>
-      </div>
-
-      {related.length > 0 ? (
-        <section className="mt-20">
-          <h2 className="sf-h2">Похожие букеты</h2>
-          <div className="mt-8">
-            <ProductGrid products={related} priorityCount={0} />
-          </div>
-          <div className="mt-8">
-            <Link href="/bukety" className="text-sm font-medium text-brand hover:underline">
-              Весь каталог
-            </Link>
-          </div>
         </section>
-      ) : null}
+
+        {related.length > 0 ? (
+          <section className="sf-pdp-related">
+            <SectionRail title="Похожие букеты" href="/bukety" linkLabel="Смотреть все" />
+            <ProductGrid products={related} priorityCount={0} />
+          </section>
+        ) : null}
+      </div>
     </main>
+  );
+}
+
+function TruckIcon() {
+  return (
+    <svg viewBox="0 0 24 24" className="sf-pdp-perks__icon" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden>
+      <path d="M3 7h11v8H3zM14 10h4l3 3v2h-7V10Z" strokeLinejoin="round" />
+      <circle cx="7" cy="17" r="1.5" />
+      <circle cx="17" cy="17" r="1.5" />
+    </svg>
+  );
+}
+
+function GiftIcon() {
+  return (
+    <svg viewBox="0 0 24 24" className="sf-pdp-perks__icon" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden>
+      <path d="M4 11h16v9H4zM4 11V8h16v3M12 8v12M12 8c-2 0-3.5-1.5-3.5-3S10 3 12 5c2-2 3.5-.5 3.5 1S14 8 12 8Z" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+function StoreIcon() {
+  return (
+    <svg viewBox="0 0 24 24" className="sf-pdp-perks__icon" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden>
+      <path d="M4 10 6 5h12l2 5v9H4v-9Z" strokeLinejoin="round" />
+      <path d="M9 19v-5h6v5" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+function CameraIcon() {
+  return (
+    <svg viewBox="0 0 24 24" className="sf-pdp-perks__icon" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden>
+      <path d="M4 8h3l2-2h6l2 2h3v11H4V8Z" strokeLinejoin="round" />
+      <circle cx="12" cy="13" r="3.5" />
+    </svg>
   );
 }

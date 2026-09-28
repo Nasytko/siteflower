@@ -4,7 +4,7 @@ import { buildPageMetadata } from '@/lib/seo/metadata';
 
 export const metadata: Metadata = buildPageMetadata({
   title: 'Оформление заказа',
-  description: 'Оформление заказа в БУКЕТ №1',
+  description: 'Оформление заказа в BUKET №1',
   path: '/checkout',
   noIndex: true,
 });

@@ -1,6 +1,8 @@
 import { notFound } from 'next/navigation';
 import type { ProductAdminDto } from '@bouquet-one/contracts';
 import { AdminApiError, adminFetch } from '@/lib/admin-api';
+import { adminEndpoints } from '@/lib/admin-endpoints';
+import { lifecycleLabel } from '@/lib/admin-labels';
 import { requireAdminPermission } from '@/lib/admin-page-auth';
 import { toSameOriginMediaUrl } from '@/lib/media';
 
@@ -11,7 +13,7 @@ export default async function ProductPreviewPage({ params }: Props) {
   const { id } = await params;
   let product: ProductAdminDto;
   try {
-    product = await adminFetch<ProductAdminDto>(`/api/v1/admin/catalog/products/${id}/preview`);
+    product = await adminFetch<ProductAdminDto>(adminEndpoints.productPreview(id));
   } catch (error) {
     if (error instanceof AdminApiError && error.status === 404) notFound();
     throw error;
@@ -22,7 +24,9 @@ export default async function ProductPreviewPage({ params }: Props) {
 
   return (
     <main id="main-content" className="mx-auto max-w-3xl space-y-6">
-      <p className="text-xs uppercase tracking-wide text-amber-700">Admin preview · {product.lifecycle}</p>
+      <p className="text-xs uppercase tracking-wide text-amber-700">
+        Предпросмотр · {lifecycleLabel(product.lifecycle)}
+      </p>
       {primarySrc ? (
         <img src={primarySrc} alt={primary?.alt ?? product.name} className="w-full rounded-lg object-cover" />
       ) : null}

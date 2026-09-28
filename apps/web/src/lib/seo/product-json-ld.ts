@@ -17,11 +17,15 @@ function mapAvailability(availability: ProductPublicDto['availability']): string
   }
 }
 
-/** Product JSON-LD — truthful commercial availability, never warehouse stock. */
+/**
+ * Product JSON-LD — truthful commercial availability, never warehouse stock.
+ * Prices are the effective (post-promotion) amounts a customer actually pays.
+ */
 export function buildProductJsonLd(product: ProductPublicDto): JsonLd {
   const url = absoluteUrl(`/bukety/${product.slug}`);
   const images = product.media.map((m) => m.url).filter(Boolean);
   const activeVariants = product.variants;
+  const effectiveRange = product.promotion?.salePrice ?? product.price;
 
   const offers =
     activeVariants.length <= 1
@@ -29,7 +33,9 @@ export function buildProductJsonLd(product: ProductPublicDto): JsonLd {
           '@type': 'Offer',
           url,
           priceCurrency: product.currency,
-          price: minorToDecimal(activeVariants[0]?.priceMinor ?? product.price.minMinor),
+          price: minorToDecimal(
+            activeVariants[0]?.effectivePriceMinor ?? effectiveRange.minMinor,
+          ),
           availability: mapAvailability(product.availability),
           itemCondition: 'https://schema.org/NewCondition',
         }
@@ -37,15 +43,15 @@ export function buildProductJsonLd(product: ProductPublicDto): JsonLd {
           '@type': 'AggregateOffer',
           url,
           priceCurrency: product.currency,
-          lowPrice: minorToDecimal(product.price.minMinor),
-          highPrice: minorToDecimal(product.price.maxMinor),
+          lowPrice: minorToDecimal(effectiveRange.minMinor),
+          highPrice: minorToDecimal(effectiveRange.maxMinor),
           offerCount: activeVariants.length,
           availability: mapAvailability(product.availability),
           offers: activeVariants.map((variant) => ({
             '@type': 'Offer',
             name: variant.name,
             priceCurrency: product.currency,
-            price: minorToDecimal(variant.priceMinor),
+            price: minorToDecimal(variant.effectivePriceMinor),
             availability: mapAvailability(product.availability),
             url,
           })),
@@ -58,7 +64,7 @@ export function buildProductJsonLd(product: ProductPublicDto): JsonLd {
     image: images.length > 0 ? images : undefined,
     brand: {
       '@type': 'Brand',
-      name: 'БУКЕТ №1',
+      name: 'BUKET №1',
     },
     sku: product.slug,
     url,

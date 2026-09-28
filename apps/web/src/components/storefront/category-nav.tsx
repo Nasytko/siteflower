@@ -1,7 +1,8 @@
 import Image from 'next/image';
 import Link from 'next/link';
+import { SectionRail } from './section-rail';
 
-export type CategoryNavItem = {
+export type DiscoveryTile = {
   id: string;
   label: string;
   href: string;
@@ -9,103 +10,91 @@ export type CategoryNavItem = {
   imageAlt: string;
 };
 
-/** Boutique category strip — links map to real catalog filters/taxonomies. */
-export const HOME_CATEGORY_NAV: CategoryNavItem[] = [
+/**
+ * Illustrated discovery row — every href maps to a live storefront destination.
+ * Photos are brand assets under /categories (not Dicentra imagery).
+ */
+export const HOME_DISCOVERY_TILES: DiscoveryTile[] = [
   {
-    id: 'po-shtuchno',
+    id: 'cvety-pcs',
     label: 'Цветы поштучно',
-    href: '/cvety/rozy',
-    imageSrc: '/categories/po-shtuchno.jpg',
-    imageAlt: 'Красная роза',
+    href: '/cvety',
+    imageSrc: '/categories/discovery-roza.png',
+    imageAlt: 'Роза',
   },
   {
     id: 'rozy',
     label: 'Букеты из роз',
-    href: '/bukety?flower=rozy',
-    imageSrc: '/categories/rozy.jpg',
+    href: '/cvety/rozy',
+    imageSrc: '/categories/discovery-buket-roz.png',
     imageAlt: 'Букет роз',
   },
   {
     id: 'bukety',
     label: 'Букеты цветов',
-    href: '/bukety?category=bukety',
-    imageSrc: '/categories/bukety.jpg',
-    imageAlt: 'Смешанный букет',
+    href: '/bukety',
+    imageSrc: '/categories/discovery-sbornye.png',
+    imageAlt: 'Сборный букет',
   },
   {
-    id: 'kompozitsii',
+    id: 'kompozicii',
     label: 'Композиции',
-    href: '/bukety?category=kompozitsii',
-    imageSrc: '/categories/box.jpg',
+    href: '/bukety?size=bolshoj',
+    imageSrc: '/categories/discovery-kompozicii.png',
     imageAlt: 'Цветочная композиция',
   },
   {
-    id: 'nevesta',
+    id: 'neveste',
     label: 'Букет невесты',
-    href: '/bukety?band=200-plus',
-    imageSrc: '/categories/nevesta.jpg',
+    href: '/komu/neveste',
+    imageSrc: '/categories/discovery-nevesta.png',
     imageAlt: 'Свадебный букет',
   },
   {
-    id: 'piony',
-    label: 'Пионы',
-    href: '/cvety/piony',
-    imageSrc: '/categories/piony.jpg',
-    imageAlt: 'Пионы',
+    id: 'den-rozhdeniya',
+    label: 'На день рождения',
+    href: '/povod/den-rozhdeniya',
+    imageSrc: '/categories/discovery-den-rozhdeniya.png',
+    imageAlt: 'Букет на день рождения',
   },
   {
-    id: 'prazdnik',
-    label: 'На праздник',
-    href: '/povod/den-rozhdeniya',
-    imageSrc: '/categories/den-rozhdeniya.jpg',
-    imageAlt: 'Букет на праздник',
+    id: 'podarki',
+    label: 'Подарки',
+    href: '/bukety',
+    imageSrc: '/categories/discovery-podarki.png',
+    imageAlt: 'Букет в подарок',
   },
 ];
 
 type Props = {
   city: string;
-  items?: CategoryNavItem[];
+  items?: DiscoveryTile[];
 };
 
-export function CategoryNav({ city, items = HOME_CATEGORY_NAV }: Props) {
+export function CategoryNav({ city, items = HOME_DISCOVERY_TILES }: Props) {
   return (
-    <section className="sf-category-nav">
-      <div className="sf-container-wide py-12 md:py-16">
-        <div className="mx-auto max-w-xl text-center md:mx-0 md:text-left">
-          <p className="sf-label mb-2">Каталог настроений</p>
-          <h2 className="sf-h2">Доставка цветов и букетов в {city}</h2>
-          <div className="sf-rule mx-auto mt-4 md:mx-0" />
-        </div>
+    <section className="sf-discovery-row py-12 md:py-16">
+      <div className="sf-container-wide">
+        <SectionRail
+          title={`Доставка цветов и букетов в ${city}`}
+          href="/bukety"
+          linkLabel="Смотреть все"
+        />
 
-        <ul className="sf-category-scroller mt-8 md:mt-12">
-          {items.map((item, index) => (
-            <li
-              key={item.id}
-              className="sf-category-nav__item"
-              style={{ animationDelay: `${0.05 + index * 0.05}s` }}
-            >
-              <Link
-                href={item.href}
-                className="group relative block h-full overflow-hidden rounded-[var(--radius-lg)] outline-offset-4"
-              >
-                <span className="relative block aspect-[3/4] bg-surface md:aspect-[4/5]">
-                  <span className="sf-category-orb absolute inset-0">
-                    <Image
-                      src={item.imageSrc}
-                      alt={item.imageAlt}
-                      fill
-                      sizes="(max-width: 768px) 42vw, 12vw"
-                      className="object-cover transition duration-700 ease-out group-hover:scale-105 motion-reduce:transition-none motion-reduce:group-hover:scale-100"
-                    />
-                  </span>
-                  <span
-                    className="absolute inset-0 bg-gradient-to-t from-ink/55 via-ink/10 to-transparent"
-                    aria-hidden
+        <ul className="sf-discovery-scroller mt-2 md:mt-3">
+          {items.map((item) => (
+            <li key={item.id}>
+              <Link href={item.href} className="sf-discovery-tile group">
+                <span className="sf-discovery-tile__media">
+                  <Image
+                    src={item.imageSrc}
+                    alt={item.imageAlt}
+                    fill
+                    sizes="(max-width: 768px) 38vw, 12vw"
+                    className="object-cover transition-transform duration-500 ease-out group-hover:scale-[1.04] motion-reduce:transition-none motion-reduce:group-hover:scale-100"
                   />
-                  <span className="absolute inset-x-0 bottom-0 p-2.5 text-left font-[family-name:var(--font-display)] text-[0.9rem] leading-snug tracking-wide text-white drop-shadow-sm sm:p-3 sm:text-[0.95rem] md:p-3.5 md:text-base">
-                    {item.label}
-                  </span>
                 </span>
+                <span className="sf-discovery-tile__label">{item.label}</span>
               </Link>
             </li>
           ))}
