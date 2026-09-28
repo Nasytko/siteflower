@@ -13,7 +13,11 @@
     "test:unit": "jest",
     "test:integration": "jest --config ./test/jest-integration.json",
     "admin:create": "tsx scripts/admin-create.ts",
+    "admin:reset-password": "tsx scripts/admin-reset-password.ts",
     "seed:dev-catalog": "tsx scripts/seed-dev-catalog.ts",
+    "compliance:check": "tsx scripts/compliance-check.ts",
+    "worker": "node dist/worker-main.js",
+    "worker:dev": "tsx src/worker-main.ts",
     "clean": "rimraf dist"
   },
   "dependencies": {

@@ -53,6 +53,8 @@ const NAV_GROUPS: NavGroup[] = [
     items: [
       { href: '/admin/fulfillment', label: 'Получение и доставка', permission: 'SETTINGS_READ' },
       { href: '/admin/storefront/settings', label: 'Настройки', permission: 'SETTINGS_READ' },
+      { href: '/admin/legal', label: 'Юридическая информация', permission: 'LEGAL_READ' },
+      { href: '/admin/integrations/erp', label: 'ERP', permission: 'INTEGRATION_READ' },
     ],
   },
   {

@@ -3,7 +3,7 @@ import { OrderSuccessView } from '@/components/storefront/order-success-view';
 import { buildPageMetadata } from '@/lib/seo/metadata';
 
 export const metadata: Metadata = buildPageMetadata({
-  title: 'Заказ принят',
+  title: 'Заказ получен',
   description: 'Ваш заказ принят',
   path: '/order/success',
   noIndex: true,

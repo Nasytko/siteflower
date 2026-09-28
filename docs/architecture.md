@@ -50,7 +50,8 @@ Cross-module imports should go through exported application services or contract
 
 - Guest cart is browser-local; checkout validate/create is server-authoritative (minor units BYN).
 - Order + OrderItem snapshots + OrderEvent + OutboxEvent commit atomically — see [docs/orders.md](orders.md), [docs/outbox.md](outbox.md), [docs/checkout.md](checkout.md), [docs/cart.md](cart.md).
-- No ERP / payment in this phase; outbox prepares async integration.
+- Online payments and NewERP application code are out of this repo; SiteFlower ships a transactional outbox + optional worker/simulator for future ERP delivery.
+- Legal/compliance Admin and public legal pages are part of the storefront control plane.
 
 ## Admin control plane
 

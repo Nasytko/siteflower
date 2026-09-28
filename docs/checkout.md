@@ -1,6 +1,6 @@
 # Checkout
 
-Guest checkout only — no customer accounts (Phase 4). No online payment. No ERP.
+Guest checkout only — no customer accounts. No online payment. Orders enqueue a transactional outbox for future ERP delivery (checkout does not depend on ERP availability).
 
 ## Routes
 

@@ -106,5 +106,7 @@ export type ApiErrorBody = {
 };
 
 export * from './catalog';
-export * from './storefront';
+export * from './integration';
+export * from './legal';
 export * from './orders';
+export * from './storefront';

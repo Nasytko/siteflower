@@ -1,5 +1,7 @@
 # Admin / Security / Cleanup Audit Report
 
+> **Historical snapshot (2026-09-26).** Catalog simplification later removed collections/categories/styles admin; legal + ERP outbox foundations shipped afterward. See [catalog-simplification-and-merchandising.md](./catalog-simplification-and-merchandising.md), [belarus-commerce-compliance.md](./belarus-commerce-compliance.md), [integrations/](./integrations/).
+
 **Date:** 2026-09-26  
 **Scope:** Full Admin Panel, Data-Exchange Security, Code Structure & Cleanup  
 **Not in scope:** ERP, payments, new product features

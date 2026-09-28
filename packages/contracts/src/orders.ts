@@ -337,11 +337,11 @@ export function defaultTimeWindows(): TimeWindowDto[] {
 export function orderStatusLabel(status: OrderStatus): string {
   switch (status) {
     case 'RECEIVED':
-      return 'Получен';
+      return 'Заказ получен';
     case 'CONFIRMED':
-      return 'Подтверждён';
+      return 'Заказ подтверждён';
     case 'PREPARING':
-      return 'Собирается';
+      return 'Собираем букет';
     case 'READY':
       return 'Готов';
     case 'DELIVERING':

@@ -32,9 +32,3 @@ export function majorInputToMinor(input: string): string | null {
 export function isMajorInputValid(input: string): boolean {
   return input.trim().length === 0 || majorInputToMinor(input) !== null;
 }
-
-/** Compare minor-unit strings; null means "open bound". */
-export function minorLessOrEqual(a: string | null, b: string | null): boolean {
-  if (a === null || b === null) return true;
-  return BigInt(a) <= BigInt(b);
-}

@@ -33,12 +33,12 @@ export function OrderSuccessView() {
       <p className="sf-label text-brand">Спасибо</p>
       <h1 className="sf-h1">
         {order?.orderNumber
-          ? `Заказ №${order.orderNumber} принят`
-          : 'Заказ принят'}
+          ? `Спасибо! Заказ №${order.orderNumber} получен`
+          : 'Спасибо! Заказ получен'}
       </h1>
       <p className="sf-body text-muted">
-        Менеджер проверит возможность выполнения и свяжется для подтверждения.
-        Это ещё не подтверждённый заказ.
+        Менеджер проверит возможность выполнения заказа и свяжется с вами для подтверждения деталей.
+        Сейчас заказ принят в обработку — это ещё не подтверждение.
       </p>
       <div className="flex flex-col items-center gap-3 pt-2 sm:flex-row sm:justify-center">
         {trackingHref ? (

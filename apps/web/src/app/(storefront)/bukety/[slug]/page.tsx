@@ -9,6 +9,7 @@ import { ProductPurchasePanel } from '@/components/storefront/product-purchase-p
 import { SectionRail } from '@/components/storefront/section-rail';
 import {
   getFulfillmentOptions,
+  getLegalSeller,
   getProductBySlug,
   getStorefrontSettings,
   listRelatedProducts,
@@ -61,10 +62,11 @@ export default async function ProductPage({ params }: { params: Params }) {
   }
 
   const product = resolved.product;
-  const [related, settings, fulfillment] = await Promise.all([
+  const [related, settings, fulfillment, seller] = await Promise.all([
     listRelatedProducts(product.slug, 8).catch(() => []),
     getStorefrontSettings().catch(() => null),
     getFulfillmentOptions().catch(() => null),
+    getLegalSeller().catch(() => null),
   ]);
 
   const productLd = buildProductJsonLd(product);
@@ -78,6 +80,7 @@ export default async function ProductPage({ params }: { params: Params }) {
   const city = settings?.city ?? null;
   const substitutionNote = settings?.substitutionNote ?? null;
   const deliverySummary = settings?.deliverySummary ?? null;
+  const offlinePaymentDescription = seller?.actualOfflinePaymentDescription ?? null;
 
   return (
     <main id="main-content" className="sf-pdp">
@@ -135,6 +138,7 @@ export default async function ProductPage({ params }: { params: Params }) {
                 deliverySummary={deliverySummary}
                 substitutionNote={substitutionNote}
                 city={city}
+                offlinePaymentDescription={offlinePaymentDescription}
               />
             </div>
           </div>

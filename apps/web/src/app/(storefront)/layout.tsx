@@ -3,7 +3,7 @@ import { defaultStorefrontSettings } from '@bouquet-one/contracts';
 import { FavoritesProvider } from '@/components/storefront/favorites-provider';
 import { StorefrontFooter } from '@/components/storefront/footer';
 import { StorefrontHeader } from '@/components/storefront/header';
-import { getStorefrontSettings } from '@/lib/public-api';
+import { getLegalSeller, getStorefrontSettings } from '@/lib/public-api';
 import { buildOrganizationJsonLd, serializeJsonLd } from '@/lib/seo/json-ld';
 import { getSiteUrl } from '@/lib/seo/site-url';
 
@@ -17,6 +17,8 @@ export default async function StorefrontLayout({ children }: { children: ReactNo
   } catch {
     settings = defaultStorefrontSettings();
   }
+
+  const seller = await getLegalSeller().catch(() => null);
 
   const orgLd = buildOrganizationJsonLd({
     name: settings.brandName,
@@ -37,7 +39,7 @@ export default async function StorefrontLayout({ children }: { children: ReactNo
           workingHours={settings.workingHours}
         />
         <div className="flex-1">{children}</div>
-        <StorefrontFooter settings={settings} />
+        <StorefrontFooter settings={settings} seller={seller} />
         <script
           type="application/ld+json"
           dangerouslySetInnerHTML={{ __html: serializeJsonLd(orgLd) }}

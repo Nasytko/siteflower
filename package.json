@@ -20,7 +20,10 @@
     "db:migrate:deploy": "pnpm --filter @bouquet-one/database migrate:deploy",
     "db:studio": "pnpm --filter @bouquet-one/database studio",
     "admin:create": "pnpm --filter @bouquet-one/api admin:create",
+    "admin:reset-password": "pnpm --filter @bouquet-one/api admin:reset-password",
     "seed:dev-catalog": "pnpm --filter @bouquet-one/api seed:dev-catalog",
+    "compliance:check": "pnpm --filter @bouquet-one/api compliance:check",
+    "worker:dev": "pnpm --filter @bouquet-one/api worker:dev",
     "format": "prettier --write \"**/*.{ts,tsx,js,jsx,mjs,cjs,json,md,yml,yaml,css}\"",
     "format:check": "prettier --check \"**/*.{ts,tsx,js,jsx,mjs,cjs,json,md,yml,yaml,css}\"",
     "clean": "turbo run clean && rimraf node_modules"

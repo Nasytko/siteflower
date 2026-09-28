@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { isMajorInputValid, majorInputToMinor, minorLessOrEqual, minorToMajorInput } from './admin-money';
+import { isMajorInputValid, majorInputToMinor, minorToMajorInput } from './admin-money';
 
 test('minorToMajorInput renders major BYN with comma', () => {
   assert.equal(minorToMajorInput('12990'), '129,90');
@@ -28,11 +28,4 @@ test('isMajorInputValid allows blank fields', () => {
   assert.equal(isMajorInputValid(''), true);
   assert.equal(isMajorInputValid('10,00'), true);
   assert.equal(isMajorInputValid('10,000'), false);
-});
-
-test('minorLessOrEqual treats null as open bound', () => {
-  assert.equal(minorLessOrEqual('1000', '2000'), true);
-  assert.equal(minorLessOrEqual('2000', '1000'), false);
-  assert.equal(minorLessOrEqual(null, '1000'), true);
-  assert.equal(minorLessOrEqual('1000', null), true);
 });

@@ -12,6 +12,9 @@ Merchandising model: [catalog-simplification-and-merchandising.md](./catalog-sim
 - Taxonomies: flowers, colors, bouquet sizes, occasions, recipients
 - Promotions (`/admin/promotions`) and bestsellers (`/admin/bestsellers`)
 - Homepage & storefront settings (including budget ranges)
+- Instagram curated feed manager
+- Legal entity + versioned legal documents
+- ERP outbox admin (status, events, retry, simulator test)
 - Fulfillment (delivery / pickup windows)
 - Orders list / detail / status transitions / cancel
 
@@ -20,9 +23,9 @@ Merchandising model: [catalog-simplification-and-merchandising.md](./catalog-sim
 | Group | Sections |
 | --- | --- |
 | Работа | Заказы |
-| Каталог | Товары, Цветы, Цвета, Размеры, Поводы, Кому |
-| Продвижение | Акции, Бестселлеры, Главная |
-| Магазин | Получение и доставка, Настройки |
+| Каталог | Товары, Цветы, Цвета, Размеры, Линейки, Поводы, Кому |
+| Продвижение | Акции, Бестселлеры, Instagram, Главная |
+| Магазин | Получение и доставка, Настройки, Юридическая информация, ERP |
 | Управление | Пользователи, Аудит |
 
 Category, Style, and Collections admin UIs were removed; do not reintroduce them.
@@ -30,7 +33,7 @@ Category, Style, and Collections admin UIs were removed; do not reintroduce them
 ## Still out of scope (do not implement in current phases)
 
 - Payments / ExpressPay
-- ERP sync UI
+- NewERP application itself (SiteFlower outbox/simulator admin UI already exists)
 - Customer accounts
 - MFA / email password reset
 - Custom roles editor

@@ -23,7 +23,7 @@ import {
   type TimeWindowDto,
 } from '@bouquet-one/contracts';
 import type { OrderEventType, Prisma } from '@bouquet-one/database';
-import { createHash } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { AuditService } from '../audit/audit.service';
 import { toPromotionRow } from '../catalog/catalog.mapper';
 import { ProductsRepository } from '../catalog/products.repository';
@@ -33,6 +33,7 @@ import {
 } from '../catalog/promotion.util';
 import { AppConfigService } from '../config/app-config.service';
 import { PrismaService } from '../database/prisma.service';
+import { buildStorefrontOrderCreatedV1 } from '../integration/payload';
 import { MediaService } from '../media/media.service';
 import {
   businessDateString,
@@ -383,24 +384,33 @@ export class OrdersService {
           },
         });
 
+        const eventId = randomUUID();
         await tx.outboxEvent.create({
           data: {
+            id: eventId,
             eventType: OUTBOX_ORDER_CREATED,
             aggregateType: 'Order',
             aggregateId: created.id,
             schemaVersion: OUTBOX_SCHEMA_VERSION,
-            payload: {
-              schemaVersion: OUTBOX_SCHEMA_VERSION,
-              orderId: created.id,
-              orderNumber: created.orderNumber,
-              status: created.status,
-              fulfillmentType: created.fulfillmentType,
-              fulfillmentDate: created.fulfillmentDate,
-              totalMinor: created.totalMinor.toString(),
-              currency: created.currency,
-              itemCount: priced.items.length,
-              createdAt: created.createdAt.toISOString(),
-            } as Prisma.InputJsonValue,
+            payload: buildStorefrontOrderCreatedV1({
+              eventId,
+              order: created,
+              items: priced.items.map((item) => ({
+                productId: item.productId,
+                variantId: item.variantId,
+                productName: item.productName,
+                productSlug: item.productSlug,
+                variantName: item.variantName,
+                quantity: item.quantity,
+                unitPriceMinor: item.unitPriceMinor,
+                originalUnitPriceMinor: item.originalUnitPriceMinor,
+                promotionType: item.promotionType,
+                lineTotalMinor: item.lineTotalMinor,
+                currency: 'BYN',
+              })),
+            }) as unknown as Prisma.InputJsonValue,
+            status: 'PENDING',
+            availableAt: new Date(),
           },
         });
 

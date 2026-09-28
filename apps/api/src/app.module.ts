@@ -17,8 +17,10 @@ import { AppConfigService } from './config/app-config.service';
 import { DatabaseModule } from './database/database.module';
 import { HealthModule } from './health/health.module';
 import { MediaModule } from './media/media.module';
+import { LegalModule } from './legal/legal.module';
 import { StorefrontModule } from './storefront/storefront.module';
 import { OrdersModule } from './orders/orders.module';
+import { IntegrationModule } from './integration/integration.module';
 
 @Module({
   imports: [
@@ -95,6 +97,8 @@ import { OrdersModule } from './orders/orders.module';
     CatalogModule,
     StorefrontModule,
     OrdersModule,
+    LegalModule,
+    IntegrationModule,
   ],
   providers: [
     {

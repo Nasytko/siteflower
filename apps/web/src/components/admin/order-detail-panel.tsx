@@ -8,13 +8,18 @@ import {
   orderStatusLabel,
   type OrderAdminDetailDto,
   type OrderStatus,
+  type OutboxEventAdminListItem,
 } from '@bouquet-one/contracts';
 import { Button } from '@bouquet-one/ui';
+import { OrderErpSection } from '@/components/admin/order-erp-section';
 import { formatPriceFromMinor, toSameOriginMediaUrl } from '@/lib/media';
 
 type Props = {
   initial: OrderAdminDetailDto;
   canUpdate: boolean;
+  erpEvents?: OutboxEventAdminListItem[] | null;
+  erpTotal?: number;
+  canOperateIntegration?: boolean;
 };
 
 const TRANSITION_LABELS: Partial<Record<OrderStatus, string>> = {
@@ -48,7 +53,13 @@ async function mutate(path: string, init?: RequestInit) {
   return body as OrderAdminDetailDto;
 }
 
-export function OrderDetailPanel({ initial, canUpdate }: Props) {
+export function OrderDetailPanel({
+  initial,
+  canUpdate,
+  erpEvents = null,
+  erpTotal = 0,
+  canOperateIntegration = false,
+}: Props) {
   const router = useRouter();
   const [order, setOrder] = useState(initial);
   const [error, setError] = useState<string | null>(null);
@@ -268,6 +279,14 @@ export function OrderDetailPanel({ initial, canUpdate }: Props) {
           <p className="text-sm text-red-700">Отмена: {order.cancellationReason}</p>
         ) : null}
       </section>
+
+      {erpEvents !== null ? (
+        <OrderErpSection
+          events={erpEvents}
+          total={erpTotal}
+          canOperate={canOperateIntegration}
+        />
+      ) : null}
 
       <section className="space-y-2">
         <h2 className="text-lg font-semibold">История</h2>

@@ -12,6 +12,8 @@ type Props = {
   deliverySummary: string | null;
   substitutionNote: string | null;
   city?: string | null;
+  /** Configured offline payment description from legal seller; omit invented methods. */
+  offlinePaymentDescription?: string | null;
 };
 
 function unitLabel(unit: ComponentUnit): string {
@@ -45,6 +47,7 @@ export function ProductDetailTabs({
   deliverySummary,
   substitutionNote,
   city,
+  offlinePaymentDescription = null,
 }: Props) {
   const [tab, setTab] = useState<TabId>('delivery');
 
@@ -77,6 +80,7 @@ export function ProductDetailTabs({
             fulfillment={fulfillment}
             deliverySummary={deliverySummary}
             city={city}
+            offlinePaymentDescription={offlinePaymentDescription}
           />
         ) : null}
 
@@ -103,10 +107,12 @@ function DeliveryPanel({
   fulfillment,
   deliverySummary,
   city,
+  offlinePaymentDescription,
 }: {
   fulfillment: FulfillmentSettingsPublicDto | null;
   deliverySummary: string | null;
   city?: string | null;
+  offlinePaymentDescription?: string | null;
 }) {
   const rows: Array<{ title: string; meta: string }> = [];
 
@@ -148,9 +154,13 @@ function DeliveryPanel({
     rows.push({ title: 'Важно', meta: deliverySummary.trim() });
   }
 
+  const paymentMeta = offlinePaymentDescription?.trim()
+    ? offlinePaymentDescription.trim()
+    : 'После заказа менеджер подскажет доступные способы оплаты. Онлайн-оплата на сайте не принимается.';
+
   rows.push({
     title: 'Оплата',
-    meta: 'Наличными или картой при получении',
+    meta: paymentMeta,
   });
 
   return (

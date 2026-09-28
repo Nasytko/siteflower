@@ -15,7 +15,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "lint": "eslint .",
     "clean": "rimraf dist",
-    "test": "node --import tsx --test src/index.test.ts src/catalog.test.ts src/orders.test.ts"
+    "test": "node --import tsx --test src/index.test.ts src/catalog.test.ts src/orders.test.ts src/legal.test.ts"
   },
   "devDependencies": {
     "@bouquet-one/config": "workspace:*",

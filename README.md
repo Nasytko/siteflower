@@ -4,7 +4,7 @@ Flower commerce platform for Grodno, Belarus.
 
 Modular monolith: public storefront + admin CMS + commerce API. Orders are accepted without depending on ERP availability (see [docs/commerce-invariants.md](docs/commerce-invariants.md)).
 
-> Current status: **Phase 4 commerce** (catalog, cart, checkout, tracking, admin orders) with Phase 4.2 security hardening. Payments / ERP / customer accounts are out of scope.
+> Current status: **commerce live** (catalog, cart, checkout, tracking, admin) plus Belarus legal pages and **SiteFlower→ERP outbox foundation** (worker + simulator). Online payments and NewERP itself remain out of scope.
 
 ## Architecture (high level)
 
@@ -12,7 +12,7 @@ Modular monolith: public storefront + admin CMS + commerce API. Orders are accep
 Storefront (Next.js) ─┐
 Admin (/admin)        ├─→ Commerce API (NestJS) ─→ PostgreSQL
                       ┘         │
-                                ├─→ outbox (future ERP / notifications)
+                                ├─→ transactional outbox → worker → Simulator / future NewERP
                                 └─→ local media (masters + derivatives)
 ```
 

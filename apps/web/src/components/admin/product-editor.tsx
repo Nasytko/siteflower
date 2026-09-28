@@ -650,7 +650,6 @@ export function ProductEditor({
             Варианты = комплектация для цены (S / M / L или свои названия). Это то, что выбирает
             покупатель на карточке. «Размер» в подборе — отдельный справочник для фильтров.
           </p>
-          </p>
           <div className="admin-panel overflow-x-auto">
             <table className="admin-table min-w-[640px]">
               <thead>

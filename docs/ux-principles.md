@@ -24,4 +24,4 @@ Browse
 - One clear action per step
 - Platform power (CMS, ERP, AI, loyalty) stays behind the scenes
 
-The storefront foundation pages in this phase only prove routing and SEO — they are not the final visual system.
+The storefront is live commerce UX (catalog, cart, checkout, legal pages); keep visual changes intentional and brand-consistent.

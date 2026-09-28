@@ -25,7 +25,13 @@ async function bootstrap(): Promise<void> {
   }
 
   // Bound JSON/urlencoded payloads for admin/checkout; media uploads use multipart separately.
-  app.useBodyParser('json', { limit: '256kb' });
+  // Capture rawBody for integration HMAC verification (exact bytes).
+  app.useBodyParser('json', {
+    limit: '256kb',
+    verify: (req: { rawBody?: Buffer }, _res: unknown, buf: Buffer) => {
+      req.rawBody = Buffer.from(buf);
+    },
+  });
   app.useBodyParser('urlencoded', { limit: '256kb', extended: true });
 
   app.use(requestIdMiddleware);

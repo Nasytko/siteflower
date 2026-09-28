@@ -1,40 +1,44 @@
-# Transactional outbox
+# SiteFlower transactional outbox (ERP)
 
-Minimal foundation for future ERP / notifications (Phase 4). **No worker yet.**
+SiteFlower enqueues `ORDER_CREATED` in the same DB transaction as the order. A separate **integration worker** claims rows and delivers HMAC-signed payloads to NewERP (or the in-process simulator).
+
+See also:
+
+- [integrations/siteflower-outbox.md](./integrations/siteflower-outbox.md) — claim, backoff, statuses
+- [integrations/newerp-receiver-contract.md](./integrations/newerp-receiver-contract.md) — receiver expectations
+- [integrations/security.md](./integrations/security.md) — HMAC, secrets, pause
 
 ## Why
 
-Shop PostgreSQL is the source of truth for accepted orders. External systems must consume **committed** events without losing orders if integrations fail.
+Shop PostgreSQL is the source of truth for accepted orders. External systems must consume **committed** events without losing orders if integrations fail (at-least-once).
 
 ## Table `outbox_events`
 
 | Column | Notes |
 | --- | --- |
-| eventType | e.g. `ORDER_CREATED` |
+| eventType | `ORDER_CREATED` |
 | aggregateType / aggregateId | `Order` / uuid |
-| schemaVersion | payload compatibility (start at 1) |
-| payload | versioned JSON — not raw Prisma models |
-| processedAt / attempts | for a future dispatcher |
+| schemaVersion | payload compatibility (v1) |
+| payload | immutable `StorefrontOrderCreatedV1` JSON (built at enqueue; includes `eventId`) |
+| status | `PENDING` → `PROCESSING` → `DELIVERED` / `RETRY` / `FAILED` |
+| availableAt / leaseOwner / leaseExpiresAt | claim scheduling + SKIP LOCKED leases |
+| attemptCount / failureCategory / lastErrorSanitized | delivery diagnostics (no secrets) |
+| remoteReference | acceptor ack id |
 
 ## Atomicity
 
-`ORDER_CREATED` is inserted in the **same** `$transaction` as Order + OrderItems + OrderEvent + IdempotencyRecord.
+`ORDER_CREATED` is inserted in the **same** `$transaction` as Order + OrderItems + OrderEvent + IdempotencyRecord. The outbox row id is a UUID chosen up front so `payload.eventId` matches.
 
-Idempotency / request-hash / encrypted recovery live on `idempotency_records`, **not** in the outbox payload.
+Idempotency / request-hash / encrypted recovery live on `idempotency_records`, **not** in the outbox payload. Tracking tokens are never placed in outbox payloads.
 
-## Payload (v1)
+## Worker
 
-Includes: `orderId`, `orderNumber`, `status`, `fulfillmentType`, `fulfillmentDate`, `totalMinor`, `currency`, `itemCount`, `createdAt`.
+```bash
+# from repo root
+pnpm worker:dev
 
-Future consumers should tolerate additive fields; bump `schemaVersion` for breaking changes.
+# or after build
+pnpm --filter @bouquet-one/api worker
+```
 
-## Future worker (not implemented)
-
-- Claim unprocessed rows (`processed_at IS NULL`) ordered by `created_at`
-- Lease / update `attempts`; exponential backoff
-- Idempotent consumer; dead-letter after N failures
-- Metrics on backlog age
-
-## Non-goals (this phase)
-
-No NewERP calls, no stock reservation, no notification send, no outbox poller.
+Requires `INTEGRATION_ENABLED=true` and `INTEGRATION_MODE=SIMULATOR|ERP` (plus keys). Admin can pause via `IntegrationRuntimeSettings` without changing env.

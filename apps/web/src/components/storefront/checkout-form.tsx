@@ -539,12 +539,33 @@ export function CheckoutForm() {
           </p>
         ) : null}
 
+        <p className="sf-small text-muted leading-relaxed">
+          Оформляя заказ, вы подтверждаете, что ознакомились с{' '}
+          <Link href="/oferta" className="underline underline-offset-2 hover:text-brand">
+            условиями заказа
+          </Link>
+          ,{' '}
+          <Link href="/dostavka" className="underline underline-offset-2 hover:text-brand">
+            доставкой и оплатой
+          </Link>
+          ,{' '}
+          <Link href="/vozvrat" className="underline underline-offset-2 hover:text-brand">
+            возвратом и претензиями
+          </Link>{' '}
+          и{' '}
+          <Link href="/privacy" className="underline underline-offset-2 hover:text-brand">
+            политикой обработки персональных данных
+          </Link>
+          . Оплата на сайте не производится — менеджер сообщит доступные способы после проверки
+          заказа.
+        </p>
+
         <button
           type="submit"
           disabled={pending}
           className="sf-cta inline-flex min-h-12 w-full disabled:cursor-not-allowed disabled:opacity-50 lg:hidden"
         >
-          {pending ? 'Отправка…' : 'Отправить заказ'}
+          {pending ? 'Отправка…' : 'Оформить заказ'}
         </button>
       </div>
 
@@ -590,10 +611,11 @@ export function CheckoutForm() {
           disabled={pending}
           className="sf-cta hidden w-full disabled:cursor-not-allowed disabled:opacity-50 lg:inline-flex"
         >
-          {pending ? 'Отправка…' : 'Отправить заказ'}
+          {pending ? 'Отправка…' : 'Оформить заказ'}
         </button>
         <p className="sf-small text-muted">
-          Менеджер свяжется для подтверждения. Это ещё не подтверждённый заказ.
+          После оформления заказ будет получен в обработку. Менеджер свяжется для подтверждения
+          деталей. Это ещё не подтверждённый заказ.
         </p>
       </aside>
     </form>

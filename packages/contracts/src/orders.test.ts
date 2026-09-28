@@ -33,6 +33,8 @@ test('terminal statuses have no transitions', () => {
 });
 
 test('orderStatusLabel covers all statuses', () => {
-  assert.equal(orderStatusLabel('RECEIVED'), 'Получен');
+  assert.equal(orderStatusLabel('RECEIVED'), 'Заказ получен');
+  assert.equal(orderStatusLabel('CONFIRMED'), 'Заказ подтверждён');
+  assert.equal(orderStatusLabel('PREPARING'), 'Собираем букет');
   assert.equal(orderStatusLabel('CANCELLED'), 'Отменён');
 });

@@ -14,7 +14,9 @@ export default function CheckoutPage() {
     <main id="main-content" className="sf-container py-10 md:py-14">
       <h1 className="sf-h1">Оформление заказа</h1>
       <p className="sf-body mt-3 max-w-2xl text-muted">
-        Заполните данные — менеджер проверит возможность выполнения и свяжется для подтверждения.
+        Заполните данные. После отправки заказ будет получен нами в обработку — менеджер проверит
+        возможность выполнения и свяжется с вами для подтверждения деталей. Оплата на сайте не
+        производится.
       </p>
       <div className="mt-10">
         <CheckoutForm />

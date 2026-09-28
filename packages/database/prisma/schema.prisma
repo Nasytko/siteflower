@@ -54,6 +54,17 @@ enum AuditAction {
   PROMOTION_UPDATED
   BESTSELLER_UPDATED
   BUDGET_RANGE_UPDATED
+  SELLER_LEGAL_DETAILS_UPDATED
+  BANK_DETAILS_UPDATED
+  TRADE_REGISTER_DETAILS_UPDATED
+  LEGAL_DOCUMENT_UPDATED
+  LEGAL_DOCUMENT_PUBLISHED
+  INTEGRATION_ENABLED
+  INTEGRATION_DISABLED
+  INTEGRATION_CONFIG_UPDATED
+  INTEGRATION_TEST_CONNECTION
+  INTEGRATION_EVENT_MANUAL_RETRY
+  INTEGRATION_TEST_EVENT_SENT
 }
 
 model AdminUser {
@@ -635,6 +646,110 @@ model InstagramPost {
 }
 
 // ---------------------------------------------------------------------------
+// Belarus legal / compliance (seller identity + versioned legal documents)
+// ---------------------------------------------------------------------------
+
+enum LegalDocumentKind {
+  ORDER_TERMS
+  PRIVACY_POLICY
+  RETURNS_POLICY
+  DELIVERY_PAYMENT
+  SUBSTITUTION_POLICY
+}
+
+enum LegalDocumentVersionStatus {
+  DRAFT
+  PUBLISHED
+}
+
+/// Singleton (`id = 1`) — seller legal identity, claims contacts, bank requisites.
+/// Shop display phone/email/hours stay on StorefrontSettings; legal entity lives here.
+model LegalEntitySettings {
+  id Int @id @default(1)
+
+  sellerType String @default("INDIVIDUAL_ENTREPRENEUR") @map("seller_type") @db.VarChar(40)
+  legalName  String @map("legal_name") @db.VarChar(300)
+  unp        String @db.VarChar(20)
+  /// Registered / legal address (NOT automatically store or pickup).
+  legalAddress String @map("legal_address") @db.VarChar(500)
+  postalCode   String? @map("postal_code") @db.VarChar(20)
+
+  stateRegistrationDate   DateTime? @map("state_registration_date") @db.Date
+  stateRegistrationNumber String?   @map("state_registration_number") @db.VarChar(120)
+  registeringAuthority    String?   @map("registering_authority") @db.VarChar(300)
+
+  tradeRegisterNumber String?   @map("trade_register_number") @db.VarChar(120)
+  tradeRegisterDate   DateTime? @map("trade_register_date") @db.Date
+
+  /// Prefer filling these; public contacts page may fall back to StorefrontSettings.
+  sellerPhone    String? @map("seller_phone") @db.VarChar(40)
+  sellerEmail    String? @map("seller_email") @db.VarChar(320)
+  businessHours  String? @map("business_hours") @db.VarChar(500)
+
+  consumerClaimsContactName String? @map("consumer_claims_contact_name") @db.VarChar(200)
+  consumerClaimsPhone       String? @map("consumer_claims_phone") @db.VarChar(40)
+  consumerClaimsEmail       String? @map("consumer_claims_email") @db.VarChar(320)
+
+  /// Physical shop / showroom — never auto-filled from legalAddress.
+  physicalStoreAddress String? @map("physical_store_address") @db.VarChar(500)
+  /// Pickup point — never auto-filled from legalAddress.
+  pickupAddress String? @map("pickup_address") @db.VarChar(500)
+
+  /// Only describe payment methods the business actually offers offline.
+  actualOfflinePaymentDescription String? @map("actual_offline_payment_description") @db.VarChar(2000)
+
+  /// Recipient-unavailable / failed-delivery operational rule (draft until approved).
+  failedDeliveryPolicy String? @map("failed_delivery_policy") @db.VarChar(2000)
+
+  bankAccountIban String? @map("bank_account_iban") @db.VarChar(34)
+  bankName        String? @map("bank_name") @db.VarChar(200)
+  bankAddress     String? @map("bank_address") @db.VarChar(500)
+  bankSwift       String? @map("bank_swift") @db.VarChar(20)
+  bankUnp         String? @map("bank_unp") @db.VarChar(20)
+
+  version   Int      @default(1)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  @@map("legal_entity_settings")
+}
+
+model LegalDocument {
+  id        String            @id @default(uuid()) @db.Uuid
+  kind      LegalDocumentKind @unique
+  title     String            @db.VarChar(200)
+  createdAt DateTime          @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime          @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  versions LegalDocumentVersion[]
+
+  @@map("legal_documents")
+}
+
+model LegalDocumentVersion {
+  id          String                      @id @default(uuid()) @db.Uuid
+  documentId  String                      @map("document_id") @db.Uuid
+  version     Int
+  status      LegalDocumentVersionStatus  @default(DRAFT)
+  title       String                      @db.VarChar(200)
+  /// Markdown body (admin-authored; rendered safely on storefront).
+  bodyMarkdown String                     @map("body_markdown") @db.Text
+  /// When this published version became effective (null for drafts).
+  effectiveAt DateTime?                   @map("effective_at") @db.Timestamptz(3)
+  publishedAt DateTime?                   @map("published_at") @db.Timestamptz(3)
+  createdByAdminUserId String?            @map("created_by_admin_user_id") @db.Uuid
+  updatedByAdminUserId String?            @map("updated_by_admin_user_id") @db.Uuid
+  createdAt   DateTime                    @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt   DateTime                    @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  document LegalDocument @relation(fields: [documentId], references: [id], onDelete: Cascade)
+
+  @@unique([documentId, version])
+  @@index([documentId, status])
+  @@index([documentId, publishedAt(sort: Desc)])
+  @@map("legal_document_versions")
+}
+
+// ---------------------------------------------------------------------------
 // Commerce — cart is client-side; orders are server-authoritative (Phase 4)
 // ---------------------------------------------------------------------------
 
@@ -794,20 +909,92 @@ model OrderEvent {
 }
 
 /// Transactional outbox — written in the same DB transaction as the aggregate.
-model OutboxEvent {
-  id            String    @id @default(uuid()) @db.Uuid
-  eventType     String    @map("event_type") @db.VarChar(64)
-  aggregateType String    @map("aggregate_type") @db.VarChar(64)
-  aggregateId   String    @map("aggregate_id") @db.Uuid
-  schemaVersion Int       @default(1) @map("schema_version")
-  payload       Json
-  createdAt     DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
-  processedAt   DateTime? @map("processed_at") @db.Timestamptz(3)
-  attempts      Int       @default(0)
+/// Delivery is at-least-once; consumers must be idempotent on eventId.
+enum OutboxDeliveryStatus {
+  PENDING
+  PROCESSING
+  RETRY
+  DELIVERED
+  FAILED
+}
 
+model OutboxEvent {
+  id            String               @id @default(uuid()) @db.Uuid
+  eventType     String               @map("event_type") @db.VarChar(64)
+  aggregateType String               @map("aggregate_type") @db.VarChar(64)
+  aggregateId   String               @map("aggregate_id") @db.Uuid
+  schemaVersion Int                  @default(1) @map("schema_version")
+  /// Immutable versioned integration payload (JSON). Built once at enqueue time.
+  payload       Json
+  createdAt     DateTime             @default(now()) @map("created_at") @db.Timestamptz(3)
+  /// When the event becomes eligible for claim (backoff / pause).
+  availableAt   DateTime             @default(now()) @map("available_at") @db.Timestamptz(3)
+  status        OutboxDeliveryStatus @default(PENDING)
+  attemptCount  Int                  @default(0) @map("attempt_count")
+  lastAttemptAt DateTime?            @map("last_attempt_at") @db.Timestamptz(3)
+  nextAttemptAt DateTime?            @map("next_attempt_at") @db.Timestamptz(3)
+  deliveredAt   DateTime?            @map("delivered_at") @db.Timestamptz(3)
+  /// Legacy column kept for older readers; mirrored from deliveredAt when set.
+  processedAt   DateTime?            @map("processed_at") @db.Timestamptz(3)
+  /// Deprecated alias of attemptCount — kept during migration window.
+  attempts      Int                  @default(0)
+  leaseOwner    String?              @map("lease_owner") @db.VarChar(120)
+  leaseExpiresAt DateTime?           @map("lease_expires_at") @db.Timestamptz(3)
+  failureCategory String?            @map("failure_category") @db.VarChar(64)
+  lastErrorSanitized String?         @map("last_error_sanitized") @db.VarChar(500)
+  remoteReference String?            @map("remote_reference") @db.VarChar(200)
+
+  @@index([status, availableAt, createdAt])
   @@index([processedAt, createdAt])
   @@index([aggregateType, aggregateId])
+  @@index([leaseExpiresAt])
   @@map("outbox_events")
+}
+
+/// Worker liveness heartbeat (one row per worker instance id).
+model IntegrationWorkerHeartbeat {
+  id           String   @id @db.VarChar(120)
+  lastSeenAt   DateTime @map("last_seen_at") @db.Timestamptz(3)
+  hostname     String?  @db.VarChar(200)
+  updatedAt    DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  @@map("integration_worker_heartbeats")
+}
+
+/// Simulator replay-protection nonces (dev/test / in-process simulator).
+model IntegrationReplayNonce {
+  id        String   @id @default(cuid())
+  keyId     String   @map("key_id") @db.VarChar(120)
+  nonce     String   @db.VarChar(128)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  expiresAt DateTime @map("expires_at") @db.Timestamptz(3)
+
+  @@unique([keyId, nonce])
+  @@index([expiresAt])
+  @@map("integration_replay_nonces")
+}
+
+/// Simulator accepted logical events (idempotent by eventId).
+model IntegrationSimulatorReceipt {
+  id               String   @id @default(cuid())
+  eventId          String   @unique @map("event_id") @db.Uuid
+  externalOrderId  String?  @map("external_order_id") @db.Uuid
+  eventType        String   @map("event_type") @db.VarChar(64)
+  schemaVersion    Int      @map("schema_version")
+  acceptedAt       DateTime @default(now()) @map("accepted_at") @db.Timestamptz(3)
+  remoteReference  String   @map("remote_reference") @db.VarChar(200)
+
+  @@index([externalOrderId])
+  @@map("integration_simulator_receipts")
+}
+
+/// Singleton runtime pause flag (id=1). Env INTEGRATION_ENABLED still gates hard disable.
+model IntegrationRuntimeSettings {
+  id        Int      @id @default(1)
+  paused    Boolean  @default(false)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  @@map("integration_runtime_settings")
 }
 
 /// Safe replay of the same logical request (separate from outbox delivery).

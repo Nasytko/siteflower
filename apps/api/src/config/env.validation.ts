@@ -42,6 +42,18 @@ export const envSchema = z
     S3_ACCESS_KEY_ID: z.string().optional(),
     S3_SECRET_ACCESS_KEY: z.string().optional(),
     S3_PUBLIC_BASE_URL: z.string().optional(),
+    /** DISABLED | SIMULATOR | ERP — default DISABLED. */
+    INTEGRATION_MODE: z.enum(['DISABLED', 'SIMULATOR', 'ERP']).default('DISABLED'),
+    /** Hard enable; default false (including production). */
+    INTEGRATION_ENABLED: booleanFromString.optional(),
+    INTEGRATION_KEY_ID: z.string().optional(),
+    INTEGRATION_HMAC_SECRET: z.string().optional(),
+    INTEGRATION_ENDPOINT: z.string().optional(),
+    INTEGRATION_TIMEOUT_MS: z.coerce.number().int().positive().default(8000),
+    INTEGRATION_MAX_ATTEMPTS: z.coerce.number().int().positive().default(12),
+    INTEGRATION_LEASE_SECONDS: z.coerce.number().int().positive().default(60),
+    INTEGRATION_WORKER_ID: z.string().optional(),
+    INTEGRATION_CONCURRENCY: z.coerce.number().int().positive().default(2),
   })
   .superRefine((env, ctx) => {
     if (env.NODE_ENV === 'production' && !env.DATABASE_URL) {
@@ -100,6 +112,30 @@ export const envSchema = z
           path: ['S3_BUCKET'],
           message:
             'S3_BUCKET, S3_ACCESS_KEY_ID, and S3_SECRET_ACCESS_KEY are required when MEDIA_STORAGE=s3',
+        });
+      }
+    }
+    if (env.INTEGRATION_MODE === 'ERP' && env.INTEGRATION_ENABLED === true) {
+      const secret = env.INTEGRATION_HMAC_SECRET ?? '';
+      if (secret.length < 32) {
+        ctx.addIssue({
+          code: 'custom',
+          path: ['INTEGRATION_HMAC_SECRET'],
+          message: 'INTEGRATION_HMAC_SECRET must be at least 32 characters when ERP mode is enabled',
+        });
+      }
+      if (!env.INTEGRATION_KEY_ID?.trim()) {
+        ctx.addIssue({
+          code: 'custom',
+          path: ['INTEGRATION_KEY_ID'],
+          message: 'INTEGRATION_KEY_ID is required when ERP mode is enabled',
+        });
+      }
+      if (!env.INTEGRATION_ENDPOINT?.trim()) {
+        ctx.addIssue({
+          code: 'custom',
+          path: ['INTEGRATION_ENDPOINT'],
+          message: 'INTEGRATION_ENDPOINT is required when ERP mode is enabled',
         });
       }
     }

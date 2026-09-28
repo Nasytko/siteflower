@@ -1,3 +1,8 @@
+import {
+  isLegalDocumentKind,
+  type LegalDocumentKind,
+} from '@bouquet-one/contracts';
+
 /**
  * Single source of truth for Admin API paths (same-origin `/api/v1` rewrite).
  * Safe to import from both server and client components.
@@ -114,7 +119,33 @@ export const adminEndpoints = {
   instagramPosts: `${ADMIN}/storefront/instagram/posts`,
   instagramPost: (id: string) => `${ADMIN}/storefront/instagram/posts/${id}`,
   instagramPostsOrder: `${ADMIN}/storefront/instagram/posts/order`,
+
+  legalEntity: `${ADMIN}/legal/entity`,
+  legalCompliance: `${ADMIN}/legal/compliance`,
+  legalDocuments: `${ADMIN}/legal/documents`,
+  legalDocument: (kind: string) => `${ADMIN}/legal/documents/${kind}`,
+  legalDocumentDraft: (kind: string) => `${ADMIN}/legal/documents/${kind}/draft`,
+  legalDocumentPublish: (kind: string) => `${ADMIN}/legal/documents/${kind}/publish`,
+
+  integrationErpStatus: `${ADMIN}/integrations/erp/status`,
+  integrationErpEvents: `${ADMIN}/integrations/erp/events`,
+  integrationErpEvent: (id: string) => `${ADMIN}/integrations/erp/events/${id}`,
+  integrationErpEventRetry: (id: string) => `${ADMIN}/integrations/erp/events/${id}/retry`,
+  integrationErpTestConnection: `${ADMIN}/integrations/erp/test-connection`,
+  integrationErpTestEvent: `${ADMIN}/integrations/erp/test-event`,
+  integrationErpEnabled: `${ADMIN}/integrations/erp/enabled`,
 } as const;
+
+/** URL segment: ORDER_TERMS → order_terms */
+export function legalDocumentKindPath(kind: LegalDocumentKind): string {
+  return kind.toLowerCase();
+}
+
+/** Parse route param (order_terms / order-terms) → LegalDocumentKind */
+export function parseLegalDocumentKindPath(raw: string): LegalDocumentKind | null {
+  const normalized = raw.trim().toUpperCase().replace(/-/g, '_');
+  return isLegalDocumentKind(normalized) ? normalized : null;
+}
 
 export type QueryValue = string | number | boolean | null | undefined;
 

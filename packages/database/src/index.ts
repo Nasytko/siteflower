@@ -16,9 +16,10 @@ import {
   FulfillmentType,
   OrderStatus,
   OrderEventType,
+  OutboxDeliveryStatus,
 } from './generated/prisma/client.js';
 
-export type { PrismaClient };
+export type { PrismaClient, OutboxEvent } from './generated/prisma/client.js';
 export {
   Prisma,
   AdminRole,
@@ -35,6 +36,7 @@ export {
   FulfillmentType,
   OrderStatus,
   OrderEventType,
+  OutboxDeliveryStatus,
 };
 
 export type CreatePrismaClientOptions = {

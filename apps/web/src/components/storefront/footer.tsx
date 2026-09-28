@@ -1,16 +1,39 @@
 import Link from 'next/link';
-import type { StorefrontSettingsPublicDto } from '@bouquet-one/contracts';
+import type { LegalSellerPublicDto, StorefrontSettingsPublicDto } from '@bouquet-one/contracts';
 import { BrandLogo } from './brand-logo';
 
 type Props = {
   settings: StorefrontSettingsPublicDto;
+  seller?: LegalSellerPublicDto | null;
 };
 
-export function StorefrontFooter({ settings }: Props) {
+const BUYER_LINKS = [
+  { href: '/dostavka', label: 'Доставка и оплата' },
+  { href: '/oferta', label: 'Условия заказа' },
+  { href: '/vozvrat', label: 'Возврат' },
+  { href: '/privacy', label: 'Конфиденциальность' },
+] as const;
+
+const COMPANY_LINKS = [
+  { href: '/o-nas', label: 'О нас' },
+  { href: '/kontakty', label: 'Контакты' },
+] as const;
+
+const CATALOG_LINKS = [
+  { href: '/bukety', label: 'Букеты' },
+  { href: '/cvety', label: 'Цветы' },
+  { href: '/povod', label: 'Поводы' },
+  { href: '/akcii', label: 'Акции' },
+] as const;
+
+export function StorefrontFooter({ settings, seller = null }: Props) {
   const telHref = settings.phone ? `tel:${settings.phone.replace(/\s+/g, '')}` : null;
+  const year = new Date().getFullYear();
+  const legalName = seller?.legalName?.trim() || null;
+  const unp = seller?.unp?.trim() || null;
 
   return (
-    <footer className="mt-auto border-t border-border">
+    <footer className="sf-footer mt-auto">
       <div className="sf-band-surface">
         <div className="sf-container-wide flex flex-col gap-4 py-8 sm:flex-row sm:items-center sm:justify-between">
           <div>
@@ -32,114 +55,109 @@ export function StorefrontFooter({ settings }: Props) {
         </div>
       </div>
 
-      <div className="bg-brand text-white">
+      <div className="sf-footer__main">
         <div className="sf-container-wide grid gap-10 py-12 sm:grid-cols-2 lg:grid-cols-4">
           <div>
-            <BrandLogo alt={settings.brandName} className="sf-brand-logo--on-brand" />
-            <p className="sf-small mt-3 text-white/70">
+            <BrandLogo alt={settings.brandName} />
+            <p className="sf-small mt-3 text-muted">
               {settings.aboutSummary ??
                 `Мы обожаем цветы и чувствуем их особую роль в жизни города. В ${settings.city} собираем современные букеты для современных людей.`}
             </p>
-            <p className="mt-6 text-xs text-white/45">
-              © {new Date().getFullYear()} {settings.brandName}. Все права защищены.
+            {(settings.phone || settings.email || settings.instagramUrl || settings.telegramUrl) && (
+              <ul className="mt-5 space-y-1.5 text-sm text-foreground">
+                {settings.phone ? (
+                  <li>
+                    <a href={telHref!} className="font-semibold text-brand hover:opacity-90">
+                      {settings.phone}
+                    </a>
+                  </li>
+                ) : null}
+                {settings.email ? (
+                  <li>
+                    <a href={`mailto:${settings.email}`} className="hover:text-brand">
+                      {settings.email}
+                    </a>
+                  </li>
+                ) : null}
+                {settings.instagramUrl ? (
+                  <li>
+                    <a
+                      href={settings.instagramUrl}
+                      rel="noopener noreferrer"
+                      target="_blank"
+                      className="hover:text-brand"
+                    >
+                      Instagram
+                    </a>
+                  </li>
+                ) : null}
+                {settings.telegramUrl ? (
+                  <li>
+                    <a
+                      href={settings.telegramUrl}
+                      rel="noopener noreferrer"
+                      target="_blank"
+                      className="hover:text-brand"
+                    >
+                      Telegram
+                    </a>
+                  </li>
+                ) : null}
+              </ul>
+            )}
+          </div>
+
+          <div>
+            <p className="sf-footer__col-title">Покупателям</p>
+            <ul className="sf-footer__links">
+              {BUYER_LINKS.map((link) => (
+                <li key={link.href}>
+                  <Link href={link.href}>{link.label}</Link>
+                </li>
+              ))}
+            </ul>
+          </div>
+
+          <div>
+            <p className="sf-footer__col-title">Компания</p>
+            <ul className="sf-footer__links">
+              {COMPANY_LINKS.map((link) => (
+                <li key={link.href}>
+                  <Link href={link.href}>{link.label}</Link>
+                </li>
+              ))}
+            </ul>
+          </div>
+
+          <div>
+            <p className="sf-footer__col-title">Каталог</p>
+            <ul className="sf-footer__links">
+              {CATALOG_LINKS.map((link) => (
+                <li key={link.href}>
+                  <Link href={link.href}>{link.label}</Link>
+                </li>
+              ))}
+            </ul>
+          </div>
+        </div>
+
+        <div className="sf-footer__legal">
+          <div className="sf-container-wide">
+            <p>
+              © {year} {settings.brandName}
+              {legalName ? (
+                <>
+                  <span aria-hidden="true"> · </span>
+                  {legalName}
+                </>
+              ) : null}
+              {unp ? (
+                <>
+                  <span aria-hidden="true"> · </span>
+                  УНП {unp}
+                </>
+              ) : null}
             </p>
-          </div>
-          <div>
-            <p className="text-sm font-semibold text-white/55">Клиентам</p>
-            <ul className="mt-3 space-y-2 text-sm text-white/90">
-              <li>
-                <Link href="/dostavka" className="hover:text-white">
-                  Доставка и оплата
-                </Link>
-              </li>
-              <li>
-                <Link href="/akcii" className="hover:text-white">
-                  Акции
-                </Link>
-              </li>
-              <li>
-                <Link href="/favorites" className="hover:text-white">
-                  Избранное
-                </Link>
-              </li>
-              <li>
-                <Link href="/cart" className="hover:text-white">
-                  Корзина
-                </Link>
-              </li>
-            </ul>
-          </div>
-          <div>
-            <p className="text-sm font-semibold text-white/55">Компания</p>
-            <ul className="mt-3 space-y-2 text-sm text-white/90">
-              <li>
-                <Link href="/o-nas" className="hover:text-white">
-                  О нас
-                </Link>
-              </li>
-              <li>
-                <Link href="/bukety" className="hover:text-white">
-                  Каталог
-                </Link>
-              </li>
-              <li>
-                <Link href="/cvety" className="hover:text-white">
-                  Цветы
-                </Link>
-              </li>
-              <li>
-                <Link href="/povod" className="hover:text-white">
-                  Поводы
-                </Link>
-              </li>
-            </ul>
-          </div>
-          <div>
-            <p className="text-sm font-semibold text-white/55">Контакты</p>
-            <ul className="mt-3 space-y-2 text-sm text-white/90">
-              {settings.phone ? (
-                <li>
-                  <a href={telHref!} className="text-base font-semibold text-white hover:opacity-90">
-                    {settings.phone}
-                  </a>
-                </li>
-              ) : null}
-              {settings.email ? (
-                <li>
-                  <a href={`mailto:${settings.email}`} className="hover:text-white">
-                    {settings.email}
-                  </a>
-                </li>
-              ) : null}
-              {settings.address ? <li className="text-white/60">{settings.address}</li> : null}
-              {settings.workingHours ? (
-                <li className="text-white/60">{settings.workingHours}</li>
-              ) : null}
-              {settings.instagramUrl ? (
-                <li>
-                  <a
-                    href={settings.instagramUrl}
-                    rel="noopener noreferrer"
-                    target="_blank"
-                    className="hover:text-white"
-                  >
-                    Instagram
-                  </a>
-                </li>
-              ) : null}
-              {settings.telegramUrl ? (
-                <li>
-                  <a
-                    href={settings.telegramUrl}
-                    rel="noopener noreferrer"
-                    target="_blank"
-                    className="hover:text-white"
-                  >
-                    Telegram
-                  </a>
-                </li>
-              ) : null}
-            </ul>
           </div>
         </div>
       </div>

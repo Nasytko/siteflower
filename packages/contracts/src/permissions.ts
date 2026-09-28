@@ -28,6 +28,12 @@ export const PERMISSIONS = [
   'CONTENT_UPDATE',
   'CONTENT_PUBLISH',
   'SITE_HEALTH_READ',
+  'LEGAL_READ',
+  'LEGAL_EDIT',
+  'LEGAL_PUBLISH',
+  'INTEGRATION_READ',
+  'INTEGRATION_OPERATE',
+  'INTEGRATION_CONFIGURE',
 ] as const;
 
 export type Permission = (typeof PERMISSIONS)[number];
@@ -58,6 +64,8 @@ const MANAGER_PERMISSIONS: readonly Permission[] = [
   'CONTENT_READ',
   'CONTENT_UPDATE',
   'SITE_HEALTH_READ',
+  'LEGAL_READ',
+  'INTEGRATION_READ',
 ];
 
 const CONTENT_MANAGER_PERMISSIONS: readonly Permission[] = [
@@ -72,6 +80,8 @@ const CONTENT_MANAGER_PERMISSIONS: readonly Permission[] = [
   'CONTENT_READ',
   'CONTENT_UPDATE',
   'CONTENT_PUBLISH',
+  'LEGAL_READ',
+  'LEGAL_EDIT',
 ];
 
 export const ROLE_PERMISSIONS: Record<AdminRole, readonly Permission[]> = {

@@ -34,7 +34,7 @@ Use before first production deploy. Do not claim a row is done unless verified i
 ## Commerce
 
 - [ ] Lost-response idempotent replay returns tracking token within TTL
-- [ ] Outbox rows created with orders (worker not required yet — monitor backlog later)
+- [ ] Outbox rows created with orders; run worker when ERP delivery mode is SIMULATOR/ERP (monitor backlog either way)
 - [ ] Rate limits acceptable behind NAT (login / orders / track)
 
 ## Monitoring (minimal)

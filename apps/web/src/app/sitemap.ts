@@ -3,7 +3,20 @@ import { getSitemapEntries } from '@/lib/public-api';
 import { getIndexingPolicy } from '@/lib/seo/indexing';
 import { getSiteUrl } from '@/lib/seo/site-url';
 
-const STATIC_PATHS = ['/', '/bukety', '/akcii', '/cvety', '/povod', '/dostavka', '/o-nas'] as const;
+const STATIC_PATHS = [
+  '/',
+  '/bukety',
+  '/akcii',
+  '/cvety',
+  '/povod',
+  '/dostavka',
+  '/o-nas',
+  '/kontakty',
+  '/oferta',
+  '/vozvrat',
+  '/privacy',
+] as const;
+
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const indexing = getIndexingPolicy();
