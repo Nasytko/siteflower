@@ -1,6 +1,7 @@
 import type { ProductPublicDto } from '@bouquet-one/contracts';
 import { buildJsonLd, type JsonLd } from './json-ld';
 import { absoluteUrl } from './site-url';
+import { pickDerivativeUrl } from '@/lib/media';
 
 function mapAvailability(availability: ProductPublicDto['availability']): string {
   switch (availability) {
@@ -23,7 +24,9 @@ function mapAvailability(availability: ProductPublicDto['availability']): string
  */
 export function buildProductJsonLd(product: ProductPublicDto): JsonLd {
   const url = absoluteUrl(`/bukety/${product.slug}`);
-  const images = product.media.map((m) => m.url).filter(Boolean);
+  const images = product.media
+    .map((m) => pickDerivativeUrl(m, 1200) ?? m.url)
+    .filter(Boolean);
   const activeVariants = product.variants;
   const effectiveRange = product.promotion?.salePrice ?? product.price;
 

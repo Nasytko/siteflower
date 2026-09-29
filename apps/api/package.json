@@ -16,6 +16,10 @@
     "admin:reset-password": "tsx scripts/admin-reset-password.ts",
     "seed:dev-catalog": "tsx scripts/seed-dev-catalog.ts",
     "compliance:check": "tsx scripts/compliance-check.ts",
+    "media:check": "tsx scripts/media-check.ts",
+    "media:cleanup": "tsx scripts/media-cleanup.ts",
+    "media:repair": "tsx scripts/media-repair.ts",
+    "media:migrate-local-to-s3": "tsx scripts/media-migrate-local-to-s3.ts",
     "worker": "node dist/worker-main.js",
     "worker:dev": "tsx src/worker-main.ts",
     "clean": "rimraf dist"

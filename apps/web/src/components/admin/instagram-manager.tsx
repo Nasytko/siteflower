@@ -167,7 +167,7 @@ export function InstagramManager({ initial, profileUrl, canUpdate }: Props) {
               }`}
             >
               <div className="relative aspect-[4/5] bg-[var(--color-surface-muted)]">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
+                {/* External Instagram CDN — plain img is intentional */}
                 <img
                   src={toSameOriginMediaUrl(post.imageUrl) ?? post.imageUrl}
                   alt={post.caption ?? ''}

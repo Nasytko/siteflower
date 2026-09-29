@@ -26,7 +26,7 @@ Merchandising model: [catalog-simplification-and-merchandising.md](./catalog-sim
 | Каталог | Товары, Цветы, Цвета, Размеры, Линейки, Поводы, Кому |
 | Продвижение | Акции, Бестселлеры, Instagram, Главная |
 | Магазин | Получение и доставка, Настройки, Юридическая информация, ERP |
-| Управление | Пользователи, Аудит |
+| Управление | Пользователи, Аудит, Медиа / Site Health |
 
 Category, Style, and Collections admin UIs were removed; do not reintroduce them.
 
@@ -37,7 +37,7 @@ Category, Style, and Collections admin UIs were removed; do not reintroduce them
 - Customer accounts
 - MFA / email password reset
 - Custom roles editor
-- Site Health dashboard (future; not implemented)
+- Site Health dashboard includes media diagnostics at `/admin/media-health` (SITE_HEALTH_READ)
 
 ## Rules
 

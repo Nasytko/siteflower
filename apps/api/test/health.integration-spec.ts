@@ -1,35 +1,23 @@
 import { INestApplication, ValidationPipe } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import request from 'supertest';
-import { AppModule } from '../src/app.module';
 import { requestIdMiddleware } from '../src/common/middleware/request-id.middleware';
-import { PrismaService } from '../src/database/prisma.service';
+import { AppConfigModule } from '../src/config/app-config.module';
+import { HealthModule } from '../src/health/health.module';
 
 describe('Health (integration)', () => {
   let app: INestApplication;
 
   beforeAll(async () => {
     process.env.NODE_ENV = 'test';
-    process.env.DATABASE_URL =
-      process.env.DATABASE_URL ??
-      'postgresql://bouquet:bouquet_dev_password@localhost:5433/bouquet_one?schema=public';
     process.env.CORS_ORIGINS = 'http://localhost:3000';
     process.env.SWAGGER_ENABLED = 'false';
     process.env.TRUST_PROXY = 'false';
     process.env.SESSION_HMAC_SECRET = 'test-session-hmac-secret';
 
     const moduleRef = await Test.createTestingModule({
-      imports: [AppModule],
-    })
-      .overrideProvider(PrismaService)
-      .useValue({
-        onModuleInit: async () => undefined,
-        onModuleDestroy: async () => undefined,
-        get client() {
-          return {};
-        },
-      })
-      .compile();
+      imports: [AppConfigModule, HealthModule],
+    }).compile();
 
     app = moduleRef.createNestApplication();
     app.use(requestIdMiddleware);

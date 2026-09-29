@@ -20,6 +20,10 @@ import type { ActorContext } from '../common/actor.util';
 import { AppConfigService } from '../config/app-config.service';
 import { PrismaService } from '../database/prisma.service';
 import { MediaService } from '../media/media.service';
+import {
+  LIST_IMAGE_TARGET_WIDTH,
+  pickDerivativeStorageUrl,
+} from '../media/media-url.util';
 import { activeVariantPrices, OCC_CONFLICT_MESSAGE } from './catalog.logic';
 import {
   PRODUCT_INCLUDE,
@@ -276,7 +280,18 @@ export class PromotionsService {
       slug: product.slug,
       name: product.name,
       lifecycle: product.lifecycle,
-      primaryImageUrl: primary ? this.urlFor(primary.mediaAsset.storageKey) : null,
+      primaryImageUrl: primary
+        ? pickDerivativeStorageUrl(
+            primary.mediaAsset.storageKey,
+            primary.mediaAsset.derivatives.map((d) => ({
+              width: d.width,
+              format: d.format,
+              storageKey: d.storageKey,
+            })),
+            this.urlFor,
+            LIST_IMAGE_TARGET_WIDTH,
+          )
+        : null,
       price: activeVariantPrices(product.currency, product.variants),
       promotion,
       status: statusOf(promotion, now),

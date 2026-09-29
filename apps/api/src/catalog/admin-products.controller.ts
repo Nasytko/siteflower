@@ -16,11 +16,13 @@ import {
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { ApiTags } from '@nestjs/swagger';
+import { Throttle } from '@nestjs/throttler';
 import type { Request } from 'express';
 import { memoryStorage } from 'multer';
 import { CurrentAdmin, type AuthenticatedAdmin } from '../auth/current-admin.decorator';
 import { RequirePermissions } from '../auth/decorators';
 import { actorFrom } from '../common/actor.util';
+import { MEDIA_UPLOAD_THROTTLE } from '../media/media.constants';
 import {
   CreateProductDto,
   ExpectedVersionDto,
@@ -193,7 +195,13 @@ export class AdminProductsController {
 
   @Post(':id/media')
   @RequirePermissions('CATALOG_UPDATE')
-  @UseInterceptors(FileInterceptor('file', { storage: memoryStorage() }))
+  @Throttle({ default: { limit: MEDIA_UPLOAD_THROTTLE.limit, ttl: MEDIA_UPLOAD_THROTTLE.ttl } })
+  @UseInterceptors(
+    FileInterceptor('file', {
+      storage: memoryStorage(),
+      limits: { fileSize: 8_000_000, files: 1 },
+    }),
+  )
   addMedia(
     @Param('id', ParseUUIDPipe) id: string,
     @UploadedFile() file: Express.Multer.File | undefined,

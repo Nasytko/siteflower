@@ -134,6 +134,8 @@ export const adminEndpoints = {
   integrationErpTestConnection: `${ADMIN}/integrations/erp/test-connection`,
   integrationErpTestEvent: `${ADMIN}/integrations/erp/test-event`,
   integrationErpEnabled: `${ADMIN}/integrations/erp/enabled`,
+  mediaHealth: `${ADMIN}/media/health`,
+  mediaHealthProbe: `${ADMIN}/media/health/probe`,
 } as const;
 
 /** URL segment: ORDER_TERMS → order_terms */

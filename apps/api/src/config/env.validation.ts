@@ -36,6 +36,8 @@ export const envSchema = z
     MEDIA_LOCAL_ROOT: z.string().default('./storage/media'),
     MEDIA_PUBLIC_BASE_URL: z.string().default('http://localhost:3001/api/v1/media'),
     MEDIA_MAX_BYTES: z.coerce.number().int().positive().default(8_000_000),
+    /** Explicit opt-in for temporary/emergency local media in production. Prefer S3. */
+    ALLOW_PRODUCTION_LOCAL_MEDIA: booleanFromString.default(false),
     S3_ENDPOINT: z.string().optional(),
     S3_REGION: z.string().default('auto'),
     S3_BUCKET: z.string().optional(),
@@ -105,6 +107,16 @@ export const envSchema = z
         });
       }
     }
+    if (env.NODE_ENV === 'production') {
+      if (env.MEDIA_STORAGE === 'local' && !env.ALLOW_PRODUCTION_LOCAL_MEDIA) {
+        ctx.addIssue({
+          code: 'custom',
+          path: ['MEDIA_STORAGE'],
+          message:
+            'MEDIA_STORAGE=local is not allowed in production unless ALLOW_PRODUCTION_LOCAL_MEDIA=true (prefer S3)',
+        });
+      }
+    }
     if (env.MEDIA_STORAGE === 's3') {
       if (!env.S3_BUCKET || !env.S3_ACCESS_KEY_ID || !env.S3_SECRET_ACCESS_KEY) {
         ctx.addIssue({
@@ -112,6 +124,14 @@ export const envSchema = z
           path: ['S3_BUCKET'],
           message:
             'S3_BUCKET, S3_ACCESS_KEY_ID, and S3_SECRET_ACCESS_KEY are required when MEDIA_STORAGE=s3',
+        });
+      }
+      if (!env.S3_PUBLIC_BASE_URL && !env.MEDIA_PUBLIC_BASE_URL) {
+        ctx.addIssue({
+          code: 'custom',
+          path: ['S3_PUBLIC_BASE_URL'],
+          message:
+            'S3_PUBLIC_BASE_URL (or MEDIA_PUBLIC_BASE_URL) is required when MEDIA_STORAGE=s3',
         });
       }
     }

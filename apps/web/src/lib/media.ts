@@ -39,6 +39,13 @@ export function pickDerivativeUrl(
   return sorted.find((d) => d.width >= targetWidth)?.url ?? sorted.at(-1)?.url ?? media.url;
 }
 
+/** Meaningful alt for product photos — never SEO-spam keywords. */
+export function productImageAlt(productName: string, alt: string | null | undefined): string {
+  const trimmed = alt?.trim();
+  if (trimmed) return trimmed;
+  return `Букет «${productName}»`;
+}
+
 export function formatPriceFromMinor(amountMinor: string, currency = 'BYN'): string {
   // Shared BYN display — single implementation lives in @bouquet-one/contracts.
   return formatPriceFromMinorContract(amountMinor, currency);

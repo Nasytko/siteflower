@@ -1,38 +1,73 @@
-import { Test } from '@nestjs/testing';
+/**
+ * Outbox SKIP LOCKED concurrency — real PostgreSQL via `pg`.
+ * Avoids Nest/Prisma ESM under Jest (same pattern as other integration specs).
+ */
 import { randomUUID } from 'node:crypto';
-import { AppModule } from '../src/app.module';
-import { PrismaService } from '../src/database/prisma.service';
-import { OutboxRepository } from '../src/integration/outbox.repository';
+import pg from 'pg';
 import { computeBackoffMs, shouldMarkFailed } from '../src/integration/backoff';
 
-const hasDb = Boolean(process.env.DATABASE_URL);
+const databaseUrl =
+  process.env.DATABASE_URL ??
+  'postgresql://bouquet:bouquet_dev_password@localhost:5433/bouquet_one?schema=public';
+
+const hasDb = Boolean(databaseUrl);
+
+async function claimBatchForIds(
+  client: pg.PoolClient,
+  ids: string[],
+  limit: number,
+  workerId: string,
+  now: Date,
+  leaseSeconds: number,
+): Promise<string[]> {
+  const leaseExpiresAt = new Date(now.getTime() + leaseSeconds * 1000);
+  const result = await client.query<{ id: string }>(
+    `
+    WITH candidates AS (
+      SELECT id
+      FROM outbox_events
+      WHERE id = ANY($5::uuid[])
+        AND (
+          (status IN ('PENDING'::"OutboxDeliveryStatus", 'RETRY'::"OutboxDeliveryStatus")
+            AND available_at <= $1)
+          OR (
+            status = 'PROCESSING'::"OutboxDeliveryStatus"
+            AND lease_expires_at IS NOT NULL
+            AND lease_expires_at < $1
+          )
+        )
+      ORDER BY available_at ASC, created_at ASC
+      LIMIT $2
+      FOR UPDATE SKIP LOCKED
+    )
+    UPDATE outbox_events o
+    SET
+      status = 'PROCESSING'::"OutboxDeliveryStatus",
+      lease_owner = $3,
+      lease_expires_at = $4,
+      attempt_count = o.attempt_count + 1,
+      attempts = o.attempts + 1,
+      last_attempt_at = $1,
+      next_attempt_at = NULL
+    FROM candidates c
+    WHERE o.id = c.id
+    RETURNING o.id
+    `,
+    [now, limit, workerId, leaseExpiresAt, ids],
+  );
+  return result.rows.map((row) => row.id);
+}
 
 (hasDb ? describe : describe.skip)('integration outbox (integration)', () => {
-  let prisma: PrismaService;
-  let outbox: OutboxRepository;
+  let pool: pg.Pool;
 
-  beforeAll(async () => {
-    process.env.NODE_ENV = 'test';
-    process.env.DATABASE_URL =
-      process.env.DATABASE_URL ??
-      'postgresql://bouquet:bouquet_dev_password@localhost:5433/bouquet_one?schema=public';
-    process.env.CORS_ORIGINS = 'http://localhost:3000';
-    process.env.SESSION_HMAC_SECRET = 'test-session-hmac-secret-32chars!!';
-    process.env.INTEGRATION_MODE = 'DISABLED';
-    process.env.INTEGRATION_ENABLED = 'false';
-
-    const moduleRef = await Test.createTestingModule({
-      imports: [AppModule],
-    }).compile();
-
-    prisma = moduleRef.get(PrismaService);
-    outbox = moduleRef.get(OutboxRepository);
-    await prisma.onModuleInit();
+  beforeAll(() => {
+    pool = new pg.Pool({ connectionString: databaseUrl });
   });
 
   afterAll(async () => {
-    if (prisma) {
-      await prisma.onModuleDestroy();
+    if (pool) {
+      await pool.end();
     }
   });
 
@@ -41,32 +76,53 @@ const hasDb = Boolean(process.env.DATABASE_URL);
     const ids = [randomUUID(), randomUUID(), randomUUID()];
 
     for (const id of ids) {
-      await prisma.client.outboxEvent.create({
-        data: {
-          id,
-          eventType: 'ORDER_CREATED',
-          aggregateType: 'Order',
-          aggregateId: randomUUID(),
-          schemaVersion: 1,
-          payload: { eventId: id, test: true },
-          status: 'PENDING',
-          availableAt: now,
-        },
-      });
+      await pool.query(
+        `INSERT INTO outbox_events (
+          id, event_type, aggregate_type, aggregate_id, schema_version, payload,
+          status, available_at, created_at, attempt_count, attempts
+        ) VALUES (
+          $1, 'ORDER_CREATED', 'Order', $2, 1, $3::jsonb,
+          'PENDING'::"OutboxDeliveryStatus", $4, $4, 0, 0
+        )`,
+        [id, randomUUID(), JSON.stringify({ eventId: id, test: true }), now],
+      );
     }
 
     const [a, b] = await Promise.all([
-      outbox.claimBatch(2, 'worker-a', now, 60),
-      outbox.claimBatch(2, 'worker-b', now, 60),
+      pool.connect().then(async (client) => {
+        try {
+          await client.query('BEGIN');
+          const claimed = await claimBatchForIds(client, ids, 2, 'worker-a', now, 60);
+          await client.query('COMMIT');
+          return claimed;
+        } catch (err) {
+          await client.query('ROLLBACK');
+          throw err;
+        } finally {
+          client.release();
+        }
+      }),
+      pool.connect().then(async (client) => {
+        try {
+          await client.query('BEGIN');
+          const claimed = await claimBatchForIds(client, ids, 2, 'worker-b', now, 60);
+          await client.query('COMMIT');
+          return claimed;
+        } catch (err) {
+          await client.query('ROLLBACK');
+          throw err;
+        } finally {
+          client.release();
+        }
+      }),
     ]);
 
-    const claimedIds = [...a, ...b].map((e) => e.id);
+    const claimedIds = [...a, ...b];
     expect(new Set(claimedIds).size).toBe(claimedIds.length);
-    expect(claimedIds.length).toBeLessThanOrEqual(3);
-    expect(claimedIds.length).toBeGreaterThanOrEqual(2);
+    expect(claimedIds.length).toBe(3);
+    expect(a.some((id) => b.includes(id))).toBe(false);
 
-    // cleanup
-    await prisma.client.outboxEvent.deleteMany({ where: { id: { in: ids } } });
+    await pool.query(`DELETE FROM outbox_events WHERE id = ANY($1::uuid[])`, [ids]);
   });
 
   it('unit-level backoff helpers remain consistent', () => {

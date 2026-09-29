@@ -61,7 +61,7 @@ export function InstagramSection({ feed, heading }: Props) {
                 />
               ) : (
                 // External curated URLs — avoid next/image host allowlist friction.
-                // eslint-disable-next-line @next/next/no-img-element
+                // External Instagram CDN — plain img is intentional
                 <img
                   src={post.imageUrl}
                   alt={post.caption || feed.brandName}

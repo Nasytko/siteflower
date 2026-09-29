@@ -1,36 +1,21 @@
 # Media
 
-## Architecture
+Index for media subsystem docs (no behavior changes here).
 
-`MediaStorage` port:
+| Doc | Purpose |
+| --- | --- |
+| [media-architecture.md](./media-architecture.md) | Storage port, pipeline, security, product gallery rules |
+| [media-production.md](./media-production.md) | Production delivery, S3 checklist, VPS notes |
+| [media-recovery.md](./media-recovery.md) | Consistency check, orphan cleanup, repair, incident playbooks |
 
-- `put` / `delete` / `getPublicUrl`
+## Quick ops
 
-Implementations:
+```bash
+pnpm media:check -- --probe
+pnpm media:cleanup            # dry-run
+pnpm media:cleanup -- --execute
+pnpm media:repair -- --execute
+pnpm media:migrate-local-to-s3
+```
 
-- **local** (default) — filesystem under `MEDIA_LOCAL_ROOT`, served at `MEDIA_PUBLIC_BASE_URL` (`/media/...`)
-- **s3** — S3-compatible (`S3_ENDPOINT`, bucket, keys); public/CDN base URL
-
-Business services never import the AWS SDK directly.
-
-## Upload security
-
-- Magic-byte MIME detection (`file-type`), not filename alone
-- Allowlist: JPEG, PNG, WebP, AVIF
-- Reject SVG
-- Max size: `MEDIA_MAX_BYTES` (default 8 MiB)
-- Generated storage keys (`masters/{uuid}.ext`) — no user paths
-
-## Processing
-
-On upload (synchronous for current scale):
-
-1. Store master (EXIF stripped)
-2. Derivatives widths **400 / 800 / 1200 / 1600** without upscaling
-3. Formats WebP + AVIF (AVIF skipped if encoder fails)
-
-Future: async worker queue if processing cost grows.
-
-## Product media
-
-`ProductMedia` links assets to products: sort order, primary flag (one primary per product via partial unique index), alt, caption.
+Local default: `MEDIA_STORAGE=local`. Production: `MEDIA_STORAGE=s3` (+ bucket credentials). Local production-mode boots only with `ALLOW_PRODUCTION_LOCAL_MEDIA=true`.

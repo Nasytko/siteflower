@@ -164,6 +164,9 @@ export function ProductEditor({
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [savedAt, setSavedAt] = useState<string | null>(null);
+  const [uploadStates, setUploadStates] = useState<
+    Array<{ name: string; status: 'uploading' | 'processing' | 'ready' | 'failed'; error: string | null }>
+  >([]);
 
   const [basic, setBasic] = useState({
     name: product.name,
@@ -455,7 +458,6 @@ export function ProductEditor({
     try {
       const form = new FormData();
       form.append('file', file);
-      form.append('expectedVersion', String(version));
       const updated = await adminUpload<ProductAdminDto>(
         adminEndpoints.productMedia(server.id),
         form,
@@ -465,8 +467,53 @@ export function ProductEditor({
       router.refresh();
     } catch (err) {
       setError(errorMessage(err, 'Не удалось загрузить фото'));
+      throw err;
     } finally {
       setPending(false);
+    }
+  }
+
+  async function onUploadMany(files: FileList | File[]) {
+    if (!canUpdate) return;
+    const list = Array.from(files);
+    if (list.length === 0) return;
+    const remaining = 12 - server.media.length;
+    if (remaining <= 0) {
+      setError('Достигнут лимит: 12 фотографий на товар');
+      return;
+    }
+    const batch = list.slice(0, remaining);
+    setUploadStates(
+      batch.map((file) => ({ name: file.name, status: 'uploading' as const, error: null })),
+    );
+    setError(null);
+    for (let i = 0; i < batch.length; i += 1) {
+      const file = batch[i]!;
+      setUploadStates((prev) =>
+        prev.map((row, idx) =>
+          idx === i ? { ...row, status: 'processing' as const } : row,
+        ),
+      );
+      try {
+        await onUpload(file);
+        setUploadStates((prev) =>
+          prev.map((row, idx) =>
+            idx === i ? { ...row, status: 'ready' as const } : row,
+          ),
+        );
+      } catch (err) {
+        setUploadStates((prev) =>
+          prev.map((row, idx) =>
+            idx === i
+              ? {
+                  ...row,
+                  status: 'failed' as const,
+                  error: errorMessage(err, 'Не удалось сохранить изображение'),
+                }
+              : row,
+          ),
+        );
+      }
     }
   }
 
@@ -477,7 +524,7 @@ export function ProductEditor({
     try {
       const updated = await adminPatch<ProductAdminDto>(
         adminEndpoints.productMediaItem(server.id, mediaId),
-        { expectedVersion: version, ...body },
+        { ...body },
       );
       setServer(updated);
       setVersion(updated.version);
@@ -491,12 +538,12 @@ export function ProductEditor({
 
   async function removeMedia(mediaId: string) {
     if (!canUpdate) return;
+    if (!window.confirm('Удалить фотографию из товара?')) return;
     setPending(true);
     setError(null);
     try {
       const updated = await adminDelete<ProductAdminDto>(
         adminEndpoints.productMediaItem(server.id, mediaId),
-        { expectedVersion: version },
       );
       setServer(updated);
       setVersion(updated.version);
@@ -523,7 +570,6 @@ export function ProductEditor({
       const updated = await adminPut<ProductAdminDto>(
         adminEndpoints.productMediaOrder(server.id),
         {
-          expectedVersion: version,
           mediaIds: ordered.map((item) => item.id),
         },
       );
@@ -803,95 +849,125 @@ export function ProductEditor({
 
       {section === 'photos' ? (
         <section className="admin-section">
-          <h2 className="admin-section__title">Фото</h2>
+          <h2 className="admin-section__title">Фотографии</h2>
+          <p className="admin-section__lead">
+            {server.media.length} из 12 фотографий. Главное фото показывается в каталоге и на карточке
+            товара.
+          </p>
           {canUpdate ? (
             <label className="admin-field">
-              <span>Загрузить фото</span>
+              <span>+ Добавить фотографии</span>
               <input
                 type="file"
                 accept="image/jpeg,image/png,image/webp,image/avif"
-                disabled={pending}
+                multiple
+                disabled={pending || server.media.length >= 12}
                 onChange={(event) => {
-                  const file = event.target.files?.[0];
-                  if (file) void onUpload(file);
+                  const files = event.target.files;
+                  if (files?.length) void onUploadMany(files);
                   event.target.value = '';
                 }}
               />
             </label>
           ) : null}
+          {uploadStates.length > 0 ? (
+            <ul className="admin-help mt-2 space-y-1">
+              {uploadStates.map((row) => (
+                <li key={`${row.name}-${row.status}`}>
+                  {row.name}:{' '}
+                  {row.status === 'uploading'
+                    ? 'загрузка…'
+                    : row.status === 'processing'
+                      ? 'обработка…'
+                      : row.status === 'ready'
+                        ? 'готово'
+                        : row.error ?? 'ошибка'}
+                </li>
+              ))}
+            </ul>
+          ) : null}
 
           {server.media.length === 0 ? (
             <p className="admin-empty">Фото пока нет. Без фото товар нельзя опубликовать.</p>
           ) : (
-            <ul className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-              {[...server.media]
-                .sort((a, b) => a.sortOrder - b.sortOrder)
-                .map((media, index, sorted) => (
-                  <li key={media.id} className="admin-media-card">
-                    <img
-                      src={toSameOriginMediaUrl(media.url) ?? media.url}
-                      alt={media.alt ?? ''}
-                      className="aspect-square w-full rounded-lg object-cover"
-                    />
-                    <label className="admin-field mt-2">
-                      <span>Описание фото (alt)</span>
-                      <input
-                        className="admin-input"
-                        defaultValue={media.alt ?? ''}
-                        disabled={!canUpdate}
-                        placeholder="Букет из розовых пионов"
-                        onBlur={(event) => {
-                          const value = event.target.value.trim();
-                          if (value === (media.alt ?? '')) return;
-                          void patchMedia(media.id, { alt: value.length > 0 ? value : null });
-                        }}
+            <>
+              <p className="admin-help mb-3">
+                Используйте стрелки, чтобы изменить порядок. Перетаскивание не обязательно.
+              </p>
+              <ul className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                {[...server.media]
+                  .sort((a, b) => a.sortOrder - b.sortOrder)
+                  .map((media, index, sorted) => (
+                    <li key={media.id} className="admin-media-card">
+                      <img
+                        src={toSameOriginMediaUrl(media.url) ?? media.url}
+                        alt={media.alt ?? ''}
+                        className="aspect-square w-full rounded-lg object-cover"
                       />
-                    </label>
-                    <div className="admin-row-actions mt-2">
-                      {media.isPrimary ? (
-                        <span className="admin-chip">Главное</span>
-                      ) : (
+                      <label className="admin-field mt-2">
+                        <span>Описание фото (alt)</span>
+                        <input
+                          className="admin-input"
+                          defaultValue={media.alt ?? ''}
+                          maxLength={300}
+                          disabled={!canUpdate}
+                          placeholder={`Букет «${server.name}»`}
+                          onBlur={(event) => {
+                            const value = event.target.value.trim();
+                            if (value === (media.alt ?? '')) return;
+                            void patchMedia(media.id, { alt: value.length > 0 ? value : null });
+                          }}
+                        />
+                      </label>
+                      <div className="admin-row-actions mt-2">
+                        {media.isPrimary ? (
+                          <span className="admin-chip">★ Главное</span>
+                        ) : (
+                          <button
+                            type="button"
+                            className="admin-btn-ghost"
+                            disabled={!canUpdate || pending}
+                            onClick={() => void patchMedia(media.id, { isPrimary: true })}
+                          >
+                            Сделать главным
+                          </button>
+                        )}
+                        <button
+                          type="button"
+                          className="admin-icon-btn"
+                          aria-label="Раньше"
+                          disabled={!canUpdate || pending || index === 0}
+                          onClick={() => void reorderMedia(media.id, -1)}
+                        >
+                          ↑
+                        </button>
+                        <button
+                          type="button"
+                          className="admin-icon-btn"
+                          aria-label="Позже"
+                          disabled={!canUpdate || pending || index === sorted.length - 1}
+                          onClick={() => void reorderMedia(media.id, 1)}
+                        >
+                          ↓
+                        </button>
                         <button
                           type="button"
                           className="admin-btn-ghost"
                           disabled={!canUpdate || pending}
-                          onClick={() => void patchMedia(media.id, { isPrimary: true })}
+                          onClick={() => void removeMedia(media.id)}
                         >
-                          Сделать главным
+                          Удалить
                         </button>
-                      )}
-                      <button
-                        type="button"
-                        className="admin-icon-btn"
-                        aria-label="Раньше"
-                        disabled={!canUpdate || pending || index === 0}
-                        onClick={() => void reorderMedia(media.id, -1)}
-                      >
-                        ↑
-                      </button>
-                      <button
-                        type="button"
-                        className="admin-icon-btn"
-                        aria-label="Позже"
-                        disabled={!canUpdate || pending || index === sorted.length - 1}
-                        onClick={() => void reorderMedia(media.id, 1)}
-                      >
-                        ↓
-                      </button>
-                      <button
-                        type="button"
-                        className="admin-btn-ghost"
-                        disabled={!canUpdate || pending}
-                        onClick={() => void removeMedia(media.id)}
-                      >
-                        Удалить
-                      </button>
-                    </div>
-                  </li>
-                ))}
-            </ul>
+                      </div>
+                    </li>
+                  ))}
+              </ul>
+            </>
           )}
-          <p className="admin-help">Фото сохраняются сразу, отдельно от кнопки «Сохранить».</p>
+          <p className="admin-help">
+            Фото сохраняются сразу, отдельно от кнопки «Сохранить». Удаление убирает фото из товара;
+            файл в хранилище очищается позже служебной задачей.
+          </p>
         </section>
       ) : null}
 

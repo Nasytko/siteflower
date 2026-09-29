@@ -18,6 +18,7 @@ import { hashIp } from '../auth/crypto.util';
 import { AppConfigService } from '../config/app-config.service';
 import { PrismaService } from '../database/prisma.service';
 import { MediaService } from '../media/media.service';
+import { PRODUCT_MEDIA_MAX } from '../media/media.constants';
 import type { ActorContext } from '../common/actor.util';
 import { BestsellersService } from './bestsellers.service';
 import { BudgetRangesService } from './budget-ranges.service';
@@ -473,36 +474,56 @@ export class ProductsService {
     if (!product) {
       throw new NotFoundException('Product not found');
     }
+    if (product.media.length >= PRODUCT_MEDIA_MAX) {
+      throw new BadRequestException(
+        `Нельзя добавить больше ${PRODUCT_MEDIA_MAX} фотографий к одному товару`,
+      );
+    }
 
     const asset = await this.media.uploadImage(file.buffer, file.originalname);
     if (!asset) {
-      throw new BadRequestException('Image could not be stored');
+      throw new BadRequestException('Не удалось сохранить изображение. Попробуйте ещё раз.');
     }
     const isPrimary = input.isPrimary ?? product.media.length === 0;
+    const nextSort =
+      product.media.reduce((max, item) => Math.max(max, item.sortOrder), -1) + 1;
 
-    await this.prisma.client.$transaction(async (tx) => {
-      if (isPrimary) {
-        await tx.productMedia.updateMany({
-          where: { productId: id },
-          data: { isPrimary: false },
+    try {
+      await this.prisma.client.$transaction(async (tx) => {
+        // Re-check gallery limit inside the transaction to reduce races.
+        const count = await tx.productMedia.count({ where: { productId: id } });
+        if (count >= PRODUCT_MEDIA_MAX) {
+          throw new BadRequestException(
+            `Нельзя добавить больше ${PRODUCT_MEDIA_MAX} фотографий к одному товару`,
+          );
+        }
+        if (isPrimary) {
+          await tx.productMedia.updateMany({
+            where: { productId: id },
+            data: { isPrimary: false },
+          });
+        }
+        await tx.productMedia.create({
+          data: {
+            productId: id,
+            mediaAssetId: asset.id,
+            sortOrder: nextSort,
+            isPrimary,
+            alt: input.alt ? trimmedOrNull(input.alt) : null,
+            caption: input.caption ? trimmedOrNull(input.caption) : null,
+          },
         });
-      }
-      await tx.productMedia.create({
-        data: {
-          productId: id,
+        await this.products.bumpVersion(id, tx);
+        await this.recordAudit(tx, actor, 'PRODUCT_MEDIA_ADDED', id, {
           mediaAssetId: asset.id,
-          sortOrder: product.media.length,
           isPrimary,
-          alt: input.alt ? trimmedOrNull(input.alt) : null,
-          caption: input.caption ? trimmedOrNull(input.caption) : null,
-        },
+        });
       });
-      await this.products.bumpVersion(id, tx);
-      await this.recordAudit(tx, actor, 'PRODUCT_MEDIA_ADDED', id, {
-        mediaAssetId: asset.id,
-        isPrimary,
-      });
-    });
+    } catch (err) {
+      // Asset is already persisted; orphan cleanup will reclaim if never linked.
+      if (err instanceof BadRequestException) throw err;
+      throw err;
+    }
 
     return this.getById(id);
   }
@@ -556,13 +577,26 @@ export class ProductsService {
     }
 
     await this.prisma.client.$transaction(async (tx) => {
+      // Detach association only — MediaAsset stays until orphan grace cleanup.
       await tx.productMedia.delete({ where: { id: mediaId } });
-      const next = product.media.find((item) => item.id !== mediaId);
-      if (media.isPrimary && next) {
-        await tx.productMedia.update({ where: { id: next.id }, data: { isPrimary: true } });
+      if (media.isPrimary) {
+        const remaining = await tx.productMedia.findMany({
+          where: { productId: id },
+          orderBy: { sortOrder: 'asc' },
+          take: 1,
+        });
+        if (remaining[0]) {
+          await tx.productMedia.update({
+            where: { id: remaining[0].id },
+            data: { isPrimary: true },
+          });
+        }
       }
       await this.products.bumpVersion(id, tx);
-      await this.recordAudit(tx, actor, 'PRODUCT_MEDIA_REMOVED', id, { mediaId });
+      await this.recordAudit(tx, actor, 'PRODUCT_MEDIA_REMOVED', id, {
+        mediaId,
+        mediaAssetId: media.mediaAssetId,
+      });
     });
 
     return this.getById(id);

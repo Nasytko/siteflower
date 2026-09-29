@@ -31,6 +31,7 @@ import {
   type PromotionType,
   type VariantStatus,
 } from '@bouquet-one/contracts';
+import { MEDIA_ALT_MAX_LENGTH, PRODUCT_MEDIA_MAX } from '../media/media.constants';
 
 const PRICE_MINOR_PATTERN = /^\d{1,15}$/;
 const CURRENCY_PATTERN = /^[A-Z]{3}$/;
@@ -386,7 +387,7 @@ export class PublishProductDto extends ExpectedVersionDto {
 export class UploadProductMediaDto {
   @IsOptional()
   @IsString()
-  @MaxLength(300)
+  @MaxLength(MEDIA_ALT_MAX_LENGTH)
   alt?: string;
 
   @IsOptional()
@@ -398,12 +399,19 @@ export class UploadProductMediaDto {
   @Transform(toOptionalBoolean)
   @IsBoolean()
   isPrimary?: boolean;
+
+  /** Accepted for Admin FormData compatibility; media mutations do not enforce OCC. */
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  expectedVersion?: number;
 }
 
 export class UpdateProductMediaDto {
   @IsOptional()
   @IsString()
-  @MaxLength(300)
+  @MaxLength(MEDIA_ALT_MAX_LENGTH)
   alt?: string;
 
   @IsOptional()
@@ -420,13 +428,25 @@ export class UpdateProductMediaDto {
   @Min(0)
   @Max(9999)
   sortOrder?: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  expectedVersion?: number;
 }
 
 export class ReorderProductMediaDto {
   @IsArray()
-  @ArrayMaxSize(50)
+  @ArrayMaxSize(PRODUCT_MEDIA_MAX)
   @IsUUID(undefined, { each: true })
   mediaIds!: string[];
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  expectedVersion?: number;
 }
 
 /** Facet filters shared by admin and public product lists (OR within, AND across). */

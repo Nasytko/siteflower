@@ -15,7 +15,10 @@ Use before first production deploy. Do not claim a row is done unless verified i
 - [ ] `ALLOW_DEV_CATALOG_SEED` never set
 - [ ] `ALLOW_INDEXING` intentional for the environment
 - [ ] `NEXT_PUBLIC_SITE_URL` / public URLs are HTTPS in production
-- [ ] Media: S3 credentials or locked-down local volume; no public write
+- [ ] Media: `MEDIA_STORAGE=s3` (or documented `ALLOW_PRODUCTION_LOCAL_MEDIA` emergency override)
+- [ ] Media: Admin → Медиа / Site Health → Проверить хранилище succeeds
+- [ ] Media: `pnpm media:check` has no missing masters / multi-primary
+- [ ] Media: Postgres backup + object-storage durability both documented
 
 ## Bootstrap
 

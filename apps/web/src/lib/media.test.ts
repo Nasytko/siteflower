@@ -41,3 +41,9 @@ test('toSameOriginMediaUrl rewrites absolute media URLs to path-only', () => {
   assert.equal(toSameOriginMediaUrl('https://cdn.example/img.jpg'), 'https://cdn.example/img.jpg');
   assert.equal(toSameOriginMediaUrl(null), null);
 });
+
+test('productImageAlt uses product name without SEO spam', async () => {
+  const { productImageAlt } = await import('./media');
+  assert.equal(productImageAlt('Амели', null), 'Букет «Амели»');
+  assert.equal(productImageAlt('Амели', '  Пионы  '), 'Пионы');
+});

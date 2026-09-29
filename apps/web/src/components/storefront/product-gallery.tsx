@@ -3,7 +3,7 @@
 import Image from 'next/image';
 import { useState } from 'react';
 import type { ProductPublicDto } from '@bouquet-one/contracts';
-import { pickDerivativeUrl } from '@/lib/media';
+import { pickDerivativeUrl, productImageAlt } from '@/lib/media';
 import { HeightRuler } from './height-ruler';
 
 type MediaItem = ProductPublicDto['media'][number];
@@ -72,7 +72,7 @@ export function ProductGallery({
             >
               <Image
                 src={src}
-                alt={item.alt ?? productName}
+                alt={productImageAlt(productName, item.alt)}
                 fill
                 sizes="85vw"
                 className="object-cover"
@@ -127,7 +127,7 @@ export function ProductGallery({
             {active ? (
               <Image
                 src={pickDerivativeUrl(active, 1200) ?? active.url}
-                alt={active.alt ?? productName}
+                alt={productImageAlt(productName, active.alt)}
                 fill
                 sizes="(max-width: 1024px) 50vw, 40vw"
                 className="object-cover"

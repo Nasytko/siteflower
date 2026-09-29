@@ -50,7 +50,7 @@ export default function AdminLoginForm() {
           <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[var(--admin-muted,#5f6b67)]">
             Админ-панель
           </p>
-          {/* eslint-disable-next-line @next/next/no-img-element */}
+          {/* Admin login brand mark — plain img is intentional */}
           <img
             src="/brand/logo.png"
             alt="BUKET №1"

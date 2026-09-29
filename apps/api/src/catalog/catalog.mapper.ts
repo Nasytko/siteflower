@@ -29,6 +29,10 @@ import {
 } from '@bouquet-one/contracts';
 import { activeVariantPrices } from './catalog.logic';
 import {
+  LIST_IMAGE_TARGET_WIDTH,
+  pickDerivativeStorageUrl,
+} from '../media/media-url.util';
+import {
   buildPublicPromotionDto,
   effectiveVariantPriceMinor,
   isPromotionEffective,
@@ -438,7 +442,18 @@ export function toProductListItemDto(
       now,
     ),
     defaultVariant: defaultVariantForList(product, now),
-    primaryImageUrl: primary ? urlFor(primary.mediaAsset.storageKey) : null,
+    primaryImageUrl: primary
+      ? pickDerivativeStorageUrl(
+          primary.mediaAsset.storageKey,
+          primary.mediaAsset.derivatives.map((d) => ({
+            width: d.width,
+            format: d.format,
+            storageKey: d.storageKey,
+          })),
+          urlFor,
+          LIST_IMAGE_TARGET_WIDTH,
+        )
+      : null,
     flowers: derivedFlowers(product),
     colors: product.colors.map((link) => toTaxonomyRef(link.color)),
     productLines: product.productLines.map((link) => toTaxonomyRef(link.productLine)),

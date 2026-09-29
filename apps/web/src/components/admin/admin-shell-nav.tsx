@@ -63,6 +63,7 @@ const NAV_GROUPS: NavGroup[] = [
     items: [
       { href: '/admin/users', label: 'Пользователи', permission: 'USERS_READ' },
       { href: '/admin/audit', label: 'Аудит', permission: 'AUDIT_READ' },
+      { href: '/admin/media-health', label: 'Медиа / Site Health', permission: 'SITE_HEALTH_READ' },
     ],
   },
 ];

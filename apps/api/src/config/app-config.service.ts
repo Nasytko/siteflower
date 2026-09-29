@@ -134,6 +134,10 @@ export class AppConfigService {
     return this.config.get('MEDIA_MAX_BYTES', { infer: true });
   }
 
+  get allowProductionLocalMedia(): boolean {
+    return this.config.get('ALLOW_PRODUCTION_LOCAL_MEDIA', { infer: true });
+  }
+
   get s3Endpoint(): string | undefined {
     return this.config.get('S3_ENDPOINT', { infer: true });
   }

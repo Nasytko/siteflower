@@ -68,6 +68,12 @@ export default defineConfig({
         LOG_LEVEL: 'error',
         SESSION_HMAC_SECRET: e2eSessionHmac,
         ORDER_RECOVERY_ENCRYPTION_KEY: e2eRecoveryKey,
+        // Local E2E uses filesystem media; production still requires S3 unless explicitly opted in.
+        ALLOW_PRODUCTION_LOCAL_MEDIA: 'true',
+        MEDIA_STORAGE: process.env.MEDIA_STORAGE ?? 'local',
+        MEDIA_LOCAL_ROOT: process.env.MEDIA_LOCAL_ROOT ?? './storage/media',
+        MEDIA_PUBLIC_BASE_URL:
+          process.env.MEDIA_PUBLIC_BASE_URL ?? `${apiUrl}/api/v1/media`,
       },
     },
     {
@@ -83,6 +89,10 @@ export default defineConfig({
         API_URL: apiUrl,
         // Local seed media uses 127.0.0.1/localhost; Next/Image blocks private IPs in production unless opted in.
         ALLOW_LOCAL_IMAGE_IP: 'true',
+        REVALIDATE_SECRET:
+          process.env.REVALIDATE_SECRET && process.env.REVALIDATE_SECRET.length >= 16
+            ? process.env.REVALIDATE_SECRET
+            : 'e2e-only-revalidate-secret',
       },
     },
   ],

@@ -18,6 +18,7 @@ import {
 import { serializeJsonLd } from '@/lib/seo/json-ld';
 import { buildPageMetadata } from '@/lib/seo/metadata';
 import { buildBreadcrumbJsonLd, buildProductJsonLd } from '@/lib/seo/product-json-ld';
+import { pickDerivativeUrl } from '@/lib/media';
 
 type Params = Promise<{ slug: string }>;
 
@@ -26,7 +27,8 @@ export async function generateMetadata({ params }: { params: Params }): Promise<
   try {
     const resolved = await getProductBySlug(slug);
     const product = resolved.product;
-    const image = product.media.find((m) => m.isPrimary)?.url ?? product.media[0]?.url;
+    const primary = product.media.find((m) => m.isPrimary) ?? product.media[0];
+    const image = primary ? pickDerivativeUrl(primary, 1200) ?? primary.url : undefined;
     return buildPageMetadata({
       title: product.seo.resolvedTitle,
       description: product.seo.resolvedDescription,

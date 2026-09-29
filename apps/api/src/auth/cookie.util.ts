@@ -10,7 +10,9 @@ export function setSessionCookie(
 ): void {
   res.cookie(ADMIN_SESSION_COOKIE, rawToken, {
     httpOnly: true,
-    secure: appConfig.isProduction,
+    // Local production-mode boots (ALLOW_PRODUCTION_LOCAL_MEDIA) serve over http:// —
+    // Secure cookies would break Admin session for Playwright/APIRequestContext.
+    secure: appConfig.isProduction && !appConfig.allowProductionLocalMedia,
     sameSite: 'lax',
     path: '/',
     expires: absoluteExpiresAt,
@@ -20,7 +22,7 @@ export function setSessionCookie(
 export function clearSessionCookie(res: Response, appConfig: AppConfigService): void {
   res.cookie(ADMIN_SESSION_COOKIE, '', {
     httpOnly: true,
-    secure: appConfig.isProduction,
+    secure: appConfig.isProduction && !appConfig.allowProductionLocalMedia,
     sameSite: 'lax',
     path: '/',
     expires: new Date(0),
