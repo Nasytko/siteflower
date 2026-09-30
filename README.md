@@ -94,7 +94,7 @@ RUN_VISUAL_QA=true PLAYWRIGHT_USE_SYSTEM_CHROME=true pnpm exec playwright test e
 
 Local Docker remains **PostgreSQL only** (`docker compose up -d`).
 
-HostFly / Ubuntu production packaging (Nginx + Compose project `siteflower` + S3 media):
+HostFly / Ubuntu production packaging (Nginx + Compose project `shopbuket1` + S3 media):
 
 - Runbook: [docs/deployment-hostfly.md](docs/deployment-hostfly.md)
 - First install: `sudo ./install.sh`

@@ -55,8 +55,8 @@ Full HostFly VPS runbook: [deployment-hostfly.md](./deployment-hostfly.md).
 ## HostFly / VPS packaging
 
 - [ ] `sudo ./install.sh` completed on Ubuntu 24.04
-- [ ] `/etc/siteflower/production.env` filled (S3 + domain); never committed
-- [ ] `./deploy.sh` healthy
+- [ ] `/etc/shopbuket1/production.env` filled (S3 + domain); never committed
+- [ ] `./deploy.sh` healthy (Compose project `shopbuket1`)
 - [ ] TLS via certbot after DNS
 - [ ] `./admin-create.sh` SUPER_ADMIN created
-- [ ] Confirmed scripts never prune foreign Docker volumes (NewERP-safe)
+- [ ] Confirmed scripts never prune `erpbuket1*` / foreign Docker volumes

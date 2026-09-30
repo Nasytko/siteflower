@@ -14,14 +14,13 @@ source "${SCRIPT_DIR}/deploy/lib/common.sh"
 
 main() {
   require_cmd docker
-  load_env_file "$SITEFLOWER_ENV_FILE"
+  load_env_file "$SHOPBUKET1_ENV_FILE"
   ensure_database_url
 
-  docker inspect siteflower-api >/dev/null 2>&1 \
-    || die "siteflower-api is not running — deploy first"
+  docker inspect shopbuket1-api >/dev/null 2>&1 \
+    || die "shopbuket1-api is not running — deploy first"
 
-  log "Launching interactive admin:create inside siteflower-api"
-  # -it for password prompt when supported by the existing script.
+  log "Launching interactive admin:create inside shopbuket1-api"
   if [[ -t 0 ]]; then
     compose exec -e "DATABASE_URL=${DATABASE_URL}" api \
       pnpm exec tsx scripts/admin-create.ts "$@"

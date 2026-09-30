@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# SiteFlower — PostgreSQL backup (custom format). Never touches S3 media.
+# shopbuket1 — PostgreSQL backup (custom format). Never touches S3 media or erpbuket1.
 # Usage:
 #   ./backup.sh
 #   ./backup.sh pre-migrate
@@ -17,16 +17,16 @@ fi
 
 main() {
   require_cmd docker
-  load_env_file "$SITEFLOWER_ENV_FILE"
+  load_env_file "$SHOPBUKET1_ENV_FILE"
   [[ -n "${POSTGRES_USER:-}" && -n "${POSTGRES_DB:-}" ]] || die "POSTGRES_USER/DB required"
 
-  mkdir -p "$SITEFLOWER_BACKUP_DIR"
-  chmod 750 "$SITEFLOWER_BACKUP_DIR" || true
+  mkdir -p "$SHOPBUKET1_BACKUP_DIR"
+  chmod 750 "$SHOPBUKET1_BACKUP_DIR" || true
 
   local stamp tmp final
   stamp="$(date -u +'%Y%m%dT%H%M%SZ')"
-  tmp="${SITEFLOWER_BACKUP_DIR}/.tmp-${stamp}-${LABEL}.dump"
-  final="${SITEFLOWER_BACKUP_DIR}/siteflower-${stamp}-${LABEL}.dump"
+  tmp="${SHOPBUKET1_BACKUP_DIR}/.tmp-${stamp}-${LABEL}.dump"
+  final="${SHOPBUKET1_BACKUP_DIR}/shopbuket1-${stamp}-${LABEL}.dump"
 
   umask 077
   log "Creating PostgreSQL dump ${final}"
@@ -42,17 +42,15 @@ main() {
 
   mv -f "$tmp" "$final"
   chmod 600 "$final"
-  chown root:siteflower "$final" 2>/dev/null || true
+  chown root:shopbuket1 "$final" 2>/dev/null || true
   log "Backup OK (${size} bytes): $final"
 
   local retain="${BACKUP_RETENTION_DAYS:-14}"
   if [[ "$retain" =~ ^[0-9]+$ ]] && [[ "$retain" -gt 0 ]]; then
-    find "$SITEFLOWER_BACKUP_DIR" -maxdepth 1 -type f -name 'siteflower-*.dump' -mtime "+${retain}" -delete \
+    find "$SHOPBUKET1_BACKUP_DIR" -maxdepth 1 -type f -name 'shopbuket1-*.dump' -mtime "+${retain}" -delete \
       || true
   fi
 
-  # Optional later: copy dump to a *separate* off-provider target.
-  # Do NOT treat HostFly media S3 as the only DR location for Postgres.
   if [[ -n "${BACKUP_S3_ENDPOINT:-}" ]]; then
     log "BACKUP_S3_ENDPOINT is set but upload helper is not enabled in this release (media S3 ≠ DB DR)."
   fi

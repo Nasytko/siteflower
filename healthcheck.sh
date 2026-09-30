@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# SiteFlower healthcheck — non-zero on failure (used by deploy/rollback).
+# shopbuket1 healthcheck — non-zero on failure (used by deploy/rollback).
 
 set -euo pipefail
 
@@ -22,6 +22,7 @@ check() {
 
 container_healthy() {
   local name="$1"
+  assert_shopbuket1_owned_name "$name" "container"
   local status
   status="$(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{else}}{{.State.Status}}{{end}}' "$name" 2>/dev/null || echo missing)"
   [[ "$status" == "healthy" || "$status" == "running" ]]
@@ -31,9 +32,9 @@ main() {
   require_cmd docker
   require_cmd curl
 
-  check "postgres container" container_healthy siteflower-postgres
-  check "api container" container_healthy siteflower-api
-  check "web container" container_healthy siteflower-web
+  check "postgres container" container_healthy shopbuket1-postgres
+  check "api container" container_healthy shopbuket1-api
+  check "web container" container_healthy shopbuket1-web
 
   check "api /api/v1/health" curl -fsS http://127.0.0.1:3001/api/v1/health >/dev/null
 

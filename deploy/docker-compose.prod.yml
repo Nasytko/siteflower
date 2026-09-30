@@ -1,24 +1,26 @@
-# SiteFlower production stack — isolated Compose project "siteflower".
+# shopbuket1 production stack — isolated Compose project (domain-neutral).
 # Usage (from repo root on the VPS):
-#   docker compose -p siteflower -f deploy/docker-compose.prod.yml --env-file /etc/siteflower/production.env up -d
+#   export SHOPBUKET1_ENV_FILE=/etc/shopbuket1/production.env
+#   docker compose -p shopbuket1 -f deploy/docker-compose.prod.yml --env-file "$SHOPBUKET1_ENV_FILE" up -d
 #
+# Sibling ERP stack uses project "erpbuket1" — never share volumes/networks.
 # Does NOT publish Postgres. API/Web bind to loopback only for host Nginx.
 
-name: siteflower
+name: shopbuket1
 
 services:
   postgres:
     image: postgres:17-alpine
-    container_name: siteflower-postgres
+    container_name: shopbuket1-postgres
     restart: unless-stopped
     environment:
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       POSTGRES_DB: ${POSTGRES_DB}
     volumes:
-      - siteflower_pgdata:/var/lib/postgresql/data
+      - shopbuket1_pgdata:/var/lib/postgresql/data
     networks:
-      - siteflower_internal
+      - shopbuket1_internal
     healthcheck:
       test: ['CMD-SHELL', 'pg_isready -U "$$POSTGRES_USER" -d "$$POSTGRES_DB"']
       interval: 5s
@@ -30,29 +32,27 @@ services:
       options:
         max-size: '20m'
         max-file: '5'
-    # No host ports — never expose 5432 publicly or on the host.
 
   api:
-    image: ${SITEFLOWER_API_IMAGE:-siteflower-api:local}
+    image: ${SHOPBUKET1_API_IMAGE:-shopbuket1-api:local}
     build:
       context: ..
       dockerfile: deploy/Dockerfile.api
-    container_name: siteflower-api
+    container_name: shopbuket1-api
     restart: unless-stopped
     depends_on:
       postgres:
         condition: service_healthy
     env_file:
-      - ${SITEFLOWER_ENV_FILE:?Set SITEFLOWER_ENV_FILE to the absolute production env path}
+      - ${SHOPBUKET1_ENV_FILE:?Set SHOPBUKET1_ENV_FILE to the absolute production env path}
     environment:
       NODE_ENV: production
       API_PORT: '3001'
-      # DATABASE_URL must come from the env file and use Docker DNS host "postgres"
-      # (never interpolate passwords here — special characters break URLs).
+      # DATABASE_URL must come from the env file and use Docker DNS host "postgres".
     ports:
       - '127.0.0.1:3001:3001'
     networks:
-      - siteflower_internal
+      - shopbuket1_internal
     healthcheck:
       test: ['CMD-SHELL', 'curl -fsS http://127.0.0.1:3001/api/v1/health >/dev/null || exit 1']
       interval: 20s
@@ -68,7 +68,7 @@ services:
     mem_reservation: 512m
 
   web:
-    image: ${SITEFLOWER_WEB_IMAGE:-siteflower-web:local}
+    image: ${SHOPBUKET1_WEB_IMAGE:-shopbuket1-web:local}
     build:
       context: ..
       dockerfile: deploy/Dockerfile.web
@@ -77,13 +77,13 @@ services:
         NEXT_PUBLIC_SITE_URL: ${NEXT_PUBLIC_SITE_URL}
         S3_PUBLIC_BASE_URL: ${S3_PUBLIC_BASE_URL:-}
         MEDIA_PUBLIC_BASE_URL: ${MEDIA_PUBLIC_BASE_URL:-}
-    container_name: siteflower-web
+    container_name: shopbuket1-web
     restart: unless-stopped
     depends_on:
       api:
         condition: service_healthy
     env_file:
-      - ${SITEFLOWER_ENV_FILE:?Set SITEFLOWER_ENV_FILE to the absolute production env path}
+      - ${SHOPBUKET1_ENV_FILE:?Set SHOPBUKET1_ENV_FILE to the absolute production env path}
     environment:
       NODE_ENV: production
       API_URL: http://api:3001
@@ -92,7 +92,7 @@ services:
     ports:
       - '127.0.0.1:3000:3000'
     networks:
-      - siteflower_internal
+      - shopbuket1_internal
     healthcheck:
       test: ['CMD-SHELL', 'curl -fsS http://127.0.0.1:3000/ >/dev/null || exit 1']
       interval: 20s
@@ -107,12 +107,12 @@ services:
     mem_limit: 1024m
     mem_reservation: 384m
 
-  # Optional ERP/simulator outbox worker. Enable with:
-  #   docker compose -p siteflower -f deploy/docker-compose.prod.yml --profile integrations up -d
+  # Optional ERP/simulator outbox worker:
+  #   docker compose -p shopbuket1 -f deploy/docker-compose.prod.yml --profile integrations up -d
   worker:
     profiles: ['integrations']
-    image: ${SITEFLOWER_API_IMAGE:-siteflower-api:local}
-    container_name: siteflower-worker
+    image: ${SHOPBUKET1_API_IMAGE:-shopbuket1-api:local}
+    container_name: shopbuket1-worker
     restart: unless-stopped
     depends_on:
       postgres:
@@ -120,11 +120,11 @@ services:
       api:
         condition: service_healthy
     env_file:
-      - ${SITEFLOWER_ENV_FILE:?Set SITEFLOWER_ENV_FILE to the absolute production env path}
+      - ${SHOPBUKET1_ENV_FILE:?Set SHOPBUKET1_ENV_FILE to the absolute production env path}
     environment:
       NODE_ENV: production
     networks:
-      - siteflower_internal
+      - shopbuket1_internal
     command: ['node', 'dist/worker-main.js']
     logging:
       driver: json-file
@@ -135,10 +135,10 @@ services:
     mem_reservation: 128m
 
 networks:
-  siteflower_internal:
-    name: siteflower_internal
+  shopbuket1_internal:
+    name: shopbuket1_internal
     driver: bridge
 
 volumes:
-  siteflower_pgdata:
-    name: siteflower_pgdata
+  shopbuket1_pgdata:
+    name: shopbuket1_pgdata

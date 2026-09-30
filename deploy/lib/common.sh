@@ -1,22 +1,26 @@
 #!/usr/bin/env bash
-# Shared helpers for SiteFlower production ops scripts.
+# Shared helpers for shopbuket1 production ops scripts.
 # shellcheck shell=bash
 
 set -euo pipefail
 
-SITEFLOWER_PROJECT_NAME="${SITEFLOWER_PROJECT_NAME:-siteflower}"
-SITEFLOWER_ENV_FILE="${SITEFLOWER_ENV_FILE:-/etc/siteflower/production.env}"
-SITEFLOWER_OPT_DIR="${SITEFLOWER_OPT_DIR:-/opt/siteflower}"
-SITEFLOWER_BACKUP_DIR="${SITEFLOWER_BACKUP_DIR:-/var/backups/siteflower}"
-SITEFLOWER_STATE_DIR="${SITEFLOWER_STATE_DIR:-/var/lib/siteflower}"
-SITEFLOWER_LOCK_FILE="${SITEFLOWER_LOCK_FILE:-${SITEFLOWER_STATE_DIR}/deploy.lock}"
-SITEFLOWER_COMPOSE_FILE="${SITEFLOWER_COMPOSE_FILE:-deploy/docker-compose.prod.yml}"
-SITEFLOWER_NGINX_TEMPLATE="${SITEFLOWER_NGINX_TEMPLATE:-deploy/nginx/siteflower.conf.template}"
-SITEFLOWER_NGINX_AVAILABLE="${SITEFLOWER_NGINX_AVAILABLE:-/etc/nginx/sites-available/siteflower}"
-SITEFLOWER_NGINX_ENABLED="${SITEFLOWER_NGINX_ENABLED:-/etc/nginx/sites-enabled/siteflower}"
-SITEFLOWER_RELEASES_DIR="${SITEFLOWER_RELEASES_DIR:-${SITEFLOWER_STATE_DIR}/releases}"
-SITEFLOWER_CURRENT_FILE="${SITEFLOWER_CURRENT_FILE:-${SITEFLOWER_STATE_DIR}/current-release}"
-SITEFLOWER_PREVIOUS_FILE="${SITEFLOWER_PREVIOUS_FILE:-${SITEFLOWER_STATE_DIR}/previous-release}"
+# Production infrastructure identity (NOT a public domain).
+SHOPBUKET1_PROJECT_NAME="${SHOPBUKET1_PROJECT_NAME:-shopbuket1}"
+SHOPBUKET1_ENV_FILE="${SHOPBUKET1_ENV_FILE:-/etc/shopbuket1/production.env}"
+SHOPBUKET1_OPT_DIR="${SHOPBUKET1_OPT_DIR:-/opt/shopbuket1}"
+SHOPBUKET1_BACKUP_DIR="${SHOPBUKET1_BACKUP_DIR:-/var/backups/shopbuket1}"
+SHOPBUKET1_STATE_DIR="${SHOPBUKET1_STATE_DIR:-/var/lib/shopbuket1}"
+SHOPBUKET1_LOCK_FILE="${SHOPBUKET1_LOCK_FILE:-${SHOPBUKET1_STATE_DIR}/deploy.lock}"
+SHOPBUKET1_COMPOSE_FILE="${SHOPBUKET1_COMPOSE_FILE:-deploy/docker-compose.prod.yml}"
+SHOPBUKET1_NGINX_TEMPLATE="${SHOPBUKET1_NGINX_TEMPLATE:-deploy/nginx/shopbuket1.conf.template}"
+SHOPBUKET1_NGINX_AVAILABLE="${SHOPBUKET1_NGINX_AVAILABLE:-/etc/nginx/sites-available/shopbuket1}"
+SHOPBUKET1_NGINX_ENABLED="${SHOPBUKET1_NGINX_ENABLED:-/etc/nginx/sites-enabled/shopbuket1}"
+SHOPBUKET1_RELEASES_DIR="${SHOPBUKET1_RELEASES_DIR:-${SHOPBUKET1_STATE_DIR}/releases}"
+SHOPBUKET1_CURRENT_FILE="${SHOPBUKET1_CURRENT_FILE:-${SHOPBUKET1_STATE_DIR}/current-release}"
+SHOPBUKET1_PREVIOUS_FILE="${SHOPBUKET1_PREVIOUS_FILE:-${SHOPBUKET1_STATE_DIR}/previous-release}"
+
+# Sibling ERP stack on the same VPS — never touch these resources.
+ERPBUKET1_PREFIX="${ERPBUKET1_PREFIX:-erpbuket1}"
 
 log() { printf '%s %s\n' "$(date -u +'%Y-%m-%dT%H:%M:%SZ')" "$*"; }
 die() { log "ERROR: $*"; exit 1; }
@@ -28,8 +32,19 @@ repo_root() {
   printf '%s\n' "$here"
 }
 
+assert_shopbuket1_owned_name() {
+  local name="$1"
+  local kind="${2:-resource}"
+  if [[ "$name" == "${ERPBUKET1_PREFIX}"* ]]; then
+    die "Refusing to touch ${kind} owned by ${ERPBUKET1_PREFIX}: $name"
+  fi
+  if [[ "$name" != "${SHOPBUKET1_PROJECT_NAME}"* ]]; then
+    die "Refusing to touch non-${SHOPBUKET1_PROJECT_NAME} ${kind}: $name"
+  fi
+}
+
 load_env_file() {
-  local file="${1:-$SITEFLOWER_ENV_FILE}"
+  local file="${1:-$SHOPBUKET1_ENV_FILE}"
   [[ -f "$file" ]] || die "Missing env file: $file"
   [[ -r "$file" ]] || die "Env file not readable: $file"
   set -a
@@ -41,28 +56,27 @@ load_env_file() {
 compose() {
   local root
   root="$(repo_root)"
-  [[ -n "${SITEFLOWER_ENV_FILE:-}" ]] || die "SITEFLOWER_ENV_FILE is not set"
-  SITEFLOWER_ENV_FILE="${SITEFLOWER_ENV_FILE}" \
+  [[ -n "${SHOPBUKET1_ENV_FILE:-}" ]] || die "SHOPBUKET1_ENV_FILE is not set"
+  SHOPBUKET1_ENV_FILE="${SHOPBUKET1_ENV_FILE}" \
     docker compose \
-      -p "$SITEFLOWER_PROJECT_NAME" \
-      -f "$root/$SITEFLOWER_COMPOSE_FILE" \
-      --env-file "$SITEFLOWER_ENV_FILE" \
+      -p "$SHOPBUKET1_PROJECT_NAME" \
+      -f "$root/$SHOPBUKET1_COMPOSE_FILE" \
+      --env-file "$SHOPBUKET1_ENV_FILE" \
       "$@"
 }
 
 acquire_lock() {
   require_cmd flock
-  mkdir -p "$SITEFLOWER_STATE_DIR" "$(dirname "$SITEFLOWER_LOCK_FILE")"
-  exec 9>"$SITEFLOWER_LOCK_FILE"
+  mkdir -p "$SHOPBUKET1_STATE_DIR" "$(dirname "$SHOPBUKET1_LOCK_FILE")"
+  exec 9>"$SHOPBUKET1_LOCK_FILE"
   if ! flock -n 9; then
-    die "Another SiteFlower deployment holds the lock ($SITEFLOWER_LOCK_FILE)"
+    die "Another shopbuket1 deployment holds the lock ($SHOPBUKET1_LOCK_FILE)"
   fi
 }
 
 validate_git_ref() {
   local ref="${1:-}"
   [[ -n "$ref" ]] || die "Git ref is empty"
-  # Reject shell metacharacters / path escape attempts.
   if [[ ! "$ref" =~ ^[A-Za-z0-9._/-]+$ ]]; then
     die "Refused unsafe git ref: $ref"
   fi
@@ -72,7 +86,6 @@ validate_git_ref() {
 }
 
 urlencode() {
-  # Minimal RFC3986 encode for password segments in DATABASE_URL.
   local raw="$1"
   local length=${#raw}
   local i c
@@ -86,7 +99,6 @@ urlencode() {
 }
 
 ensure_database_url() {
-  # Prefer an explicit DATABASE_URL; otherwise build one for Docker DNS host "postgres".
   if [[ -n "${DATABASE_URL:-}" ]]; then
     if [[ "$DATABASE_URL" != *"@postgres:"* && "$DATABASE_URL" != *"@postgres/"* ]]; then
       die "DATABASE_URL must use Docker hostname 'postgres' in production (got host that is not postgres)"
@@ -102,7 +114,7 @@ ensure_database_url() {
 }
 
 validate_production_env() {
-  load_env_file "$SITEFLOWER_ENV_FILE"
+  load_env_file "$SHOPBUKET1_ENV_FILE"
   ensure_database_url
 
   [[ "${NODE_ENV:-}" == "production" ]] || die "NODE_ENV must be production"
@@ -137,10 +149,12 @@ write_release_metadata() {
   local rev="$1"
   local api_image="$2"
   local web_image="$3"
-  mkdir -p "$SITEFLOWER_RELEASES_DIR"
+  assert_shopbuket1_owned_name "$api_image" "image"
+  assert_shopbuket1_owned_name "$web_image" "image"
+  mkdir -p "$SHOPBUKET1_RELEASES_DIR"
   local stamp file
   stamp="$(date -u +'%Y%m%dT%H%M%SZ')"
-  file="${SITEFLOWER_RELEASES_DIR}/${stamp}-${rev}.json"
+  file="${SHOPBUKET1_RELEASES_DIR}/${stamp}-${rev}.json"
   umask 077
   cat >"$file" <<EOF
 {
@@ -150,11 +164,11 @@ write_release_metadata() {
   "deployed_at": "$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
 }
 EOF
-  if [[ -f "$SITEFLOWER_CURRENT_FILE" ]]; then
-    cp -f "$SITEFLOWER_CURRENT_FILE" "$SITEFLOWER_PREVIOUS_FILE"
+  if [[ -f "$SHOPBUKET1_CURRENT_FILE" ]]; then
+    cp -f "$SHOPBUKET1_CURRENT_FILE" "$SHOPBUKET1_PREVIOUS_FILE"
   fi
-  printf '%s\n' "$file" >"$SITEFLOWER_CURRENT_FILE"
-  chmod 600 "$file" "$SITEFLOWER_CURRENT_FILE" "$SITEFLOWER_PREVIOUS_FILE" 2>/dev/null || true
+  printf '%s\n' "$file" >"$SHOPBUKET1_CURRENT_FILE"
+  chmod 600 "$file" "$SHOPBUKET1_CURRENT_FILE" "$SHOPBUKET1_PREVIOUS_FILE" 2>/dev/null || true
 }
 
 read_release_file() {
@@ -167,7 +181,6 @@ read_release_file() {
 }
 
 json_field() {
-  # Tiny extractor without jq dependency.
   local file="$1" key="$2"
   sed -n "s/.*\"${key}\"[[:space:]]*:[[:space:]]*\"\\([^\"]*\\)\".*/\\1/p" "$file" | head -n1
 }

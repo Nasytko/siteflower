@@ -1,18 +1,19 @@
-# SiteFlower Nginx site template.
-# install.sh substitutes __SITEFLOWER_DOMAIN__ and installs under
-# /etc/nginx/sites-available/siteflower
+# shopbuket1 Nginx site template (domain from production config only).
+# install.sh substitutes __PUBLIC_DOMAIN__ and installs under
+# /etc/nginx/sites-available/shopbuket1
 #
-# HTTP-only until DNS + certbot. TLS block is documented in docs/deployment-hostfly.md.
+# HTTP-only until DNS + certbot. TLS is issued later against PUBLIC_DOMAIN /
+# NEXT_PUBLIC_SITE_URL — changing the domain does not require recreating
+# Docker volumes, Postgres data, or S3 media.
 
 server {
     listen 80;
     listen [::]:80;
-    server_name __SITEFLOWER_DOMAIN__;
+    server_name __PUBLIC_DOMAIN__;
 
     server_tokens off;
     client_max_body_size 10m;
 
-    # Basic hardening (app may set its own headers too).
     add_header X-Content-Type-Options nosniff always;
     add_header Referrer-Policy strict-origin-when-cross-origin always;
     add_header X-Frame-Options SAMEORIGIN always;
@@ -27,7 +28,6 @@ server {
         add_header Content-Type text/plain;
     }
 
-    # Prefer direct API proxy so browser /api/v1 never depends solely on Next rewrites.
     location /api/ {
         proxy_pass http://127.0.0.1:3001;
         proxy_http_version 1.1;
@@ -58,4 +58,3 @@ server {
 
 # After DNS points here, enable TLS (do not enable before):
 #   sudo certbot --nginx -d YOUR_DOMAIN
-# Certbot will add the listen 443 ssl server block.

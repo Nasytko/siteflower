@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
-# SiteFlower — normal application deployment (does NOT reinstall the VPS).
+# shopbuket1 — normal application deployment (does NOT reinstall the VPS).
 # Usage:
 #   ./deploy.sh
 #   ./deploy.sh <git-ref>
 #
 # Never runs docker system prune --volumes.
-# Never deletes non-siteflower Docker resources.
+# Never deletes erpbuket1 or other non-shopbuket1 Docker resources.
 
 set -euo pipefail
 
@@ -25,9 +25,11 @@ rollback_app_images() {
     log "No previous release images recorded — cannot auto-rollback containers"
     return 0
   fi
+  assert_shopbuket1_owned_name "$PREV_API_IMAGE" "image"
+  assert_shopbuket1_owned_name "$PREV_WEB_IMAGE" "image"
   log "Rolling back containers to ${PREV_API_IMAGE} / ${PREV_WEB_IMAGE}"
-  export SITEFLOWER_API_IMAGE="$PREV_API_IMAGE"
-  export SITEFLOWER_WEB_IMAGE="$PREV_WEB_IMAGE"
+  export SHOPBUKET1_API_IMAGE="$PREV_API_IMAGE"
+  export SHOPBUKET1_WEB_IMAGE="$PREV_WEB_IMAGE"
   compose up -d api web || true
 }
 
@@ -74,16 +76,18 @@ resolve_ref() {
 tag_images() {
   local rev="$1"
   local short="${rev:0:12}"
-  NEW_API_IMAGE="siteflower-api:${short}"
-  NEW_WEB_IMAGE="siteflower-web:${short}"
-  export SITEFLOWER_API_IMAGE="$NEW_API_IMAGE"
-  export SITEFLOWER_WEB_IMAGE="$NEW_WEB_IMAGE"
+  NEW_API_IMAGE="shopbuket1-api:${short}"
+  NEW_WEB_IMAGE="shopbuket1-web:${short}"
+  assert_shopbuket1_owned_name "$NEW_API_IMAGE" "image"
+  assert_shopbuket1_owned_name "$NEW_WEB_IMAGE" "image"
+  export SHOPBUKET1_API_IMAGE="$NEW_API_IMAGE"
+  export SHOPBUKET1_WEB_IMAGE="$NEW_WEB_IMAGE"
 }
 
 remember_previous_images() {
-  if [[ -f "$SITEFLOWER_CURRENT_FILE" ]]; then
+  if [[ -f "$SHOPBUKET1_CURRENT_FILE" ]]; then
     local meta
-    meta="$(cat "$SITEFLOWER_CURRENT_FILE" 2>/dev/null || true)"
+    meta="$(cat "$SHOPBUKET1_CURRENT_FILE" 2>/dev/null || true)"
     if [[ -n "$meta" && -f "$meta" ]]; then
       PREV_API_IMAGE="$(json_field "$meta" api_image || true)"
       PREV_WEB_IMAGE="$(json_field "$meta" web_image || true)"
@@ -96,7 +100,7 @@ build_images() {
   docker build \
     -f "$SCRIPT_DIR/deploy/Dockerfile.api" \
     -t "$NEW_API_IMAGE" \
-    -t siteflower-api:local \
+    -t shopbuket1-api:local \
     "$SCRIPT_DIR"
 
   log "Building Web image ${NEW_WEB_IMAGE}"
@@ -107,7 +111,7 @@ build_images() {
     --build-arg "S3_PUBLIC_BASE_URL=${S3_PUBLIC_BASE_URL:-}" \
     --build-arg "MEDIA_PUBLIC_BASE_URL=${MEDIA_PUBLIC_BASE_URL:-}" \
     -t "$NEW_WEB_IMAGE" \
-    -t siteflower-web:local \
+    -t shopbuket1-web:local \
     "$SCRIPT_DIR"
 }
 
@@ -125,9 +129,8 @@ migrate() {
 }
 
 bring_up() {
-  log "Starting SiteFlower stack"
+  log "Starting shopbuket1 stack"
   compose up -d postgres
-  # Ensure postgres healthy before migrate already done; recreate app services on new images.
   compose up -d --force-recreate api web
   if [[ "${INTEGRATION_ENABLED:-false}" == "true" && "${INTEGRATION_MODE:-DISABLED}" != "DISABLED" ]]; then
     log "Integrations enabled — starting worker profile"
@@ -147,20 +150,25 @@ wait_healthy() {
   die "Healthchecks did not become ready in time"
 }
 
-prune_old_siteflower_images() {
-  log "Pruning old SiteFlower images only (keeping newest 5 tags each)"
-  docker images 'siteflower-api' --format '{{.CreatedAt}} {{.ID}}' \
-    | sort -r | awk 'NR>5 {print $NF}' \
-    | while read -r id; do docker image rm "$id" 2>/dev/null || true; done
-  docker images 'siteflower-web' --format '{{.CreatedAt}} {{.ID}}' \
-    | sort -r | awk 'NR>5 {print $NF}' \
-    | while read -r id; do docker image rm "$id" 2>/dev/null || true; done
+prune_old_shopbuket1_images() {
+  log "Pruning old shopbuket1 images only (keeping newest 5 tags each; never erpbuket1)"
+  local repo
+  for repo in shopbuket1-api shopbuket1-web; do
+    assert_shopbuket1_owned_name "$repo" "image-repo"
+    docker images "$repo" --format '{{.CreatedAt}} {{.Repository}}:{{.Tag}} {{.ID}}' \
+      | sort -r \
+      | awk 'NR>5 {print $NF, $(NF-1)}' \
+      | while read -r id ref; do
+          assert_shopbuket1_owned_name "${ref%%:*}" "image-repo"
+          docker image rm "$id" 2>/dev/null || true
+        done
+  done
 }
 
 main() {
   acquire_lock
   require_docker_access
-  [[ -f "$SITEFLOWER_ENV_FILE" ]] || die "Missing $SITEFLOWER_ENV_FILE — run sudo ./install.sh and edit secrets"
+  [[ -f "$SHOPBUKET1_ENV_FILE" ]] || die "Missing $SHOPBUKET1_ENV_FILE — run sudo ./install.sh and edit secrets"
   validate_production_env
   remember_previous_images
 
@@ -172,11 +180,10 @@ main() {
 
   build_images
 
-  # Postgres must exist before backup/migrate.
   compose up -d postgres
   local i
   for i in $(seq 1 30); do
-    if docker inspect -f '{{.State.Health.Status}}' siteflower-postgres 2>/dev/null | grep -qx healthy; then
+    if docker inspect -f '{{.State.Health.Status}}' shopbuket1-postgres 2>/dev/null | grep -qx healthy; then
       break
     fi
     sleep 2
@@ -188,7 +195,7 @@ main() {
   wait_healthy
 
   write_release_metadata "$rev" "$NEW_API_IMAGE" "$NEW_WEB_IMAGE"
-  prune_old_siteflower_images
+  prune_old_shopbuket1_images
 
   log "Deploy succeeded: $rev"
   log "Create/update SUPER_ADMIN if needed: ./admin-create.sh"

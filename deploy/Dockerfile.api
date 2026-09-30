@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1.7
 
-# SiteFlower API (+ optional worker / ops CLI) — multi-stage, Node 24, pnpm 10.17.
+# shopbuket1 API image (+ optional worker / ops CLI) — multi-stage, Node 24, pnpm 10.17.
 ARG NODE_VERSION=24
 
 FROM node:${NODE_VERSION}-bookworm-slim AS base
@@ -42,22 +42,22 @@ RUN apt-get update \
   && rm -rf /var/lib/apt/lists/* \
   && corepack enable \
   && corepack prepare pnpm@10.17.0 --activate \
-  && groupadd --gid 10001 siteflower \
-  && useradd --uid 10001 --gid siteflower --shell /usr/sbin/nologin --create-home siteflower
+  && groupadd --gid 10001 shopbuket1 \
+  && useradd --uid 10001 --gid shopbuket1 --shell /usr/sbin/nologin --create-home shopbuket1
 WORKDIR /app
 
 # Workspace runtime: built packages + lockfile-aligned node_modules (includes prisma for migrate).
-COPY --from=build --chown=siteflower:siteflower /app/package.json /app/pnpm-lock.yaml /app/pnpm-workspace.yaml ./
-COPY --from=build --chown=siteflower:siteflower /app/node_modules ./node_modules
-COPY --from=build --chown=siteflower:siteflower /app/apps/api/package.json ./apps/api/package.json
-COPY --from=build --chown=siteflower:siteflower /app/apps/api/dist ./apps/api/dist
-COPY --from=build --chown=siteflower:siteflower /app/apps/api/scripts ./apps/api/scripts
-COPY --from=build --chown=siteflower:siteflower /app/apps/api/src ./apps/api/src
-COPY --from=build --chown=siteflower:siteflower /app/packages/contracts ./packages/contracts
-COPY --from=build --chown=siteflower:siteflower /app/packages/database ./packages/database
-COPY --from=build --chown=siteflower:siteflower /app/packages/config ./packages/config
+COPY --from=build --chown=shopbuket1:shopbuket1 /app/package.json /app/pnpm-lock.yaml /app/pnpm-workspace.yaml ./
+COPY --from=build --chown=shopbuket1:shopbuket1 /app/node_modules ./node_modules
+COPY --from=build --chown=shopbuket1:shopbuket1 /app/apps/api/package.json ./apps/api/package.json
+COPY --from=build --chown=shopbuket1:shopbuket1 /app/apps/api/dist ./apps/api/dist
+COPY --from=build --chown=shopbuket1:shopbuket1 /app/apps/api/scripts ./apps/api/scripts
+COPY --from=build --chown=shopbuket1:shopbuket1 /app/apps/api/src ./apps/api/src
+COPY --from=build --chown=shopbuket1:shopbuket1 /app/packages/contracts ./packages/contracts
+COPY --from=build --chown=shopbuket1:shopbuket1 /app/packages/database ./packages/database
+COPY --from=build --chown=shopbuket1:shopbuket1 /app/packages/config ./packages/config
 
-USER siteflower
+USER shopbuket1
 WORKDIR /app/apps/api
 EXPOSE 3001
 

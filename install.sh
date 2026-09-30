@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
-# SiteFlower — first-time Ubuntu 24.04 VPS bootstrap (HostFly).
+# shopbuket1 — first-time Ubuntu 24.04 VPS bootstrap (HostFly).
 # Usage: sudo ./install.sh
 #
-# Safe to re-run. Does NOT overwrite an existing /etc/siteflower/production.env.
-# Does NOT run docker system prune. Does NOT touch NewERP resources.
+# Safe to re-run. Does NOT overwrite an existing /etc/shopbuket1/production.env.
+# Does NOT run docker system prune. Does NOT touch erpbuket1 resources.
 
 set -euo pipefail
 
@@ -93,28 +93,112 @@ EOF
 }
 
 create_user_and_dirs() {
-  if ! id -u siteflower >/dev/null 2>&1; then
-    useradd --system --create-home --home-dir /home/siteflower --shell /bin/bash siteflower
+  if ! id -u shopbuket1 >/dev/null 2>&1; then
+    useradd --system --create-home --home-dir /home/shopbuket1 --shell /bin/bash shopbuket1
   fi
-  usermod -aG docker siteflower || true
+  usermod -aG docker shopbuket1 || true
 
-  mkdir -p /etc/siteflower \
-    "$SITEFLOWER_OPT_DIR" \
-    "$SITEFLOWER_BACKUP_DIR" \
-    "$SITEFLOWER_STATE_DIR" \
-    "$SITEFLOWER_RELEASES_DIR" \
-    /var/log/siteflower
+  mkdir -p /etc/shopbuket1 \
+    "$SHOPBUKET1_OPT_DIR" \
+    "$SHOPBUKET1_BACKUP_DIR" \
+    "$SHOPBUKET1_STATE_DIR" \
+    "$SHOPBUKET1_RELEASES_DIR" \
+    /var/log/shopbuket1
 
-  chown root:siteflower /etc/siteflower
-  chmod 750 /etc/siteflower
-  chown siteflower:siteflower "$SITEFLOWER_OPT_DIR" "$SITEFLOWER_STATE_DIR" "$SITEFLOWER_RELEASES_DIR"
-  chown root:siteflower "$SITEFLOWER_BACKUP_DIR"
-  chmod 750 "$SITEFLOWER_BACKUP_DIR"
-  chmod 755 /var/log/siteflower
+  chown root:shopbuket1 /etc/shopbuket1
+  chmod 750 /etc/shopbuket1
+  chown shopbuket1:shopbuket1 "$SHOPBUKET1_OPT_DIR" "$SHOPBUKET1_STATE_DIR" "$SHOPBUKET1_RELEASES_DIR"
+  chown root:shopbuket1 "$SHOPBUKET1_BACKUP_DIR"
+  chmod 750 "$SHOPBUKET1_BACKUP_DIR"
+  chmod 755 /var/log/shopbuket1
+}
+
+# Migrates/cleans ONLY obsolete pre-deploy bootstrap paths from the first
+# siteflower-named install.sh. Never deletes Docker volumes or foreign stacks.
+migrate_legacy_siteflower_bootstrap() {
+  local legacy_env="/etc/siteflower/production.env"
+  local new_env="/etc/shopbuket1/production.env"
+  local has_pg_volume=0
+  local has_running=0
+
+  if command -v docker >/dev/null 2>&1; then
+    if docker volume inspect siteflower_pgdata >/dev/null 2>&1 \
+      || docker volume inspect shopbuket1_pgdata >/dev/null 2>&1; then
+      has_pg_volume=1
+    fi
+    if docker ps --format '{{.Names}}' 2>/dev/null | grep -Eq '^(siteflower|shopbuket1)-'; then
+      has_running=1
+    fi
+  fi
+
+  if [[ "$has_pg_volume" -eq 1 || "$has_running" -eq 1 ]]; then
+    log "Legacy bootstrap cleanup: Docker volume/container for siteflower/shopbuket1 detected."
+    log "Refusing automatic deletion of DB volumes/containers. Only config path migration may proceed."
+  fi
+
+  # Move env file if the new path is missing.
+  if [[ -f "$legacy_env" && ! -f "$new_env" ]]; then
+    mkdir -p /etc/shopbuket1
+    cp -a "$legacy_env" "$new_env"
+    # Domain config key rename (infrastructure is shopbuket1; domain stays config-only).
+    if grep -q '^SITEFLOWER_DOMAIN=' "$new_env"; then
+      sed -i 's/^SITEFLOWER_DOMAIN=/PUBLIC_DOMAIN=/' "$new_env"
+    fi
+    chown root:shopbuket1 "$new_env"
+    chmod 640 "$new_env"
+    log "Migrated $legacy_env -> $new_env"
+  elif [[ -f "$legacy_env" && -f "$new_env" ]]; then
+    log "Both legacy and new env files exist; keeping $new_env (not overwriting)"
+  fi
+
+  # Obsolete Nginx site from first bootstrap (replaced by shopbuket1 below).
+  rm -f /etc/nginx/sites-enabled/siteflower \
+    /etc/nginx/sites-available/siteflower \
+    /etc/nginx/conf.d/siteflower-map.conf
+
+  # Symlink-only current pointer (never delete a real git checkout under /opt/siteflower/repo).
+  if [[ -L /opt/siteflower/current ]]; then
+    rm -f /opt/siteflower/current
+    log "Removed legacy symlink /opt/siteflower/current"
+  fi
+
+  # Empty / near-empty legacy dirs only.
+  for d in /etc/siteflower /var/backups/siteflower /var/lib/siteflower /var/log/siteflower; do
+    if [[ -d "$d" ]]; then
+      # Do not delete if non-empty beyond a leftover env we already migrated.
+      if [[ "$d" == "/etc/siteflower" && -f "$d/production.env" && -f "$new_env" ]]; then
+        rm -f "$d/production.env"
+      fi
+      if [[ -z "$(find "$d" -mindepth 1 -maxdepth 1 2>/dev/null | head -n1)" ]]; then
+        rmdir "$d" 2>/dev/null && log "Removed empty legacy dir $d" || true
+      else
+        log "WARN: legacy dir $d is not empty — left in place for manual review"
+        find "$d" -mindepth 1 -maxdepth 2 -printf '  leftover: %p\n' 2>/dev/null || true
+      fi
+    fi
+  done
+
+  # /opt/siteflower: remove only if empty or only contains an empty repo placeholder.
+  if [[ -d /opt/siteflower ]]; then
+    if [[ -d /opt/siteflower/repo ]]; then
+      log "NOTE: /opt/siteflower/repo still exists. Prefer moving the checkout to /opt/shopbuket1/repo"
+      log "  Example: sudo mv /opt/siteflower/repo /opt/shopbuket1/repo"
+    fi
+    if [[ -z "$(find /opt/siteflower -mindepth 1 -maxdepth 1 2>/dev/null | head -n1)" ]]; then
+      rmdir /opt/siteflower 2>/dev/null && log "Removed empty legacy dir /opt/siteflower" || true
+    fi
+  fi
+
+  # Never auto-delete Docker volumes named siteflower_* — even if "unused".
+  if [[ "$has_pg_volume" -eq 0 ]]; then
+    log "No siteflower_pgdata/shopbuket1_pgdata volume detected — OK for pre-deploy bootstrap repair"
+  else
+    log "Docker volumes present — they were NOT deleted (by design)"
+  fi
 }
 
 seed_env_template() {
-  local dest="/etc/siteflower/production.env"
+  local dest="/etc/shopbuket1/production.env"
   local template="${SCRIPT_DIR}/deploy/env/production.env.example"
   if [[ -f "$dest" ]]; then
     log "Keeping existing $dest (not overwritten)"
@@ -131,19 +215,18 @@ seed_env_template() {
     -e "s|^SESSION_HMAC_SECRET=.*|SESSION_HMAC_SECRET=${session_hmac}|" \
     -e "s|^ORDER_RECOVERY_ENCRYPTION_KEY=.*|ORDER_RECOVERY_ENCRYPTION_KEY=${recovery_key}|" \
     -e "s|^POSTGRES_PASSWORD=.*|POSTGRES_PASSWORD=${db_pass}|" \
-    -e "s|^DATABASE_URL=.*|DATABASE_URL=postgresql://siteflower:${enc}@postgres:5432/siteflower?schema=public|" \
+    -e "s|^DATABASE_URL=.*|DATABASE_URL=postgresql://shopbuket1:${enc}@postgres:5432/shopbuket1?schema=public|" \
     "$template" >"$dest"
   chmod 640 "$dest"
-  chown root:siteflower "$dest"
+  chown root:shopbuket1 "$dest"
   log "Created $dest with generated DB password + session/recovery secrets"
-  log "EDIT remaining placeholders (domain, S3) before deploy"
+  log "EDIT remaining placeholders (NEXT_PUBLIC_SITE_URL / CORS_ORIGINS / S3) before deploy"
 }
 
 prepare_checkout() {
-  # Prefer using the directory from which install.sh was invoked (cloned repo).
   local src="$SCRIPT_DIR"
   if [[ ! -f "$src/package.json" || ! -f "$src/deploy/docker-compose.prod.yml" ]]; then
-    die "install.sh must be run from a SiteFlower git checkout"
+    die "install.sh must be run from the shopbuket1 application git checkout"
   fi
   chmod +x \
     "$src/install.sh" \
@@ -153,33 +236,32 @@ prepare_checkout() {
     "$src/healthcheck.sh" \
     "$src/admin-create.sh" \
     || true
-  if [[ "$src" != "$SITEFLOWER_OPT_DIR" && ! -e "$SITEFLOWER_OPT_DIR/current" ]]; then
-    ln -sfn "$src" "$SITEFLOWER_OPT_DIR/current"
-    log "Linked $SITEFLOWER_OPT_DIR/current -> $src"
+  if [[ "$src" != "$SHOPBUKET1_OPT_DIR" && ! -e "$SHOPBUKET1_OPT_DIR/current" ]]; then
+    ln -sfn "$src" "$SHOPBUKET1_OPT_DIR/current"
+    log "Linked $SHOPBUKET1_OPT_DIR/current -> $src"
   fi
-  chown -R siteflower:siteflower "$src" || true
+  chown -R shopbuket1:shopbuket1 "$src" || true
 }
 
 configure_nginx() {
-  install -m 644 "${SCRIPT_DIR}/deploy/nginx/siteflower-map.conf" \
-    /etc/nginx/conf.d/siteflower-map.conf
+  install -m 644 "${SCRIPT_DIR}/deploy/nginx/shopbuket1-map.conf" \
+    /etc/nginx/conf.d/shopbuket1-map.conf
 
-  local domain="${SITEFLOWER_DOMAIN:-_}"
-  if [[ -f /etc/siteflower/production.env ]]; then
+  local domain="_"
+  if [[ -f /etc/shopbuket1/production.env ]]; then
     # shellcheck disable=SC1091
-    set -a; source /etc/siteflower/production.env; set +a
-    domain="${SITEFLOWER_DOMAIN:-${NEXT_PUBLIC_SITE_URL:-_}}"
+    set -a; source /etc/shopbuket1/production.env; set +a
+    domain="${PUBLIC_DOMAIN:-${NEXT_PUBLIC_SITE_URL:-_}}"
     domain="${domain#https://}"
     domain="${domain#http://}"
     domain="${domain%%/*}"
   fi
   [[ -n "$domain" ]] || domain='_'
 
-  sed "s/__SITEFLOWER_DOMAIN__/${domain}/g" \
-    "${SCRIPT_DIR}/deploy/nginx/siteflower.conf.template" \
-    >"$SITEFLOWER_NGINX_AVAILABLE"
-  ln -sfn "$SITEFLOWER_NGINX_AVAILABLE" "$SITEFLOWER_NGINX_ENABLED"
-  # Disable default site if present to avoid conflicts
+  sed "s/__PUBLIC_DOMAIN__/${domain}/g" \
+    "${SCRIPT_DIR}/deploy/nginx/shopbuket1.conf.template" \
+    >"$SHOPBUKET1_NGINX_AVAILABLE"
+  ln -sfn "$SHOPBUKET1_NGINX_AVAILABLE" "$SHOPBUKET1_NGINX_ENABLED"
   rm -f /etc/nginx/sites-enabled/default
   nginx -t
   systemctl enable --now nginx
@@ -191,7 +273,6 @@ configure_ufw() {
     log "ufw not installed; skipping firewall"
     return 0
   fi
-  # Allow SSH BEFORE enabling — never lock the operator out.
   ufw allow OpenSSH || ufw allow 22/tcp
   ufw allow 80/tcp
   ufw allow 443/tcp
@@ -204,22 +285,22 @@ print_summary() {
   cat <<EOF
 
 ============================================================
-SiteFlower VPS bootstrap complete
+shopbuket1 VPS bootstrap complete
 ============================================================
 Docker:     $(docker --version 2>/dev/null || echo missing)
 Compose:    $(docker compose version 2>/dev/null || echo missing)
 Nginx:      $(nginx -v 2>&1 || true)
-Env file:   /etc/siteflower/production.env
-App link:   ${SITEFLOWER_OPT_DIR}/current
-Backups:    ${SITEFLOWER_BACKUP_DIR}
+Env file:   /etc/shopbuket1/production.env
+App link:   ${SHOPBUKET1_OPT_DIR}/current
+Backups:    ${SHOPBUKET1_BACKUP_DIR}
 
 NEXT MANUAL STEPS:
-  1) Edit /etc/siteflower/production.env
-     - NEXT_PUBLIC_SITE_URL / CORS_ORIGINS / SITEFLOWER_DOMAIN
-     - HostFly S3_* fields
+  1) Edit /etc/shopbuket1/production.env
+     - NEXT_PUBLIC_SITE_URL / CORS_ORIGINS / optional PUBLIC_DOMAIN
+     - HostFly S3_* (example bucket: shopbuket1-media)
      - Confirm DATABASE_URL host is "postgres"
   2) Point DNS A/AAAA to this VPS
-  3) From the repo as a user in group docker (or siteflower):
+  3) From the repo as a user in group docker (or shopbuket1):
        ./deploy.sh
   4) Create admin:
        ./admin-create.sh
@@ -240,6 +321,7 @@ main() {
   install_docker
   configure_docker_log_defaults
   create_user_and_dirs
+  migrate_legacy_siteflower_bootstrap
   seed_env_template
   prepare_checkout
   configure_nginx

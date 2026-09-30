@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1.7
 
-# SiteFlower Next.js storefront/admin — standalone output.
+# shopbuket1 Next.js storefront/admin image — standalone output.
 ARG NODE_VERSION=24
 
 FROM node:${NODE_VERSION}-bookworm-slim AS base
@@ -47,16 +47,16 @@ ENV NODE_ENV=production \
 RUN apt-get update \
   && apt-get install -y --no-install-recommends ca-certificates tini curl \
   && rm -rf /var/lib/apt/lists/* \
-  && groupadd --gid 10001 siteflower \
-  && useradd --uid 10001 --gid siteflower --shell /usr/sbin/nologin --create-home siteflower
+  && groupadd --gid 10001 shopbuket1 \
+  && useradd --uid 10001 --gid shopbuket1 --shell /usr/sbin/nologin --create-home shopbuket1
 WORKDIR /app
 
 # Next standalone traces monorepo paths under apps/web.
-COPY --from=build --chown=siteflower:siteflower /app/apps/web/.next/standalone ./
-COPY --from=build --chown=siteflower:siteflower /app/apps/web/.next/static ./apps/web/.next/static
-COPY --from=build --chown=siteflower:siteflower /app/apps/web/public ./apps/web/public
+COPY --from=build --chown=shopbuket1:shopbuket1 /app/apps/web/.next/standalone ./
+COPY --from=build --chown=shopbuket1:shopbuket1 /app/apps/web/.next/static ./apps/web/.next/static
+COPY --from=build --chown=shopbuket1:shopbuket1 /app/apps/web/public ./apps/web/public
 
-USER siteflower
+USER shopbuket1
 EXPOSE 3000
 
 HEALTHCHECK --interval=20s --timeout=5s --start-period=40s --retries=5 \
