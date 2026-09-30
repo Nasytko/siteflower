@@ -88,10 +88,11 @@ Legacy stored kinds `featured` / `collection` are migrated to `bestsellers` / `p
 ## Admin navigation
 
 - Работа → Заказы
-- Каталог → Товары, Цветы, Цвета, Размеры, Поводы, Кому
-- Продвижение → Акции, Бестселлеры, Главная
-- Магазин → Получение и доставка, Настройки (+ бюджетные диапазоны)
-- Управление → Пользователи, Аудит
+- Каталог → Товары, Справочники (вкладки), Акции, Бестселлеры
+- Витрина → Instagram, Настройки магазина (+ бюджетные диапазоны), Получение и доставка, Юридическая информация
+- Система → ERP, Пользователи, Аудит, Медиа / Site Health
+
+Homepage block editor is not part of admin UI (layout fixed / seeded).
 
 ## Migration notes (`20260926120000_catalog_simplification`)
 

@@ -1264,6 +1264,53 @@ select:focus-visible,
   color: #fff;
 }
 
+.admin-tabs {
+  margin: 0;
+}
+
+.admin-tabs__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.admin-tabs__link {
+  display: block;
+  border-radius: 0.55rem;
+  border: 1px solid var(--admin-border);
+  padding: 0.4rem 0.75rem;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  color: var(--admin-ink);
+  text-decoration: none;
+  background: var(--admin-surface, #fff);
+  transition:
+    background-color 0.2s ease,
+    color 0.2s ease,
+    border-color 0.2s ease;
+}
+
+.admin-tabs__link:hover {
+  border-color: var(--admin-brand);
+  color: var(--admin-brand);
+  background: var(--admin-brand-soft);
+}
+
+.admin-tabs__link--active {
+  border-color: var(--admin-brand);
+  background: var(--admin-brand);
+  color: #fff;
+}
+
+.admin-tabs__link--active:hover {
+  border-color: var(--admin-brand);
+  background: var(--admin-brand);
+  color: #fff;
+}
+
 .admin-main {
   min-width: 0;
 }
@@ -2366,12 +2413,6 @@ a.sf-instagram__handle:hover {
   color: var(--color-success);
 }
 
-.sf-pdp-buy__delivery {
-  font-size: 0.8125rem;
-  color: var(--color-muted);
-  line-height: 1.35;
-}
-
 .sf-pdp-buy__block {
   display: flex;
   flex-direction: column;
@@ -2467,30 +2508,6 @@ a.sf-instagram__handle:hover {
   color: var(--color-brand);
 }
 
-.sf-pdp-card-opt {
-  margin-top: 0.7rem;
-  display: grid;
-  gap: 0.5rem;
-}
-
-.sf-pdp-card-opt__check {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  font-size: 0.875rem;
-}
-
-.sf-pdp-card-opt__text {
-  width: 100%;
-  border: 1px solid var(--color-border-strong);
-  border-radius: var(--radius-md);
-  padding: 0.65rem 0.8rem;
-  font-size: 0.875rem;
-  line-height: 1.45;
-  resize: vertical;
-  background: #fff;
-}
-
 .sf-pdp-buy__qty {
   display: flex;
   align-items: center;
@@ -2574,110 +2591,45 @@ a.sf-instagram__handle:hover {
   color: var(--color-brand);
 }
 
-.sf-pdp-tabs {
+.sf-pdp-info {
   margin-top: 1.5rem;
   border-top: 1px solid var(--color-border);
   padding-top: 1rem;
-}
-
-.sf-pdp-tabs__list {
   display: flex;
-  flex-wrap: wrap;
-  gap: 0.35rem 1.25rem;
-  margin-bottom: 1rem;
+  flex-direction: column;
+  gap: 1.15rem;
 }
 
-.sf-pdp-tabs__tab {
-  position: relative;
-  padding: 0.35rem 0;
-  border: 0;
-  background: transparent;
-  color: var(--color-muted);
-  font-size: 0.875rem;
-  font-weight: 600;
-  cursor: pointer;
+.sf-pdp-info__section {
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
 }
 
-.sf-pdp-tabs__tab[aria-selected='true'] {
-  color: var(--color-brand);
+.sf-pdp-info__section .sf-label {
+  margin: 0;
 }
 
-.sf-pdp-tabs__tab[aria-selected='true']::after {
-  content: '';
-  position: absolute;
-  left: 0;
-  right: 0;
-  bottom: -0.15rem;
-  height: 2px;
-  border-radius: 999px;
-  background: var(--color-brand);
-}
-
-.sf-pdp-tabs__panel {
-  min-height: 4rem;
-}
-
-.sf-pdp-delivery {
-  display: grid;
-  gap: 0.75rem;
+.sf-pdp-composition {
+  list-style: none;
   margin: 0;
   padding: 0;
-  list-style: none;
-}
-
-.sf-pdp-delivery li {
   display: flex;
-  justify-content: space-between;
-  gap: 1rem;
-  padding-bottom: 0.7rem;
-  border-bottom: 1px solid var(--color-border);
-  font-size: 0.875rem;
+  flex-direction: column;
+  gap: 0.35rem;
 }
 
-.sf-pdp-delivery li:last-child {
-  padding-bottom: 0;
-  border-bottom: 0;
-}
-
-.sf-pdp-delivery__title {
-  font-weight: 600;
-  color: var(--color-ink);
-}
-
-.sf-pdp-delivery__meta {
-  color: var(--color-muted);
-  text-align: right;
-}
-
-.sf-pdp-specs {
-  display: grid;
-  gap: 0.55rem;
-  margin: 0;
-}
-
-.sf-pdp-specs__row {
-  display: grid;
-  grid-template-columns: minmax(6rem, 8rem) minmax(0, 1fr);
-  gap: 0.75rem;
-  padding-bottom: 0.55rem;
-  border-bottom: 1px solid var(--color-border);
-  font-size: 0.875rem;
-}
-
-.sf-pdp-specs__row:last-child {
-  padding-bottom: 0;
-  border-bottom: 0;
-}
-
-.sf-pdp-specs__row dt {
-  margin: 0;
+.sf-pdp-composition li {
+  font-size: 0.9375rem;
+  line-height: 1.45;
   color: var(--color-muted);
 }
 
-.sf-pdp-specs__row dd {
-  margin: 0;
-  color: var(--color-ink);
-  font-weight: 500;
+.sf-pdp-composition li::before {
+  content: '·';
+  margin-right: 0.45rem;
+  color: var(--color-brand);
+  font-weight: 700;
 }
 
 .sf-pdp-perks-bar {

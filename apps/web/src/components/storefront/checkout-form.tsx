@@ -13,7 +13,6 @@ import type {
 import { formatPriceFromMinor } from '@/lib/media';
 import { trackEvent } from '@/lib/analytics';
 import { clearCart, readCart, writeCart, type CartState } from '@/lib/cart';
-import { clearCheckoutIntent, readCheckoutIntent } from '@/lib/checkout-intent';
 
 const IDEMPOTENCY_STORAGE_KEY = 'bouquet-one:checkout-idempotency';
 
@@ -81,18 +80,6 @@ export function CheckoutForm() {
   const [cardMessage, setCardMessage] = useState('');
   const [anonymousCard, setAnonymousCard] = useState(false);
   const [customerComment, setCustomerComment] = useState('');
-
-  useEffect(() => {
-    const intent = readCheckoutIntent();
-    if (intent.isGift) {
-      setRecipientIsMe(false);
-    }
-    if (intent.wantCard || intent.cardDraft) {
-      setWantCard(true);
-      if (intent.cardDraft) setCardMessage(intent.cardDraft);
-    }
-    clearCheckoutIntent();
-  }, []);
 
   useEffect(() => {
     const c = readCart();

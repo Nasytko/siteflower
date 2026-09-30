@@ -2,14 +2,13 @@ import type { Metadata } from 'next';
 import { notFound, permanentRedirect } from 'next/navigation';
 import { Breadcrumbs } from '@/components/storefront/breadcrumbs';
 import { FavoriteButton } from '@/components/storefront/favorite-button';
-import { ProductDetailTabs } from '@/components/storefront/product-detail-tabs';
+import { ProductDetailInfo } from '@/components/storefront/product-detail-info';
 import { ProductGallery } from '@/components/storefront/product-gallery';
 import { ProductGrid } from '@/components/storefront/product-grid';
 import { ProductPurchasePanel } from '@/components/storefront/product-purchase-panel';
 import { SectionRail } from '@/components/storefront/section-rail';
 import {
   getFulfillmentOptions,
-  getLegalSeller,
   getProductBySlug,
   getStorefrontSettings,
   listRelatedProducts,
@@ -64,11 +63,10 @@ export default async function ProductPage({ params }: { params: Params }) {
   }
 
   const product = resolved.product;
-  const [related, settings, fulfillment, seller] = await Promise.all([
+  const [related, settings, fulfillment] = await Promise.all([
     listRelatedProducts(product.slug, 8).catch(() => []),
     getStorefrontSettings().catch(() => null),
     getFulfillmentOptions().catch(() => null),
-    getLegalSeller().catch(() => null),
   ]);
 
   const productLd = buildProductJsonLd(product);
@@ -82,7 +80,6 @@ export default async function ProductPage({ params }: { params: Params }) {
   const city = settings?.city ?? null;
   const substitutionNote = settings?.substitutionNote ?? null;
   const deliverySummary = settings?.deliverySummary ?? null;
-  const offlinePaymentDescription = seller?.actualOfflinePaymentDescription ?? null;
 
   return (
     <main id="main-content" className="sf-pdp">
@@ -129,18 +126,14 @@ export default async function ProductPage({ params }: { params: Params }) {
                 product={product}
                 variants={product.variants}
                 phone={phone}
-                city={city}
-                fulfillment={fulfillment}
-                deliverySummary={deliverySummary}
               />
 
-              <ProductDetailTabs
+              <ProductDetailInfo
                 product={product}
                 fulfillment={fulfillment}
                 deliverySummary={deliverySummary}
                 substitutionNote={substitutionNote}
                 city={city}
-                offlinePaymentDescription={offlinePaymentDescription}
               />
             </div>
           </div>

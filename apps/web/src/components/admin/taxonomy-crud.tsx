@@ -184,12 +184,7 @@ export function TaxonomyCrud({ meta, initial, canCreate, canUpdate }: Props) {
   }
 
   return (
-    <main id="main-content" className="space-y-6">
-      <header>
-        <h1 className="admin-page-title">{meta.title}</h1>
-        <p className="admin-page-lead">{meta.lead}</p>
-      </header>
-
+    <div className="space-y-6">
       {error ? (
         <p role="alert" className="admin-error">
           {error}
@@ -427,6 +422,6 @@ export function TaxonomyCrud({ meta, initial, canCreate, canUpdate }: Props) {
         Скрытая запись не удаляется: она исчезает из подбора на витрине, но остаётся у товаров и в
         истории заказов.
       </p>
-    </main>
+    </div>
   );
 }

@@ -2,11 +2,9 @@
 
 import { useEffect, useState } from 'react';
 import type { ProductPublicDto } from '@bouquet-one/contracts';
-import type { FulfillmentSettingsPublicDto } from '@bouquet-one/contracts';
 import { formatPriceFromMinor } from '@/lib/media';
 import { trackEvent } from '@/lib/analytics';
 import { addToCart, readCart, writeCart } from '@/lib/cart';
-import { writeCheckoutIntent } from '@/lib/checkout-intent';
 
 type Variant = ProductPublicDto['variants'][number];
 
@@ -17,48 +15,12 @@ type Props = {
   >;
   variants: Variant[];
   phone?: string | null;
-  city?: string | null;
-  fulfillment?: FulfillmentSettingsPublicDto | null;
-  deliverySummary?: string | null;
 };
 
-function formatFee(minor: string, currency: string): string {
-  const value = Number(minor);
-  if (!Number.isFinite(value) || value <= 0) return 'бесплатно';
-  return `${(value / 100).toFixed(0)} ${currency}`;
-}
-
-function deliveryOneLiner(
-  fulfillment: FulfillmentSettingsPublicDto | null | undefined,
-  deliverySummary: string | null | undefined,
-  city: string | null | undefined,
-): string {
-  if (fulfillment?.deliveryEnabled) {
-    const fee = formatFee(fulfillment.deliveryFeeMinor, fulfillment.currency);
-    const windows = fulfillment.timeWindows
-      .slice(0, 2)
-      .map((w) => w.label)
-      .join(', ');
-    return windows ? `Доставка — ${fee} · ${windows}` : `Доставка — ${fee}`;
-  }
-  if (deliverySummary?.trim()) return deliverySummary.trim();
-  return city ? `Доставка по ${city}` : 'Доставка по городу';
-}
-
-export function ProductPurchasePanel({
-  product,
-  variants,
-  phone,
-  city,
-  fulfillment,
-  deliverySummary,
-}: Props) {
+export function ProductPurchasePanel({ product, variants, phone }: Props) {
   const sorted = [...variants].sort((a, b) => a.sortOrder - b.sortOrder);
   const [selectedId, setSelectedId] = useState(sorted[0]?.id ?? '');
   const [qty, setQty] = useState(1);
-  const [isGift, setIsGift] = useState(true);
-  const [wantCard, setWantCard] = useState(false);
-  const [cardDraft, setCardDraft] = useState('');
   const [quickPhone, setQuickPhone] = useState('');
   const [feedback, setFeedback] = useState<string | null>(null);
   const [cartCount, setCartCount] = useState(0);
@@ -74,7 +36,6 @@ export function ProductPurchasePanel({
     discounted && selected ? formatPriceFromMinor(selected.priceMinor, product.currency) : null;
   const percentOff = product.promotion?.percentOff ?? null;
   const blocked = product.availability === 'TEMPORARILY_UNAVAILABLE' || !selected;
-  const deliveryLine = deliveryOneLiner(fulfillment, deliverySummary, city);
 
   useEffect(() => {
     setHydrated(true);
@@ -90,17 +51,8 @@ export function ProductPurchasePanel({
     return () => window.removeEventListener('bouquet:cart', sync as EventListener);
   }, []);
 
-  function persistIntent() {
-    writeCheckoutIntent({
-      isGift,
-      wantCard: isGift && wantCard,
-      cardDraft: isGift && wantCard ? cardDraft.trim() : '',
-    });
-  }
-
   function onAdd() {
     if (!selected || blocked) return;
-    persistIntent();
     const primary =
       product.media.find((m) => m.isPrimary)?.url ?? product.media[0]?.url ?? null;
     const next = addToCart(readCart(), {
@@ -119,7 +71,7 @@ export function ProductPurchasePanel({
       variantId: selected.id,
       quantity: qty,
     });
-    setFeedback(isGift ? 'Добавлено · оформим как подарок' : 'Добавлено в корзину');
+    setFeedback('Добавлено в корзину');
     window.setTimeout(() => setFeedback(null), 2800);
   }
 
@@ -142,7 +94,6 @@ export function ProductPurchasePanel({
         ) : (
           <span className="sf-pdp-badge">Временно нет</span>
         )}
-        <span className="sf-pdp-buy__delivery">{deliveryLine}</span>
       </div>
 
       {sorted.length > 1 ? (
@@ -187,49 +138,6 @@ export function ProductPurchasePanel({
           </p>
         ) : null}
         {percentOff != null ? <span className="sf-sale-chip">−{percentOff}%</span> : null}
-      </div>
-
-      <div className="sf-pdp-buy__block">
-        <div className="sf-pdp-intent" role="group" aria-label="Тип заказа">
-          <button
-            type="button"
-            className={`sf-pdp-intent__btn ${!isGift ? 'sf-pdp-intent__btn--active' : ''}`}
-            aria-pressed={!isGift}
-            onClick={() => setIsGift(false)}
-          >
-            Себе
-          </button>
-          <button
-            type="button"
-            className={`sf-pdp-intent__btn ${isGift ? 'sf-pdp-intent__btn--active' : ''}`}
-            aria-pressed={isGift}
-            onClick={() => setIsGift(true)}
-          >
-            Подарок
-          </button>
-        </div>
-        {isGift ? (
-          <div className="sf-pdp-card-opt">
-            <label className="sf-pdp-card-opt__check">
-              <input
-                type="checkbox"
-                checked={wantCard}
-                onChange={(e) => setWantCard(e.target.checked)}
-              />
-              Открытка с текстом
-            </label>
-            {wantCard ? (
-              <textarea
-                className="sf-pdp-card-opt__text"
-                rows={2}
-                maxLength={500}
-                placeholder="Текст для открытки"
-                value={cardDraft}
-                onChange={(e) => setCardDraft(e.target.value)}
-              />
-            ) : null}
-          </div>
-        ) : null}
       </div>
 
       <div className="sf-pdp-buy__qty">

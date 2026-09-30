@@ -191,9 +191,9 @@ test('admin visual QA capture', async ({ page }, testInfo) => {
     await shot(page, 'desktop-1440-admin-product-editor');
   }
 
-  await page.goto(`${webUrl}/admin/storefront/homepage`);
-  await expect(page.getByRole('heading', { name: 'Главная витрины' })).toBeVisible({ timeout: 15_000 });
-  await shot(page, 'desktop-1440-admin-homepage');
+  await page.goto(`${webUrl}/admin/catalog/flowers`);
+  await expect(page.getByRole('heading', { name: 'Справочники' })).toBeVisible({ timeout: 15_000 });
+  await shot(page, 'desktop-1440-admin-dictionaries');
 
   await page.goto(`${webUrl}/admin/bestsellers`);
   if (await page.getByRole('heading', { name: /Бестселлер/i }).count()) {

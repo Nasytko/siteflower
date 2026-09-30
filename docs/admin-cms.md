@@ -11,7 +11,7 @@ Merchandising model: [catalog-simplification-and-merchandising.md](./catalog-sim
 - Catalog products / variants / media / publish
 - Taxonomies: flowers, colors, bouquet sizes, occasions, recipients
 - Promotions (`/admin/promotions`) and bestsellers (`/admin/bestsellers`)
-- Homepage & storefront settings (including budget ranges)
+- Storefront settings (including budget ranges); homepage layout is fixed (no admin block editor)
 - Instagram curated feed manager
 - Legal entity + versioned legal documents
 - ERP outbox admin (status, events, retry, simulator test)
@@ -23,12 +23,11 @@ Merchandising model: [catalog-simplification-and-merchandising.md](./catalog-sim
 | Group | Sections |
 | --- | --- |
 | Работа | Заказы |
-| Каталог | Товары, Цветы, Цвета, Размеры, Линейки, Поводы, Кому |
-| Продвижение | Акции, Бестселлеры, Instagram, Главная |
-| Магазин | Получение и доставка, Настройки, Юридическая информация, ERP |
-| Управление | Пользователи, Аудит, Медиа / Site Health |
+| Каталог | Товары, Справочники (вкладки: Цветы, Цвета, Размеры, Линейки, Поводы, Кому), Акции, Бестселлеры |
+| Витрина | Instagram, Настройки магазина, Получение и доставка, Юридическая информация |
+| Система | ERP, Пользователи, Аудит, Медиа / Site Health |
 
-Category, Style, and Collections admin UIs were removed; do not reintroduce them.
+Category, Style, and Collections admin UIs were removed; do not reintroduce them. Homepage block editor was removed; do not reintroduce it.
 
 ## Still out of scope (do not implement in current phases)
 

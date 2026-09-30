@@ -6,7 +6,6 @@ import type {
   AdminRole,
   CommercialAvailability,
   ComponentUnit,
-  HomepageSectionKind,
   ProductLifecycle,
   PromotionType,
   TaxonomyVisibility,
@@ -48,18 +47,6 @@ const PROMOTION_TYPE: Record<PromotionType, string> = {
   FIXED: 'Фиксированная цена',
 };
 
-const HOMEPAGE_SECTION: Record<HomepageSectionKind, string> = {
-  promotions: 'Акции',
-  bestsellers: 'Бестселлеры',
-  gifts: 'Подарки',
-  instagram: 'Instagram',
-  occasions: 'Поводы',
-  recipients: 'Кому',
-  discovery: 'Подбор букета',
-  help: 'Помощь с выбором',
-  delivery: 'Доставка',
-};
-
 const ROLE: Record<AdminRole, string> = {
   SUPER_ADMIN: 'Главный администратор',
   MANAGER: 'Менеджер',
@@ -92,10 +79,6 @@ export function componentUnitLabel(value: ComponentUnit): string {
 
 export function promotionTypeLabel(value: PromotionType): string {
   return PROMOTION_TYPE[value] ?? value;
-}
-
-export function homepageSectionLabel(value: HomepageSectionKind): string {
-  return HOMEPAGE_SECTION[value] ?? value;
 }
 
 /** Local date-time for operational screens (Europe/Minsk store clock). */

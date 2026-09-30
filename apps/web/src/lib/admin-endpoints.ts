@@ -115,7 +115,6 @@ export const adminEndpoints = {
 
   orders: `${ADMIN}/orders`,
   storefrontSettings: `${ADMIN}/storefront/settings`,
-  homepage: `${ADMIN}/storefront/homepage`,
   instagramPosts: `${ADMIN}/storefront/instagram/posts`,
   instagramPost: (id: string) => `${ADMIN}/storefront/instagram/posts/${id}`,
   instagramPostsOrder: `${ADMIN}/storefront/instagram/posts/order`,

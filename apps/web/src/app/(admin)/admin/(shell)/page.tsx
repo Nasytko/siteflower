@@ -30,12 +30,6 @@ const SHORTCUTS = [
     permission: 'CATALOG_READ' as const,
   },
   {
-    href: '/admin/storefront/homepage',
-    label: 'Главная',
-    hint: 'Первый экран и блоки',
-    permission: 'CONTENT_READ' as const,
-  },
-  {
     href: '/admin/fulfillment',
     label: 'Получение и доставка',
     hint: 'Окна времени и способы',

@@ -4,11 +4,14 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import type { AdminRole, Permission } from '@bouquet-one/contracts';
 import { roleHasPermission } from '@bouquet-one/contracts';
+import { TAXONOMY_KINDS } from '@/lib/admin-endpoints';
 
 type NavItem = {
   href: string;
   label: string;
   permission?: Permission;
+  /** When set, used instead of href prefix matching. */
+  isActive?: (pathname: string) => boolean;
 };
 
 type NavGroup = {
@@ -17,7 +20,15 @@ type NavGroup = {
   items: NavItem[];
 };
 
-/** Florist store panel: work first, then catalog dictionaries, then merchandising. */
+const DICTIONARY_HREFS = TAXONOMY_KINDS.map((kind) => `/admin/catalog/${kind}`);
+
+function isDictionaryPath(pathname: string): boolean {
+  return DICTIONARY_HREFS.some(
+    (base) => pathname === base || pathname.startsWith(`${base}/`),
+  );
+}
+
+/** Florist store panel: work first, catalog, storefront, then system. */
 const NAV_GROUPS: NavGroup[] = [
   {
     id: 'work',
@@ -29,38 +40,35 @@ const NAV_GROUPS: NavGroup[] = [
     label: 'Каталог',
     items: [
       { href: '/admin/catalog/products', label: 'Товары', permission: 'CATALOG_READ' },
-      { href: '/admin/catalog/flowers', label: 'Цветы', permission: 'CATALOG_READ' },
-      { href: '/admin/catalog/colors', label: 'Цвета', permission: 'CATALOG_READ' },
-      { href: '/admin/catalog/bouquet-sizes', label: 'Размеры', permission: 'CATALOG_READ' },
-      { href: '/admin/catalog/product-lines', label: 'Линейки', permission: 'CATALOG_READ' },
-      { href: '/admin/catalog/occasions', label: 'Поводы', permission: 'CATALOG_READ' },
-      { href: '/admin/catalog/recipients', label: 'Кому', permission: 'CATALOG_READ' },
-    ],
-  },
-  {
-    id: 'promotion',
-    label: 'Продвижение',
-    items: [
+      {
+        href: '/admin/catalog/flowers',
+        label: 'Справочники',
+        permission: 'CATALOG_READ',
+        isActive: isDictionaryPath,
+      },
       { href: '/admin/promotions', label: 'Акции', permission: 'CATALOG_READ' },
       { href: '/admin/bestsellers', label: 'Бестселлеры', permission: 'CATALOG_READ' },
+    ],
+  },
+  {
+    id: 'storefront',
+    label: 'Витрина',
+    items: [
       { href: '/admin/storefront/instagram', label: 'Instagram', permission: 'CONTENT_READ' },
-      { href: '/admin/storefront/homepage', label: 'Главная', permission: 'CONTENT_READ' },
-    ],
-  },
-  {
-    id: 'shop',
-    label: 'Магазин',
-    items: [
+      {
+        href: '/admin/storefront/settings',
+        label: 'Настройки магазина',
+        permission: 'SETTINGS_READ',
+      },
       { href: '/admin/fulfillment', label: 'Получение и доставка', permission: 'SETTINGS_READ' },
-      { href: '/admin/storefront/settings', label: 'Настройки', permission: 'SETTINGS_READ' },
       { href: '/admin/legal', label: 'Юридическая информация', permission: 'LEGAL_READ' },
-      { href: '/admin/integrations/erp', label: 'ERP', permission: 'INTEGRATION_READ' },
     ],
   },
   {
-    id: 'management',
-    label: 'Управление',
+    id: 'system',
+    label: 'Система',
     items: [
+      { href: '/admin/integrations/erp', label: 'ERP', permission: 'INTEGRATION_READ' },
       { href: '/admin/users', label: 'Пользователи', permission: 'USERS_READ' },
       { href: '/admin/audit', label: 'Аудит', permission: 'AUDIT_READ' },
       { href: '/admin/media-health', label: 'Медиа / Site Health', permission: 'SITE_HEALTH_READ' },
@@ -72,8 +80,9 @@ type Props = {
   role: AdminRole;
 };
 
-function isActive(pathname: string, href: string): boolean {
-  return pathname === href || pathname.startsWith(`${href}/`);
+function isActive(pathname: string, item: NavItem): boolean {
+  if (item.isActive) return item.isActive(pathname);
+  return pathname === item.href || pathname.startsWith(`${item.href}/`);
 }
 
 export function AdminShellNav({ role }: Props) {
@@ -105,7 +114,7 @@ export function AdminShellNav({ role }: Props) {
           <p className="admin-nav__group-label">{group.label}</p>
           <ul className="admin-nav__list">
             {group.items.map((item) => {
-              const active = isActive(pathname, item.href);
+              const active = isActive(pathname, item);
               return (
                 <li key={item.href}>
                   <Link

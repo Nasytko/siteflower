@@ -22,16 +22,15 @@ Legacy `/collections` and `/collections/:slug` permanently redirect (see `apps/w
 
 ## Homepage sections
 
-Fixed layout with configurable content. Section kinds: `bestsellers` | `promotions` | `occasions` | `recipients` | `discovery` | `help` | `delivery`. Legacy stored kinds `featured` / `collection` migrate to `bestsellers` / `promotions` on load.
+Fixed layout with configurable content via API / seed (no admin UI to reorder blocks). Section kinds: `bestsellers` | `promotions` | `occasions` | `recipients` | `discovery` | `help` | `delivery`. Legacy stored kinds `featured` / `collection` migrate to `bestsellers` / `promotions` on load.
 
 ## Admin storefront config
 
 | Path | Permission | API |
 | --- | --- | --- |
-| `/admin/storefront/homepage` | `CONTENT_READ` / `CONTENT_UPDATE` | `GET/PATCH /api/v1/admin/storefront/homepage` |
 | `/admin/storefront/settings` | `SETTINGS_READ` / `SETTINGS_UPDATE` | `GET/PATCH /api/v1/admin/storefront/settings` |
 
-Budget ranges are edited from storefront settings. Both editors use optimistic concurrency (`expectedVersion`) and surface HTTP 409 on conflict.
+Homepage config remains available at `GET/PATCH /api/v1/admin/storefront/homepage` for ops/scripts; `/admin/storefront/homepage` redirects to the dashboard. Budget ranges are edited from storefront settings. Settings editor uses optimistic concurrency (`expectedVersion`) and surfaces HTTP 409 on conflict.
 
 Related merchandising admin: `/admin/promotions`, `/admin/bestsellers` (see [admin-cms.md](./admin-cms.md)).
 
