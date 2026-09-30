@@ -72,3 +72,5 @@ Steps:
 ## VPS note
 
 SiteFlower media must not use destructive Docker prune commands that could affect NewERP volumes on the same host.
+
+Production packaging runbook: [deployment-hostfly.md](./deployment-hostfly.md).

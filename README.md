@@ -90,6 +90,20 @@ RUN_VISUAL_QA=true PLAYWRIGHT_USE_SYSTEM_CHROME=true pnpm exec playwright test e
 | [docs/production-readiness.md](docs/production-readiness.md) | Production checklist |
 | [docs/commerce-invariants.md](docs/commerce-invariants.md) | Non-negotiable commerce rules |
 
+## Production Docker
+
+Local Docker remains **PostgreSQL only** (`docker compose up -d`).
+
+HostFly / Ubuntu production packaging (Nginx + Compose project `siteflower` + S3 media):
+
+- Runbook: [docs/deployment-hostfly.md](docs/deployment-hostfly.md)
+- First install: `sudo ./install.sh`
+- Deploy: `./deploy.sh`
+- Rollback: `./rollback.sh`
+- Backup: `./backup.sh`
+- Health: `./healthcheck.sh`
+- Admin: `./admin-create.sh`
+
 ## License
 
 Proprietary — all rights reserved.

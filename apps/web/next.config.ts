@@ -51,6 +51,8 @@ const uniquePatterns = remotePatterns.filter((pattern) => {
 const nextConfig: NextConfig = {
   reactStrictMode: true,
   poweredByHeader: false,
+  // Production Docker images copy a minimal server bundle (see deploy/Dockerfile.web).
+  output: 'standalone',
   transpilePackages: ['@bouquet-one/ui'],
   // Tree-shake barrel imports from the shared UI package.
   experimental: {

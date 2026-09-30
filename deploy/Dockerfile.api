@@ -1,0 +1,68 @@
+# syntax=docker/dockerfile:1.7
+
+# SiteFlower API (+ optional worker / ops CLI) — multi-stage, Node 24, pnpm 10.17.
+ARG NODE_VERSION=24
+
+FROM node:${NODE_VERSION}-bookworm-slim AS base
+ENV PNPM_HOME=/pnpm \
+    PATH=/pnpm:$PATH \
+    NEXT_TELEMETRY_DISABLED=1
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends ca-certificates openssl python3 make g++ \
+  && rm -rf /var/lib/apt/lists/* \
+  && corepack enable \
+  && corepack prepare pnpm@10.17.0 --activate
+WORKDIR /app
+
+FROM base AS deps
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml turbo.json ./
+COPY apps/api/package.json apps/api/
+COPY apps/web/package.json apps/web/
+COPY packages/database/package.json packages/database/
+COPY packages/contracts/package.json packages/contracts/
+COPY packages/ui/package.json packages/ui/
+COPY packages/config/package.json packages/config/
+COPY packages/config/typescript packages/config/typescript
+RUN pnpm install --frozen-lockfile
+
+FROM deps AS build
+COPY . .
+RUN pnpm --filter @bouquet-one/database generate \
+  && pnpm --filter @bouquet-one/contracts build \
+  && pnpm --filter @bouquet-one/database build \
+  && pnpm --filter @bouquet-one/api build
+
+FROM node:${NODE_VERSION}-bookworm-slim AS runtime
+ENV NODE_ENV=production \
+    PNPM_HOME=/pnpm \
+    PATH=/pnpm:$PATH \
+    API_PORT=3001
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends ca-certificates openssl tini curl \
+  && rm -rf /var/lib/apt/lists/* \
+  && corepack enable \
+  && corepack prepare pnpm@10.17.0 --activate \
+  && groupadd --gid 10001 siteflower \
+  && useradd --uid 10001 --gid siteflower --shell /usr/sbin/nologin --create-home siteflower
+WORKDIR /app
+
+# Workspace runtime: built packages + lockfile-aligned node_modules (includes prisma for migrate).
+COPY --from=build --chown=siteflower:siteflower /app/package.json /app/pnpm-lock.yaml /app/pnpm-workspace.yaml ./
+COPY --from=build --chown=siteflower:siteflower /app/node_modules ./node_modules
+COPY --from=build --chown=siteflower:siteflower /app/apps/api/package.json ./apps/api/package.json
+COPY --from=build --chown=siteflower:siteflower /app/apps/api/dist ./apps/api/dist
+COPY --from=build --chown=siteflower:siteflower /app/apps/api/scripts ./apps/api/scripts
+COPY --from=build --chown=siteflower:siteflower /app/apps/api/src ./apps/api/src
+COPY --from=build --chown=siteflower:siteflower /app/packages/contracts ./packages/contracts
+COPY --from=build --chown=siteflower:siteflower /app/packages/database ./packages/database
+COPY --from=build --chown=siteflower:siteflower /app/packages/config ./packages/config
+
+USER siteflower
+WORKDIR /app/apps/api
+EXPOSE 3001
+
+HEALTHCHECK --interval=20s --timeout=5s --start-period=40s --retries=5 \
+  CMD curl -fsS "http://127.0.0.1:${API_PORT}/api/v1/health" >/dev/null || exit 1
+
+ENTRYPOINT ["/usr/bin/tini", "--"]
+CMD ["node", "dist/main.js"]

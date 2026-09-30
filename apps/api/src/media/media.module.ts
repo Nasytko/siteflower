@@ -29,6 +29,7 @@ import { S3MediaStorage } from './s3-media.storage';
             accessKeyId: appConfig.s3AccessKeyId!,
             secretAccessKey: appConfig.s3SecretAccessKey!,
             publicBaseUrl: appConfig.s3PublicBaseUrl ?? appConfig.mediaPublicBaseUrl,
+            forcePathStyle: appConfig.s3ForcePathStyle,
           });
         }
         const root = join(process.cwd(), appConfig.mediaLocalRoot);

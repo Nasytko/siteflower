@@ -2,6 +2,8 @@
 
 Use before first production deploy. Do not claim a row is done unless verified in the target environment.
 
+Full HostFly VPS runbook: [deployment-hostfly.md](./deployment-hostfly.md).
+
 ## Secrets & config
 
 - [ ] Unique `SESSION_HMAC_SECRET` (≥32 chars, not a template placeholder)
@@ -49,3 +51,12 @@ Use before first production deploy. Do not claim a row is done unless verified i
 ## Explicitly not in v1
 
 - ERP consumer, payments, CAPTCHA, full Site Health UI, Redis
+
+## HostFly / VPS packaging
+
+- [ ] `sudo ./install.sh` completed on Ubuntu 24.04
+- [ ] `/etc/siteflower/production.env` filled (S3 + domain); never committed
+- [ ] `./deploy.sh` healthy
+- [ ] TLS via certbot after DNS
+- [ ] `./admin-create.sh` SUPER_ADMIN created
+- [ ] Confirmed scripts never prune foreign Docker volumes (NewERP-safe)

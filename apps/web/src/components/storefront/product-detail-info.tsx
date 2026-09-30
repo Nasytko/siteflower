@@ -72,13 +72,13 @@ function CompositionSection({ product }: { product: ProductPublicDto }) {
     <div className="space-y-2.5">
       {components.length > 0 ? (
         <ul className="sf-pdp-composition">
-          {components.map((item) => {
+          {components.map((item, index) => {
             const qty =
               item.quantity != null
                 ? ` — ${item.quantity}${unitLabel(item.unit) ? `\u00a0${unitLabel(item.unit)}` : ''}`
                 : '';
             return (
-              <li key={item.id}>
+              <li key={`${item.displayName}-${item.flowerSlug ?? index}`}>
                 {item.displayName}
                 {qty}
               </li>

@@ -1,0 +1,144 @@
+# SiteFlower production stack — isolated Compose project "siteflower".
+# Usage (from repo root on the VPS):
+#   docker compose -p siteflower -f deploy/docker-compose.prod.yml --env-file /etc/siteflower/production.env up -d
+#
+# Does NOT publish Postgres. API/Web bind to loopback only for host Nginx.
+
+name: siteflower
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    container_name: siteflower-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    volumes:
+      - siteflower_pgdata:/var/lib/postgresql/data
+    networks:
+      - siteflower_internal
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U "$$POSTGRES_USER" -d "$$POSTGRES_DB"']
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 10s
+    logging:
+      driver: json-file
+      options:
+        max-size: '20m'
+        max-file: '5'
+    # No host ports — never expose 5432 publicly or on the host.
+
+  api:
+    image: ${SITEFLOWER_API_IMAGE:-siteflower-api:local}
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.api
+    container_name: siteflower-api
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    env_file:
+      - ${SITEFLOWER_ENV_FILE:?Set SITEFLOWER_ENV_FILE to the absolute production env path}
+    environment:
+      NODE_ENV: production
+      API_PORT: '3001'
+      # DATABASE_URL must come from the env file and use Docker DNS host "postgres"
+      # (never interpolate passwords here — special characters break URLs).
+    ports:
+      - '127.0.0.1:3001:3001'
+    networks:
+      - siteflower_internal
+    healthcheck:
+      test: ['CMD-SHELL', 'curl -fsS http://127.0.0.1:3001/api/v1/health >/dev/null || exit 1']
+      interval: 20s
+      timeout: 5s
+      retries: 8
+      start_period: 45s
+    logging:
+      driver: json-file
+      options:
+        max-size: '20m'
+        max-file: '5'
+    mem_limit: 1536m
+    mem_reservation: 512m
+
+  web:
+    image: ${SITEFLOWER_WEB_IMAGE:-siteflower-web:local}
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.web
+      args:
+        API_URL: http://api:3001
+        NEXT_PUBLIC_SITE_URL: ${NEXT_PUBLIC_SITE_URL}
+        S3_PUBLIC_BASE_URL: ${S3_PUBLIC_BASE_URL:-}
+        MEDIA_PUBLIC_BASE_URL: ${MEDIA_PUBLIC_BASE_URL:-}
+    container_name: siteflower-web
+    restart: unless-stopped
+    depends_on:
+      api:
+        condition: service_healthy
+    env_file:
+      - ${SITEFLOWER_ENV_FILE:?Set SITEFLOWER_ENV_FILE to the absolute production env path}
+    environment:
+      NODE_ENV: production
+      API_URL: http://api:3001
+      PORT: '3000'
+      HOSTNAME: 0.0.0.0
+    ports:
+      - '127.0.0.1:3000:3000'
+    networks:
+      - siteflower_internal
+    healthcheck:
+      test: ['CMD-SHELL', 'curl -fsS http://127.0.0.1:3000/ >/dev/null || exit 1']
+      interval: 20s
+      timeout: 5s
+      retries: 8
+      start_period: 45s
+    logging:
+      driver: json-file
+      options:
+        max-size: '20m'
+        max-file: '5'
+    mem_limit: 1024m
+    mem_reservation: 384m
+
+  # Optional ERP/simulator outbox worker. Enable with:
+  #   docker compose -p siteflower -f deploy/docker-compose.prod.yml --profile integrations up -d
+  worker:
+    profiles: ['integrations']
+    image: ${SITEFLOWER_API_IMAGE:-siteflower-api:local}
+    container_name: siteflower-worker
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      api:
+        condition: service_healthy
+    env_file:
+      - ${SITEFLOWER_ENV_FILE:?Set SITEFLOWER_ENV_FILE to the absolute production env path}
+    environment:
+      NODE_ENV: production
+    networks:
+      - siteflower_internal
+    command: ['node', 'dist/worker-main.js']
+    logging:
+      driver: json-file
+      options:
+        max-size: '10m'
+        max-file: '5'
+    mem_limit: 512m
+    mem_reservation: 128m
+
+networks:
+  siteflower_internal:
+    name: siteflower_internal
+    driver: bridge
+
+volumes:
+  siteflower_pgdata:
+    name: siteflower_pgdata

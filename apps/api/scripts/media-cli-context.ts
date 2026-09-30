@@ -31,6 +31,9 @@ function createStorage(): MediaStorage {
         process.env.S3_PUBLIC_BASE_URL ??
         process.env.MEDIA_PUBLIC_BASE_URL ??
         'http://localhost/media',
+      forcePathStyle: !['0', 'false', 'no', 'off'].includes(
+        (process.env.S3_FORCE_PATH_STYLE ?? 'true').toLowerCase(),
+      ),
     });
   }
   const root = join(process.cwd(), process.env.MEDIA_LOCAL_ROOT ?? './storage/media');
