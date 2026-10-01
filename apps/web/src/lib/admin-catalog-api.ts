@@ -4,6 +4,7 @@
  */
 
 import type {
+  AdminPromotionListItemDto,
   BestsellerGroupAdminDto,
   BouquetSizeAdminDto,
   BudgetRangeDto,
@@ -11,17 +12,11 @@ import type {
   PaginatedResponse,
   ProductAdminDto,
   ProductListItemDto,
-  ProductPromotionAdminDto,
   TaxonomyAdminDto,
 } from '@bouquet-one/contracts';
 import { AdminApiError, adminFetch } from './admin-api';
 import { unwrapAdminList, unwrapAdminPage } from './admin-list';
 import { adminEndpoints, withQuery, type QueryValue, type TaxonomyKind } from './admin-endpoints';
-
-/** Product row on the Акции screen: public promo display + admin schedule when available. */
-export type PromotionListItemDto = ProductListItemDto & {
-  promotionAdmin?: ProductPromotionAdminDto | null;
-};
 
 export type ProductListQuery = {
   q?: string;
@@ -106,17 +101,13 @@ export function fetchBestsellerGroups(): Promise<BestsellerGroupAdminDto[]> {
 }
 
 /**
- * Promotions screen. Prefers the dedicated endpoint; falls back to the product
- * list filtered by active promotion so the screen works during API rollout.
+ * Admin «Акции» list — dedicated endpoint only.
+ * Do not fall back to product list with unknown `promotion=` query (forbidNonWhitelisted → 400).
  */
-export async function fetchPromotionRows(): Promise<PromotionListItemDto[]> {
-  const direct = await safeList<PromotionListItemDto>(
+export async function fetchPromotionRows(): Promise<AdminPromotionListItemDto[]> {
+  return safeList<AdminPromotionListItemDto>(
     withQuery(adminEndpoints.promotions, { page: 1, pageSize: 100 }),
   );
-  if (direct.length > 0) return direct;
-
-  const fallback = await fetchProductsPage({ promotion: 'any', pageSize: 100 });
-  return fallback.items.filter((item) => item.promotion !== null);
 }
 
 /** Dashboard counters: `total` from a pageSize=1 list; null when unavailable. */

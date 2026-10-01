@@ -2,15 +2,15 @@ import {
   BadRequestException,
   ConflictException,
   Injectable,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
 import type {
+  AdminPromotionListItemDto,
   PaginatedResponse,
-  PriceRangeDto,
   ProductAdminDto,
-  ProductLifecycle,
-  ProductListItemDto,
   ProductPromotionAdminDto,
+  ProductListItemDto,
   PromotionType,
   PromotionValidationIssue,
 } from '@bouquet-one/contracts';
@@ -21,12 +21,8 @@ import type { ActorContext } from '../common/actor.util';
 import { AppConfigService } from '../config/app-config.service';
 import { PrismaService } from '../database/prisma.service';
 import { MediaService } from '../media/media.service';
-import {
-  LIST_IMAGE_TARGET_WIDTH,
-  pickDerivativeStorageUrl,
-} from '../media/media-url.util';
 import { StorefrontRevalidateService } from '../storefront/storefront-revalidate.service';
-import { activeVariantPrices, OCC_CONFLICT_MESSAGE } from './catalog.logic';
+import { OCC_CONFLICT_MESSAGE } from './catalog.logic';
 import {
   PRODUCT_INCLUDE,
   toPromotionAdminDto,
@@ -35,22 +31,10 @@ import {
   type ProductWithRelations,
 } from './catalog.mapper';
 import { ProductsRepository } from './products.repository';
-import { validatePromotionInput } from './promotion.util';
+import { adminPromotionListStatus, validatePromotionInput } from './promotion.util';
 
 export const PROMOTION_STATUSES = ['all', 'active', 'scheduled', 'ended', 'disabled'] as const;
 export type PromotionStatus = (typeof PROMOTION_STATUSES)[number];
-
-/** Admin «Акции» row — product identity plus the full promotion record. */
-export type AdminPromotionListItemDto = {
-  productId: string;
-  slug: string;
-  name: string;
-  lifecycle: ProductLifecycle;
-  primaryImageUrl: string | null;
-  price: PriceRangeDto | null;
-  promotion: ProductPromotionAdminDto;
-  status: Exclude<PromotionStatus, 'all'>;
-};
 
 export type UpsertPromotionInput = {
   expectedVersion: number;
@@ -91,25 +75,14 @@ function mapPromotionPrismaError(err: unknown): never {
   throw err;
 }
 
-function statusOf(promotion: ProductPromotionAdminDto, now: Date): AdminPromotionListItemDto['status'] {
-  if (!promotion.enabled) return 'disabled';
-  if (promotion.currentlyEffective) return 'active';
-  if (promotion.startsAt && new Date(promotion.startsAt).getTime() > now.getTime()) {
-    return 'scheduled';
-  }
-  if (promotion.endsAt && new Date(promotion.endsAt).getTime() <= now.getTime()) {
-    return 'ended';
-  }
-  // Enabled but not effective for another reason (e.g. FIXED prices no longer below regular).
-  return 'disabled';
-}
-
 /**
  * Promotion pricing is server-authoritative: the admin stores intent here, and
  * every read path (catalog, checkout, orders) recomputes the effective price.
  */
 @Injectable()
 export class PromotionsService {
+  private readonly logger = new Logger(PromotionsService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly products: ProductsRepository,
@@ -305,30 +278,20 @@ export class PromotionsService {
     product: ProductWithRelations,
     now: Date,
   ): AdminPromotionListItemDto | null {
-    const promotion = toPromotionAdminDto(product, now);
-    if (!promotion) return null;
-    const primary = product.media.find((item) => item.isPrimary) ?? product.media[0] ?? null;
-    return {
-      productId: product.id,
-      slug: product.slug,
-      name: product.name,
-      lifecycle: product.lifecycle,
-      primaryImageUrl: primary
-        ? pickDerivativeStorageUrl(
-            primary.mediaAsset.storageKey,
-            primary.mediaAsset.derivatives.map((d) => ({
-              width: d.width,
-              format: d.format,
-              storageKey: d.storageKey,
-            })),
-            this.urlFor,
-            LIST_IMAGE_TARGET_WIDTH,
-          )
-        : null,
-      price: activeVariantPrices(product.currency, product.variants),
-      promotion,
-      status: statusOf(promotion, now),
-    };
+    try {
+      const promotionAdmin = toPromotionAdminDto(product, now);
+      if (!promotionAdmin) return null;
+      const listItem = toProductListItemDto(product, this.urlFor, now);
+      return {
+        ...listItem,
+        promotionAdmin,
+        status: adminPromotionListStatus(promotionAdmin, now),
+      };
+    } catch (err) {
+      const detail = err instanceof Error ? err.message : String(err);
+      this.logger.warn(`promotion_list_row_skipped productId=${product.id} err=${detail}`);
+      return null;
+    }
   }
 
   /** Promotion edits are part of the product aggregate, so they share its version. */

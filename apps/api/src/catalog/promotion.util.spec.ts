@@ -1,10 +1,12 @@
 import {
+  adminPromotionListStatus,
   buildPublicPromotionDto,
   effectiveVariantPriceMinor,
   isPromotionEffective,
   validatePromotionInput,
   type PromotionRow,
 } from './promotion.util';
+import type { ProductPromotionAdminDto } from '@bouquet-one/contracts';
 
 const now = new Date('2026-03-08T09:00:00.000Z');
 
@@ -271,5 +273,52 @@ describe('validatePromotionInput', () => {
         variantSalePrices: [{ variantId: 'v1', salePriceMinor: 7900n }],
       }),
     ).toEqual([]);
+  });
+});
+
+describe('adminPromotionListStatus', () => {
+  function admin(
+    overrides: Partial<ProductPromotionAdminDto> = {},
+  ): ProductPromotionAdminDto {
+    return {
+      enabled: true,
+      type: 'PERCENT',
+      percentOff: 20,
+      startsAt: null,
+      endsAt: null,
+      variantSalePrices: [],
+      version: 1,
+      currentlyEffective: true,
+      ...overrides,
+    };
+  }
+
+  it('maps disabled / active / scheduled / ended', () => {
+    expect(adminPromotionListStatus(admin({ enabled: false }), now)).toBe('disabled');
+    expect(adminPromotionListStatus(admin({ currentlyEffective: true }), now)).toBe('active');
+    expect(
+      adminPromotionListStatus(
+        admin({
+          currentlyEffective: false,
+          startsAt: '2026-03-09T00:00:00.000Z',
+        }),
+        now,
+      ),
+    ).toBe('scheduled');
+    expect(
+      adminPromotionListStatus(
+        admin({
+          currentlyEffective: false,
+          endsAt: '2026-03-08T08:00:00.000Z',
+        }),
+        now,
+      ),
+    ).toBe('ended');
+  });
+
+  it('treats enabled-but-ineffective as disabled for list chips', () => {
+    expect(
+      adminPromotionListStatus(admin({ currentlyEffective: false, startsAt: null, endsAt: null }), now),
+    ).toBe('disabled');
   });
 });

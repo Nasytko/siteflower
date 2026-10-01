@@ -1,33 +1,15 @@
 import Link from 'next/link';
-import { fetchPromotionRows, type PromotionListItemDto } from '@/lib/admin-catalog-api';
-import { formatAdminDateTime, promotionTypeLabel } from '@/lib/admin-labels';
+import { fetchPromotionRows } from '@/lib/admin-catalog-api';
+import {
+  promotionDiscountLabel,
+  promotionPeriodLabel,
+  promotionRegularPriceLabel,
+  promotionSalePriceLabel,
+  promotionStatusView,
+  promotionTypeForRow,
+} from '@/lib/admin-promotions';
 import { requireAdminPermission } from '@/lib/admin-page-auth';
 import { toSameOriginMediaUrl } from '@/lib/media';
-
-type PromotionStatus = { label: string; tone: 'active' | 'planned' | 'ended' | 'off' };
-
-function readStatus(row: PromotionListItemDto): PromotionStatus {
-  const admin = row.promotionAdmin;
-  if (admin && !admin.enabled) return { label: 'Выключена', tone: 'off' };
-  if (admin?.currentlyEffective || (!admin && row.promotion)) {
-    return { label: 'Идёт сейчас', tone: 'active' };
-  }
-  if (admin?.startsAt && new Date(admin.startsAt).getTime() > Date.now()) {
-    return { label: 'Запланирована', tone: 'planned' };
-  }
-  if (admin?.endsAt && new Date(admin.endsAt).getTime() < Date.now()) {
-    return { label: 'Завершена', tone: 'ended' };
-  }
-  return { label: 'Настроена', tone: 'planned' };
-}
-
-function readPeriod(row: PromotionListItemDto): string {
-  const admin = row.promotionAdmin;
-  if (!admin || (!admin.startsAt && !admin.endsAt)) return 'Без срока';
-  const from = admin.startsAt ? formatAdminDateTime(admin.startsAt) : 'сразу';
-  const to = admin.endsAt ? formatAdminDateTime(admin.endsAt) : 'бессрочно';
-  return `${from} — ${to}`;
-}
 
 export default async function AdminPromotionsPage() {
   await requireAdminPermission('CATALOG_READ');
@@ -35,18 +17,36 @@ export default async function AdminPromotionsPage() {
 
   return (
     <main id="main-content" className="space-y-6">
-      <header>
-        <h1 className="admin-page-title">Акции</h1>
-        <p className="admin-page-lead">
-          Обзор скидок. Редактирование — в карточке товара, раздел «Акция и витрины».
-        </p>
+      <header className="flex flex-wrap items-end justify-between gap-4">
+        <div>
+          <h1 className="admin-page-title">Акции</h1>
+          <p className="admin-page-lead">
+            Обзор скидок по товарам. Создать или изменить акцию можно в карточке товара —
+            раздел «Акция и витрины».
+          </p>
+        </div>
+        <Link href="/admin/catalog/products" className="admin-btn-ghost">
+          К товарам
+        </Link>
       </header>
 
       {rows.length === 0 ? (
-        <div className="admin-panel">
-          <p className="admin-empty">
-            Акций нет. Откройте товар → «Акция и витрины» и включите скидку.
+        <div className="admin-panel space-y-3 py-10 text-center">
+          <p className="admin-empty text-base font-medium text-[var(--admin-ink)]">
+            Акций пока нет
           </p>
+          <p className="mx-auto max-w-md text-sm text-[var(--admin-muted)]">
+            Создайте первую акцию, чтобы управлять скидками на товары: откройте товар и включите
+            скидку в разделе «Акция и витрины».
+          </p>
+          <div className="pt-2">
+            <Link
+              href="/admin/catalog/products"
+              className="inline-flex rounded-lg bg-[var(--admin-brand)] px-4 py-2 text-sm font-medium text-white hover:opacity-90"
+            >
+              Открыть каталог товаров
+            </Link>
+          </div>
         </div>
       ) : (
         <div className="admin-panel overflow-x-auto">
@@ -64,7 +64,8 @@ export default async function AdminPromotionsPage() {
             </thead>
             <tbody>
               {rows.map((row) => {
-                const status = readStatus(row);
+                const status = promotionStatusView(row);
+                const discount = promotionDiscountLabel(row);
                 return (
                   <tr key={row.id}>
                     <td>
@@ -85,36 +86,22 @@ export default async function AdminPromotionsPage() {
                       >
                         {row.name}
                       </Link>
-                      <p className="text-xs text-[var(--admin-muted)]">
-                        {row.promotionAdmin
-                          ? promotionTypeLabel(row.promotionAdmin.type)
-                          : row.promotion
-                            ? promotionTypeLabel(row.promotion.type)
-                            : '—'}
-                      </p>
+                      <p className="text-xs text-[var(--admin-muted)]">{promotionTypeForRow(row)}</p>
                     </td>
                     <td className="tabular-nums admin-price-old">
-                      {row.promotion?.originalPrice.label ?? row.price?.label ?? '—'}
+                      {promotionRegularPriceLabel(row)}
                     </td>
                     <td className="tabular-nums">
-                      <span className="admin-price-sale">
-                        {row.promotion?.salePrice.label ?? '—'}
-                      </span>
+                      <span className="admin-price-sale">{promotionSalePriceLabel(row)}</span>
                     </td>
                     <td>
-                      {row.promotion?.percentOff ? (
-                        <span className="admin-chip admin-chip--sale">
-                          −{row.promotion.percentOff}%
-                        </span>
-                      ) : row.promotionAdmin?.percentOff ? (
-                        <span className="admin-chip admin-chip--sale">
-                          −{row.promotionAdmin.percentOff}%
-                        </span>
+                      {discount ? (
+                        <span className="admin-chip admin-chip--sale">{discount}</span>
                       ) : (
                         <span className="text-[var(--admin-muted)]">—</span>
                       )}
                     </td>
-                    <td className="text-[var(--admin-muted)]">{readPeriod(row)}</td>
+                    <td className="text-[var(--admin-muted)]">{promotionPeriodLabel(row)}</td>
                     <td>
                       <span
                         className={`admin-chip ${

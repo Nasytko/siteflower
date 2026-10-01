@@ -193,6 +193,26 @@ export type ProductPromotionAdminDto = {
   currentlyEffective: boolean;
 };
 
+/** Filter/status values for admin «Акции» list (excludes query sentinel `all`). */
+export const ADMIN_PROMOTION_LIST_STATUSES = [
+  'active',
+  'scheduled',
+  'ended',
+  'disabled',
+] as const;
+export type AdminPromotionListStatus = (typeof ADMIN_PROMOTION_LIST_STATUSES)[number];
+
+/**
+ * Admin «Акции» overview row.
+ * - `promotion` — public display prices when currently effective (else null)
+ * - `promotionAdmin` — full schedule/config for the row
+ * - `status` — derived chip state for the list
+ */
+export type AdminPromotionListItemDto = ProductListItemDto & {
+  promotionAdmin: ProductPromotionAdminDto;
+  status: AdminPromotionListStatus;
+};
+
 export type ProductListItemDto = {
   id: string;
   slug: string;

@@ -6,7 +6,9 @@ import {
   applyPercentOff,
   deriveDisplayPercentOff,
   derivePriceRange,
+  type AdminPromotionListStatus,
   type PriceRangeDto,
+  type ProductPromotionAdminDto,
   type ProductPromotionPublicDto,
   type PromotionType,
   type PromotionValidationIssue,
@@ -92,6 +94,23 @@ export function buildPublicPromotionDto(
 }
 
 export type { PromotionValidationIssue };
+
+/** List-chip status for admin promotions overview. */
+export function adminPromotionListStatus(
+  promotion: ProductPromotionAdminDto,
+  now: Date,
+): AdminPromotionListStatus {
+  if (!promotion.enabled) return 'disabled';
+  if (promotion.currentlyEffective) return 'active';
+  if (promotion.startsAt && new Date(promotion.startsAt).getTime() > now.getTime()) {
+    return 'scheduled';
+  }
+  if (promotion.endsAt && new Date(promotion.endsAt).getTime() <= now.getTime()) {
+    return 'ended';
+  }
+  // Enabled but not currently discounted (e.g. FIXED prices no longer below regular).
+  return 'disabled';
+}
 
 /**
  * Storage invariants (type ↔ fields) always apply — they match DB CHECKs.
