@@ -207,16 +207,28 @@ export class MediaService {
       this.logger.warn(`media_decode_zero_dimensions format=${format}`);
       throw mediaHttpException(MEDIA_ERROR_CODES.IMAGE_DECODE_FAILED);
     }
-    if (width > MEDIA_MAX_DIMENSION || height > MEDIA_MAX_DIMENSION) {
-      throw mediaHttpException(MEDIA_ERROR_CODES.IMAGE_DIMENSIONS_TOO_LARGE);
-    }
     if (width * height > MEDIA_MAX_INPUT_PIXELS) {
       throw mediaHttpException(MEDIA_ERROR_CODES.IMAGE_DIMENSIONS_TOO_LARGE);
     }
 
+    // Oversized edges: downscale safely before master encode (never upscale).
+    // Pixel-bomb guard above remains the hard reject; 6000px is a working max, not UX copy.
+    let pipelineImage = image;
+    if (width > MEDIA_MAX_DIMENSION || height > MEDIA_MAX_DIMENSION) {
+      this.logger.log(
+        `media_input_downscale format=${format} from=${width}x${height} maxEdge=${MEDIA_MAX_DIMENSION}`,
+      );
+      pipelineImage = image.resize({
+        width: MEDIA_MAX_DIMENSION,
+        height: MEDIA_MAX_DIMENSION,
+        fit: 'inside',
+        withoutEnlargement: true,
+      });
+    }
+
     let masterEncoded: { buffer: Buffer; mime: string; ext: string };
     try {
-      masterEncoded = await encodeNormalizedMaster(image.clone(), format);
+      masterEncoded = await encodeNormalizedMaster(pipelineImage.clone(), format);
     } catch (err) {
       if (err instanceof BadRequestException) throw err;
       const detail = err instanceof Error ? err.message : String(err);

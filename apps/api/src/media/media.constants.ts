@@ -8,10 +8,18 @@ export const MEDIA_ORPHAN_GRACE_HOURS = 24;
 export const MEDIA_MAX_INPUT_PIXELS = 25_000_000;
 
 /**
- * Max edge of the *uploaded* raster after EXIF rotate (input reject gate).
- * Oversized phone photos are accepted up to this size, then downscaled to master.
+ * Max edge of the *uploaded* raster after EXIF rotate.
+ * Larger phone photos are safely downscaled to this edge before master encode
+ * (not a hard reject — pixel-bomb guard remains MEDIA_MAX_INPUT_PIXELS).
  */
 export const MEDIA_MAX_DIMENSION = 6000;
+
+/**
+ * Hard ceiling for a single upload body (Multer + MediaService).
+ * Managers may select large phone photos; client may prepare first, but the
+ * API still enforces this absolute byte limit.
+ */
+export const MEDIA_UPLOAD_MAX_INPUT_BYTES = 25_000_000;
 
 /**
  * Web-ready master long side (max). Only downscales; never upscales.

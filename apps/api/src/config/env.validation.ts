@@ -35,7 +35,7 @@ export const envSchema = z
     MEDIA_STORAGE: z.enum(['local', 's3']).default('local'),
     MEDIA_LOCAL_ROOT: z.string().default('./storage/media'),
     MEDIA_PUBLIC_BASE_URL: z.string().default('http://localhost:3001/api/v1/media'),
-    MEDIA_MAX_BYTES: z.coerce.number().int().positive().default(8_000_000),
+    MEDIA_MAX_BYTES: z.coerce.number().int().positive().default(25_000_000),
     /** Explicit opt-in for temporary/emergency local media in production. Prefer S3. */
     ALLOW_PRODUCTION_LOCAL_MEDIA: booleanFromString.default(false),
     /**

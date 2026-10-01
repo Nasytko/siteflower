@@ -21,7 +21,7 @@ import { memoryStorage } from 'multer';
 import { CurrentAdmin, type AuthenticatedAdmin } from '../auth/current-admin.decorator';
 import { RequirePermissions } from '../auth/decorators';
 import { actorFrom } from '../common/actor.util';
-import { MEDIA_UPLOAD_THROTTLE } from '../media/media.constants';
+import { MEDIA_UPLOAD_MAX_INPUT_BYTES, MEDIA_UPLOAD_THROTTLE } from '../media/media.constants';
 import { MEDIA_ERROR_CODES, mediaHttpException } from '../media/media-errors';
 import {
   CreateProductDto,
@@ -200,7 +200,7 @@ export class AdminProductsController {
     FileInterceptor('file', {
       storage: memoryStorage(),
       limits: {
-        fileSize: Number(process.env.MEDIA_MAX_BYTES ?? 8_000_000),
+        fileSize: Number(process.env.MEDIA_MAX_BYTES ?? MEDIA_UPLOAD_MAX_INPUT_BYTES),
         files: 1,
       },
     }),

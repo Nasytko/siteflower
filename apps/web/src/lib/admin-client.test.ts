@@ -52,7 +52,7 @@ test('maps 413 oversized upload to validation kind', () => {
   });
   assert.equal(err.kind, 'validation');
   assert.equal(err.code, 'MEDIA_TOO_LARGE');
-  assert.match(mediaErrorUserText(err), /8 MB/i);
+  assert.match(mediaErrorUserText(err), /25 МБ|25 MB/i);
 });
 
 test('maps validation issues to fieldErrors', () => {

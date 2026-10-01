@@ -45,10 +45,12 @@ import {
   variantStatusLabel,
 } from '@/lib/admin-labels';
 import {
+  formatMediaBytes,
   mediaPreflightStatusLabel,
   preflightMediaBatch,
   type MediaPreflightStatus,
 } from '@/lib/admin-media-preflight';
+import { prepareAdminMediaFile } from '@/lib/admin-media-prepare';
 import { majorInputToMinor, minorToMajorInput } from '@/lib/admin-money';
 import { toSameOriginMediaUrl } from '@/lib/media';
 import {
@@ -197,9 +199,12 @@ export function ProductEditor({
       status: MediaPreflightStatus;
       error: string | null;
       sizeLabel?: string;
+      prepareSummary?: string | null;
+      requestId?: string | null;
     }>
   >([]);
-  const pending = savePending || mediaPending;  const [slugManual, setSlugManual] = useState(
+  const pending = savePending || mediaPending;
+  const [slugManual, setSlugManual] = useState(
     () => normalizeSlug(product.name) !== product.slug,
   );
 
@@ -616,14 +621,18 @@ export function ProductEditor({
         name: row.name,
         status: 'error' as const,
         error: row.error,
-        sizeLabel: `${(row.sizeBytes / (1024 * 1024)).toFixed(1)} MB`,
+        sizeLabel: formatMediaBytes(row.sizeBytes),
+        prepareSummary: null as string | null,
+        requestId: null as string | null,
       })),
       ...accepted.map((row, index) => ({
         id: `acc-${index}-${row.name}-${row.sizeBytes}`,
         name: row.name,
-        status: 'ready' as const,
+        status: 'selected' as const,
         error: null as string | null,
-        sizeLabel: `${(row.sizeBytes / (1024 * 1024)).toFixed(1)} MB`,
+        sizeLabel: formatMediaBytes(row.sizeBytes),
+        prepareSummary: null as string | null,
+        requestId: null as string | null,
       })),
     ];
     setUploadStates(initialRows);
@@ -638,40 +647,80 @@ export function ProductEditor({
     if (capacityError) {
       setError(capacityError);
     }
+
     for (let i = 0; i < accepted.length; i += 1) {
       const row = accepted[i]!;
       const rowId = `acc-${i}-${row.name}-${row.sizeBytes}`;
+      setUploadStates((prev) =>
+        prev.map((item) =>
+          item.id === rowId ? { ...item, status: 'preparing' as const, error: null } : item,
+        ),
+      );
+
+      let uploadFile = row.file;
+      try {
+        const prepared = await prepareAdminMediaFile(row.file);
+        if (!prepared.ok) {
+          setUploadStates((prev) =>
+            prev.map((item) =>
+              item.id === rowId
+                ? {
+                    ...item,
+                    status: 'error' as const,
+                    error: prepared.error ?? 'Не удалось обработать фотографию',
+                  }
+                : item,
+            ),
+          );
+          continue;
+        }
+        uploadFile = prepared.file;
+        setUploadStates((prev) =>
+          prev.map((item) =>
+            item.id === rowId
+              ? {
+                  ...item,
+                  status: 'prepared' as const,
+                  sizeLabel: formatMediaBytes(prepared.preparedSizeBytes),
+                  prepareSummary: prepared.summary,
+                }
+              : item,
+          ),
+        );
+      } catch {
+        // Client prepare failed — fall back to original; API validates.
+        uploadFile = row.file;
+        setUploadStates((prev) =>
+          prev.map((item) =>
+            item.id === rowId ? { ...item, status: 'prepared' as const } : item,
+          ),
+        );
+      }
+
       setUploadStates((prev) =>
         prev.map((item) =>
           item.id === rowId ? { ...item, status: 'uploading' as const } : item,
         ),
       );
       try {
+        await onUpload(uploadFile);
         setUploadStates((prev) =>
           prev.map((item) =>
-            item.id === rowId ? { ...item, status: 'processing' as const } : item,
-          ),
-        );
-        // Brief optimizing phase while server Sharp pipeline runs inside the upload request.
-        setUploadStates((prev) =>
-          prev.map((item) =>
-            item.id === rowId ? { ...item, status: 'optimizing' as const } : item,
-          ),
-        );
-        await onUpload(row.file);
-        setUploadStates((prev) =>
-          prev.map((item) =>
-            item.id === rowId ? { ...item, status: 'done' as const, error: null } : item,
+            item.id === rowId
+              ? { ...item, status: 'uploaded' as const, error: null, requestId: null }
+              : item,
           ),
         );
       } catch (err) {
+        const rid = err instanceof AdminRequestError ? err.requestId ?? null : null;
         setUploadStates((prev) =>
           prev.map((item) =>
             item.id === rowId
               ? {
                   ...item,
                   status: 'error' as const,
-                  error: mediaErrorUserText(err, 'Не удалось обработать изображение'),
+                  error: mediaErrorUserText(err, 'Не удалось обработать фотографию'),
+                  requestId: rid,
                 }
               : item,
           ),
@@ -1076,13 +1125,11 @@ export function ProductEditor({
                 }
               }}
             >
-              <p className="admin-help">
-                JPG, PNG, WebP, AVIF · до 8 МБ на исходный файл.
-              </p>
+              <p className="admin-help">JPG, PNG, WebP, AVIF.</p>
               <p className="admin-field__hint mb-3">
-                Можно загружать большие фотографии — система автоматически уменьшит их размер и
-                оптимизирует для сайта. Слишком большие изображения уменьшаются до 1600 px по
-                длинной стороне; маленькие не увеличиваются. Можно перетащить файлы сюда.
+                Можно загружать фотографии большого размера — система автоматически уменьшит и
+                оптимизирует их для сайта. Максимальный размер исходного файла — 25 МБ. Перетащите
+                файлы сюда или выберите кнопкой ниже.
               </p>
               <label className="admin-field">
                 <span className="admin-btn-ghost inline-flex cursor-pointer px-3 py-2">
@@ -1104,15 +1151,21 @@ export function ProductEditor({
             </div>
           ) : null}
           {uploadStates.length > 0 ? (
-            <ul className="admin-upload-status">
+            <ul className="admin-upload-status" aria-live="polite">
               {uploadStates.map((row) => {
                 const icon =
-                  row.status === 'error' ? '✕' : row.status === 'done' ? '✓' : '◌';
+                  row.status === 'error'
+                    ? '✕'
+                    : row.status === 'uploaded' || row.status === 'done'
+                      ? '✓'
+                      : row.status === 'preparing' || row.status === 'uploading'
+                        ? '↻'
+                        : '◌';
                 return (
                   <li
                     key={row.id}
                     className={`admin-upload-status__row${
-                      row.status === 'done'
+                      row.status === 'uploaded' || row.status === 'done'
                         ? ' admin-upload-status__row--done'
                         : row.status === 'error'
                           ? ' admin-upload-status__row--error'
@@ -1122,11 +1175,26 @@ export function ProductEditor({
                     <span>
                       {icon} {row.name}
                       {row.sizeLabel ? ` · ${row.sizeLabel}` : ''}
+                      {row.prepareSummary ? ` · ${row.prepareSummary}` : ''}
                     </span>
                     <span className="admin-upload-status__meta">
                       {mediaPreflightStatusLabel(row.status)}
                     </span>
-                    {row.error ? <span className="admin-field-error">{row.error}</span> : null}
+                    {row.error ? (
+                      <span className="admin-field-error">
+                        Не удалось обработать фотографию
+                        <br />
+                        Причина: {row.error}
+                        {row.requestId ? (
+                          <>
+                            <br />
+                            <span className="text-xs text-[var(--admin-muted)]">
+                              Код запроса: {row.requestId}
+                            </span>
+                          </>
+                        ) : null}
+                      </span>
+                    ) : null}
                   </li>
                 );
               })}

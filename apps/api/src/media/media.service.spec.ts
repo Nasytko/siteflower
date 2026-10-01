@@ -12,6 +12,7 @@ import {
   MASTER_MAX_LONG_SIDE,
   MEDIA_MAX_DIMENSION,
   MEDIA_MAX_INPUT_PIXELS,
+  MEDIA_UPLOAD_MAX_INPUT_BYTES,
   PRODUCT_MEDIA_MAX,
   fitMasterDimensions,
 } from './media.constants';
@@ -67,11 +68,12 @@ describe('LocalMediaStorage contract', () => {
 });
 
 describe('media constants', () => {
-  it('keeps gallery max and bomb limits', () => {
+  it('keeps gallery max, bomb limits, and upload hard ceiling', () => {
     expect(PRODUCT_MEDIA_MAX).toBe(12);
     expect(MEDIA_MAX_INPUT_PIXELS).toBe(25_000_000);
     expect(MEDIA_MAX_DIMENSION).toBe(6000);
     expect(MASTER_MAX_LONG_SIDE).toBe(1600);
+    expect(MEDIA_UPLOAD_MAX_INPUT_BYTES).toBe(25_000_000);
   });
 });
 
@@ -446,7 +448,7 @@ describe('MediaService uploadImage storage compensate', () => {
       },
     };
 
-    const appConfig = { mediaMaxBytes: 8_000_000 };
+    const appConfig = { mediaMaxBytes: MEDIA_UPLOAD_MAX_INPUT_BYTES };
     const service = new MediaService(prisma as never, appConfig as never, storage as never);
 
     const jpeg = await sharp({
@@ -494,7 +496,7 @@ describe('MediaService uploadImage storage compensate', () => {
     };
     const service = new MediaService(
       { client: {} } as never,
-      { mediaMaxBytes: 8_000_000 } as never,
+      { mediaMaxBytes: MEDIA_UPLOAD_MAX_INPUT_BYTES } as never,
       storage as never,
     );
     await expect(service.uploadImage(Buffer.from('not-an-image'))).rejects.toMatchObject({
@@ -548,7 +550,7 @@ describe('MediaService uploadImage storage compensate', () => {
 
       const service = new MediaService(
         prisma as never,
-        { mediaMaxBytes: 8_000_000 } as never,
+        { mediaMaxBytes: MEDIA_UPLOAD_MAX_INPUT_BYTES } as never,
         storage as never,
       );
 
@@ -565,6 +567,71 @@ describe('MediaService uploadImage storage compensate', () => {
       expect(Math.max(...puts.map((p) => p.body.byteLength))).toBeLessThan(jpeg.byteLength);
     },
     60_000,
+  );
+  it(
+    'downscales oversized input edges instead of rejecting',
+    async () => {
+      const puts: Array<{ key: string; body: Buffer }> = [];
+      let createdAsset: { width: number; height: number } | null = null;
+      const storage = {
+        put: jest.fn(async (args: { key: string; body: Buffer }) => {
+          puts.push(args);
+        }),
+        delete: jest.fn(),
+        getPublicUrl: (key: string) => `http://cdn.test/${key}`,
+        get: jest.fn(),
+        head: jest.fn(),
+        listKeys: jest.fn(),
+      };
+      const prisma = {
+        client: {
+          $transaction: jest.fn(async (fn: (tx: unknown) => Promise<void>) => {
+            const tx = {
+              mediaAsset: {
+                create: jest.fn(async ({ data }: { data: { width: number; height: number } }) => {
+                  createdAsset = { width: data.width, height: data.height };
+                }),
+              },
+              mediaDerivative: { createMany: jest.fn() },
+            };
+            await fn(tx);
+          }),
+          mediaAsset: {
+            findUnique: jest.fn(async () => ({
+              id: 'asset-oversized',
+              storageKey: puts[0]?.key ?? 'masters/x.jpg',
+              mimeType: 'image/jpeg',
+              width: createdAsset?.width ?? 0,
+              height: createdAsset?.height ?? 0,
+              derivatives: [],
+            })),
+          },
+        },
+      };
+      const service = new MediaService(
+        prisma as never,
+        { mediaMaxBytes: MEDIA_UPLOAD_MAX_INPUT_BYTES } as never,
+        storage as never,
+      );
+      const jpeg = await sharp({
+        create: {
+          // > MEDIA_MAX_DIMENSION on long edge, but under MEDIA_MAX_INPUT_PIXELS bomb guard.
+          width: 6100,
+          height: 4000,
+          channels: 3,
+          background: { r: 200, g: 40, b: 60 },
+        },
+      })
+        .jpeg({ quality: 70 })
+        .toBuffer();
+      // Ensure under hard byte limit for this synthetic raster.
+      expect(jpeg.byteLength).toBeLessThan(MEDIA_UPLOAD_MAX_INPUT_BYTES);
+      const dto = await service.uploadImage(jpeg);
+      expect(Math.max(dto.width ?? 0, dto.height ?? 0)).toBeLessThanOrEqual(MASTER_MAX_LONG_SIDE);
+      expect(dto.width).toBe(1600);
+      expect(dto.height).toBe(1049);
+    },
+    90_000,
   );
 });
 

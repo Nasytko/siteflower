@@ -246,7 +246,7 @@ export function mediaErrorUserText(error: unknown, fallback = 'Не удалос
   if (!(error instanceof AdminRequestError)) return errorMessage(error, fallback);
   switch (error.code) {
     case 'MEDIA_TOO_LARGE':
-      return 'Файл слишком большой. Максимальный размер: 8 MB.';
+      return 'Файл слишком большой. Максимальный размер исходного изображения — 25 МБ.';
     case 'MEDIA_UNSUPPORTED':
       return 'Формат не поддерживается. Используйте JPG, PNG, WebP или AVIF.';
     case 'IMAGE_DECODE_FAILED':

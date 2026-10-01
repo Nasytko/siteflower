@@ -1,22 +1,42 @@
 /**
  * Client-side media preflight before multipart upload.
  * Server Sharp pipeline remains the source of truth.
+ *
+ * Hard input limit mirrors API MEDIA_MAX_BYTES / MEDIA_UPLOAD_MAX_INPUT_BYTES (25 MB).
+ * Oversized dimensions are prepared client-side — not rejected here.
  */
 
-export const ADMIN_MEDIA_MAX_BYTES = 8_000_000;
+/** Absolute max original file size (bytes). Keep in sync with API MEDIA_MAX_BYTES default. */
+export const ADMIN_MEDIA_MAX_INPUT_BYTES = 25_000_000;
+
+/** @deprecated Use ADMIN_MEDIA_MAX_INPUT_BYTES */
+export const ADMIN_MEDIA_MAX_BYTES = ADMIN_MEDIA_MAX_INPUT_BYTES;
+
 export const ADMIN_MEDIA_MAX_PER_PRODUCT = 12;
-/** Mirrors server MEDIA_MAX_DIMENSION (input reject gate, not master size). */
+
+/** Mirrors server MEDIA_MAX_DIMENSION working max (client prepare target). */
 export const ADMIN_MEDIA_MAX_DIMENSION = 6000;
+
+/** Soft target after client prepare — prefer smaller uploads when safe. */
+export const ADMIN_MEDIA_PREPARE_TARGET_BYTES = 8_000_000;
+
+export const ADMIN_MEDIA_PREPARE_JPEG_QUALITY = 0.86;
+
 export const ADMIN_MEDIA_ACCEPT = ['image/jpeg', 'image/png', 'image/webp', 'image/avif'] as const;
 
 export type MediaPreflightStatus =
+  | 'selected'
+  | 'preparing'
+  | 'prepared'
+  | 'uploading'
+  | 'uploaded'
+  | 'error'
+  /** @deprecated kept for transitional UI */
   | 'checking'
   | 'ready'
-  | 'uploading'
   | 'processing'
   | 'optimizing'
-  | 'done'
-  | 'error';
+  | 'done';
 
 export type MediaPreflightResult = {
   file: File;
@@ -26,24 +46,13 @@ export type MediaPreflightResult = {
   error: string | null;
 };
 
-function formatMb(bytes: number): string {
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-}
-
-async function probeDimensions(
-  file: File,
-): Promise<{ width: number; height: number } | null> {
-  try {
-    if (typeof createImageBitmap === 'function') {
-      const bitmap = await createImageBitmap(file);
-      const dims = { width: bitmap.width, height: bitmap.height };
-      bitmap.close();
-      return dims;
-    }
-  } catch {
-    // Browser decode failed — server will validate.
+export function formatMediaBytes(bytes: number): string {
+  // Decimal MB/KB for manager-facing copy (25_000_000 → «25 МБ»).
+  const mb = bytes / 1_000_000;
+  if (mb < 1) {
+    return `${Math.max(1, Math.round(bytes / 1000))} КБ`;
   }
-  return null;
+  return `${mb >= 10 ? Math.round(mb) : mb.toFixed(1)} МБ`;
 }
 
 export async function preflightMediaFile(file: File): Promise<MediaPreflightResult> {
@@ -61,30 +70,16 @@ export async function preflightMediaFile(file: File): Promise<MediaPreflightResu
   if (sizeBytes <= 0) {
     return { file, name, sizeBytes, ok: false, error: 'Пустой файл.' };
   }
-  if (sizeBytes > ADMIN_MEDIA_MAX_BYTES) {
+  if (sizeBytes > ADMIN_MEDIA_MAX_INPUT_BYTES) {
     return {
       file,
       name,
       sizeBytes,
       ok: false,
-      error: `Размер ${formatMb(sizeBytes)} превышает лимит 8 MB.`,
+      error: `Файл слишком большой. Максимальный размер исходного изображения — ${formatMediaBytes(ADMIN_MEDIA_MAX_INPUT_BYTES)}.`,
     };
   }
-
-  const dims = await probeDimensions(file);
-  if (
-    dims &&
-    (dims.width > ADMIN_MEDIA_MAX_DIMENSION || dims.height > ADMIN_MEDIA_MAX_DIMENSION)
-  ) {
-    return {
-      file,
-      name,
-      sizeBytes,
-      ok: false,
-      error: `Разрешение ${dims.width}×${dims.height} слишком большое (макс. ${ADMIN_MEDIA_MAX_DIMENSION} px по стороне).`,
-    };
-  }
-
+  // Dimensions are handled by prepareAdminMediaFile — do not reject here.
   return { file, name, sizeBytes, ok: true, error: null };
 }
 
@@ -134,18 +129,25 @@ export async function preflightMediaBatch(
 
 export function mediaPreflightStatusLabel(status: MediaPreflightStatus): string {
   switch (status) {
+    case 'selected':
+      return 'Выбрано';
+    case 'preparing':
+      return 'Подготавливаем…';
+    case 'prepared':
+      return 'Подготовлено';
+    case 'uploading':
+      return 'Загружаем…';
+    case 'uploaded':
+    case 'done':
+      return 'Фото добавлено ✓';
     case 'checking':
       return 'Проверка…';
     case 'ready':
       return 'Готово к загрузке';
-    case 'uploading':
-      return 'Загрузка…';
     case 'processing':
       return 'Обработка…';
     case 'optimizing':
       return 'Оптимизация…';
-    case 'done':
-      return 'Готово ✓';
     case 'error':
       return 'Ошибка';
     default:
