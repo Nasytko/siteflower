@@ -342,6 +342,22 @@ export type PublishValidationErrorBody = {
   timestamp: string;
 };
 
+export type PromotionValidationIssue = {
+  code: string;
+  message: string;
+  field?: string;
+};
+
+export type PromotionValidationErrorBody = {
+  statusCode: 400;
+  error: 'PromotionValidationError';
+  message: string;
+  issues: PromotionValidationIssue[];
+  requestId?: string;
+  path: string;
+  timestamp: string;
+};
+
 export function isProductLifecycle(value: string): value is ProductLifecycle {
   return (PRODUCT_LIFECYCLES as readonly string[]).includes(value);
 }

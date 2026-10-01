@@ -9,6 +9,7 @@ import {
   type PriceRangeDto,
   type ProductPromotionPublicDto,
   type PromotionType,
+  type PromotionValidationIssue,
 } from '@bouquet-one/contracts';
 
 export type PromotionRow = {
@@ -90,8 +91,12 @@ export function buildPublicPromotionDto(
   };
 }
 
-export type PromotionValidationIssue = { code: string; message: string; field?: string };
+export type { PromotionValidationIssue };
 
+/**
+ * Storage invariants (type ↔ fields) always apply — they match DB CHECKs.
+ * Commercial rules (sale prices, active variants) apply only when enabled.
+ */
 export function validatePromotionInput(input: {
   enabled: boolean;
   type: PromotionType;
@@ -103,8 +108,8 @@ export function validatePromotionInput(input: {
   variantRegularPrices: Map<string, bigint>;
 }): PromotionValidationIssue[] {
   const issues: PromotionValidationIssue[] = [];
-  if (!input.enabled) return issues;
 
+  // Storage invariants — always (aligns with product_promotions_type_fields).
   if (input.type === 'PERCENT') {
     if (input.percentOff == null || input.percentOff < 1 || input.percentOff > 99) {
       issues.push({
@@ -128,6 +133,22 @@ export function validatePromotionInput(input: {
         field: 'percentOff',
       });
     }
+  }
+
+  if (input.startsAt && input.endsAt && input.startsAt.getTime() >= input.endsAt.getTime()) {
+    issues.push({
+      code: 'INVALID_SCHEDULE',
+      message: 'Дата начала акции должна быть раньше даты окончания',
+      field: 'endsAt',
+    });
+  }
+
+  // Commercial rules — only when the promotion is enabled.
+  if (!input.enabled) {
+    return issues;
+  }
+
+  if (input.type === 'FIXED') {
     if (input.variantSalePrices.length === 0) {
       issues.push({
         code: 'FIXED_PRICES_REQUIRED',
@@ -160,14 +181,6 @@ export function validatePromotionInput(input: {
         });
       }
     }
-  }
-
-  if (input.startsAt && input.endsAt && input.startsAt.getTime() >= input.endsAt.getTime()) {
-    issues.push({
-      code: 'INVALID_SCHEDULE',
-      message: 'Дата начала акции должна быть раньше даты окончания',
-      field: 'endsAt',
-    });
   }
 
   return issues;

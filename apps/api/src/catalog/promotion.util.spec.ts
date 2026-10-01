@@ -136,12 +136,39 @@ describe('validatePromotionInput', () => {
     ]),
   };
 
-  it('skips validation for a disabled promotion', () => {
+  it('rejects disabled PERCENT with null percent (DB storage invariant)', () => {
+    const issues = validatePromotionInput({
+      ...base,
+      enabled: false,
+      type: 'PERCENT',
+      percentOff: null,
+      startsAt: null,
+      endsAt: null,
+      variantSalePrices: [],
+    });
+    expect(issues.map((issue) => issue.code)).toEqual(['INVALID_PERCENT']);
+  });
+
+  it('accepts disabled PERCENT when percent is valid', () => {
     expect(
       validatePromotionInput({
         ...base,
         enabled: false,
         type: 'PERCENT',
+        percentOff: 15,
+        startsAt: null,
+        endsAt: null,
+        variantSalePrices: [],
+      }),
+    ).toEqual([]);
+  });
+
+  it('accepts disabled FIXED without sale prices', () => {
+    expect(
+      validatePromotionInput({
+        ...base,
+        enabled: false,
+        type: 'FIXED',
         percentOff: null,
         startsAt: null,
         endsAt: null,

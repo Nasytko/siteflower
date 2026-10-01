@@ -12,8 +12,9 @@ import type {
   ProductListItemDto,
   ProductPromotionAdminDto,
   PromotionType,
+  PromotionValidationIssue,
 } from '@bouquet-one/contracts';
-import type { Prisma } from '@bouquet-one/database';
+import { Prisma } from '@bouquet-one/database';
 import { AuditService } from '../audit/audit.service';
 import { hashIp } from '../auth/crypto.util';
 import type { ActorContext } from '../common/actor.util';
@@ -24,6 +25,7 @@ import {
   LIST_IMAGE_TARGET_WIDTH,
   pickDerivativeStorageUrl,
 } from '../media/media-url.util';
+import { StorefrontRevalidateService } from '../storefront/storefront-revalidate.service';
 import { activeVariantPrices, OCC_CONFLICT_MESSAGE } from './catalog.logic';
 import {
   PRODUCT_INCLUDE,
@@ -33,7 +35,7 @@ import {
   type ProductWithRelations,
 } from './catalog.mapper';
 import { ProductsRepository } from './products.repository';
-import { validatePromotionInput, type PromotionValidationIssue } from './promotion.util';
+import { validatePromotionInput } from './promotion.util';
 
 export const PROMOTION_STATUSES = ['all', 'active', 'scheduled', 'ended', 'disabled'] as const;
 export type PromotionStatus = (typeof PROMOTION_STATUSES)[number];
@@ -69,6 +71,32 @@ function promotionValidationException(issues: PromotionValidationIssue[]): BadRe
   });
 }
 
+function mapPromotionPrismaError(err: unknown): never {
+  if (err instanceof Prisma.PrismaClientKnownRequestError) {
+    const meta = err.meta as { constraint?: string; field_name?: string } | undefined;
+    const constraint = String(meta?.constraint ?? meta?.field_name ?? err.message);
+    if (constraint.includes('product_promotions_type_fields') || constraint.includes('percent_off')) {
+      throw promotionValidationException([
+        {
+          code: 'INVALID_PERCENT',
+          message: 'Процент скидки должен быть от 1 до 99',
+          field: 'percentOff',
+        },
+      ]);
+    }
+    if (constraint.includes('product_promotions_percent_off_range')) {
+      throw promotionValidationException([
+        {
+          code: 'INVALID_PERCENT',
+          message: 'Процент скидки должен быть от 1 до 99',
+          field: 'percentOff',
+        },
+      ]);
+    }
+  }
+  throw err;
+}
+
 function statusOf(promotion: ProductPromotionAdminDto, now: Date): AdminPromotionListItemDto['status'] {
   if (!promotion.enabled) return 'disabled';
   if (promotion.currentlyEffective) return 'active';
@@ -94,6 +122,7 @@ export class PromotionsService {
     private readonly media: MediaService,
     private readonly audit: AuditService,
     private readonly appConfig: AppConfigService,
+    private readonly revalidate: StorefrontRevalidateService,
   ) {}
 
   private readonly urlFor = (storageKey: string) => this.media.getPublicUrl(storageKey);
@@ -241,10 +270,15 @@ export class PromotionsService {
         endsAt: endsAt?.toISOString() ?? null,
         fixedVariants: variantSalePrices.length,
       });
-    });
+    }).catch(mapPromotionPrismaError);
 
     const updated = await this.products.findById(productId);
-    return toProductAdminDto(updated!, this.urlFor);
+    const dto = toProductAdminDto(updated!, this.urlFor);
+    await this.revalidate.ping({
+      tags: ['catalog', 'storefront'],
+      paths: ['/', '/bukety', '/akcii', ...(dto.slug ? [`/bukety/${dto.slug}`] : [])],
+    });
+    return dto;
   }
 
   async removeForProduct(
@@ -265,7 +299,12 @@ export class PromotionsService {
     if (!updated) {
       throw new NotFoundException('Product not found');
     }
-    return toProductAdminDto(updated, this.urlFor);
+    const dto = toProductAdminDto(updated, this.urlFor);
+    await this.revalidate.ping({
+      tags: ['catalog', 'storefront'],
+      paths: ['/', '/bukety', '/akcii', ...(dto.slug ? [`/bukety/${dto.slug}`] : [])],
+    });
+    return dto;
   }
 
   private toPromotionListItem(

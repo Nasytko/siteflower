@@ -354,9 +354,8 @@ export class UpsertProductPromotionDto extends ExpectedVersionDto {
   @IsIn(PROMOTION_TYPES)
   type!: PromotionType;
 
-  /** Required for PERCENT promotions (1–99). */
-  @IsOptional()
-  @ValidateIf((_, value) => value !== null)
+  /** Required for PERCENT (1–99) — matches DB product_promotions_type_fields. */
+  @ValidateIf((o: UpsertProductPromotionDto) => o.type === 'PERCENT')
   @Type(() => Number)
   @IsInt()
   @Min(1)

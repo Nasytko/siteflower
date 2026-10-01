@@ -96,10 +96,20 @@ export type AuditLogListResponse = {
   pageSize: number;
 };
 
+export type ApiErrorIssue = {
+  code: string;
+  message: string;
+  field?: string;
+};
+
 export type ApiErrorBody = {
   statusCode: number;
   error: string;
   message: string | string[];
+  /** Structured field/validation issues when present (publish, promotion, etc.). */
+  issues?: ApiErrorIssue[];
+  /** Machine-readable top-level code when set (e.g. media errors). */
+  code?: string;
   requestId?: string;
   path: string;
   timestamp: string;
