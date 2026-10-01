@@ -54,14 +54,17 @@ require_docker_access() {
 resolve_ref() {
   # Prints ONLY the commit SHA on stdout. All diagnostics go via log/die → stderr
   # so callers can safely use: rev="$(resolve_ref)"
+  #
+  # Important: git fetch/pull/checkout may print human messages on stdout
+  # (e.g. "Already up to date."). Those MUST NOT leak into the substitution.
   cd "$SCRIPT_DIR"
   require_cmd git
   if [[ -n "$REF" ]]; then
     validate_git_ref "$REF"
     log "Fetching and checking out ref: $REF"
-    git fetch --tags --prune origin
+    git fetch --tags --prune origin 1>&2
     git rev-parse --verify "$REF^{commit}" >/dev/null
-    git checkout --detach "$REF"
+    git checkout --detach "$REF" 1>&2
   else
     local dirty
     dirty="$(git status --porcelain)"
@@ -74,19 +77,28 @@ resolve_ref() {
     branch="$(git rev-parse --abbrev-ref HEAD)"
     if [[ "$branch" != "HEAD" ]]; then
       log "Fetching origin/${branch}"
-      git fetch --tags --prune origin
+      git fetch --tags --prune origin 1>&2
       if git show-ref --verify --quiet "refs/remotes/origin/${branch}"; then
-        git pull --ff-only "origin" "$branch"
+        # stdout → stderr: avoid contaminating rev="$(resolve_ref)"
+        git pull --ff-only "origin" "$branch" 1>&2
       else
         log "No origin/${branch} remote-tracking branch — using local HEAD"
       fi
     fi
   fi
-  git rev-parse HEAD
+  local sha
+  sha="$(git rev-parse HEAD)"
+  if [[ ! "$sha" =~ ^[0-9a-f]{40}$ ]]; then
+    die "git rev-parse HEAD returned invalid SHA: ${sha}"
+  fi
+  printf '%s\n' "$sha"
 }
 
 tag_images() {
   local rev="$1"
+  if [[ ! "$rev" =~ ^[0-9a-f]{40}$ ]]; then
+    die "tag_images expects a 40-char commit SHA, got: ${rev}"
+  fi
   local short="${rev:0:12}"
   NEW_API_IMAGE="shopbuket1-api:${short}"
   NEW_WEB_IMAGE="shopbuket1-web:${short}"
@@ -193,7 +205,10 @@ main() {
   local rev
   log "Stage: resolve git revision"
   rev="$(resolve_ref)"
-  [[ -n "$rev" ]] || die "resolve_ref returned an empty revision"
+  # Defensive: strip CR and ensure a pure SHA even if a future git command regresses.
+  rev="${rev//$'\r'/}"
+  rev="$(printf '%s' "$rev" | tr -d '\n')"
+  [[ "$rev" =~ ^[0-9a-f]{40}$ ]] || die "resolve_ref returned invalid revision: ${rev}"
   log "Deploying revision $rev"
   tag_images "$rev"
   DEPLOY_STARTED=1
@@ -223,4 +238,7 @@ main() {
   log "Verify media: Admin → Медиа / Site Health → Проверить хранилище"
 }
 
-main "$@"
+# Allow focused unit tests to source this file without starting a deploy.
+if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
+  main "$@"
+fi
