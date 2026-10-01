@@ -118,9 +118,21 @@ validate_production_env() {
   load_env_file "$SHOPBUKET1_ENV_FILE"
   ensure_database_url
 
+  # shellcheck source=nginx.sh
+  source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/nginx.sh"
+
   [[ "${NODE_ENV:-}" == "production" ]] || die "NODE_ENV must be production"
   [[ -n "${NEXT_PUBLIC_SITE_URL:-}" ]] || die "NEXT_PUBLIC_SITE_URL is required"
   [[ "${NEXT_PUBLIC_SITE_URL}" == https://* ]] || log "WARN: NEXT_PUBLIC_SITE_URL is not https:// — OK only before TLS is ready"
+
+  local public_domain
+  public_domain="$(resolve_public_domain)"
+  assert_valid_public_domain "$public_domain"
+  if [[ "${NEXT_PUBLIC_SITE_URL}" == *"YOUR_DOMAIN"* ]] \
+    || [[ "${CORS_ORIGINS:-}" == *"YOUR_DOMAIN"* ]]; then
+    die "NEXT_PUBLIC_SITE_URL / CORS_ORIGINS still contain YOUR_DOMAIN placeholder"
+  fi
+
   [[ -n "${POSTGRES_USER:-}" ]] || die "POSTGRES_USER is required"
   [[ -n "${POSTGRES_PASSWORD:-}" ]] || die "POSTGRES_PASSWORD is required"
   [[ -n "${POSTGRES_DB:-}" ]] || die "POSTGRES_DB is required"

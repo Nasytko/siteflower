@@ -6,6 +6,8 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=deploy/lib/common.sh
 source "${SCRIPT_DIR}/deploy/lib/common.sh"
+# shellcheck source=deploy/lib/nginx.sh
+source "${SCRIPT_DIR}/deploy/lib/nginx.sh"
 
 FAIL=0
 
@@ -49,10 +51,37 @@ main() {
 
   if command -v nginx >/dev/null 2>&1; then
     if nginx -t >/dev/null 2>&1; then
-      log "OK  nginx config"
+      log "OK  nginx config syntax"
     else
-      log "FAIL nginx config"
+      log "FAIL nginx config syntax"
       FAIL=1
+    fi
+
+    if [[ -f "$SHOPBUKET1_ENV_FILE" && -r "$SHOPBUKET1_ENV_FILE" ]]; then
+      # shellcheck disable=SC1090
+      set -a
+      source "$SHOPBUKET1_ENV_FILE"
+      set +a
+      local domain require_tls=0
+      domain="$(resolve_public_domain)"
+      if [[ -n "$domain" ]] && ! is_placeholder_domain "$domain"; then
+        if tls_cert_present "$domain"; then
+          require_tls=1
+        fi
+        if validate_nginx_site_file "$SHOPBUKET1_NGINX_AVAILABLE" "$domain" "$require_tls"; then
+          log "OK  nginx site (${domain}, tls=${require_tls})"
+        else
+          log "FAIL nginx site checks for ${domain}"
+          FAIL=1
+        fi
+      else
+        if [[ -f "$SHOPBUKET1_NGINX_AVAILABLE" ]] && grep -Eqi 'YOUR_DOMAIN' "$SHOPBUKET1_NGINX_AVAILABLE"; then
+          log "FAIL nginx site contains YOUR_DOMAIN placeholder"
+          FAIL=1
+        else
+          log "WARN nginx domain not validated (PUBLIC_DOMAIN / NEXT_PUBLIC_SITE_URL unset or placeholder)"
+        fi
+      fi
     fi
   fi
 

@@ -10,6 +10,8 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=deploy/lib/common.sh
 source "${SCRIPT_DIR}/deploy/lib/common.sh"
+# shellcheck source=deploy/lib/nginx.sh
+source "${SCRIPT_DIR}/deploy/lib/nginx.sh"
 
 require_root() {
   [[ "${EUID}" -eq 0 ]] || die "Run as root: sudo ./install.sh"
@@ -45,7 +47,7 @@ install_base_packages() {
   apt-get update -y
   apt-get install -y --no-install-recommends \
     ca-certificates curl gnupg git nginx ufw openssl jq \
-    needrestart
+    certbot needrestart
 }
 
 install_docker() {
@@ -231,6 +233,7 @@ prepare_checkout() {
   chmod +x \
     "$src/install.sh" \
     "$src/deploy.sh" \
+    "$src/provision-nginx.sh" \
     "$src/rollback.sh" \
     "$src/backup.sh" \
     "$src/healthcheck.sh" \
@@ -244,28 +247,8 @@ prepare_checkout() {
 }
 
 configure_nginx() {
-  install -m 644 "${SCRIPT_DIR}/deploy/nginx/shopbuket1-map.conf" \
-    /etc/nginx/conf.d/shopbuket1-map.conf
-
-  local domain="_"
-  if [[ -f /etc/shopbuket1/production.env ]]; then
-    # shellcheck disable=SC1091
-    set -a; source /etc/shopbuket1/production.env; set +a
-    domain="${PUBLIC_DOMAIN:-${NEXT_PUBLIC_SITE_URL:-_}}"
-    domain="${domain#https://}"
-    domain="${domain#http://}"
-    domain="${domain%%/*}"
-  fi
-  [[ -n "$domain" ]] || domain='_'
-
-  sed "s/__PUBLIC_DOMAIN__/${domain}/g" \
-    "${SCRIPT_DIR}/deploy/nginx/shopbuket1.conf.template" \
-    >"$SHOPBUKET1_NGINX_AVAILABLE"
-  ln -sfn "$SHOPBUKET1_NGINX_AVAILABLE" "$SHOPBUKET1_NGINX_ENABLED"
-  rm -f /etc/nginx/sites-enabled/default
-  nginx -t
-  systemctl enable --now nginx
-  systemctl reload nginx
+  # Bootstrap may run before env placeholders are replaced — never write YOUR_DOMAIN.
+  provision_nginx bootstrap
 }
 
 configure_ufw() {
@@ -296,16 +279,19 @@ Backups:    ${SHOPBUKET1_BACKUP_DIR}
 
 NEXT MANUAL STEPS:
   1) Edit /etc/shopbuket1/production.env
-     - NEXT_PUBLIC_SITE_URL / CORS_ORIGINS / optional PUBLIC_DOMAIN
+     - NEXT_PUBLIC_SITE_URL=https://shop.example.com
+     - CORS_ORIGINS=https://shop.example.com
+     - optional PUBLIC_DOMAIN=shop.example.com
+     - CERTBOT_EMAIL=ops@example.com  (for Let's Encrypt)
      - HostFly S3_* (example bucket: shopbuket1-media)
      - Confirm DATABASE_URL host is "postgres"
   2) Point DNS A/AAAA to this VPS
-  3) From the repo as a user in group docker (or shopbuket1):
+  3) Provision Nginx + TLS (idempotent; rejects YOUR_DOMAIN):
+       sudo ./provision-nginx.sh
+  4) From the repo as a user in group docker (or shopbuket1):
        ./deploy.sh
-  4) Create admin:
+  5) Create admin:
        ./admin-create.sh
-  5) After DNS is live, issue TLS:
-       sudo certbot --nginx -d YOUR_DOMAIN
   6) Verify:
        ./healthcheck.sh
 

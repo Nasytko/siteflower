@@ -75,7 +75,8 @@ sudo ./install.sh
 - Installs Docker Engine (official Docker apt repo) + Compose plugin + Nginx + UFW
 - Creates system user `shopbuket1` (docker group)
 - Seeds `/etc/shopbuket1/production.env` **only if missing**
-- Installs Nginx site `shopbuket1` (HTTP; `server_name` from config)
+- Installs Nginx site `shopbuket1` via `deploy/lib/nginx.sh` (never writes `YOUR_DOMAIN`)
+- Installs `certbot` for later TLS; TLS itself is applied by `sudo ./provision-nginx.sh` after DNS + real domain in env
 - Enables UFW for **22/80/443 only**
 
 It does **not** overwrite an existing production env. It never runs `docker system prune`. It never touches `erpbuket1*`.
@@ -125,9 +126,10 @@ sudoeditor /etc/shopbuket1/production.env
 
 Must set at least:
 
-- `NEXT_PUBLIC_SITE_URL=https://YOUR_DOMAIN`
-- `CORS_ORIGINS=https://YOUR_DOMAIN`
-- optional `PUBLIC_DOMAIN=YOUR_DOMAIN` (Nginx `server_name`; defaults from site URL)
+- `NEXT_PUBLIC_SITE_URL=https://shop.nasytko.ru` (real FQDN — never `YOUR_DOMAIN`)
+- `CORS_ORIGINS=https://shop.nasytko.ru`
+- optional `PUBLIC_DOMAIN=shop.nasytko.ru` (Nginx `server_name`; defaults to host from `NEXT_PUBLIC_SITE_URL`)
+- `CERTBOT_EMAIL=ops@example.com` (Let's Encrypt account email for `provision-nginx.sh`)
 - `TRUST_PROXY=true`
 - `MEDIA_STORAGE=s3` + all `S3_*` (example bucket `shopbuket1-media`)
 - Confirm `DATABASE_URL` host is **`postgres`**
@@ -146,18 +148,52 @@ Must set at least:
 
 After deploy: Admin → **Медиа / Site Health** → **Проверить хранилище**, then upload a real product image.
 
-## D–E. DNS + TLS
+## D–E. DNS + Nginx/TLS provisioning
 
-1. Point DNS A/AAAA to the VPS.
-2. Reload Nginx after editing domain config: `sudo nginx -t && sudo systemctl reload nginx`
-3. Issue certificate **only after DNS resolves**:
+1. Point DNS A/AAAA for the shop hostname to the VPS.
+2. Ensure `/etc/shopbuket1/production.env` has a real domain + `CERTBOT_EMAIL` (not `YOUR_DOMAIN`).
+3. Provision Nginx + Let's Encrypt **idempotently** (owns the site file; certs stay under `/etc/letsencrypt`, never in Git):
 
 ```bash
-sudo apt-get install -y certbot python3-certbot-nginx
-sudo certbot --nginx -d YOUR_DOMAIN
+cd /opt/shopbuket1/repo   # or /opt/shopbuket1/current
+sudo ./provision-nginx.sh
 ```
 
-Changing `YOUR_DOMAIN` later is a config/cert change — not a volume recreate.
+What it does:
+
+- Resolves `PUBLIC_DOMAIN` or host of `NEXT_PUBLIC_SITE_URL`
+- Rejects placeholders (`YOUR_DOMAIN`, `example.com`, …)
+- Writes `/etc/nginx/sites-available/shopbuket1` with correct `server_name`
+- Runs `nginx -t` before every reload
+- Issues/reuses Let's Encrypt cert via webroot when `CERTBOT_EMAIL` is set
+- When cert exists: `listen 443`, HTTP→HTTPS redirect, same `/api/` + `/` proxy scheme
+- Installs renew hook: `nginx -t && systemctl reload nginx`
+
+### Repair an existing VPS that still has `server_name YOUR_DOMAIN`
+
+```bash
+cd /opt/shopbuket1/repo 2>/dev/null || cd /opt/shopbuket1/current
+git pull --ff-only origin main
+
+# 1) Fix domain + certbot email (example for shop.nasytko.ru)
+sudoeditor /etc/shopbuket1/production.env
+# NEXT_PUBLIC_SITE_URL=https://shop.nasytko.ru
+# CORS_ORIGINS=https://shop.nasytko.ru
+# PUBLIC_DOMAIN=shop.nasytko.ru
+# CERTBOT_EMAIL=you@example.com
+
+# 2) Re-render Nginx + issue/install TLS
+sudo ./provision-nginx.sh
+
+# 3) Confirm
+sudo grep -E 'server_name|listen' /etc/nginx/sites-available/shopbuket1
+sudo nginx -t
+curl -fsSI http://shop.nasytko.ru/ | head
+curl -fsSI https://shop.nasytko.ru/ | head
+./healthcheck.sh
+```
+
+Changing the public domain later is a config/cert change — not a volume recreate. Re-run `sudo ./provision-nginx.sh` after editing env.
 
 ## F. First deploy
 

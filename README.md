@@ -98,6 +98,7 @@ HostFly / Ubuntu production packaging (Nginx + Compose project `shopbuket1` + S3
 
 - Runbook: [docs/deployment-hostfly.md](docs/deployment-hostfly.md)
 - First install: `sudo ./install.sh`
+- Nginx/TLS (after DNS + real domain): `sudo ./provision-nginx.sh`
 - Deploy: `./deploy.sh`
 - Rollback: `./rollback.sh`
 - Backup: `./backup.sh`

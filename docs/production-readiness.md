@@ -55,8 +55,8 @@ Full HostFly VPS runbook: [deployment-hostfly.md](./deployment-hostfly.md).
 ## HostFly / VPS packaging
 
 - [ ] `sudo ./install.sh` completed on Ubuntu 24.04
-- [ ] `/etc/shopbuket1/production.env` filled (S3 + domain); never committed
+- [ ] `/etc/shopbuket1/production.env` filled (S3 + real domain + `CERTBOT_EMAIL`); never committed; no `YOUR_DOMAIN`
+- [ ] `sudo ./provision-nginx.sh` (correct `server_name`, `listen 443`, HTTP→HTTPS)
 - [ ] `./deploy.sh` healthy (Compose project `shopbuket1`)
-- [ ] TLS via certbot after DNS
 - [ ] `./admin-create.sh` SUPER_ADMIN created
 - [ ] Confirmed scripts never prune `erpbuket1*` / foreign Docker volumes
