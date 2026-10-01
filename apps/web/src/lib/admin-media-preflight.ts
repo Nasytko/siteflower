@@ -5,6 +5,8 @@
 
 export const ADMIN_MEDIA_MAX_BYTES = 8_000_000;
 export const ADMIN_MEDIA_MAX_PER_PRODUCT = 12;
+/** Mirrors server MEDIA_MAX_DIMENSION (input reject gate, not master size). */
+export const ADMIN_MEDIA_MAX_DIMENSION = 6000;
 export const ADMIN_MEDIA_ACCEPT = ['image/jpeg', 'image/png', 'image/webp', 'image/avif'] as const;
 
 export type MediaPreflightStatus =
@@ -12,6 +14,7 @@ export type MediaPreflightStatus =
   | 'ready'
   | 'uploading'
   | 'processing'
+  | 'optimizing'
   | 'done'
   | 'error';
 
@@ -27,7 +30,23 @@ function formatMb(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-export function preflightMediaFile(file: File): MediaPreflightResult {
+async function probeDimensions(
+  file: File,
+): Promise<{ width: number; height: number } | null> {
+  try {
+    if (typeof createImageBitmap === 'function') {
+      const bitmap = await createImageBitmap(file);
+      const dims = { width: bitmap.width, height: bitmap.height };
+      bitmap.close();
+      return dims;
+    }
+  } catch {
+    // Browser decode failed — server will validate.
+  }
+  return null;
+}
+
+export async function preflightMediaFile(file: File): Promise<MediaPreflightResult> {
   const name = file.name || 'файл';
   const sizeBytes = file.size;
   if (!ADMIN_MEDIA_ACCEPT.includes(file.type as (typeof ADMIN_MEDIA_ACCEPT)[number])) {
@@ -51,13 +70,32 @@ export function preflightMediaFile(file: File): MediaPreflightResult {
       error: `Размер ${formatMb(sizeBytes)} превышает лимит 8 MB.`,
     };
   }
+
+  const dims = await probeDimensions(file);
+  if (
+    dims &&
+    (dims.width > ADMIN_MEDIA_MAX_DIMENSION || dims.height > ADMIN_MEDIA_MAX_DIMENSION)
+  ) {
+    return {
+      file,
+      name,
+      sizeBytes,
+      ok: false,
+      error: `Разрешение ${dims.width}×${dims.height} слишком большое (макс. ${ADMIN_MEDIA_MAX_DIMENSION} px по стороне).`,
+    };
+  }
+
   return { file, name, sizeBytes, ok: true, error: null };
 }
 
-export function preflightMediaBatch(
+export async function preflightMediaBatch(
   files: FileList | File[],
   currentGalleryCount: number,
-): { accepted: MediaPreflightResult[]; rejected: MediaPreflightResult[]; capacityError: string | null } {
+): Promise<{
+  accepted: MediaPreflightResult[];
+  rejected: MediaPreflightResult[];
+  capacityError: string | null;
+}> {
   const list = Array.from(files);
   const remaining = Math.max(0, ADMIN_MEDIA_MAX_PER_PRODUCT - currentGalleryCount);
   if (remaining <= 0) {
@@ -74,7 +112,7 @@ export function preflightMediaBatch(
     };
   }
 
-  const checked = list.map(preflightMediaFile);
+  const checked = await Promise.all(list.map((file) => preflightMediaFile(file)));
   const valid = checked.filter((row) => row.ok);
   const rejected = checked.filter((row) => !row.ok);
 
@@ -97,15 +135,17 @@ export function preflightMediaBatch(
 export function mediaPreflightStatusLabel(status: MediaPreflightStatus): string {
   switch (status) {
     case 'checking':
-      return 'Проверка';
+      return 'Проверка…';
     case 'ready':
       return 'Готово к загрузке';
     case 'uploading':
-      return 'Загрузка';
+      return 'Загрузка…';
     case 'processing':
-      return 'Обработка';
+      return 'Обработка…';
+    case 'optimizing':
+      return 'Оптимизация…';
     case 'done':
-      return 'Готово';
+      return 'Готово ✓';
     case 'error':
       return 'Ошибка';
     default:

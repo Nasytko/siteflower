@@ -19,6 +19,7 @@ import {
   DERIVATIVE_WIDTHS,
   MASTER_AVIF_QUALITY,
   MASTER_JPEG_QUALITY,
+  MASTER_MAX_LONG_SIDE,
   MASTER_WEBP_QUALITY,
   MEDIA_MAX_DIMENSION,
   MEDIA_MAX_INPUT_PIXELS,
@@ -58,29 +59,36 @@ async function encodeNormalizedMaster(
   image: Sharp,
   format: MediaFormat,
 ): Promise<{ buffer: Buffer; mime: string; ext: string }> {
-  // Strip EXIF/XMP/IPTC — never call withMetadata().
+  // Downscale-only to web master size; never enlarge small uploads.
+  // EXIF/XMP/IPTC stripped — never call withMetadata().
+  const pipeline = image.resize({
+    width: MASTER_MAX_LONG_SIDE,
+    height: MASTER_MAX_LONG_SIDE,
+    fit: 'inside',
+    withoutEnlargement: true,
+  });
   switch (format) {
     case 'JPEG':
       return {
-        buffer: await image.jpeg({ quality: MASTER_JPEG_QUALITY, mozjpeg: true }).toBuffer(),
+        buffer: await pipeline.jpeg({ quality: MASTER_JPEG_QUALITY, mozjpeg: true }).toBuffer(),
         mime: 'image/jpeg',
         ext: 'jpg',
       };
     case 'PNG':
       return {
-        buffer: await image.png({ compressionLevel: 6 }).toBuffer(),
+        buffer: await pipeline.png({ compressionLevel: 6 }).toBuffer(),
         mime: 'image/png',
         ext: 'png',
       };
     case 'WEBP':
       return {
-        buffer: await image.webp({ quality: MASTER_WEBP_QUALITY }).toBuffer(),
+        buffer: await pipeline.webp({ quality: MASTER_WEBP_QUALITY }).toBuffer(),
         mime: 'image/webp',
         ext: 'webp',
       };
     case 'AVIF':
       return {
-        buffer: await image.avif({ quality: MASTER_AVIF_QUALITY }).toBuffer(),
+        buffer: await pipeline.avif({ quality: MASTER_AVIF_QUALITY }).toBuffer(),
         mime: 'image/avif',
         ext: 'avif',
       };
@@ -217,6 +225,23 @@ export class MediaService {
     }
 
     const masterBuffer = masterEncoded.buffer;
+    // Persist / derivative from actual master pixels (post-downscale), not input dims.
+    const masterMeta = await sharp(masterBuffer, {
+      limitInputPixels: MEDIA_MAX_INPUT_PIXELS,
+    }).metadata();
+    const masterWidth = masterMeta.width ?? 0;
+    const masterHeight = masterMeta.height ?? 0;
+    if (masterWidth <= 0 || masterHeight <= 0) {
+      this.logger.warn(`media_encode_zero_dimensions format=${format}`);
+      throw mediaHttpException(MEDIA_ERROR_CODES.IMAGE_PROCESSING_FAILED);
+    }
+    if (Math.max(masterWidth, masterHeight) > MASTER_MAX_LONG_SIDE) {
+      this.logger.warn(
+        `media_master_exceeds_cap format=${format} ${masterWidth}x${masterHeight}`,
+      );
+      throw mediaHttpException(MEDIA_ERROR_CODES.IMAGE_PROCESSING_FAILED);
+    }
+
     // Checksum describes the exact normalized master bytes that are stored.
     const checksum = createHash('sha256').update(masterBuffer).digest('hex');
     const assetId = randomUUID();
@@ -232,7 +257,7 @@ export class MediaService {
     }> = [];
 
     for (const dw of DERIVATIVE_WIDTHS) {
-      if (width < dw) continue;
+      if (masterWidth < dw) continue;
       for (const fmt of DERIVATIVE_FORMATS) {
         try {
           let pipeline = sharp(masterBuffer, { limitInputPixels: MEDIA_MAX_INPUT_PIXELS }).resize({
@@ -303,8 +328,8 @@ export class MediaService {
               mimeType: masterEncoded.mime,
               format,
               byteSize: masterBuffer.byteLength,
-              width,
-              height,
+              width: masterWidth,
+              height: masterHeight,
               checksumSha256: checksum,
             },
           });
@@ -339,7 +364,7 @@ export class MediaService {
     }
 
     this.logger.log(
-      `media_upload_ok assetId=${assetId} bytes=${masterBuffer.byteLength} ${width}x${height} derivatives=${derivatives.length}`,
+      `media_upload_ok assetId=${assetId} bytes=${masterBuffer.byteLength} input=${width}x${height} master=${masterWidth}x${masterHeight} derivatives=${derivatives.length}`,
     );
 
     const dto = await this.getAssetDto(assetId);

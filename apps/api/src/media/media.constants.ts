@@ -7,10 +7,19 @@ export const MEDIA_ORPHAN_GRACE_HOURS = 24;
 /** Decompression-bomb guard: ~25MP covers high-res bouquet photography. */
 export const MEDIA_MAX_INPUT_PIXELS = 25_000_000;
 
-/** Max edge after EXIF rotate — boutique product photos. */
+/**
+ * Max edge of the *uploaded* raster after EXIF rotate (input reject gate).
+ * Oversized phone photos are accepted up to this size, then downscaled to master.
+ */
 export const MEDIA_MAX_DIMENSION = 6000;
 
-/** Responsive derivative ladder (no upscaling beyond source). */
+/**
+ * Web-ready master long side (max). Only downscales; never upscales.
+ * Aspect ratio preserved via Sharp `fit: 'inside'`.
+ */
+export const MASTER_MAX_LONG_SIDE = 1600;
+
+/** Responsive derivative ladder (no upscaling beyond source master). */
 export const DERIVATIVE_WIDTHS = [400, 800, 1200, 1600] as const;
 
 /**
@@ -42,3 +51,22 @@ export const DERIVATIVE_FORMATS = [
   { format: 'WEBP' as const, mime: 'image/webp', sharp: 'webp' as const },
   { format: 'AVIF' as const, mime: 'image/avif', sharp: 'avif' as const },
 ];
+
+/**
+ * Compute master pixel size after downscale-only fit to MASTER_MAX_LONG_SIDE.
+ * Pure helper for tests and docs; Sharp uses the same scale rule via fit:'inside'.
+ */
+export function fitMasterDimensions(
+  width: number,
+  height: number,
+  maxLongSide: number = MASTER_MAX_LONG_SIDE,
+): { width: number; height: number } {
+  if (width <= 0 || height <= 0) return { width: 0, height: 0 };
+  const long = Math.max(width, height);
+  if (long <= maxLongSide) return { width, height };
+  const scale = maxLongSide / long;
+  return {
+    width: Math.max(1, Math.round(width * scale)),
+    height: Math.max(1, Math.round(height * scale)),
+  };
+}

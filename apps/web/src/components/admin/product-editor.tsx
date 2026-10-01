@@ -564,7 +564,10 @@ export function ProductEditor({
 
   async function onUploadMany(files: FileList | File[]) {
     if (!canUpdate) return;
-    const { accepted, rejected, capacityError } = preflightMediaBatch(files, server.media.length);
+    const { accepted, rejected, capacityError } = await preflightMediaBatch(
+      files,
+      server.media.length,
+    );
     const initialRows = [
       ...rejected.map((row, index) => ({
         id: `rej-${index}-${row.name}`,
@@ -607,6 +610,12 @@ export function ProductEditor({
             item.id === rowId ? { ...item, status: 'processing' as const } : item,
           ),
         );
+        // Brief optimizing phase while server Sharp pipeline runs inside the upload request.
+        setUploadStates((prev) =>
+          prev.map((item) =>
+            item.id === rowId ? { ...item, status: 'optimizing' as const } : item,
+          ),
+        );
         await onUpload(row.file);
         setUploadStates((prev) =>
           prev.map((item) =>
@@ -620,7 +629,7 @@ export function ProductEditor({
               ? {
                   ...item,
                   status: 'error' as const,
-                  error: mediaErrorUserText(err, 'Не удалось сохранить изображение'),
+                  error: mediaErrorUserText(err, 'Не удалось обработать изображение'),
                 }
               : item,
           ),
@@ -1025,9 +1034,13 @@ export function ProductEditor({
                 }
               }}
             >
-              <p className="admin-help">JPG, PNG, WebP, AVIF · до 8 MB</p>
+              <p className="admin-help">
+                JPG, PNG, WebP, AVIF · до 8 МБ на исходный файл.
+              </p>
               <p className="admin-field__hint mb-3">
-                Рекомендуемый размер: 1600–3000 px по длинной стороне. Можно перетащить файлы сюда.
+                Можно загружать большие фотографии — система автоматически уменьшит их размер и
+                оптимизирует для сайта. Слишком большие изображения уменьшаются до 1600 px по
+                длинной стороне; маленькие не увеличиваются. Можно перетащить файлы сюда.
               </p>
               <label className="admin-field">
                 <span className="admin-btn-ghost inline-flex cursor-pointer px-3 py-2">
