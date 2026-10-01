@@ -113,3 +113,22 @@ No duplicate-utility consolidations recommended: merging helpers could change ru
 ### Execution note
 
 Only items in **SAFE TO REMOVE DEPENDENCY** and the `.dockerignore` additions under **SAFE TO REFACTOR** will be applied in the follow-up cleanup commit.
+
+---
+
+## Re-audit (2026-10-01, post `ef0bb1a`)
+
+Re-scanned dependencies and tracked files after the first cleanup commit (`00a9448`) and the deploy.sh SHA fix (`ef0bb1a`).
+
+### Additional SAFE TO DELETE / REMOVE
+
+| Item | Result |
+| --- | --- |
+| Tracked source / config files | **None** — no new proven-unused tracked files |
+| Dependencies | **None** — remaining “no direct import” hits (`pino-http`, `reflect-metadata`, `rxjs`) are NestJS runtime peers and must stay |
+| Docs / historical audits | **Keep** — operational trail, not dead code |
+| Local ignored junk (`.tmp-prod-verify/`, `artifacts/`, `test-results/`, `debug.log`) | Safe to delete **locally only** (already gitignored; not part of the repo) |
+
+### Conclusion
+
+Further tracked cleanup would be speculative. Quality over deletion count: **no additional repo commit required** unless new unused items appear later.
