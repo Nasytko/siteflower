@@ -16,11 +16,12 @@ import { availabilityLabel, formatAdminDateTime, lifecycleLabel } from '@/lib/ad
 import { toSameOriginMediaUrl } from '@/lib/media';
 
 export type ProductFilters = {
-  q: string;
+  search: string;
   lifecycle: string;
   availability: string;
-  promotion: string;
-  bestsellerGroupId: string;
+  /** Empty or "true" — maps to API promotionalOnly. */
+  promotionalOnly: string;
+  bestsellerGroupIds: string;
   sort: string;
   page: number;
 };
@@ -85,11 +86,11 @@ export function ProductsManager({ data, filters, bestsellerGroups, canCreate }: 
 
   const pages = Math.max(1, Math.ceil(data.total / Math.max(1, data.pageSize)));
   const hasFilters =
-    filters.q.length > 0 ||
+    filters.search.length > 0 ||
     filters.lifecycle.length > 0 ||
     filters.availability.length > 0 ||
-    filters.promotion.length > 0 ||
-    filters.bestsellerGroupId.length > 0;
+    filters.promotionalOnly === 'true' ||
+    filters.bestsellerGroupIds.length > 0;
 
   return (
     <div className={`space-y-5 ${navigating ? 'opacity-70' : ''}`}>
@@ -129,14 +130,14 @@ export function ProductsManager({ data, filters, bestsellerGroups, canCreate }: 
           onSubmit={(event) => {
             event.preventDefault();
             const form = new FormData(event.currentTarget);
-            setFilter('q', String(form.get('q') ?? '').trim());
+            setFilter('search', String(form.get('search') ?? '').trim());
           }}
         >
           <label className="admin-field">
             <span>Поиск</span>
             <input
-              name="q"
-              defaultValue={filters.q}
+              name="search"
+              defaultValue={filters.search}
               className="admin-input w-56"
               placeholder="Название или адрес"
             />
@@ -182,13 +183,11 @@ export function ProductsManager({ data, filters, bestsellerGroups, canCreate }: 
           <span>Акция</span>
           <select
             className="admin-select"
-            value={filters.promotion}
-            onChange={(event) => setFilter('promotion', event.target.value)}
+            value={filters.promotionalOnly}
+            onChange={(event) => setFilter('promotionalOnly', event.target.value)}
           >
             <option value="">Не важно</option>
-            <option value="active">Идёт сейчас</option>
-            <option value="any">Настроена</option>
-            <option value="none">Без акции</option>
+            <option value="true">Идёт сейчас</option>
           </select>
         </label>
 
@@ -197,8 +196,8 @@ export function ProductsManager({ data, filters, bestsellerGroups, canCreate }: 
             <span>Бестселлеры</span>
             <select
               className="admin-select"
-              value={filters.bestsellerGroupId}
-              onChange={(event) => setFilter('bestsellerGroupId', event.target.value)}
+              value={filters.bestsellerGroupIds}
+              onChange={(event) => setFilter('bestsellerGroupIds', event.target.value)}
             >
               <option value="">Все товары</option>
               {bestsellerGroups.map((group) => (

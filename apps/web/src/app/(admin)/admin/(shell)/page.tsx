@@ -80,7 +80,7 @@ export default async function AdminDashboardPage() {
       canReadCatalog
         ? fetchTotal(adminEndpoints.products, { lifecycle: 'PUBLISHED' })
         : null,
-      canReadCatalog ? fetchTotal(adminEndpoints.products, { promotion: 'active' }) : null,
+      canReadCatalog ? fetchTotal(adminEndpoints.products, { promotionalOnly: true }) : null,
     ]);
 
   const shortcuts = SHORTCUTS.filter((item) => role && roleHasPermission(role, item.permission));

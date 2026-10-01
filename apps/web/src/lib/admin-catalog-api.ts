@@ -15,25 +15,20 @@ import type {
   TaxonomyAdminDto,
 } from '@bouquet-one/contracts';
 import { AdminApiError, adminFetch } from './admin-api';
+import {
+  buildProductListQueryParams,
+  type ProductListQuery,
+} from './admin-catalog-contract';
 import { unwrapAdminList, unwrapAdminPage } from './admin-list';
 import { adminEndpoints, withQuery, type QueryValue, type TaxonomyKind } from './admin-endpoints';
 
-export type ProductListQuery = {
-  q?: string;
-  lifecycle?: string;
-  availability?: string;
-  promotion?: string;
-  bestsellerGroupId?: string;
-  occasionId?: string;
-  recipientId?: string;
-  colorId?: string;
-  bouquetSizeId?: string;
-  sort?: string;
-  page?: number;
-  pageSize?: number;
-};
-
-const DEFAULT_PAGE_SIZE = 25;
+export type { ProductListQuery } from './admin-catalog-contract';
+export {
+  buildBestsellerGroupProductsBody,
+  buildProductBestsellerGroupsBody,
+  buildProductListQueryParams,
+  productsListPath,
+} from './admin-catalog-contract';
 
 /** Secondary data (pickers, badges): an endpoint the API has not added yet must not 500 the page. */
 async function safeList<T>(path: string): Promise<T[]> {
@@ -50,9 +45,9 @@ async function safeList<T>(path: string): Promise<T[]> {
 export async function fetchProductsPage(
   query: ProductListQuery = {},
 ): Promise<PaginatedResponse<ProductListItemDto>> {
-  const page = query.page ?? 1;
-  const pageSize = query.pageSize ?? DEFAULT_PAGE_SIZE;
-  const params: Record<string, QueryValue> = { ...query, page, pageSize };
+  const params = buildProductListQueryParams(query);
+  const page = Number(params.page ?? 1);
+  const pageSize = Number(params.pageSize ?? 25);
   const payload = await adminFetch<PaginatedResponse<ProductListItemDto>>(
     withQuery(adminEndpoints.products, params),
   );
@@ -102,7 +97,7 @@ export function fetchBestsellerGroups(): Promise<BestsellerGroupAdminDto[]> {
 
 /**
  * Admin «Акции» list — dedicated endpoint only.
- * Do not fall back to product list with unknown `promotion=` query (forbidNonWhitelisted → 400).
+ * Do not fall back to product list with unknown query keys (forbidNonWhitelisted → 400).
  */
 export async function fetchPromotionRows(): Promise<AdminPromotionListItemDto[]> {
   return safeList<AdminPromotionListItemDto>(

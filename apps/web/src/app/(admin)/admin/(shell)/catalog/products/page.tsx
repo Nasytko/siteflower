@@ -23,23 +23,31 @@ export default async function AdminProductsPage({
   const me = await requireAdminPermission('CATALOG_READ');
   const sp = await searchParams;
 
+  // Accept legacy URL aliases once so bookmarks keep working, then map to canonical API keys.
+  const search = readParam(sp, 'search') || readParam(sp, 'q');
+  const promotionalOnlyRaw =
+    readParam(sp, 'promotionalOnly') ||
+    (readParam(sp, 'promotion') === 'active' ? 'true' : '');
+  const bestsellerGroupIds =
+    readParam(sp, 'bestsellerGroupIds') || readParam(sp, 'bestsellerGroupId');
+
   const filters: ProductFilters = {
-    q: readParam(sp, 'q'),
+    search,
     lifecycle: readParam(sp, 'lifecycle'),
     availability: readParam(sp, 'availability'),
-    promotion: readParam(sp, 'promotion'),
-    bestsellerGroupId: readParam(sp, 'bestsellerGroupId'),
+    promotionalOnly: promotionalOnlyRaw === 'true' ? 'true' : '',
+    bestsellerGroupIds,
     sort: readParam(sp, 'sort'),
     page: Math.max(1, Number(readParam(sp, 'page', '1')) || 1),
   };
 
   const [data, bestsellerGroups] = await Promise.all([
     fetchProductsPage({
-      q: filters.q || undefined,
+      search: filters.search || undefined,
       lifecycle: filters.lifecycle || undefined,
       availability: filters.availability || undefined,
-      promotion: filters.promotion || undefined,
-      bestsellerGroupId: filters.bestsellerGroupId || undefined,
+      promotionalOnly: filters.promotionalOnly === 'true' ? true : undefined,
+      bestsellerGroupIds: filters.bestsellerGroupIds || undefined,
       sort: filters.sort || undefined,
       page: filters.page,
       pageSize: 25,

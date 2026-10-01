@@ -487,10 +487,13 @@ export function ProductEditor({
       setVersion(current.version);
       setServer(current);
 
-      current = await adminPut<ProductAdminDto>(adminEndpoints.productBestsellers(server.id), {
-        expectedVersion: current.version,
-        groupIds,
-      });
+      current = await adminPut<ProductAdminDto>(
+        adminEndpoints.productBestsellerGroups(server.id),
+        {
+          expectedVersion: current.version,
+          groupIds,
+        },
+      );
 
       resync(current);
       setDirty(false);

@@ -10,6 +10,7 @@ import type {
 } from '@bouquet-one/contracts';
 import { Button } from '@bouquet-one/ui';
 import { adminGet, adminPatch, adminPost, adminPut, errorMessage } from '@/lib/admin-client';
+import { buildBestsellerGroupProductsBody } from '@/lib/admin-catalog-contract';
 import { adminEndpoints, withQuery } from '@/lib/admin-endpoints';
 import { unwrapAdminList } from '@/lib/admin-list';
 import { lifecycleLabel } from '@/lib/admin-labels';
@@ -119,13 +120,10 @@ export function BestsellersManager({ initial, canCreate, canUpdate }: Props) {
     await run(async () => {
       const updated = await adminPut<BestsellerGroupAdminDto>(
         adminEndpoints.bestsellerGroupProducts(group.id),
-        {
-          expectedVersion: group.version,
-          products: next.map((item, index) => ({
-            productId: item.productId,
-            sortOrder: (index + 1) * 10,
-          })),
-        },
+        buildBestsellerGroupProductsBody(
+          group.version,
+          next.map((item) => item.productId),
+        ),
       );
       applyGroup(updated);
     });
@@ -164,7 +162,7 @@ export function BestsellersManager({ initial, canCreate, canUpdate }: Props) {
     try {
       const payload = await adminGet<PaginatedResponse<ProductListItemDto>>(
         withQuery(adminEndpoints.products, {
-          q: search.trim(),
+          search: search.trim(),
           lifecycle: 'PUBLISHED',
           page: 1,
           pageSize: 10,

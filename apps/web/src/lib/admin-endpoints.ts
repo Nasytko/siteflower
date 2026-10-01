@@ -93,7 +93,7 @@ export const adminEndpoints = {
   productComponents: (id: string) => `${ADMIN}/catalog/products/${id}/components`,
   productTaxonomies: (id: string) => `${ADMIN}/catalog/products/${id}/taxonomies`,
   productPromotion: (id: string) => `${ADMIN}/catalog/products/${id}/promotion`,
-  productBestsellers: (id: string) => `${ADMIN}/catalog/products/${id}/bestsellers`,
+  productBestsellerGroups: (id: string) => `${ADMIN}/catalog/products/${id}/bestseller-groups`,
   productLifecycle: (id: string, action: 'publish' | 'unpublish' | 'archive') =>
     `${ADMIN}/catalog/products/${id}/${action}`,
   productMedia: (id: string) => `${ADMIN}/catalog/products/${id}/media`,
@@ -106,10 +106,13 @@ export const adminEndpoints = {
 
   budgetRanges: `${ADMIN}/catalog/budget-ranges`,
   budgetRange: (id: string) => `${ADMIN}/catalog/budget-ranges/${id}`,
+  budgetRangesOrder: `${ADMIN}/catalog/budget-ranges/order`,
 
   bestsellerGroups: `${ADMIN}/catalog/bestsellers`,
   bestsellerGroup: (id: string) => `${ADMIN}/catalog/bestsellers/${id}`,
   bestsellerGroupProducts: (id: string) => `${ADMIN}/catalog/bestsellers/${id}/products`,
+  bestsellerGroupProductsOrder: (id: string) =>
+    `${ADMIN}/catalog/bestsellers/${id}/products/order`,
 
   promotions: `${ADMIN}/catalog/promotions`,
 
@@ -148,13 +151,22 @@ export function parseLegalDocumentKindPath(raw: string): LegalDocumentKind | nul
   return isLegalDocumentKind(normalized) ? normalized : null;
 }
 
-export type QueryValue = string | number | boolean | null | undefined;
+export type QueryValue = string | number | boolean | null | undefined | ReadonlyArray<string | number>;
 
-/** Append a query string, skipping empty values. */
+/** Append a query string, skipping empty values. Arrays become comma-separated (Nest toStringList). */
 export function withQuery(path: string, params: Record<string, QueryValue>): string {
   const search = new URLSearchParams();
   for (const [key, value] of Object.entries(params)) {
     if (value === null || value === undefined) continue;
+    if (Array.isArray(value)) {
+      const joined = value
+        .map((entry) => String(entry).trim())
+        .filter((entry) => entry.length > 0)
+        .join(',');
+      if (joined.length === 0) continue;
+      search.set(key, joined);
+      continue;
+    }
     const text = String(value);
     if (text.length === 0) continue;
     search.set(key, text);
