@@ -8,7 +8,6 @@ import {
   Logger,
 } from '@nestjs/common';
 import type { Request, Response } from 'express';
-import { Prisma } from '@bouquet-one/database';
 import { AppConfigService } from '../../config/app-config.service';
 import { REQUEST_ID_HEADER, getRequestId } from '../middleware/request-id.middleware';
 import { sanitizeSensitiveUrl } from '../sanitize-sensitive-url.util';
@@ -22,6 +21,12 @@ type ErrorBody = {
   requestId?: string;
   path: string;
   timestamp: string;
+};
+
+/** Duck-typed Prisma known-request error — avoids runtime `Prisma.*` (CJS bridge has no value export). */
+type PrismaKnownRequestErrorLike = Error & {
+  code: string;
+  meta?: { constraint?: string; field_name?: string; target?: string[] };
 };
 
 @Injectable()
@@ -49,19 +54,18 @@ export class GlobalExceptionFilter implements ExceptionFilter {
       const payload = exception.getResponse();
       if (typeof payload === 'string') {
         message = payload;
-      } else if (typeof payload === 'object' && payload !== null) {
-        const record = payload as Record<string, unknown>;
-        if (typeof record.message === 'string' || Array.isArray(record.message)) {
-          message = record.message as string | string[];
+      } else if (isPlainObject(payload)) {
+        if (typeof payload.message === 'string' || Array.isArray(payload.message)) {
+          message = payload.message as string | string[];
         }
-        if (typeof record.error === 'string') {
-          errorName = record.error;
+        if (typeof payload.error === 'string') {
+          errorName = payload.error;
         }
-        if (record.issues !== undefined) {
-          issues = record.issues;
+        if (payload.issues !== undefined) {
+          issues = payload.issues;
         }
-        if (typeof record.code === 'string') {
-          code = record.code;
+        if (typeof payload.code === 'string') {
+          code = payload.code;
         }
       }
       // Nest converts Multer LIMIT_FILE_SIZE → PayloadTooLargeException("File too large")
@@ -89,7 +93,7 @@ export class GlobalExceptionFilter implements ExceptionFilter {
       errorName = 'Bad Request';
       message = 'Файл не передан. Выберите изображение и попробуйте снова.';
       code = 'FILE_REQUIRED';
-    } else if (exception instanceof Prisma.PrismaClientKnownRequestError) {
+    } else if (isPrismaKnownRequestError(exception)) {
       const mapped = mapPrismaKnownError(exception);
       status = mapped.status;
       errorName = mapped.error;
@@ -128,23 +132,37 @@ export class GlobalExceptionFilter implements ExceptionFilter {
   }
 }
 
-function isMulterLimitError(exception: unknown, code: string): boolean {
-  return (
-    Boolean(exception) &&
-    typeof exception === 'object' &&
-    'code' in exception &&
-    (exception as { code?: string }).code === code
-  );
+/**
+ * Narrow unknown thrown values before property access.
+ * Note: `typeof null === 'object'`, so null must be excluded before `in` / field reads
+ * (strict TS: TS18047 on `'code' in exception` when null is still possible).
+ */
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null;
 }
 
-function mapPrismaKnownError(exception: Prisma.PrismaClientKnownRequestError): {
+function isMulterLimitError(exception: unknown, expectedCode: string): boolean {
+  if (!isPlainObject(exception)) {
+    return false;
+  }
+  return typeof exception.code === 'string' && exception.code === expectedCode;
+}
+
+function isPrismaKnownRequestError(exception: unknown): exception is PrismaKnownRequestErrorLike {
+  if (!(exception instanceof Error) || !isPlainObject(exception)) {
+    return false;
+  }
+  return typeof exception.code === 'string' && /^P\d{4}$/.test(exception.code);
+}
+
+function mapPrismaKnownError(exception: PrismaKnownRequestErrorLike): {
   status: number;
   error: string;
   message: string;
   issues?: unknown;
   code?: string;
 } {
-  const meta = exception.meta as { constraint?: string; field_name?: string; target?: string[] } | undefined;
+  const meta = exception.meta;
   const constraint = String(meta?.constraint ?? meta?.field_name ?? meta?.target?.join(',') ?? '');
 
   if (

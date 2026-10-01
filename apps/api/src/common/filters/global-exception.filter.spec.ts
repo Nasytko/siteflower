@@ -61,4 +61,46 @@ describe('GlobalExceptionFilter media multer mapping', () => {
       expect.objectContaining({ code: 'FILE_REQUIRED' }),
     );
   });
+
+  it('treats null/undefined throws as opaque 500 without TS/runtime crashes', () => {
+    for (const value of [null, undefined] as const) {
+      const { host, status, json } = mockHost();
+      expect(() => filter.catch(value, host)).not.toThrow();
+      expect(status).toHaveBeenCalledWith(HttpStatus.INTERNAL_SERVER_ERROR);
+      expect(json).toHaveBeenCalledWith(
+        expect.objectContaining({
+          statusCode: HttpStatus.INTERNAL_SERVER_ERROR,
+          message: 'Internal server error',
+        }),
+      );
+      const body = json.mock.calls[0]?.[0] as { code?: string };
+      expect(body.code).toBeUndefined();
+    }
+  });
+
+  it('does not treat non-object or wrong-code values as Multer limit errors', () => {
+    const { host, status, json } = mockHost();
+    filter.catch('LIMIT_FILE_SIZE', host);
+    expect(status).toHaveBeenCalledWith(HttpStatus.INTERNAL_SERVER_ERROR);
+    expect(json.mock.calls[0]?.[0]).not.toEqual(
+      expect.objectContaining({ code: 'MEDIA_TOO_LARGE' }),
+    );
+
+    const again = mockHost();
+    filter.catch({ code: 123 }, again.host);
+    expect(again.status).toHaveBeenCalledWith(HttpStatus.INTERNAL_SERVER_ERROR);
+  });
+
+  it('maps duck-typed Prisma unique conflicts without Prisma namespace runtime access', () => {
+    const { host, status, json } = mockHost();
+    const err = Object.assign(new Error('Unique constraint failed'), {
+      code: 'P2002',
+      meta: { target: ['slug'] },
+    });
+    filter.catch(err, host);
+    expect(status).toHaveBeenCalledWith(HttpStatus.CONFLICT);
+    expect(json).toHaveBeenCalledWith(
+      expect.objectContaining({ code: 'UNIQUE_CONFLICT' }),
+    );
+  });
 });
