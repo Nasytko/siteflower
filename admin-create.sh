@@ -52,8 +52,9 @@ main() {
     cmd+=(-T)
   fi
   cmd+=(-e "DATABASE_URL=${DATABASE_URL}")
-  # `--` ensures --email/--name/--password are CLI args, not compose exec options.
-  cmd+=(api -- node dist/cli/admin-create.js)
+  # docker compose exec SERVICE COMMAND [ARGS...] — do NOT insert `--` between
+  # service and executable (OCI would try to exec "--").
+  cmd+=(api node dist/cli/admin-create.js)
   cmd+=("${user_args[@]}")
 
   SHOPBUKET1_ENV_FILE="${SHOPBUKET1_ENV_FILE}" "${cmd[@]}"

@@ -1,6 +1,16 @@
 #!/usr/bin/env bash
 # Regression: admin-create.sh must forward --email/--name/--password to
 # `node dist/cli/admin-create.js` inside `docker compose exec` (production CLI).
+#
+# Expected final argv shape (after docker compose ... exec [opts]):
+#   api
+#   node
+#   dist/cli/admin-create.js
+#   --email <email>
+#   --name <name>
+#   --password <password>
+#
+# There must be NO standalone `--` between `api` and `node` (OCI treats it as executable).
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
@@ -66,31 +76,76 @@ set -e
 grep -qx 'compose' "$CAPTURE_TXT" || fail "expected docker compose"
 grep -qx 'exec' "$CAPTURE_TXT" || fail "expected compose exec"
 grep -qx -- '-T' "$CAPTURE_TXT" || fail "expected compose exec -T for non-TTY"
-grep -qx 'api' "$CAPTURE_TXT" || fail "expected service api"
-grep -qx -- '--' "$CAPTURE_TXT" || fail "expected -- before container command"
-grep -qx 'node' "$CAPTURE_TXT" || fail "expected node"
-grep -qx 'dist/cli/admin-create.js' "$CAPTURE_TXT" || fail "expected dist/cli/admin-create.js"
 
-# Critical: user flags must appear AFTER the production CLI entrypoint.
-cli_line="$(grep -n -x 'dist/cli/admin-create.js' "$CAPTURE_TXT" | head -n1 | cut -d: -f1)"
-[[ -n "$cli_line" ]] || fail "CLI path not found in docker argv"
-email_line="$(grep -n -x -- '--email' "$CAPTURE_TXT" | head -n1 | cut -d: -f1)"
-name_line="$(grep -n -x -- '--name' "$CAPTURE_TXT" | head -n1 | cut -d: -f1)"
-password_line="$(grep -n -x -- '--password' "$CAPTURE_TXT" | head -n1 | cut -d: -f1)"
-[[ -n "$email_line" ]] || fail "missing --email in docker argv"
-[[ -n "$name_line" ]] || fail "missing --name in docker argv"
-[[ -n "$password_line" ]] || fail "missing --password in docker argv"
-[[ "$email_line" -gt "$cli_line" ]] || fail "--email must follow dist/cli/admin-create.js"
-[[ "$name_line" -gt "$cli_line" ]] || fail "--name must follow dist/cli/admin-create.js"
-[[ "$password_line" -gt "$cli_line" ]] || fail "--password must follow dist/cli/admin-create.js"
+mapfile -t argv <"$CAPTURE_TXT"
 
-grep -qx 'director@example.com' "$CAPTURE_TXT" || fail "missing email value"
-grep -qx 'Director' "$CAPTURE_TXT" || fail "missing name value"
-grep -qx 'test-password-12' "$CAPTURE_TXT" || fail "missing password value"
+# Locate service `api` among compose exec argv.
+api_idx=-1
+for i in "${!argv[@]}"; do
+  if [[ "${argv[$i]}" == "api" ]]; then
+    api_idx=$i
+    break
+  fi
+done
+[[ "$api_idx" -ge 0 ]] || fail "expected service api"
+
+# Exact contiguous sequence required by docker compose exec runtime:
+#   api node dist/cli/admin-create.js --email ... --name ... --password ...
+[[ "${argv[$((api_idx + 1))]:-}" == "node" ]] \
+  || fail "expected executable 'node' immediately after api (got: ${argv[$((api_idx + 1))]:-<missing>})"
+[[ "${argv[$((api_idx + 2))]:-}" == "dist/cli/admin-create.js" ]] \
+  || fail "expected dist/cli/admin-create.js after node"
+[[ "${argv[$((api_idx + 3))]:-}" == "--email" ]] \
+  || fail "expected --email after script"
+[[ "${argv[$((api_idx + 4))]:-}" == "director@example.com" ]] \
+  || fail "expected email value"
+[[ "${argv[$((api_idx + 5))]:-}" == "--name" ]] \
+  || fail "expected --name"
+[[ "${argv[$((api_idx + 6))]:-}" == "Director" ]] \
+  || fail "expected name value"
+[[ "${argv[$((api_idx + 7))]:-}" == "--password" ]] \
+  || fail "expected --password"
+[[ "${argv[$((api_idx + 8))]:-}" == "test-password-12" ]] \
+  || fail "expected password value"
+
+# `--` between api and node would be executed by OCI as the container command.
+if [[ "${argv[$((api_idx + 1))]:-}" == "--" ]]; then
+  fail "must not insert '--' between api and node (OCI exec: executable file not found)"
+fi
+# No standalone `--` anywhere after `exec` before user flags (defensive).
+exec_idx=-1
+for i in "${!argv[@]}"; do
+  if [[ "${argv[$i]}" == "exec" ]]; then
+    exec_idx=$i
+    break
+  fi
+done
+[[ "$exec_idx" -ge 0 ]] || fail "exec not found"
+for ((i = exec_idx + 1; i < api_idx + 3; i++)); do
+  if [[ "${argv[$i]}" == "--" ]]; then
+    fail "unexpected '--' at argv[$i] near api/node (OCI would treat it as executable)"
+  fi
+done
 
 # Ensure we did not fall back to tsx / source tree.
 if grep -E -q 'tsx|/app/scripts/|src/cli/admin-create\.ts' "$CAPTURE_TXT"; then
   fail "docker argv must use compiled dist/cli only (no tsx/src)"
 fi
 
-pass "admin-create.sh forwards --email/--name/--password to node dist/cli/admin-create.js"
+# Interactive path (no user args): still ends with api node dist/cli/admin-create.js
+: >"$CAPTURE_TXT"
+# Force a TTY-less run without --password should die; with empty args + fake TTY is hard.
+# Instead invoke the script's argv capture by calling with zero flags via a tiny wrapper
+# that pretends stdin is a TTY is unreliable cross-platform — verify zero-arg array path
+# by sourcing the same construction with a dry helper:
+set +e
+# shellcheck disable=SC2034
+printf '' | "$ROOT/admin-create.sh" >/tmp/admin-create-noargs.out 2>/tmp/admin-create-noargs.err
+noargs_rc=$?
+set -e
+# Without --password and without TTY, script must refuse (not spawn broken OCI --).
+[[ "$noargs_rc" -ne 0 ]] || fail "no-arg non-TTY should fail closed"
+grep -q 'Interactive TTY required' /tmp/admin-create-noargs.err \
+  || fail "expected TTY required message for interactive-only path"
+
+pass "admin-create.sh builds: api node dist/cli/admin-create.js --email/--name/--password (no OCI --)"
