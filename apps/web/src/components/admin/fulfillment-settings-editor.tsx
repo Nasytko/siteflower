@@ -7,8 +7,10 @@ import type {
   TimeWindowDto,
 } from '@bouquet-one/contracts';
 import { Button } from '@bouquet-one/ui';
-import { adminPatch, AdminRequestError, errorMessage } from '@/lib/admin-client';
+import { adminGet, adminPatch, AdminRequestError, errorMessage } from '@/lib/admin-client';
 import { FormSaveStatus, phaseFromAdminError, type FormSavePhase } from '@/components/admin/form-status';
+
+const FULFILLMENT_SETTINGS_PATH = '/api/v1/admin/fulfillment/settings';
 
 type Props = {
   initial: FulfillmentSettingsAdminDto;
@@ -35,6 +37,17 @@ export function FulfillmentSettingsEditor({ initial, canUpdate }: Props) {
   const [pending, setPending] = useState(false);
   const [savedAt, setSavedAt] = useState<string | null>(null);
 
+  function applySettings(updated: FulfillmentSettingsAdminDto) {
+    setVersion(updated.version);
+    setDeliveryEnabled(updated.deliveryEnabled);
+    setPickupEnabled(updated.pickupEnabled);
+    setDeliveryFeeMinor(updated.deliveryFeeMinor);
+    setMinLeadTimeMinutes(String(updated.minLeadTimeMinutes));
+    setMaxAdvanceDays(String(updated.maxAdvanceDays));
+    setPickupInstructions(updated.pickupInstructions ?? '');
+    setTimeWindows(updated.timeWindows);
+  }
+
   async function onSave(event: FormEvent) {
     event.preventDefault();
     if (!canUpdate) return;
@@ -44,21 +57,17 @@ export function FulfillmentSettingsEditor({ initial, canUpdate }: Props) {
     setSavedAt(null);
     setPhase('saving');
     try {
-      const updated = await adminPatch<FulfillmentSettingsAdminDto>(
-        '/api/v1/admin/fulfillment/settings',
-        {
-          expectedVersion: version,
-          deliveryEnabled,
-          pickupEnabled,
-          deliveryFeeMinor,
-          minLeadTimeMinutes: Number(minLeadTimeMinutes),
-          maxAdvanceDays: Number(maxAdvanceDays),
-          pickupInstructions: pickupInstructions.trim() || null,
-          timeWindows,
-        },
-      );
-      setVersion(updated.version);
-      setTimeWindows(updated.timeWindows);
+      const updated = await adminPatch<FulfillmentSettingsAdminDto>(FULFILLMENT_SETTINGS_PATH, {
+        expectedVersion: version,
+        deliveryEnabled,
+        pickupEnabled,
+        deliveryFeeMinor,
+        minLeadTimeMinutes: Number(minLeadTimeMinutes),
+        maxAdvanceDays: Number(maxAdvanceDays),
+        pickupInstructions: pickupInstructions.trim() || null,
+        timeWindows,
+      });
+      applySettings(updated);
       setSavedAt(new Date().toLocaleTimeString('ru-BY'));
       setPhase('saved');
       router.refresh();
@@ -88,7 +97,21 @@ export function FulfillmentSettingsEditor({ initial, canUpdate }: Props) {
         savedLabel={savedAt ? `Настройки сохранены · ${savedAt}` : null}
         errorMessage={error}
         requestId={requestId}
-        onRefresh={() => router.refresh()}
+        onRefresh={() => {
+          void (async () => {
+            try {
+              const fresh = await adminGet<FulfillmentSettingsAdminDto>(FULFILLMENT_SETTINGS_PATH);
+              applySettings(fresh);
+              setError(null);
+              setRequestId(null);
+              setPhase('idle');
+              router.refresh();
+            } catch (err) {
+              setPhase('server');
+              setError(errorMessage(err, 'Не удалось обновить данные'));
+            }
+          })();
+        }}
         onDismiss={() => {
           setError(null);
           setPhase(savedAt ? 'saved' : 'idle');

@@ -91,7 +91,7 @@ export function FormSaveStatus({
       >
         <p className="admin-form-status__title">⚠ {title}</p>
         {errorMessage ? <p className="admin-form-status__body">{errorMessage}</p> : null}
-        {phase === 'conflict' ? (
+        {phase === 'conflict' && /другим пользователем/i.test(errorMessage ?? '') ? (
           <p className="admin-form-status__hint">
             Данные были изменены в другой вкладке или другим пользователем.
           </p>

@@ -5,10 +5,12 @@ import { useRouter } from 'next/navigation';
 import type { StorefrontSettingsAdminDto } from '@bouquet-one/contracts';
 import { Button } from '@bouquet-one/ui';
 import {
+  adminGet,
   adminPatch,
   AdminRequestError,
   errorMessage,
 } from '@/lib/admin-client';
+import { adminEndpoints } from '@/lib/admin-endpoints';
 import {
   FormSaveStatus,
   phaseFromAdminError,
@@ -63,6 +65,23 @@ export function StorefrontSettingsEditor({ initial, canUpdate }: Props) {
   const [pending, setPending] = useState(false);
   const [savedAt, setSavedAt] = useState<string | null>(null);
 
+  function applySettings(updated: StorefrontSettingsAdminDto) {
+    setVersion(updated.version);
+    setForm({
+      brandName: updated.brandName,
+      city: updated.city,
+      phone: updated.phone ?? '',
+      email: updated.email ?? '',
+      address: updated.address ?? '',
+      workingHours: updated.workingHours ?? '',
+      deliverySummary: updated.deliverySummary ?? '',
+      aboutSummary: updated.aboutSummary ?? '',
+      instagramUrl: updated.instagramUrl ?? '',
+      telegramUrl: updated.telegramUrl ?? '',
+      substitutionNote: updated.substitutionNote ?? '',
+    });
+  }
+
   async function onSave(event: FormEvent) {
     event.preventDefault();
     if (!canUpdate) return;
@@ -89,20 +108,7 @@ export function StorefrontSettingsEditor({ initial, canUpdate }: Props) {
           substitutionNote: emptyToNull(form.substitutionNote),
         },
       );
-      setVersion(updated.version);
-      setForm({
-        brandName: updated.brandName,
-        city: updated.city,
-        phone: updated.phone ?? '',
-        email: updated.email ?? '',
-        address: updated.address ?? '',
-        workingHours: updated.workingHours ?? '',
-        deliverySummary: updated.deliverySummary ?? '',
-        aboutSummary: updated.aboutSummary ?? '',
-        instagramUrl: updated.instagramUrl ?? '',
-        telegramUrl: updated.telegramUrl ?? '',
-        substitutionNote: updated.substitutionNote ?? '',
-      });
+      applySettings(updated);
       setSavedAt(new Date().toLocaleString('ru-BY'));
       setPhase('saved');
       router.refresh();
@@ -131,7 +137,23 @@ export function StorefrontSettingsEditor({ initial, canUpdate }: Props) {
           const formEl = document.querySelector('form');
           formEl?.dispatchEvent(new Event('submit', { cancelable: true, bubbles: true }));
         }}
-        onRefresh={() => router.refresh()}
+        onRefresh={() => {
+          void (async () => {
+            try {
+              const fresh = await adminGet<StorefrontSettingsAdminDto>(
+                adminEndpoints.storefrontSettings,
+              );
+              applySettings(fresh);
+              setError(null);
+              setRequestId(null);
+              setPhase('idle');
+              router.refresh();
+            } catch (err) {
+              setPhase('server');
+              setError(errorMessage(err, 'Не удалось обновить данные'));
+            }
+          })();
+        }}
         onDismiss={() => {
           setError(null);
           setPhase(savedAt ? 'saved' : 'idle');

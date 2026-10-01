@@ -59,7 +59,7 @@ export class AdminRequestError extends Error {
 
 export function kindFromStatus(status: number): AdminErrorKind {
   if (status === 0) return 'network';
-  if (status === 400 || status === 422) return 'validation';
+  if (status === 400 || status === 413 || status === 422) return 'validation';
   if (status === 401) return 'unauthorized';
   if (status === 403) return 'forbidden';
   if (status === 404) return 'not_found';
@@ -146,7 +146,9 @@ export function buildAdminRequestError(
 
   let message = defaultMessageForKind(kind, status);
   if (kind === 'conflict') {
-    message = OCC_MESSAGE;
+    // Prefer API reason for non-OCC conflicts (slug/unique/business); OCC responses
+    // already send OCC_CONFLICT_MESSAGE which matches OCC_MESSAGE.
+    message = bodyMessage ?? OCC_MESSAGE;
   } else if (kind === 'validation' && issues.length > 0) {
     message = `${defaultMessageForKind('validation', status)} ${issues.map((i) => i.message).join('; ')}`;
   } else if (bodyMessage && kind !== 'server') {

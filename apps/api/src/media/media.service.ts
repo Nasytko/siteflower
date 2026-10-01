@@ -114,6 +114,9 @@ async function decodeImage(
   } catch (err) {
     const detail = err instanceof Error ? err.message : String(err);
     log.warn(`media_decode_primary_failed format=${format} err=${detail}`);
+    if (isPixelLimitError(detail)) {
+      throw mediaHttpException(MEDIA_ERROR_CODES.IMAGE_DIMENSIONS_TOO_LARGE);
+    }
     if (format === 'JPEG') {
       try {
         return await tryDecode(
@@ -125,10 +128,17 @@ async function decodeImage(
       } catch (retryErr) {
         const retryDetail = retryErr instanceof Error ? retryErr.message : String(retryErr);
         log.warn(`media_decode_srgb_failed format=${format} err=${retryDetail}`);
+        if (isPixelLimitError(retryDetail)) {
+          throw mediaHttpException(MEDIA_ERROR_CODES.IMAGE_DIMENSIONS_TOO_LARGE);
+        }
       }
     }
     throw mediaHttpException(MEDIA_ERROR_CODES.IMAGE_DECODE_FAILED);
   }
+}
+
+function isPixelLimitError(detail: string): boolean {
+  return /pixel limit|input image exceeds|limitInputPixels/i.test(detail);
 }
 
 export type MediaAssetDto = {

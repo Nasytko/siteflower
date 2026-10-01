@@ -64,16 +64,31 @@ export class GlobalExceptionFilter implements ExceptionFilter {
           code = record.code;
         }
       }
-    } else if (
-      exception &&
-      typeof exception === 'object' &&
-      'code' in exception &&
-      (exception as { code?: string }).code === 'LIMIT_FILE_SIZE'
-    ) {
+      // Nest converts Multer LIMIT_FILE_SIZE → PayloadTooLargeException("File too large")
+      // before this filter sees the raw MulterError; normalize to the media contract.
+      if (
+        !code &&
+        (status === HttpStatus.PAYLOAD_TOO_LARGE ||
+          message === 'File too large' ||
+          (Array.isArray(message) && message.includes('File too large')))
+      ) {
+        status = HttpStatus.BAD_REQUEST;
+        errorName = 'Bad Request';
+        message = 'Файл слишком большой';
+        code = 'MEDIA_TOO_LARGE';
+      }
+    } else if (isMulterLimitError(exception, 'LIMIT_FILE_SIZE')) {
       status = HttpStatus.BAD_REQUEST;
       errorName = 'Bad Request';
       message = 'Файл слишком большой';
       code = 'MEDIA_TOO_LARGE';
+    } else if (isMulterLimitError(exception, 'LIMIT_UNEXPECTED_FILE')) {
+      // Multer 2.x message is "Unexpected file field"; Nest still matches the old
+      // "Unexpected field" string, so this can arrive as a raw MulterError.
+      status = HttpStatus.BAD_REQUEST;
+      errorName = 'Bad Request';
+      message = 'Файл не передан. Выберите изображение и попробуйте снова.';
+      code = 'FILE_REQUIRED';
     } else if (exception instanceof Prisma.PrismaClientKnownRequestError) {
       const mapped = mapPrismaKnownError(exception);
       status = mapped.status;
@@ -111,6 +126,15 @@ export class GlobalExceptionFilter implements ExceptionFilter {
 
     response.status(status).json(body);
   }
+}
+
+function isMulterLimitError(exception: unknown, code: string): boolean {
+  return (
+    Boolean(exception) &&
+    typeof exception === 'object' &&
+    'code' in exception &&
+    (exception as { code?: string }).code === code
+  );
 }
 
 function mapPrismaKnownError(exception: Prisma.PrismaClientKnownRequestError): {

@@ -21,11 +21,38 @@ test('maps status codes to kinds', () => {
 });
 
 test('builds OCC conflict message for 409', () => {
-  const err = buildAdminRequestError(409, { message: 'whatever', requestId: 'req-1' });
+  const err = buildAdminRequestError(409, {
+    message:
+      'Данные изменены другим пользователем. Обновите страницу и сохраните снова.',
+    requestId: 'req-1',
+  });
   assert.equal(err.kind, 'conflict');
   assert.match(err.message, /другим пользователем/i);
   assert.equal(err.requestId, 'req-1');
   assert.equal(err.retryable, false);
+});
+
+test('preserves non-OCC 409 API message (slug/unique)', () => {
+  const err = buildAdminRequestError(409, {
+    message: 'Slug already in use',
+    code: 'UNIQUE_CONFLICT',
+    requestId: 'req-slug',
+  });
+  assert.equal(err.kind, 'conflict');
+  assert.equal(err.message, 'Slug already in use');
+  assert.equal(err.code, 'UNIQUE_CONFLICT');
+  assert.equal(err.retryable, false);
+});
+
+test('maps 413 oversized upload to validation kind', () => {
+  assert.equal(kindFromStatus(413), 'validation');
+  const err = buildAdminRequestError(413, {
+    message: 'Файл слишком большой',
+    code: 'MEDIA_TOO_LARGE',
+  });
+  assert.equal(err.kind, 'validation');
+  assert.equal(err.code, 'MEDIA_TOO_LARGE');
+  assert.match(mediaErrorUserText(err), /8 MB/i);
 });
 
 test('maps validation issues to fieldErrors', () => {
