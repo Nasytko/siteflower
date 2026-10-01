@@ -1,23 +1,33 @@
 import Link from 'next/link';
+import { HistoryBackButton } from '@/components/history-back-button';
 
 export default function StorefrontNotFound() {
   return (
-    <main id="main-content" className="sf-container flex min-h-[60vh] flex-col justify-center py-16">
-      <p className="sf-label">404</p>
-      <h1 className="sf-display mt-3 max-w-xl">Страница не найдена</h1>
-      <p className="sf-body mt-4 max-w-md text-muted">
-        Возможно, букет сняли с публикации или ссылка устарела. Загляните в каталог — там всё актуальное.
-      </p>
-      <div className="mt-8 flex flex-wrap gap-4">
-        <Link
-          href="/bukety"
-          className="inline-flex rounded-[var(--radius-md)] bg-brand px-5 py-2.5 text-sm font-medium text-brand-foreground hover:opacity-90"
-        >
-          В каталог
-        </Link>
-        <Link href="/" className="inline-flex px-5 py-2.5 text-sm font-medium text-foreground hover:text-brand">
-          На главную
-        </Link>
+    <main
+      id="main-content"
+      className="sf-not-found relative flex min-h-[70vh] flex-col justify-center overflow-hidden py-16"
+    >
+      <div className="sf-not-found__glow" aria-hidden />
+      <div className="sf-container relative">
+        <p className="sf-label">404</p>
+        <h1 className="sf-display mt-3 max-w-xl text-balance">
+          Кажется, этой страницы больше нет
+        </h1>
+        <p className="sf-body mt-4 max-w-md text-muted">
+          Возможно, ссылка устарела или страница была перемещена. Загляните в каталог — там всё
+          актуальное.
+        </p>
+        <div className="mt-8 flex flex-wrap gap-3">
+          <Link href="/" className="sf-not-found__cta">
+            На главную
+          </Link>
+          <HistoryBackButton fallbackHref="/" className="sf-not-found__secondary">
+            Вернуться назад
+          </HistoryBackButton>
+          <Link href="/bukety" className="sf-not-found__secondary">
+            В каталог
+          </Link>
+        </div>
       </div>
     </main>
   );
