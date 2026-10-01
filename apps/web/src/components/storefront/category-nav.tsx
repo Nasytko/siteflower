@@ -1,14 +1,10 @@
 import Image from 'next/image';
 import Link from 'next/link';
+import type { DiscoveryTile } from './category-nav-types';
 import { SectionRail } from './section-rail';
 
-export type DiscoveryTile = {
-  id: string;
-  label: string;
-  href: string;
-  imageSrc: string;
-  imageAlt: string;
-};
+export type { DiscoveryTile } from './category-nav-types';
+export { filterDiscoveryTiles } from './discovery-tiles';
 
 /**
  * Illustrated discovery row — every href maps to a live storefront destination.
@@ -72,6 +68,8 @@ type Props = {
 };
 
 export function CategoryNav({ city, items = HOME_DISCOVERY_TILES }: Props) {
+  if (items.length === 0) return null;
+
   return (
     <section className="sf-discovery-row py-12 md:py-16">
       <div className="sf-container-wide">

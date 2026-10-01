@@ -7,12 +7,18 @@ import {
   getStorefrontSettings,
   listBestsellerGroups,
   listBudgetRanges,
+  listFlowers,
+  listOccasions,
   listPromotionalProducts,
   listRecipients,
 } from '@/lib/public-api';
 import { buildPageMetadata } from '@/lib/seo/metadata';
 import { BestsellersSection } from '@/components/storefront/bestsellers-section';
-import { CategoryNav } from '@/components/storefront/category-nav';
+import {
+  CategoryNav,
+  filterDiscoveryTiles,
+  HOME_DISCOVERY_TILES,
+} from '@/components/storefront/category-nav';
 import { ExpandingHero, type HeroSlide } from '@/components/storefront/expanding-hero';
 import { HomeAnalytics } from '@/components/storefront/home-analytics';
 import { InstagramSection } from '@/components/storefront/instagram-section';
@@ -40,8 +46,18 @@ export async function generateMetadata(): Promise<Metadata> {
 }
 
 export default async function StorefrontHomePage() {
-  const [homepage, settings, bestsellerGroups, promoProducts, giftsShelf, budgets, recipients, instagram] =
-    await Promise.all([
+  const [
+    homepage,
+    settings,
+    bestsellerGroups,
+    promoProducts,
+    giftsShelf,
+    budgets,
+    recipients,
+    flowers,
+    occasions,
+    instagram,
+  ] = await Promise.all([
       getHomepageConfig().catch(() => null),
       getStorefrontSettings().catch(() => null),
       listBestsellerGroups().catch(() => []),
@@ -49,6 +65,8 @@ export default async function StorefrontHomePage() {
       getBestsellerGroup('podarki').catch(() => null),
       listBudgetRanges().catch(() => []),
       listRecipients().catch(() => []),
+      listFlowers().catch(() => []),
+      listOccasions().catch(() => []),
       getInstagramFeed().catch(() => null),
     ]);
 
@@ -65,6 +83,12 @@ export default async function StorefrontHomePage() {
       </main>
     );
   }
+
+  const discoveryTiles = filterDiscoveryTiles(HOME_DISCOVERY_TILES, {
+    flowerSlugs: new Set(flowers.map((item) => item.slug)),
+    recipientSlugs: new Set(recipients.map((item) => item.slug)),
+    occasionSlugs: new Set(occasions.map((item) => item.slug)),
+  });
 
   const sections = [...homepage.sections]
     .filter((section) => section.enabled)
@@ -153,7 +177,7 @@ export default async function StorefrontHomePage() {
         </div>
       </section>
 
-      <CategoryNav city={settings.city} />
+      <CategoryNav city={settings.city} items={discoveryTiles} />
 
       {bestsellersSection ? (
         <BestsellersSection
