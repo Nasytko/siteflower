@@ -18,6 +18,7 @@ import {
 import { Button } from '@bouquet-one/ui';
 import {
   adminDelete,
+  adminGet,
   adminPatch,
   adminPost,
   adminPut,
@@ -714,9 +715,21 @@ export function ProductEditor({
         requestId={requestId}
         onRetry={() => void onSave()}
         onRefresh={() => {
-          router.refresh();
-          setError(null);
-          setSavePhase('idle');
+          void (async () => {
+            try {
+              const fresh = await adminGet<ProductAdminDto>(adminEndpoints.product(server.id));
+              resync(fresh);
+              setDirty(false);
+              setError(null);
+              setFieldErrors({});
+              setRequestId(null);
+              setSavePhase('idle');
+              router.refresh();
+            } catch (err) {
+              setError(errorMessage(err, 'Не удалось обновить данные'));
+              setSavePhase('server');
+            }
+          })();
         }}
         onDismiss={() => {
           setError(null);

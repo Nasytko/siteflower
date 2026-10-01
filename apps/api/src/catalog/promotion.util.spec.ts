@@ -163,6 +163,20 @@ describe('validatePromotionInput', () => {
     ).toEqual([]);
   });
 
+  it('does not reject inverted schedule when promotion is disabled', () => {
+    expect(
+      validatePromotionInput({
+        ...base,
+        enabled: false,
+        type: 'PERCENT',
+        percentOff: 15,
+        startsAt: new Date('2026-03-10T00:00:00Z'),
+        endsAt: new Date('2026-03-09T00:00:00Z'),
+        variantSalePrices: [],
+      }),
+    ).toEqual([]);
+  });
+
   it('accepts disabled FIXED without sale prices', () => {
     expect(
       validatePromotionInput({

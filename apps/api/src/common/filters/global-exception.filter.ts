@@ -126,8 +126,7 @@ function mapPrismaKnownError(exception: Prisma.PrismaClientKnownRequestError): {
   if (
     (exception.code === 'P2004' || exception.code === 'P2010') &&
     (constraint.includes('product_promotions_type_fields') ||
-      constraint.includes('product_promotions_percent_off_range') ||
-      constraint.includes('percent_off'))
+      constraint.includes('product_promotions_percent_off_range'))
   ) {
     return {
       status: HttpStatus.BAD_REQUEST,

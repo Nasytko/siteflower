@@ -135,17 +135,19 @@ export function validatePromotionInput(input: {
     }
   }
 
+  // Commercial rules — only when the promotion is enabled.
+  // Schedule is commercial intent (DB does not CHECK starts < ends); do not block
+  // disabled legacy rows with inverted windows from unrelated product saves.
+  if (!input.enabled) {
+    return issues;
+  }
+
   if (input.startsAt && input.endsAt && input.startsAt.getTime() >= input.endsAt.getTime()) {
     issues.push({
       code: 'INVALID_SCHEDULE',
       message: 'Дата начала акции должна быть раньше даты окончания',
       field: 'endsAt',
     });
-  }
-
-  // Commercial rules — only when the promotion is enabled.
-  if (!input.enabled) {
-    return issues;
   }
 
   if (input.type === 'FIXED') {

@@ -75,16 +75,10 @@ function mapPromotionPrismaError(err: unknown): never {
   if (err instanceof Prisma.PrismaClientKnownRequestError) {
     const meta = err.meta as { constraint?: string; field_name?: string } | undefined;
     const constraint = String(meta?.constraint ?? meta?.field_name ?? err.message);
-    if (constraint.includes('product_promotions_type_fields') || constraint.includes('percent_off')) {
-      throw promotionValidationException([
-        {
-          code: 'INVALID_PERCENT',
-          message: 'Процент скидки должен быть от 1 до 99',
-          field: 'percentOff',
-        },
-      ]);
-    }
-    if (constraint.includes('product_promotions_percent_off_range')) {
+    if (
+      constraint.includes('product_promotions_type_fields') ||
+      constraint.includes('product_promotions_percent_off_range')
+    ) {
       throw promotionValidationException([
         {
           code: 'INVALID_PERCENT',
