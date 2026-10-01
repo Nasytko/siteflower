@@ -22,7 +22,10 @@ import {
   adminPost,
   adminPut,
   adminUpload,
+  AdminRequestError,
   errorMessage,
+  fieldErrorMap,
+  mediaErrorUserText,
 } from '@/lib/admin-client';
 import { adminEndpoints } from '@/lib/admin-endpoints';
 import {
@@ -42,6 +45,13 @@ import {
 } from '@/lib/admin-media-preflight';
 import { majorInputToMinor, minorToMajorInput } from '@/lib/admin-money';
 import { toSameOriginMediaUrl } from '@/lib/media';
+import {
+  FieldError,
+  FormErrorSummary,
+  FormSaveStatus,
+  phaseFromAdminError,
+  type FormSavePhase,
+} from '@/components/admin/form-status';
 
 export type PickerOption = { id: string; name: string };
 
@@ -167,13 +177,23 @@ export function ProductEditor({
   const [server, setServer] = useState(product);
   const [version, setVersion] = useState(product.version);
   const [dirty, setDirty] = useState(false);
-  const [pending, setPending] = useState(false);
+  const [savePending, setSavePending] = useState(false);
+  const [mediaPending, setMediaPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+  const [savePhase, setSavePhase] = useState<FormSavePhase>('idle');
+  const [requestId, setRequestId] = useState<string | null>(null);
   const [savedAt, setSavedAt] = useState<string | null>(null);
   const [uploadStates, setUploadStates] = useState<
-    Array<{ name: string; status: MediaPreflightStatus; error: string | null; sizeLabel?: string }>
+    Array<{
+      id: string;
+      name: string;
+      status: MediaPreflightStatus;
+      error: string | null;
+      sizeLabel?: string;
+    }>
   >([]);
-  const [slugManual, setSlugManual] = useState(
+  const pending = savePending || mediaPending;  const [slugManual, setSlugManual] = useState(
     () => normalizeSlug(product.name) !== product.slug,
   );
 
@@ -254,6 +274,9 @@ export function ProductEditor({
   function touch() {
     setDirty(true);
     setSavedAt(null);
+    if (savePhase === 'saved' || savePhase === 'idle') {
+      setSavePhase('dirty');
+    }
   }
 
   function toggleId(list: string[], id: string): string[] {
@@ -327,13 +350,20 @@ export function ProductEditor({
         return 'В составе есть строка без названия';
       }
     }
+    if (promotion.enabled && promotion.type === 'PERCENT') {
+      const percent = Number(promotion.percentOff);
+      if (!Number.isInteger(percent) || percent < 1 || percent > 99) {
+        return 'Скидка должна быть целым числом от 1 до 99%';
+      }
+    }
+    if (!promotion.enabled && promotion.type === 'PERCENT' && promotion.percentOff.trim() !== '') {
+      const percent = Number(promotion.percentOff);
+      if (!Number.isInteger(percent) || percent < 1 || percent > 99) {
+        return 'Скидка должна быть целым числом от 1 до 99%';
+      }
+    }
     if (promotion.enabled) {
-      if (promotion.type === 'PERCENT') {
-        const percent = Number(promotion.percentOff);
-        if (!Number.isInteger(percent) || percent < 1 || percent > 99) {
-          return 'Скидка должна быть целым числом от 1 до 99%';
-        }
-      } else {
+      if (promotion.type === 'FIXED') {
         for (const variant of activeVariants) {
           const sale = majorInputToMinor(variant.salePriceMajor);
           const regular = majorInputToMinor(variant.priceMajor);
@@ -355,11 +385,18 @@ export function ProductEditor({
     const problem = validate();
     if (problem) {
       setError(problem);
+      setFieldErrors(
+        problem.includes('Скидка') ? { percentOff: problem } : {},
+      );
+      setSavePhase('validation');
       return;
     }
-    setPending(true);
+    setSavePending(true);
     setError(null);
+    setFieldErrors({});
+    setRequestId(null);
     setSavedAt(null);
+    setSavePhase('saving');
     try {
       let current = await adminPatch<ProductAdminDto>(adminEndpoints.product(server.id), {
         expectedVersion: version,
@@ -375,6 +412,8 @@ export function ProductEditor({
         seoDescription: seo.seoDescription.trim() || null,
         noIndex: seo.noIndex,
       });
+      setVersion(current.version);
+      setServer(current);
 
       current = await adminPut<ProductAdminDto>(adminEndpoints.productVariants(server.id), {
         expectedVersion: current.version,
@@ -385,6 +424,8 @@ export function ProductEditor({
           status: variant.status,
         })),
       });
+      setVersion(current.version);
+      setServer(current);
 
       current = await adminPut<ProductAdminDto>(adminEndpoints.productComponents(server.id), {
         expectedVersion: current.version,
@@ -396,6 +437,8 @@ export function ProductEditor({
           sortOrder: index,
         })),
       });
+      setVersion(current.version);
+      setServer(current);
 
       current = await adminPut<ProductAdminDto>(adminEndpoints.productTaxonomies(server.id), {
         expectedVersion: current.version,
@@ -405,19 +448,33 @@ export function ProductEditor({
         colorIds: discovery.colorIds,
         productLineIds: discovery.productLineIds,
       });
+      setVersion(current.version);
+      setServer(current);
 
       // Variant ids can be created by the step above: map sale prices positionally.
       const savedVariants = [...current.variants].sort((a, b) => a.sortOrder - b.sortOrder);
+      const percentValue = Number(promotion.percentOff);
+      const hasValidPercent =
+        Number.isInteger(percentValue) && percentValue >= 1 && percentValue <= 99;
+      // DB requires PERCENT ⇒ percent_off NOT NULL. When disabled without a percent,
+      // persist as FIXED + null (commercial rules skipped while disabled).
+      const promotionType: PromotionType =
+        promotion.type === 'PERCENT' && (promotion.enabled || hasValidPercent)
+          ? 'PERCENT'
+          : promotion.type === 'FIXED'
+            ? 'FIXED'
+            : hasValidPercent
+              ? 'PERCENT'
+              : 'FIXED';
       current = await adminPut<ProductAdminDto>(adminEndpoints.productPromotion(server.id), {
         expectedVersion: current.version,
         enabled: promotion.enabled,
-        type: promotion.type,
-        percentOff:
-          promotion.enabled && promotion.type === 'PERCENT' ? Number(promotion.percentOff) : null,
+        type: promotionType,
+        percentOff: promotionType === 'PERCENT' ? percentValue : null,
         startsAt: fromDateTimeLocalValue(promotion.startsAt),
         endsAt: fromDateTimeLocalValue(promotion.endsAt),
         variantSalePrices:
-          promotion.enabled && promotion.type === 'FIXED'
+          promotion.enabled && promotionType === 'FIXED'
             ? variants.flatMap((variant, index) => {
                 const saved = savedVariants[index];
                 const saleMinor = majorInputToMinor(variant.salePriceMajor);
@@ -426,6 +483,8 @@ export function ProductEditor({
               })
             : [],
       });
+      setVersion(current.version);
+      setServer(current);
 
       current = await adminPut<ProductAdminDto>(adminEndpoints.productBestsellers(server.id), {
         expectedVersion: current.version,
@@ -433,19 +492,30 @@ export function ProductEditor({
       });
 
       resync(current);
+      setDirty(false);
       setSavedAt(new Date().toLocaleTimeString('ru-BY'));
+      setSavePhase('saved');
       router.refresh();
     } catch (err) {
-      setError(errorMessage(err, 'Не удалось сохранить товар'));
+      if (err instanceof AdminRequestError) {
+        setFieldErrors(fieldErrorMap(err));
+        setRequestId(err.requestId ?? null);
+        setSavePhase(phaseFromAdminError(err));
+        setError(errorMessage(err, 'Не удалось сохранить товар'));
+      } else {
+        setSavePhase('server');
+        setError(errorMessage(err, 'Не удалось сохранить товар'));
+      }
     } finally {
-      setPending(false);
+      setSavePending(false);
     }
   }
 
   async function runLifecycle(action: 'publish' | 'unpublish' | 'archive') {
     if (!canPublish) return;
-    setPending(true);
+    setSavePending(true);
     setError(null);
+    setSavePhase('saving');
     try {
       const updated = await adminPost<ProductAdminDto>(
         adminEndpoints.productLifecycle(server.id, action),
@@ -454,15 +524,21 @@ export function ProductEditor({
       resync(updated);
       router.refresh();
     } catch (err) {
+      if (err instanceof AdminRequestError) {
+        setRequestId(err.requestId ?? null);
+        setSavePhase(phaseFromAdminError(err));
+      } else {
+        setSavePhase('server');
+      }
       setError(errorMessage(err, 'Не удалось изменить статус'));
     } finally {
-      setPending(false);
+      setSavePending(false);
     }
   }
 
   async function onUpload(file: File) {
     if (!canUpdate) return;
-    setPending(true);
+    setMediaPending(true);
     setError(null);
     try {
       const form = new FormData();
@@ -475,10 +551,10 @@ export function ProductEditor({
       setVersion(updated.version);
       router.refresh();
     } catch (err) {
-      setError(errorMessage(err, 'Не удалось загрузить фото'));
+      setError(mediaErrorUserText(err, 'Не удалось загрузить фото'));
       throw err;
     } finally {
-      setPending(false);
+      setMediaPending(false);
     }
   }
 
@@ -486,16 +562,18 @@ export function ProductEditor({
     if (!canUpdate) return;
     const { accepted, rejected, capacityError } = preflightMediaBatch(files, server.media.length);
     const initialRows = [
-      ...rejected.map((row) => ({
+      ...rejected.map((row, index) => ({
+        id: `rej-${index}-${row.name}`,
         name: row.name,
         status: 'error' as const,
         error: row.error,
         sizeLabel: `${(row.sizeBytes / (1024 * 1024)).toFixed(1)} MB`,
       })),
-      ...accepted.map((row) => ({
+      ...accepted.map((row, index) => ({
+        id: `acc-${index}-${row.name}-${row.sizeBytes}`,
         name: row.name,
         status: 'ready' as const,
-        error: null,
+        error: null as string | null,
         sizeLabel: `${(row.sizeBytes / (1024 * 1024)).toFixed(1)} MB`,
       })),
     ];
@@ -508,37 +586,37 @@ export function ProductEditor({
       setError(rejected[0]?.error ?? 'Файлы не прошли проверку');
       return;
     }
-    setError(capacityError);
-    for (const row of accepted) {
+    if (capacityError) {
+      setError(capacityError);
+    }
+    for (let i = 0; i < accepted.length; i += 1) {
+      const row = accepted[i]!;
+      const rowId = `acc-${i}-${row.name}-${row.sizeBytes}`;
       setUploadStates((prev) =>
         prev.map((item) =>
-          item.name === row.name && item.status === 'ready'
-            ? { ...item, status: 'uploading' as const }
-            : item,
+          item.id === rowId ? { ...item, status: 'uploading' as const } : item,
         ),
       );
       try {
         setUploadStates((prev) =>
           prev.map((item) =>
-            item.name === row.name && item.status === 'uploading'
-              ? { ...item, status: 'processing' as const }
-              : item,
+            item.id === rowId ? { ...item, status: 'processing' as const } : item,
           ),
         );
         await onUpload(row.file);
         setUploadStates((prev) =>
           prev.map((item) =>
-            item.name === row.name ? { ...item, status: 'done' as const } : item,
+            item.id === rowId ? { ...item, status: 'done' as const, error: null } : item,
           ),
         );
       } catch (err) {
         setUploadStates((prev) =>
           prev.map((item) =>
-            item.name === row.name
+            item.id === rowId
               ? {
                   ...item,
                   status: 'error' as const,
-                  error: errorMessage(err, 'Не удалось сохранить изображение'),
+                  error: mediaErrorUserText(err, 'Не удалось сохранить изображение'),
                 }
               : item,
           ),
@@ -549,7 +627,7 @@ export function ProductEditor({
 
   async function patchMedia(mediaId: string, body: Record<string, unknown>) {
     if (!canUpdate) return;
-    setPending(true);
+    setMediaPending(true);
     setError(null);
     try {
       const updated = await adminPatch<ProductAdminDto>(
@@ -562,14 +640,14 @@ export function ProductEditor({
     } catch (err) {
       setError(errorMessage(err, 'Не удалось изменить фото'));
     } finally {
-      setPending(false);
+      setMediaPending(false);
     }
   }
 
   async function removeMedia(mediaId: string) {
     if (!canUpdate) return;
     if (!window.confirm('Удалить фотографию из товара?')) return;
-    setPending(true);
+    setMediaPending(true);
     setError(null);
     try {
       const updated = await adminDelete<ProductAdminDto>(
@@ -581,7 +659,7 @@ export function ProductEditor({
     } catch (err) {
       setError(errorMessage(err, 'Не удалось удалить фото'));
     } finally {
-      setPending(false);
+      setMediaPending(false);
     }
   }
 
@@ -594,7 +672,7 @@ export function ProductEditor({
     const [moved] = ordered.splice(index, 1);
     ordered.splice(target, 0, moved!);
 
-    setPending(true);
+    setMediaPending(true);
     setError(null);
     try {
       const updated = await adminPut<ProductAdminDto>(
@@ -609,9 +687,19 @@ export function ProductEditor({
     } catch (err) {
       setError(errorMessage(err, 'Не удалось изменить порядок фото'));
     } finally {
-      setPending(false);
+      setMediaPending(false);
     }
   }
+
+  const statusPhase: FormSavePhase =
+    savePhase === 'saving' || savePhase === 'validation' || savePhase === 'conflict' ||
+    savePhase === 'server' || savePhase === 'network' || savePhase === 'saved'
+      ? savePhase
+      : dirty
+        ? 'dirty'
+        : savedAt
+          ? 'saved'
+          : 'idle';
 
   const readOnlyNote = canUpdate ? null : (
     <p className="admin-help">Только просмотр: у вашей роли нет прав на изменение каталога.</p>
@@ -619,10 +707,27 @@ export function ProductEditor({
 
   return (
     <div className="space-y-6">
-      {error ? (
-        <p role="alert" className="admin-error">
-          {error}
-        </p>
+      <FormSaveStatus
+        phase={statusPhase}
+        savedLabel={savedAt ? `Товар сохранён · ${savedAt}` : 'Все изменения сохранены'}
+        errorMessage={error}
+        requestId={requestId}
+        onRetry={() => void onSave()}
+        onRefresh={() => {
+          router.refresh();
+          setError(null);
+          setSavePhase('idle');
+        }}
+        onDismiss={() => {
+          setError(null);
+          setSavePhase(dirty ? 'dirty' : 'idle');
+        }}
+      />
+      {savePhase === 'validation' && Object.keys(fieldErrors).length > 0 ? (
+        <FormErrorSummary
+          message={error ?? 'Проверьте данные'}
+          issues={Object.entries(fieldErrors).map(([field, message]) => ({ field, message }))}
+        />
       ) : null}
       {readOnlyNote}
 
@@ -928,14 +1033,32 @@ export function ProductEditor({
             </div>
           ) : null}
           {uploadStates.length > 0 ? (
-            <ul className="admin-help mt-2 space-y-1">
-              {uploadStates.map((row) => (
-                <li key={`${row.name}-${row.status}-${row.error ?? ''}`}>
-                  {row.status === 'error' ? '✕' : '✓'} {row.name}
-                  {row.sizeLabel ? ` — ${row.sizeLabel}` : ''} · {mediaPreflightStatusLabel(row.status)}
-                  {row.error ? `: ${row.error}` : ''}
-                </li>
-              ))}
+            <ul className="admin-upload-status">
+              {uploadStates.map((row) => {
+                const icon =
+                  row.status === 'error' ? '✕' : row.status === 'done' ? '✓' : '◌';
+                return (
+                  <li
+                    key={row.id}
+                    className={`admin-upload-status__row${
+                      row.status === 'done'
+                        ? ' admin-upload-status__row--done'
+                        : row.status === 'error'
+                          ? ' admin-upload-status__row--error'
+                          : ''
+                    }`}
+                  >
+                    <span>
+                      {icon} {row.name}
+                      {row.sizeLabel ? ` · ${row.sizeLabel}` : ''}
+                    </span>
+                    <span className="admin-upload-status__meta">
+                      {mediaPreflightStatusLabel(row.status)}
+                    </span>
+                    {row.error ? <span className="admin-field-error">{row.error}</span> : null}
+                  </li>
+                );
+              })}
             </ul>
           ) : null}
 
@@ -1377,9 +1500,15 @@ export function ProductEditor({
                       disabled={!canUpdate}
                       onChange={(event) => {
                         setPromotion((prev) => ({ ...prev, percentOff: event.target.value }));
+                        setFieldErrors((prev) => {
+                          const next = { ...prev };
+                          delete next.percentOff;
+                          return next;
+                        });
                         touch();
                       }}
                     />
+                    <FieldError message={fieldErrors.percentOff} />
                   </label>
                 ) : (
                   <div className="admin-field">
@@ -1694,17 +1823,24 @@ export function ProductEditor({
         <div className="admin-savebar">
           <Button
             type="button"
-            disabled={pending}
+            disabled={savePending || mediaPending}
             className="!rounded-lg !bg-[var(--admin-brand)]"
             onClick={() => void onSave()}
           >
-            {pending ? 'Сохранение…' : 'Сохранить'}
+            {savePending ? 'Сохранение…' : 'Сохранить'}
           </Button>
-          {dirty ? (
-            <span className="text-sm text-amber-700">Есть несохранённые изменения</span>
-          ) : savedAt ? (
-            <span className="text-sm text-[var(--admin-muted)]">Сохранено в {savedAt}</span>
-          ) : null}
+          <FormSaveStatus
+            phase={
+              savePending
+                ? 'saving'
+                : dirty
+                  ? 'dirty'
+                  : savedAt
+                    ? 'saved'
+                    : 'idle'
+            }
+            savedLabel={savedAt ? `Сохранено в ${savedAt}` : null}
+          />
         </div>
       ) : null}
     </div>

@@ -1613,6 +1613,112 @@ select:focus-visible,
   color: var(--color-danger);
 }
 
+.admin-form-status {
+  font-size: 0.875rem;
+  line-height: 1.4;
+}
+
+.admin-form-status--dirty {
+  color: #8a5a10;
+}
+
+.admin-form-status--saving {
+  color: var(--admin-muted);
+}
+
+.admin-form-status--success {
+  color: #1f6b3a;
+}
+
+.admin-form-status--error {
+  padding: 0.75rem 0.9rem;
+  border: 1px solid color-mix(in oklab, var(--color-danger) 35%, var(--admin-border));
+  border-radius: var(--admin-radius);
+  background: color-mix(in oklab, var(--color-danger) 8%, var(--admin-surface));
+  color: var(--admin-ink);
+}
+
+.admin-form-status__title {
+  margin: 0;
+  font-weight: 600;
+}
+
+.admin-form-status__body,
+.admin-form-status__hint {
+  margin: 0.35rem 0 0;
+  color: var(--admin-muted);
+}
+
+.admin-form-status__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 0.65rem;
+}
+
+.admin-form-summary {
+  padding: 0.75rem 0.9rem;
+  border: 1px solid color-mix(in oklab, var(--color-danger) 35%, var(--admin-border));
+  border-radius: var(--admin-radius);
+  background: color-mix(in oklab, var(--color-danger) 8%, var(--admin-surface));
+}
+
+.admin-form-summary__title {
+  margin: 0;
+  font-weight: 600;
+  font-size: 0.875rem;
+}
+
+.admin-form-summary__body {
+  margin: 0.35rem 0 0;
+  font-size: 0.8125rem;
+  color: var(--admin-muted);
+}
+
+.admin-form-summary__list {
+  margin: 0.5rem 0 0;
+  padding-left: 1.1rem;
+  font-size: 0.8125rem;
+}
+
+.admin-field-error {
+  margin: 0.35rem 0 0;
+  font-size: 0.8125rem;
+  color: var(--color-danger);
+}
+
+.admin-upload-status {
+  margin: 0.75rem 0 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 0.4rem;
+}
+
+.admin-upload-status__row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem 0.75rem;
+  align-items: baseline;
+  font-size: 0.8125rem;
+  padding: 0.45rem 0.65rem;
+  border-radius: 0.45rem;
+  border: 1px solid var(--admin-border);
+  background: var(--admin-surface);
+}
+
+.admin-upload-status__row--done {
+  border-color: color-mix(in oklab, #1f6b3a 30%, var(--admin-border));
+}
+
+.admin-upload-status__row--error {
+  border-color: color-mix(in oklab, var(--color-danger) 35%, var(--admin-border));
+}
+
+.admin-upload-status__meta {
+  color: var(--admin-muted);
+}
+
 .admin-btn-ghost {
   display: inline-flex;
   align-items: center;
