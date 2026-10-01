@@ -8,6 +8,19 @@ Public domains (`NEXT_PUBLIC_SITE_URL`, `CORS_ORIGINS`, Nginx `server_name`, TLS
 
 Local development is unchanged (`docker compose up -d` still starts **Postgres only** on host port 5433).
 
+## Production container packaging
+
+- API image (`deploy/Dockerfile.api`) builds the monorepo, then runs
+  `pnpm --filter @bouquet-one/api --prod deploy /out` with
+  `injectWorkspacePackages: true` so NestJS and workspace packages land in a
+  portable production `node_modules` (no broken pnpm symlinks into a missing
+  monorepo tree).
+- Prisma CLI remains in the API image for `prisma migrate deploy` during
+  `./deploy.sh`. Real `DATABASE_URL` is supplied only at runtime from
+  `/etc/shopbuket1/production.env` (a build-time dummy URL is used solely for
+  `prisma generate`).
+- Web image uses Next.js `output: 'standalone'`.
+
 ## Architecture
 
 ```text

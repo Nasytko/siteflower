@@ -22,8 +22,9 @@ main() {
 
   log "Launching interactive admin:create inside shopbuket1-api"
   if [[ -t 0 ]]; then
+    # Production API image has no workspace pnpm CLI — use bundled tsx binary.
     compose exec -e "DATABASE_URL=${DATABASE_URL}" api \
-      pnpm exec tsx scripts/admin-create.ts "$@"
+      node /app/node_modules/tsx/dist/cli.mjs /app/scripts/admin-create.ts "$@"
   else
     die "Interactive TTY required for password entry (or pass --password for automation only)"
   fi

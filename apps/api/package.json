@@ -2,6 +2,10 @@
   "name": "@bouquet-one/api",
   "version": "0.0.0",
   "private": true,
+  "files": [
+    "dist",
+    "scripts"
+  ],
   "scripts": {
     "dev": "nest start --watch",
     "build": "rimraf dist && nest build",
@@ -45,9 +49,11 @@
     "nestjs-pino": "4.4.0",
     "pino": "9.9.5",
     "pino-http": "10.5.0",
+    "prisma": "7.10.0",
     "reflect-metadata": "0.2.2",
     "rxjs": "7.8.2",
     "sharp": "^0.35.4",
+    "tsx": "4.20.5",
     "uuid": "11.1.0",
     "zod": "4.1.5"
   },
@@ -75,7 +81,6 @@
     "supertest": "7.1.4",
     "ts-jest": "29.4.1",
     "ts-node": "10.9.2",
-    "tsx": "4.20.5",
     "typescript": "5.9.3",
     "typescript-eslint": "8.44.0"
   }

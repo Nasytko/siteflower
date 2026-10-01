@@ -55,6 +55,8 @@ web-out.log
 web-err.log
 .tmp-*.txt
 .tmp-*.log
+.tmp-prod-verify/
+**/.tmp-prod-verify/
 
 # Local media storage
 storage/

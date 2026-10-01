@@ -2,6 +2,11 @@ packages:
   - "apps/*"
   - "packages/*"
 
+# Required for portable `pnpm deploy` output (Docker production images).
+injectWorkspacePackages: true
+syncInjectedDepsAfterScripts:
+  - build
+
 onlyBuiltDependencies:
   - "@prisma/engines"
   - "@tailwindcss/oxide"
@@ -9,6 +14,7 @@ onlyBuiltDependencies:
   - esbuild
   - nestjs-pino
   - prisma
+  - sharp
   - unrs-resolver
 
 ignoredBuiltDependencies:

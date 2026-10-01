@@ -1,6 +1,8 @@
 # syntax=docker/dockerfile:1.7
 
 # shopbuket1 API image (+ optional worker / ops CLI) — multi-stage, Node 24, pnpm 10.17.
+# Runtime is produced with `pnpm deploy --prod` so the image gets a self-contained
+# production dependency tree (no broken workspace symlinks into a missing monorepo).
 ARG NODE_VERSION=24
 
 FROM node:${NODE_VERSION}-bookworm-slim AS base
@@ -23,42 +25,52 @@ COPY packages/contracts/package.json packages/contracts/
 COPY packages/ui/package.json packages/ui/
 COPY packages/config/package.json packages/config/
 COPY packages/config/typescript packages/config/typescript
+COPY apps/api/.npmignore apps/api/
+COPY packages/database/.npmignore packages/database/
+COPY packages/contracts/.npmignore packages/contracts/
 RUN pnpm install --frozen-lockfile
 
 FROM deps AS build
 COPY . .
+# Prisma 7 `prisma.config.ts` requires DATABASE_URL at `prisma generate` time.
+# Build-only dummy — never used to open a DB connection during image build.
+ENV DATABASE_URL=postgresql://prisma:prisma@127.0.0.1:5432/prisma?schema=public
 RUN pnpm --filter @bouquet-one/database generate \
   && pnpm --filter @bouquet-one/contracts build \
   && pnpm --filter @bouquet-one/database build \
   && pnpm --filter @bouquet-one/api build
 
+# Portable production tree for @bouquet-one/api (injected workspace packages).
+# Do not use --legacy: shared lockfile + legacy deploy can pull unrelated workspace peers.
+RUN pnpm --filter @bouquet-one/api --prod deploy /out
+
+# Verify Nest + native + workspace packages resolve from the deploy root (Node module resolution).
+# Transitive deps such as @prisma/client may live under the injected database package, not as
+# top-level /out/node_modules/@prisma/* — that is expected with pnpm.
+WORKDIR /out
+RUN set -eux; \
+  test -f dist/main.js; \
+  test -f dist/worker-main.js; \
+  test -d scripts; \
+  test -e node_modules/.bin/prisma; \
+  test -e node_modules/@bouquet-one/database/prisma/schema.prisma; \
+  test -e node_modules/@bouquet-one/database/prisma.config.ts; \
+  test -d node_modules/@bouquet-one/database/dist; \
+  node -e "require('@nestjs/common'); require('@nestjs/core'); require('@nestjs/platform-express'); require('@nestjs/config'); require('@nestjs/swagger'); require('@nestjs/throttler'); require('@bouquet-one/contracts'); require('@bouquet-one/database'); require('argon2'); require('sharp'); require('@aws-sdk/client-s3'); console.log('api-runtime-deps-ok')"
+
 FROM node:${NODE_VERSION}-bookworm-slim AS runtime
 ENV NODE_ENV=production \
-    PNPM_HOME=/pnpm \
-    PATH=/pnpm:$PATH \
     API_PORT=3001
 RUN apt-get update \
   && apt-get install -y --no-install-recommends ca-certificates openssl tini curl \
   && rm -rf /var/lib/apt/lists/* \
-  && corepack enable \
-  && corepack prepare pnpm@10.17.0 --activate \
   && groupadd --gid 10001 shopbuket1 \
   && useradd --uid 10001 --gid shopbuket1 --shell /usr/sbin/nologin --create-home shopbuket1
 WORKDIR /app
 
-# Workspace runtime: built packages + lockfile-aligned node_modules (includes prisma for migrate).
-COPY --from=build --chown=shopbuket1:shopbuket1 /app/package.json /app/pnpm-lock.yaml /app/pnpm-workspace.yaml ./
-COPY --from=build --chown=shopbuket1:shopbuket1 /app/node_modules ./node_modules
-COPY --from=build --chown=shopbuket1:shopbuket1 /app/apps/api/package.json ./apps/api/package.json
-COPY --from=build --chown=shopbuket1:shopbuket1 /app/apps/api/dist ./apps/api/dist
-COPY --from=build --chown=shopbuket1:shopbuket1 /app/apps/api/scripts ./apps/api/scripts
-COPY --from=build --chown=shopbuket1:shopbuket1 /app/apps/api/src ./apps/api/src
-COPY --from=build --chown=shopbuket1:shopbuket1 /app/packages/contracts ./packages/contracts
-COPY --from=build --chown=shopbuket1:shopbuket1 /app/packages/database ./packages/database
-COPY --from=build --chown=shopbuket1:shopbuket1 /app/packages/config ./packages/config
+COPY --from=build --chown=shopbuket1:shopbuket1 /out/ ./
 
 USER shopbuket1
-WORKDIR /app/apps/api
 EXPOSE 3001
 
 HEALTHCHECK --interval=20s --timeout=5s --start-period=40s --retries=5 \

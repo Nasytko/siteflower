@@ -3,6 +3,7 @@ lockfileVersion: '9.0'
 settings:
   autoInstallPeers: true
   excludeLinksFromLockfile: false
+  injectWorkspacePackages: true
 
 importers:
 
@@ -86,6 +87,9 @@ importers:
       pino-http:
         specifier: 10.5.0
         version: 10.5.0
+      prisma:
+        specifier: 7.10.0
+        version: 7.10.0(@types/react-dom@19.1.9(@types/react@19.1.13))(@types/react@19.1.13)(react-dom@19.2.0(react@19.2.0))(react@19.2.0)(typescript@5.9.3)
       reflect-metadata:
         specifier: 0.2.2
         version: 0.2.2
@@ -95,6 +99,9 @@ importers:
       sharp:
         specifier: ^0.35.4
         version: 0.35.4(@types/node@24.3.0)
+      tsx:
+        specifier: 4.20.5
+        version: 4.20.5
       uuid:
         specifier: 11.1.0
         version: 11.1.0
@@ -171,9 +178,6 @@ importers:
       ts-node:
         specifier: 10.9.2
         version: 10.9.2(@types/node@24.3.0)(typescript@5.9.3)
-      tsx:
-        specifier: 4.20.5
-        version: 4.20.5
       typescript:
         specifier: 5.9.3
         version: 5.9.3
@@ -279,9 +283,15 @@ importers:
       '@prisma/client':
         specifier: 7.10.0
         version: 7.10.0(prisma@7.10.0(@types/react-dom@19.1.9(@types/react@19.1.13))(@types/react@19.1.13)(react-dom@19.2.0(react@19.2.0))(react@19.2.0)(typescript@5.9.3))(typescript@5.9.3)
+      dotenv:
+        specifier: 17.2.2
+        version: 17.2.2
       pg:
         specifier: 8.16.3
         version: 8.16.3
+      prisma:
+        specifier: 7.10.0
+        version: 7.10.0(@types/react-dom@19.1.9(@types/react@19.1.13))(@types/react@19.1.13)(react-dom@19.2.0(react@19.2.0))(react@19.2.0)(typescript@5.9.3)
     devDependencies:
       '@bouquet-one/config':
         specifier: workspace:*
@@ -295,15 +305,9 @@ importers:
       '@types/pg':
         specifier: 8.15.5
         version: 8.15.5
-      dotenv:
-        specifier: 17.2.2
-        version: 17.2.2
       eslint:
         specifier: 9.36.0
         version: 9.36.0(jiti@2.7.0)
-      prisma:
-        specifier: 7.10.0
-        version: 7.10.0(@types/react-dom@19.1.9(@types/react@19.1.13))(@types/react@19.1.13)(react-dom@19.2.0(react@19.2.0))(react@19.2.0)(typescript@5.9.3)
       rimraf:
         specifier: 6.0.1
         version: 6.0.1

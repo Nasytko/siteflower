@@ -1,0 +1,2 @@
+# Empty on purpose: override the monorepo root .gitignore for `pnpm deploy` /
+# npm-packlist so built `dist/` (gitignored) is included in the deploy output.

@@ -122,10 +122,12 @@ backup_before_migrate() {
 
 migrate() {
   log "Running prisma migrate deploy"
+  # API image is a pnpm deploy --prod tree: schema lives under the injected
+  # @bouquet-one/database package; prisma CLI is a production dependency.
   compose run --rm --no-deps \
     -e "DATABASE_URL=${DATABASE_URL}" \
     api \
-    sh -lc 'cd /app/packages/database && pnpm exec prisma migrate deploy'
+    sh -lc 'cd /app/node_modules/@bouquet-one/database && exec /app/node_modules/.bin/prisma migrate deploy'
 }
 
 bring_up() {
