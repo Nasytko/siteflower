@@ -20,6 +20,8 @@ import { PrismaService } from '../database/prisma.service';
 import { MediaService } from '../media/media.service';
 import { PRODUCT_MEDIA_MAX } from '../media/media.constants';
 import type { ActorContext } from '../common/actor.util';
+import { trimmedOrNull } from '../common/string.util';
+import { StorefrontRevalidateService } from '../storefront/storefront-revalidate.service';
 import { BestsellersService } from './bestsellers.service';
 import { BudgetRangesService } from './budget-ranges.service';
 import { OCC_CONFLICT_MESSAGE, validatePublishRequirements } from './catalog.logic';
@@ -62,12 +64,6 @@ function publishValidationException(issues: PublishValidationIssue[]): BadReques
   });
 }
 
-function trimmedOrNull(value: string | null | undefined): string | null {
-  if (value == null) return null;
-  const trimmed = value.trim();
-  return trimmed.length > 0 ? trimmed : null;
-}
-
 @Injectable()
 export class ProductsService {
   constructor(
@@ -79,7 +75,21 @@ export class ProductsService {
     private readonly audit: AuditService,
     private readonly prisma: PrismaService,
     private readonly appConfig: AppConfigService,
+    private readonly revalidate: StorefrontRevalidateService,
   ) {}
+
+  private async bumpStorefrontCache(productSlug?: string): Promise<void> {
+    await this.revalidate.ping({
+      tags: ['catalog', 'storefront', ...(productSlug ? [`product:${productSlug}`] : [])],
+      paths: ['/', '/bukety', ...(productSlug ? [`/bukety/${productSlug}`] : [])],
+    });
+  }
+
+  private async finishAdminMutation(id: string): Promise<ProductAdminDto> {
+    const dto = await this.getById(id);
+    await this.bumpStorefrontCache(dto.slug);
+    return dto;
+  }
 
   private readonly urlFor = (storageKey: string) => this.media.getPublicUrl(storageKey);
 
@@ -273,7 +283,8 @@ export class ProductsService {
       });
     });
 
-    return this.getById(id);
+    const updated = await this.finishAdminMutation(id);
+    return updated;
   }
 
   async setVariants(
@@ -298,7 +309,7 @@ export class ProductsService {
       });
     });
 
-    return this.getById(id);
+    return this.finishAdminMutation(id);
   }
 
   /**
@@ -333,7 +344,7 @@ export class ProductsService {
       });
     });
 
-    return this.getById(id);
+    return this.finishAdminMutation(id);
   }
 
   async setTaxonomies(
@@ -369,7 +380,7 @@ export class ProductsService {
       await this.recordAudit(tx, actor, 'PRODUCT_UPDATED', id, { taxonomies: true });
     });
 
-    return this.getById(id);
+    return this.finishAdminMutation(id);
   }
 
   async setBestsellerGroups(
@@ -385,7 +396,7 @@ export class ProductsService {
       });
     });
 
-    return this.getById(id);
+    return this.finishAdminMutation(id);
   }
 
   async publish(
@@ -430,7 +441,7 @@ export class ProductsService {
       });
     });
 
-    return this.getById(id);
+    return this.finishAdminMutation(id);
   }
 
   async unpublish(
@@ -447,7 +458,7 @@ export class ProductsService {
       await this.recordAudit(tx, actor, 'PRODUCT_UNPUBLISHED', id);
     });
 
-    return this.getById(id);
+    return this.finishAdminMutation(id);
   }
 
   async archive(
@@ -464,7 +475,7 @@ export class ProductsService {
       await this.recordAudit(tx, actor, 'PRODUCT_ARCHIVED', id);
     });
 
-    return this.getById(id);
+    return this.finishAdminMutation(id);
   }
 
   async addMedia(
@@ -528,7 +539,7 @@ export class ProductsService {
       throw err;
     }
 
-    return this.getById(id);
+    return this.finishAdminMutation(id);
   }
 
   async updateMedia(
@@ -566,7 +577,7 @@ export class ProductsService {
       await this.recordAudit(tx, actor, 'PRODUCT_UPDATED', id, { mediaId });
     });
 
-    return this.getById(id);
+    return this.finishAdminMutation(id);
   }
 
   async removeMedia(id: string, mediaId: string, actor: ActorContext): Promise<ProductAdminDto> {
@@ -602,7 +613,7 @@ export class ProductsService {
       });
     });
 
-    return this.getById(id);
+    return this.finishAdminMutation(id);
   }
 
   async reorderMedia(
@@ -632,7 +643,7 @@ export class ProductsService {
       });
     });
 
-    return this.getById(id);
+    return this.finishAdminMutation(id);
   }
 
   private async guardVersion(

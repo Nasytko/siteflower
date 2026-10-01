@@ -91,8 +91,15 @@ export class BestsellersService {
       where: { slug },
       include: GROUP_INCLUDE,
     });
+    // Optional shelf: missing/inactive groups are empty, not 404 (avoids homepage noise).
     if (!group || !group.active) {
-      throw new NotFoundException('Bestseller group not found');
+      return {
+        id: group?.id ?? '00000000-0000-4000-8000-000000000000',
+        slug,
+        name: group?.name ?? slug,
+        title: group?.title ?? null,
+        products: [],
+      };
     }
     const productsById = await this.loadProducts([group], { publicOnly: true });
     return toBestsellerGroupPublicDto(group, productsById);

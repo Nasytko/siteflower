@@ -22,7 +22,7 @@ import type { ActorContext } from '../common/actor.util';
 
 const SINGLETON_ID = 1;
 const OCC_CONFLICT_MESSAGE =
-  'This item was changed by another user. Reload before saving.';
+  'Данные изменены другим пользователем. Обновите страницу и сохраните снова.';
 
 type HomepageConfigRow = Prisma.HomepageConfigGetPayload<object>;
 

@@ -16,7 +16,7 @@ import { StorefrontSettingsService } from '../storefront/storefront-settings.ser
 
 const SINGLETON_ID = 1;
 const OCC_CONFLICT_MESSAGE =
-  'This item was changed by another user. Reload before saving.';
+  'Данные изменены другим пользователем. Обновите страницу и сохраните снова.';
 
 type LegalEntityRow = Prisma.LegalEntitySettingsGetPayload<object>;
 

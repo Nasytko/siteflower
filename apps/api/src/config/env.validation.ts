@@ -38,6 +38,9 @@ export const envSchema = z
     MEDIA_MAX_BYTES: z.coerce.number().int().positive().default(8_000_000),
     /** Explicit opt-in for temporary/emergency local media in production. Prefer S3. */
     ALLOW_PRODUCTION_LOCAL_MEDIA: booleanFromString.default(false),
+    /** Optional Next.js on-demand revalidation endpoint (e.g. https://shop.example/api/revalidate). */
+    REVALIDATE_URL: z.string().url().optional(),
+    REVALIDATE_SECRET: z.string().min(16).optional(),
     S3_ENDPOINT: z.string().optional(),
     S3_REGION: z.string().default('auto'),
     S3_BUCKET: z.string().optional(),

@@ -60,27 +60,41 @@ export class IntegrationWorkerService {
   }
 
   private async processOne(event: OutboxEvent): Promise<'delivered' | 'retry' | 'failed'> {
+    const workerId = this.config.workerId;
     const result = await this.delivery.deliver(event);
     if (result.ok) {
-      await this.outbox.markDelivered(event.id, result.remoteReference);
+      const applied = await this.outbox.markDelivered(event.id, workerId, result.remoteReference);
+      if (!applied) {
+        this.logger.warn(`Stale lease — skipped markDelivered for outbox ${event.id}`);
+        return 'retry';
+      }
       this.logger.log(`Delivered outbox ${event.id} → ${result.remoteReference}`);
       return 'delivered';
     }
 
     if (shouldMarkFailed(result.category, event.attemptCount, this.config.maxAttempts)) {
-      await this.outbox.markFailed(event.id, result.category, result.message);
+      const applied = await this.outbox.markFailed(event.id, workerId, result.category, result.message);
+      if (!applied) {
+        this.logger.warn(`Stale lease — skipped markFailed for outbox ${event.id}`);
+        return 'retry';
+      }
       this.logger.warn(
         `Failed outbox ${event.id} [${result.category}] after ${event.attemptCount} attempts: ${result.message}`,
       );
       return 'failed';
     }
 
-    await this.outbox.scheduleRetryFromAttempt(
+    const applied = await this.outbox.scheduleRetryFromAttempt(
       event.id,
+      workerId,
       result.category,
       result.message,
       event.attemptCount,
     );
+    if (!applied) {
+      this.logger.warn(`Stale lease — skipped markRetry for outbox ${event.id}`);
+      return 'retry';
+    }
     this.logger.warn(
       `Retry outbox ${event.id} [${result.category}] attempt=${event.attemptCount}: ${result.message}`,
     );

@@ -84,8 +84,9 @@ export class ProductVariantInputDto {
 
 export class ProductComponentInputDto {
   @IsOptional()
+  @ValidateIf((_, value) => value !== null)
   @IsUUID()
-  flowerId?: string;
+  flowerId?: string | null;
 
   @IsString()
   @MinLength(1)
@@ -93,10 +94,11 @@ export class ProductComponentInputDto {
   displayName!: string;
 
   @IsOptional()
+  @ValidateIf((_, value) => value !== null)
   @IsInt()
   @Min(0)
   @Max(10_000)
-  quantity?: number;
+  quantity?: number | null;
 
   @IsOptional()
   @IsIn(COMPONENT_UNITS)
@@ -416,14 +418,16 @@ export class UploadProductMediaDto {
 
 export class UpdateProductMediaDto {
   @IsOptional()
+  @ValidateIf((_, value) => value !== null)
   @IsString()
   @MaxLength(MEDIA_ALT_MAX_LENGTH)
-  alt?: string;
+  alt?: string | null;
 
   @IsOptional()
+  @ValidateIf((_, value) => value !== null)
   @IsString()
   @MaxLength(500)
-  caption?: string;
+  caption?: string | null;
 
   @IsOptional()
   @IsBoolean()

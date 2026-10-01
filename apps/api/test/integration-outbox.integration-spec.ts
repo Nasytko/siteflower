@@ -125,6 +125,51 @@ async function claimBatchForIds(
     await pool.query(`DELETE FROM outbox_events WHERE id = ANY($1::uuid[])`, [ids]);
   });
 
+  it('stale worker markDelivered is a no-op when lease owner differs', async () => {
+    if (!hasDb) return;
+    const pool = new pg.Pool({ connectionString: databaseUrl });
+    const id = randomUUID();
+    const now = new Date();
+    const leaseExpires = new Date(now.getTime() + 60_000);
+
+    await pool.query(
+      `INSERT INTO outbox_events (
+        id, event_type, aggregate_type, aggregate_id, schema_version, payload,
+        status, available_at, created_at, attempt_count, attempts,
+        lease_owner, lease_expires_at
+      ) VALUES (
+        $1, 'ORDER_CREATED', 'Order', $2, 1, $3::jsonb,
+        'PROCESSING'::"OutboxDeliveryStatus", $4, $4, 1, 1,
+        'worker-b', $5
+      )`,
+      [id, randomUUID(), JSON.stringify({ eventId: id, stale: true }), now, leaseExpires],
+    );
+
+    const stale = await pool.query(
+      `UPDATE outbox_events
+       SET status = 'DELIVERED'::"OutboxDeliveryStatus",
+           delivered_at = $2,
+           lease_owner = NULL,
+           lease_expires_at = NULL
+       WHERE id = $1
+         AND status = 'PROCESSING'::"OutboxDeliveryStatus"
+         AND lease_owner = $3
+         AND lease_expires_at > $2`,
+      [id, now, 'worker-a'],
+    );
+    expect(stale.rowCount).toBe(0);
+
+    const current = await pool.query<{ status: string; lease_owner: string | null }>(
+      `SELECT status::text AS status, lease_owner FROM outbox_events WHERE id = $1`,
+      [id],
+    );
+    expect(current.rows[0]?.status).toBe('PROCESSING');
+    expect(current.rows[0]?.lease_owner).toBe('worker-b');
+
+    await pool.query(`DELETE FROM outbox_events WHERE id = $1`, [id]);
+    await pool.end();
+  });
+
   it('unit-level backoff helpers remain consistent', () => {
     expect(computeBackoffMs(1, () => 0)).toBe(30_000);
     expect(shouldMarkFailed('AUTH_FAILED', 2, 12)).toBe(true);

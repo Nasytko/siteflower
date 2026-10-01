@@ -40,6 +40,9 @@ export type ProductListFilters = {
 const SLUG_LIST_MAX = 16;
 /** Boutique catalog: in-memory refinement stays bounded and predictable. */
 const IN_MEMORY_CANDIDATE_CAP = 2_000;
+/** Soft safety bound for boutique catalogs: in-memory sort/filter candidates.
+ *  Raising is fine when inventory grows; rewrite to SQL sort only if correctness
+ *  or memory becomes a real problem at this scale. */
 
 /** Parse `a,b,c` (or a single value) into a de-duplicated list. */
 export function parseSlugList(value?: string | null): string[] | undefined {

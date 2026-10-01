@@ -1,10 +1,10 @@
 import { Body, Controller, Get, Patch, Req } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
-import type { UpdateFulfillmentSettingsDto } from '@bouquet-one/contracts';
 import type { Request } from 'express';
 import { RequirePermissions } from '../auth/decorators';
 import { CurrentAdmin, type AuthenticatedAdmin } from '../auth/current-admin.decorator';
 import { getRequestId } from '../common/middleware/request-id.middleware';
+import { UpdateFulfillmentSettingsBodyDto } from './fulfillment-settings.dto';
 import { FulfillmentSettingsService } from './fulfillment-settings.service';
 
 @ApiTags('admin-fulfillment')
@@ -21,7 +21,7 @@ export class AdminFulfillmentController {
   @RequirePermissions('SETTINGS_UPDATE')
   @Patch('settings')
   update(
-    @Body() body: UpdateFulfillmentSettingsDto,
+    @Body() body: UpdateFulfillmentSettingsBodyDto,
     @CurrentAdmin() admin: AuthenticatedAdmin,
     @Req() req: Request,
   ) {

@@ -103,7 +103,9 @@ export class FulfillmentSettingsService {
     return this.prisma.client.$transaction(async (tx) => {
       const current = await this.getOrCreate(tx);
       if (current.version !== dto.expectedVersion) {
-        throw new ConflictException('This item was changed by another user. Reload before saving.');
+        throw new ConflictException(
+          'Данные изменены другим пользователем. Обновите страницу и сохраните снова.',
+        );
       }
 
       const data: Prisma.FulfillmentSettingsUpdateManyMutationInput = {
@@ -126,7 +128,9 @@ export class FulfillmentSettingsService {
         data,
       });
       if (updated.count !== 1) {
-        throw new ConflictException('This item was changed by another user. Reload before saving.');
+        throw new ConflictException(
+          'Данные изменены другим пользователем. Обновите страницу и сохраните снова.',
+        );
       }
 
       await this.audit.record(

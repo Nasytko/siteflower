@@ -1,5 +1,6 @@
 import { Global, Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
+import { StorefrontRevalidateService } from '../storefront/storefront-revalidate.service';
 import { AppConfigService } from './app-config.service';
 import { validateEnv } from './env.validation';
 
@@ -13,7 +14,7 @@ import { validateEnv } from './env.validation';
       envFilePath: ['.env', '../../.env'],
     }),
   ],
-  providers: [AppConfigService],
-  exports: [AppConfigService],
+  providers: [AppConfigService, StorefrontRevalidateService],
+  exports: [AppConfigService, StorefrontRevalidateService],
 })
 export class AppConfigModule {}

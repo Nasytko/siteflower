@@ -26,6 +26,13 @@ test('derivePriceRange range label', () => {
 
 test('normalizeSlug', () => {
   assert.equal(normalizeSlug('  Améli Premium  '), 'ameli-premium');
+  assert.equal(normalizeSlug('Красные розы'), 'krasnye-rozy');
+  assert.equal(normalizeSlug('Букеты на день рождения'), 'bukety-na-den-rozhdeniya');
+  assert.equal(normalizeSlug('Белые пионы'), 'belye-piony');
+  assert.equal(normalizeSlug('Ёлка'), 'elka');
+  assert.equal(normalizeSlug('Объектъ'), 'obekt');
+  assert.equal(normalizeSlug('Розы / Roses 2024!!!'), 'rozy-roses-2024');
+  assert.equal(normalizeSlug('---'), '');
 });
 
 test('defaultProductSeoTitle', () => {

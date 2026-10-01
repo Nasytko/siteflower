@@ -194,9 +194,23 @@ export class OutboxRepository {
     return rows.map(mapClaimRow);
   }
 
-  async markDelivered(id: string, remoteReference: string, now: Date = new Date()): Promise<void> {
-    await this.prisma.client.outboxEvent.update({
-      where: { id },
+  /**
+   * Completes delivery only if this worker still owns the PROCESSING lease.
+   * Returns false when the lease was stolen/expired (stale worker — no-op).
+   */
+  async markDelivered(
+    id: string,
+    workerId: string,
+    remoteReference: string,
+    now: Date = new Date(),
+  ): Promise<boolean> {
+    const result = await this.prisma.client.outboxEvent.updateMany({
+      where: {
+        id,
+        status: 'PROCESSING',
+        leaseOwner: workerId,
+        leaseExpiresAt: { gt: now },
+      },
       data: {
         status: 'DELIVERED',
         deliveredAt: now,
@@ -210,16 +224,24 @@ export class OutboxRepository {
         availableAt: now,
       },
     });
+    return result.count === 1;
   }
 
   async markRetry(
     id: string,
+    workerId: string,
     category: IntegrationFailureCategory,
     sanitizedError: string,
     nextAttemptAt: Date,
-  ): Promise<void> {
-    await this.prisma.client.outboxEvent.update({
-      where: { id },
+    now: Date = new Date(),
+  ): Promise<boolean> {
+    const result = await this.prisma.client.outboxEvent.updateMany({
+      where: {
+        id,
+        status: 'PROCESSING',
+        leaseOwner: workerId,
+        leaseExpiresAt: { gt: now },
+      },
       data: {
         status: 'RETRY',
         failureCategory: category,
@@ -230,15 +252,23 @@ export class OutboxRepository {
         leaseExpiresAt: null,
       },
     });
+    return result.count === 1;
   }
 
   async markFailed(
     id: string,
+    workerId: string,
     category: IntegrationFailureCategory,
     sanitizedError: string,
-  ): Promise<void> {
-    await this.prisma.client.outboxEvent.update({
-      where: { id },
+    now: Date = new Date(),
+  ): Promise<boolean> {
+    const result = await this.prisma.client.outboxEvent.updateMany({
+      where: {
+        id,
+        status: 'PROCESSING',
+        leaseOwner: workerId,
+        leaseExpiresAt: { gt: now },
+      },
       data: {
         status: 'FAILED',
         failureCategory: category,
@@ -248,6 +278,7 @@ export class OutboxRepository {
         nextAttemptAt: null,
       },
     });
+    return result.count === 1;
   }
 
   async releaseExpiredLeases(now: Date = new Date()): Promise<number> {
@@ -270,13 +301,14 @@ export class OutboxRepository {
 
   async scheduleRetryFromAttempt(
     id: string,
+    workerId: string,
     category: IntegrationFailureCategory,
     error: string,
     attemptCount: number,
     now: Date = new Date(),
-  ): Promise<void> {
+  ): Promise<boolean> {
     const next = computeNextAttemptAt(attemptCount, now);
-    await this.markRetry(id, category, error, next);
+    return this.markRetry(id, workerId, category, error, next, now);
   }
 
   async listAdmin(filters: OutboxListFilters): Promise<{

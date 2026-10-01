@@ -19,6 +19,8 @@ import { hashIp } from '../auth/crypto.util';
 import { AppConfigService } from '../config/app-config.service';
 import { PrismaService } from '../database/prisma.service';
 import type { ActorContext } from '../common/actor.util';
+import { trimmedOrNull } from '../common/string.util';
+import { StorefrontRevalidateService } from '../storefront/storefront-revalidate.service';
 import { OCC_CONFLICT_MESSAGE } from './catalog.logic';
 import {
   toBouquetSizeAdminDto,
@@ -123,11 +125,11 @@ export type TaxonomyListQuery = {
 export type CreateTaxonomyInput = {
   name: string;
   slug?: string;
-  description?: string;
+  description?: string | null;
   sortOrder?: number;
   visibility?: TaxonomyVisibility;
-  seoTitle?: string;
-  seoDescription?: string;
+  seoTitle?: string | null;
+  seoDescription?: string | null;
   noIndex?: boolean;
   /** Colors only: optional CSS color for swatch UI. */
   swatch?: string | null;
@@ -142,6 +144,7 @@ export class TaxonomyService {
     private readonly slugRedirects: SlugRedirectsService,
     private readonly audit: AuditService,
     private readonly appConfig: AppConfigService,
+    private readonly revalidate: StorefrontRevalidateService,
   ) {}
 
   async list(
@@ -210,23 +213,24 @@ export class TaxonomyService {
         data: {
           slug,
           name,
-          description: input.description?.trim() ?? null,
+          description: trimmedOrNull(input.description),
           ...(input.sortOrder === undefined ? {} : { sortOrder: input.sortOrder }),
           ...(input.visibility ? { visibility: input.visibility } : {}),
           ...(hasSeoColumns(kind)
             ? {
-                seoTitle: input.seoTitle?.trim() ?? null,
-                seoDescription: input.seoDescription?.trim() ?? null,
+                seoTitle: trimmedOrNull(input.seoTitle),
+                seoDescription: trimmedOrNull(input.seoDescription),
                 ...(input.noIndex === undefined ? {} : { noIndex: input.noIndex }),
               }
             : {}),
-          ...(kind === 'colors' ? { swatch: input.swatch?.trim() || null } : {}),
+          ...(kind === 'colors' ? { swatch: trimmedOrNull(input.swatch) } : {}),
         },
       });
       await this.recordAudit(tx, kind, actor, 'TAXONOMY_CREATED', row.id, { slug, name });
       return row;
     });
 
+    await this.revalidate.ping({ tags: ['catalog'], paths: ['/', '/bukety'] });
     return this.toDto(kind, created);
   }
 
@@ -265,20 +269,20 @@ export class TaxonomyService {
         ...(slugChanged ? { slug: nextSlug } : {}),
         ...(input.description === undefined
           ? {}
-          : { description: input.description.trim() || null }),
+          : { description: trimmedOrNull(input.description) }),
         ...(input.sortOrder === undefined ? {} : { sortOrder: input.sortOrder }),
         ...(input.visibility === undefined ? {} : { visibility: input.visibility }),
         ...(hasSeoColumns(kind)
           ? {
-              ...(input.seoTitle === undefined ? {} : { seoTitle: input.seoTitle.trim() || null }),
+              ...(input.seoTitle === undefined ? {} : { seoTitle: trimmedOrNull(input.seoTitle) }),
               ...(input.seoDescription === undefined
                 ? {}
-                : { seoDescription: input.seoDescription.trim() || null }),
+                : { seoDescription: trimmedOrNull(input.seoDescription) }),
               ...(input.noIndex === undefined ? {} : { noIndex: input.noIndex }),
             }
           : {}),
         ...(kind === 'colors' && input.swatch !== undefined
-          ? { swatch: input.swatch?.trim() || null }
+          ? { swatch: trimmedOrNull(input.swatch) }
           : {}),
       };
 
@@ -296,7 +300,9 @@ export class TaxonomyService {
       });
     });
 
-    return this.getById(kind, id);
+    const dto = await this.getById(kind, id);
+    await this.revalidate.ping({ tags: ['catalog'], paths: ['/', '/bukety'] });
+    return dto;
   }
 
   private toDto(kind: TaxonomyKind, row: TaxonomyRow): TaxonomyEntryDto {

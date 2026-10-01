@@ -165,4 +165,12 @@ export class AppConfigService {
   get s3ForcePathStyle(): boolean {
     return this.config.get('S3_FORCE_PATH_STYLE', { infer: true });
   }
+
+  get revalidateUrl(): string | undefined {
+    return this.config.get('REVALIDATE_URL', { infer: true });
+  }
+
+  get revalidateSecret(): string | undefined {
+    return this.config.get('REVALIDATE_SECRET', { infer: true });
+  }
 }

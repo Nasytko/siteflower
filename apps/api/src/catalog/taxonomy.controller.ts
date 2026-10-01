@@ -72,9 +72,10 @@ class CreateTaxonomyDto {
   slug?: string;
 
   @IsOptional()
+  @ValidateIf((_, value) => value !== null)
   @IsString()
   @MaxLength(2000)
-  description?: string;
+  description?: string | null;
 
   @IsOptional()
   @IsInt()
@@ -87,14 +88,16 @@ class CreateTaxonomyDto {
   visibility?: TaxonomyVisibility;
 
   @IsOptional()
+  @ValidateIf((_, value) => value !== null)
   @IsString()
   @MaxLength(200)
-  seoTitle?: string;
+  seoTitle?: string | null;
 
   @IsOptional()
+  @ValidateIf((_, value) => value !== null)
   @IsString()
   @MaxLength(500)
-  seoDescription?: string;
+  seoDescription?: string | null;
 
   @IsOptional()
   @IsBoolean()
@@ -122,9 +125,10 @@ class UpdateTaxonomyDto extends ExpectedVersionDto {
   slug?: string;
 
   @IsOptional()
+  @ValidateIf((_, value) => value !== null)
   @IsString()
   @MaxLength(2000)
-  description?: string;
+  description?: string | null;
 
   @IsOptional()
   @IsInt()
@@ -137,14 +141,16 @@ class UpdateTaxonomyDto extends ExpectedVersionDto {
   visibility?: TaxonomyVisibility;
 
   @IsOptional()
+  @ValidateIf((_, value) => value !== null)
   @IsString()
   @MaxLength(200)
-  seoTitle?: string;
+  seoTitle?: string | null;
 
   @IsOptional()
+  @ValidateIf((_, value) => value !== null)
   @IsString()
   @MaxLength(500)
-  seoDescription?: string;
+  seoDescription?: string | null;
 
   @IsOptional()
   @IsBoolean()

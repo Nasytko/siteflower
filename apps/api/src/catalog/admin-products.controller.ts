@@ -199,7 +199,10 @@ export class AdminProductsController {
   @UseInterceptors(
     FileInterceptor('file', {
       storage: memoryStorage(),
-      limits: { fileSize: 8_000_000, files: 1 },
+      limits: {
+        fileSize: Number(process.env.MEDIA_MAX_BYTES ?? 8_000_000),
+        files: 1,
+      },
     }),
   )
   addMedia(

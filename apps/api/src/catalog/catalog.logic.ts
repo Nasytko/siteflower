@@ -10,7 +10,7 @@ import {
 
 /** Shown to admins when an optimistic-concurrency check fails. */
 export const OCC_CONFLICT_MESSAGE =
-  'This item was changed by another user. Reload before saving.';
+  'Данные изменены другим пользователем. Обновите страницу и сохраните снова.';
 
 /** Price range of ACTIVE variants only — inactive sizes never shape the storefront price. */
 export function activeVariantPrices(

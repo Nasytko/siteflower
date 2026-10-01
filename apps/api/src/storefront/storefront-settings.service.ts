@@ -11,10 +11,11 @@ import { hashIp } from '../auth/crypto.util';
 import { AppConfigService } from '../config/app-config.service';
 import { PrismaService } from '../database/prisma.service';
 import type { ActorContext } from '../common/actor.util';
+import { StorefrontRevalidateService } from './storefront-revalidate.service';
 
 const SINGLETON_ID = 1;
 const OCC_CONFLICT_MESSAGE =
-  'This item was changed by another user. Reload before saving.';
+  'Данные изменены другим пользователем. Обновите страницу и сохраните снова.';
 
 type StorefrontSettingsRow = Prisma.StorefrontSettingsGetPayload<object>;
 
@@ -24,6 +25,7 @@ export class StorefrontSettingsService {
     private readonly prisma: PrismaService,
     private readonly audit: AuditService,
     private readonly appConfig: AppConfigService,
+    private readonly revalidate: StorefrontRevalidateService,
   ) {}
 
   async getPublic(): Promise<StorefrontSettingsPublicDto> {
@@ -92,7 +94,10 @@ export class StorefrontSettingsService {
       );
     });
 
-    return this.getAdmin();
+    return this.getAdmin().then(async (dto) => {
+      await this.revalidate.ping({ tags: ['storefront'], paths: ['/'] });
+      return dto;
+    });
   }
 
   private async getOrCreate(): Promise<StorefrontSettingsRow> {
