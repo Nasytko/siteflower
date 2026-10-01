@@ -60,6 +60,7 @@ const NAV_GROUPS: NavGroup[] = [
         label: 'Настройки магазина',
         permission: 'SETTINGS_READ',
       },
+      { href: '/admin/seo', label: 'SEO сайта', permission: 'SEO_READ' },
       { href: '/admin/fulfillment', label: 'Получение и доставка', permission: 'SETTINGS_READ' },
       { href: '/admin/legal', label: 'Юридическая информация', permission: 'LEGAL_READ' },
     ],

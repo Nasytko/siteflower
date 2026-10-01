@@ -3,12 +3,17 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import {
+  analyzeProductSeo,
   applyPercentOff,
   COMMERCIAL_AVAILABILITIES,
   COMPONENT_UNITS,
+  defaultProductSeoDescription,
+  defaultProductSeoTitle,
   formatPriceFromMinor,
   normalizeSlug,
   PROMOTION_TYPES,
+  seoStatusEmoji,
+  seoStatusLabel,
   type ComponentUnit,
   type CommercialAvailability,
   type ProductAdminDto,
@@ -221,6 +226,9 @@ export function ProductEditor({
     seoDescription: product.seoDescription ?? '',
     noIndex: product.noIndex,
   });
+  const [seoManualOpen, setSeoManualOpen] = useState(
+    () => Boolean(product.seoTitle?.trim() || product.seoDescription?.trim()),
+  );
   const [publication, setPublication] = useState({
     availability: product.availability,
     publishAt: toDateTimeLocalValue(product.publishAt),
@@ -264,6 +272,7 @@ export function ProductEditor({
       seoDescription: updated.seoDescription ?? '',
       noIndex: updated.noIndex,
     });
+    setSeoManualOpen(Boolean(updated.seoTitle?.trim() || updated.seoDescription?.trim()));
     setPublication({
       availability: updated.availability,
       publishAt: toDateTimeLocalValue(updated.publishAt),
@@ -325,16 +334,49 @@ export function ProductEditor({
     });
   }, [promotion, activeVariants, server.currency]);
 
-  const seoWarnings = useMemo(() => {
-    const warnings: string[] = [];
-    if (!server.seo.resolvedTitle) warnings.push('Нет заголовка для поиска');
-    if (server.seo.resolvedTitle.length > 70) warnings.push('Заголовок длиннее 70 символов');
-    if (!server.seo.resolvedDescription) warnings.push('Нет описания для поиска');
-    if (server.media.length === 0) warnings.push('Нет фото');
-    else if (!server.media.some((item) => item.isPrimary)) warnings.push('Не выбрано главное фото');
-    if (server.media.some((item) => !item.alt)) warnings.push('Есть фото без описания (alt)');
-    return warnings;
-  }, [server]);
+  const seoHealth = useMemo(() => {
+    const titleManual = seo.seoTitle.trim();
+    const descriptionManual = seo.seoDescription.trim();
+    const resolvedTitle = titleManual || defaultProductSeoTitle(basic.name.trim() || server.name);
+    const resolvedDescription =
+      descriptionManual ||
+      defaultProductSeoDescription(
+        basic.name.trim() || server.name,
+        basic.shortDescription.trim() || server.shortDescription,
+      );
+    const slug = basic.slug.trim() || server.slug;
+    return analyzeProductSeo({
+      id: server.id,
+      name: basic.name.trim() || server.name,
+      slug,
+      lifecycle: server.lifecycle,
+      effectivelyPublished: server.lifecycle === 'PUBLISHED',
+      noIndex: seo.noIndex,
+      seoTitle: titleManual || null,
+      seoDescription: descriptionManual || null,
+      resolvedTitle,
+      resolvedDescription,
+      hasPrimaryMedia: server.media.some((item) => item.isPrimary),
+      mediaCount: server.media.length,
+      mediaMissingAlt: server.media.filter((item) => !item.alt?.trim()).length,
+      hasPrice: variants.some((variant) => majorInputToMinor(variant.priceMajor) !== null),
+      jsonLdReady: variants.some((variant) => majorInputToMinor(variant.priceMajor) !== null),
+      path: `/bukety/${slug}`,
+      adminHref: `/admin/catalog/products/${server.id}`,
+      inSitemap: server.lifecycle === 'PUBLISHED' && !seo.noIndex && Boolean(slug),
+    });
+  }, [seo, basic, server, variants]);
+
+  const previewTitle =
+    seo.seoTitle.trim() || defaultProductSeoTitle(basic.name.trim() || server.name);
+  const previewDescription =
+    seo.seoDescription.trim() ||
+    defaultProductSeoDescription(
+      basic.name.trim() || server.name,
+      basic.shortDescription.trim() || server.shortDescription,
+    );
+  const titleIsAutomatic = !seo.seoTitle.trim();
+  const descriptionIsAutomatic = !seo.seoDescription.trim();
 
   function validate(): string | null {
     if (basic.name.trim().length === 0) return 'Укажите название товара';
@@ -1679,34 +1721,134 @@ export function ProductEditor({
       {section === 'seo' ? (
         <section className="admin-section">
           <h2 className="admin-section__title">SEO</h2>
+          <p className="admin-section__lead">
+            Поисковые заголовок и описание собираются автоматически из названия и описания букета.
+            Вручную менять их нужно только если хотите другой текст в поиске.
+          </p>
+
+          <div className="mb-4 rounded-lg border border-[var(--admin-border)] p-4">
+            <p className="text-base font-semibold">
+              {seoStatusEmoji(seoHealth.status)}{' '}
+              {seoHealth.status === 'good'
+                ? 'SEO настроено'
+                : `${seoStatusLabel(seoHealth.status)}${
+                    seoHealth.checks.filter((c) => c.severity === 'CRITICAL' || c.severity === 'WARNING')
+                      .length
+                      ? ` · ${
+                          seoHealth.checks.filter(
+                            (c) => c.severity === 'CRITICAL' || c.severity === 'WARNING',
+                          ).length
+                        } рекомендац.`
+                      : ''
+                  }`}
+            </p>
+            <p className="mt-1 text-sm text-[var(--admin-muted)]">{seoHealth.indexabilityLabel}</p>
+          </div>
+
+          <ul className="admin-checks mb-6 space-y-2">
+            {seoHealth.checks
+              .filter((check) => check.severity !== 'INFO' || check.code === 'PRODUCT_NOT_LIVE')
+              .map((check) => (
+                <li key={check.code} className="text-sm">
+                  <span className="font-medium">
+                    {check.severity === 'PASS' ? '✓' : check.severity === 'CRITICAL' ? '✕' : '!'}{' '}
+                    {check.title}
+                  </span>
+                  <span className="mt-0.5 block text-[var(--admin-muted)]">{check.message}</span>
+                </li>
+              ))}
+          </ul>
+
           <div className="grid max-w-2xl gap-4">
-            <label className="admin-field">
-              <span>Заголовок для поиска</span>
-              <input
-                className="admin-input"
-                value={seo.seoTitle}
-                disabled={!canUpdate}
-                placeholder={server.seo.resolvedTitle}
-                onChange={(event) => {
-                  setSeo((prev) => ({ ...prev, seoTitle: event.target.value }));
-                  touch();
-                }}
-              />
-            </label>
-            <label className="admin-field">
-              <span>Описание для поиска</span>
-              <textarea
-                className="admin-input"
-                rows={3}
-                value={seo.seoDescription}
-                disabled={!canUpdate}
-                placeholder={server.seo.resolvedDescription}
-                onChange={(event) => {
-                  setSeo((prev) => ({ ...prev, seoDescription: event.target.value }));
-                  touch();
-                }}
-              />
-            </label>
+            <div className="admin-serp">
+              <p className="admin-help mb-2">
+                Примерный вид в поиске (не точная копия Google или Яндекса)
+                {titleIsAutomatic && descriptionIsAutomatic
+                  ? ' · автоматически'
+                  : titleIsAutomatic || descriptionIsAutomatic
+                    ? ' · частично вручную'
+                    : ' · настроено вручную'}
+              </p>
+              <p className="admin-serp__title">{previewTitle}</p>
+              <p className="admin-serp__url">/bukety/{basic.slug || server.slug}</p>
+              <p className="admin-serp__text">{previewDescription}</p>
+            </div>
+
+            {!seoManualOpen ? (
+              <div className="space-y-2">
+                <p className="admin-help">
+                  Заголовок: <strong>используется автоматически</strong>
+                  <br />
+                  Описание: <strong>используется автоматически</strong>
+                </p>
+                {canUpdate ? (
+                  <button
+                    type="button"
+                    className="admin-btn-ghost px-3 py-2"
+                    onClick={() => setSeoManualOpen(true)}
+                  >
+                    Настроить вручную
+                  </button>
+                ) : null}
+              </div>
+            ) : (
+              <>
+                <label className="admin-field">
+                  <span>Заголовок для поиска</span>
+                  <input
+                    className="admin-input"
+                    value={seo.seoTitle}
+                    disabled={!canUpdate}
+                    placeholder={defaultProductSeoTitle(basic.name.trim() || server.name)}
+                    onChange={(event) => {
+                      setSeo((prev) => ({ ...prev, seoTitle: event.target.value }));
+                      touch();
+                    }}
+                  />
+                  <span className="admin-field__hint">
+                    {titleIsAutomatic
+                      ? 'Используется автоматически'
+                      : 'Задан вручную — перекрывает автоматический текст'}
+                  </span>
+                </label>
+                <label className="admin-field">
+                  <span>Описание для поиска</span>
+                  <textarea
+                    className="admin-input"
+                    rows={3}
+                    value={seo.seoDescription}
+                    disabled={!canUpdate}
+                    placeholder={defaultProductSeoDescription(
+                      basic.name.trim() || server.name,
+                      basic.shortDescription.trim() || server.shortDescription,
+                    )}
+                    onChange={(event) => {
+                      setSeo((prev) => ({ ...prev, seoDescription: event.target.value }));
+                      touch();
+                    }}
+                  />
+                  <span className="admin-field__hint">
+                    {descriptionIsAutomatic
+                      ? 'Используется автоматически'
+                      : 'Задано вручную — перекрывает автоматический текст'}
+                  </span>
+                </label>
+                {canUpdate ? (
+                  <button
+                    type="button"
+                    className="admin-btn-ghost px-3 py-2"
+                    onClick={() => {
+                      setSeo((prev) => ({ ...prev, seoTitle: '', seoDescription: '' }));
+                      setSeoManualOpen(false);
+                      touch();
+                    }}
+                  >
+                    Сбросить → использовать автоматически
+                  </button>
+                ) : null}
+              </>
+            )}
+
             <label className="admin-check">
               <input
                 type="checkbox"
@@ -1719,20 +1861,6 @@ export function ProductEditor({
               />
               Скрыть страницу от поисковых систем
             </label>
-
-            <div className="admin-serp">
-              <p className="admin-serp__title">{server.seo.resolvedTitle}</p>
-              <p className="admin-serp__url">/bukety/{server.slug}</p>
-              <p className="admin-serp__text">{server.seo.resolvedDescription}</p>
-            </div>
-
-            {seoWarnings.length > 0 ? (
-              <ul className="admin-warnings">
-                {seoWarnings.map((warning) => (
-                  <li key={warning}>{warning}</li>
-                ))}
-              </ul>
-            ) : null}
           </div>
         </section>
       ) : null}

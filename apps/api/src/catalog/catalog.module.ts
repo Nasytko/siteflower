@@ -7,6 +7,7 @@ import { AdminBestsellersController } from './admin-bestsellers.controller';
 import { AdminBudgetRangesController } from './admin-budget-ranges.controller';
 import { AdminProductsController } from './admin-products.controller';
 import { AdminPromotionsController } from './admin-promotions.controller';
+import { AdminSeoController } from './admin-seo.controller';
 import { BestsellersService } from './bestsellers.service';
 import { BudgetRangesService } from './budget-ranges.service';
 import { ProductsRepository } from './products.repository';
@@ -14,6 +15,7 @@ import { ProductsService } from './products.service';
 import { PromotionsService } from './promotions.service';
 import { PublicCatalogController } from './public-catalog.controller';
 import { PublicCatalogService } from './public-catalog.service';
+import { SeoHealthService } from './seo-health.service';
 import { SlugRedirectsService } from './slug-redirects.service';
 import { TaxonomyController } from './taxonomy.controller';
 import { TaxonomyService } from './taxonomy.service';
@@ -29,6 +31,7 @@ import { TaxonomyService } from './taxonomy.service';
     AdminPromotionsController,
     AdminBestsellersController,
     AdminBudgetRangesController,
+    AdminSeoController,
     TaxonomyController,
     PublicCatalogController,
   ],
@@ -41,6 +44,7 @@ import { TaxonomyService } from './taxonomy.service';
     PromotionsService,
     PublicCatalogService,
     SlugRedirectsService,
+    SeoHealthService,
   ],
   exports: [ProductsService, ProductsRepository, PromotionsService, BestsellersService],
 })

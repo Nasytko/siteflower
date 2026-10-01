@@ -28,6 +28,8 @@ export type TaxonomyKindMeta = {
   itemLabel: string;
   hasSwatch: boolean;
   hasDescription: boolean;
+  /** Flowers/colors/occasions/recipients expose SEO overrides. */
+  hasSeo: boolean;
 };
 
 export const TAXONOMY_KIND_META: Record<TaxonomyKind, TaxonomyKindMeta> = {
@@ -38,6 +40,7 @@ export const TAXONOMY_KIND_META: Record<TaxonomyKind, TaxonomyKindMeta> = {
     itemLabel: 'цветок',
     hasSwatch: false,
     hasDescription: true,
+    hasSeo: true,
   },
   colors: {
     kind: 'colors',
@@ -46,6 +49,7 @@ export const TAXONOMY_KIND_META: Record<TaxonomyKind, TaxonomyKindMeta> = {
     itemLabel: 'цвет',
     hasSwatch: true,
     hasDescription: true,
+    hasSeo: true,
   },
   'bouquet-sizes': {
     kind: 'bouquet-sizes',
@@ -54,6 +58,7 @@ export const TAXONOMY_KIND_META: Record<TaxonomyKind, TaxonomyKindMeta> = {
     itemLabel: 'размер',
     hasSwatch: false,
     hasDescription: true,
+    hasSeo: false,
   },
   'product-lines': {
     kind: 'product-lines',
@@ -62,6 +67,7 @@ export const TAXONOMY_KIND_META: Record<TaxonomyKind, TaxonomyKindMeta> = {
     itemLabel: 'линейку',
     hasSwatch: false,
     hasDescription: true,
+    hasSeo: false,
   },
   occasions: {
     kind: 'occasions',
@@ -70,6 +76,7 @@ export const TAXONOMY_KIND_META: Record<TaxonomyKind, TaxonomyKindMeta> = {
     itemLabel: 'повод',
     hasSwatch: false,
     hasDescription: true,
+    hasSeo: true,
   },
   recipients: {
     kind: 'recipients',
@@ -78,6 +85,7 @@ export const TAXONOMY_KIND_META: Record<TaxonomyKind, TaxonomyKindMeta> = {
     itemLabel: 'получателя',
     hasSwatch: false,
     hasDescription: true,
+    hasSeo: true,
   },
 };
 
@@ -138,6 +146,8 @@ export const adminEndpoints = {
   integrationErpEnabled: `${ADMIN}/integrations/erp/enabled`,
   mediaHealth: `${ADMIN}/media/health`,
   mediaHealthProbe: `${ADMIN}/media/health/probe`,
+  seoSummary: `${ADMIN}/seo/summary`,
+  seoHealth: `${ADMIN}/seo/health`,
 } as const;
 
 /** URL segment: ORDER_TERMS → order_terms */

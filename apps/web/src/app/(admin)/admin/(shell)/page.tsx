@@ -1,6 +1,10 @@
 import Link from 'next/link';
-import { roleHasPermission } from '@bouquet-one/contracts';
-import { fetchAdminMe } from '@/lib/admin-api';
+import {
+  roleHasPermission,
+  seoStatusEmoji,
+  type SeoHealthSummary,
+} from '@bouquet-one/contracts';
+import { fetchAdminMe, adminFetch } from '@/lib/admin-api';
 import { fetchTotal } from '@/lib/admin-catalog-api';
 import { adminEndpoints } from '@/lib/admin-endpoints';
 
@@ -28,6 +32,12 @@ const SHORTCUTS = [
     label: 'Бестселлеры',
     hint: 'Подборки для главной',
     permission: 'CATALOG_READ' as const,
+  },
+  {
+    href: '/admin/seo',
+    label: 'SEO сайта',
+    hint: 'Проверка страниц для поиска',
+    permission: 'SEO_READ' as const,
   },
   {
     href: '/admin/fulfillment',
@@ -69,8 +79,9 @@ export default async function AdminDashboardPage() {
   const role = me?.user.role;
   const canReadOrders = Boolean(role && roleHasPermission(role, 'ORDERS_READ'));
   const canReadCatalog = Boolean(role && roleHasPermission(role, 'CATALOG_READ'));
+  const canReadSeo = Boolean(role && roleHasPermission(role, 'SEO_READ'));
 
-  const [ordersToday, ordersTomorrow, ordersNew, publishedProducts, promotedProducts] =
+  const [ordersToday, ordersTomorrow, ordersNew, publishedProducts, promotedProducts, seoSummary] =
     await Promise.all([
       canReadOrders ? fetchTotal(adminEndpoints.orders, { date: 'today' }) : null,
       canReadOrders ? fetchTotal(adminEndpoints.orders, { date: 'tomorrow' }) : null,
@@ -81,9 +92,14 @@ export default async function AdminDashboardPage() {
         ? fetchTotal(adminEndpoints.products, { lifecycle: 'PUBLISHED' })
         : null,
       canReadCatalog ? fetchTotal(adminEndpoints.products, { promotionalOnly: true }) : null,
+      canReadSeo
+        ? adminFetch<{ summary: SeoHealthSummary }>(adminEndpoints.seoSummary).catch(() => null)
+        : null,
     ]);
 
   const shortcuts = SHORTCUTS.filter((item) => role && roleHasPermission(role, item.permission));
+  const seoNeedsAttention =
+    seoSummary && (seoSummary.summary.attention > 0 || seoSummary.summary.improve > 0);
 
   return (
     <main id="main-content" className="space-y-8">
@@ -137,6 +153,28 @@ export default async function AdminDashboardPage() {
               href="/admin/promotions"
             />
           </div>
+        </section>
+      ) : null}
+
+      {canReadSeo && seoNeedsAttention ? (
+        <section className="space-y-3">
+          <h2 className="admin-section__eyebrow">SEO</h2>
+          <Link href="/admin/seo" className="admin-card admin-card--link block max-w-xl">
+            <p className="admin-card__label">SEO требует внимания</p>
+            <p className="mt-2 text-base">
+              {seoSummary.summary.attention > 0 ? (
+                <span className="mr-4">
+                  {seoStatusEmoji('attention')} {seoSummary.summary.attention} страниц
+                </span>
+              ) : null}
+              {seoSummary.summary.improve > 0 ? (
+                <span>
+                  {seoStatusEmoji('improve')} {seoSummary.summary.improve} страниц
+                </span>
+              ) : null}
+            </p>
+            <p className="mt-2 text-sm text-[var(--admin-muted)]">Посмотреть рекомендации →</p>
+          </Link>
         </section>
       ) : null}
 

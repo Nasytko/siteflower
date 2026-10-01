@@ -22,6 +22,9 @@ export type TaxonomyRow = {
   visibility: TaxonomyVisibility;
   version: number;
   updatedAt: string;
+  seoTitle?: string | null;
+  seoDescription?: string | null;
+  noIndex?: boolean;
 };
 
 type Props = {
@@ -36,6 +39,9 @@ type Draft = {
   slug: string;
   description: string;
   swatch: string;
+  seoTitle: string;
+  seoDescription: string;
+  noIndex: boolean;
 };
 
 function byOrder(a: TaxonomyRow, b: TaxonomyRow): number {
@@ -48,6 +54,9 @@ function toDraft(row: TaxonomyRow): Draft {
     slug: row.slug,
     description: row.description ?? '',
     swatch: row.swatch ?? '',
+    seoTitle: row.seoTitle ?? '',
+    seoDescription: row.seoDescription ?? '',
+    noIndex: row.noIndex ?? false,
   };
 }
 
@@ -159,6 +168,13 @@ export function TaxonomyCrud({ meta, initial, canCreate, canUpdate }: Props) {
         slug: draft.slug.trim() || row.slug,
         ...(meta.hasDescription ? { description: draft.description.trim() || null } : {}),
         ...(meta.hasSwatch ? { swatch: draft.swatch.trim() || null } : {}),
+        ...(meta.hasSeo
+          ? {
+              seoTitle: draft.seoTitle.trim() || null,
+              seoDescription: draft.seoDescription.trim() || null,
+              noIndex: draft.noIndex,
+            }
+          : {}),
       });
       cancelEdit();
     }, 'Изменения сохранены');
@@ -376,6 +392,49 @@ export function TaxonomyCrud({ meta, initial, canCreate, canUpdate }: Props) {
                                 Убрать
                               </button>
                             </label>
+                          ) : null}
+                          {meta.hasSeo ? (
+                            <div className="grid gap-2 rounded border border-[var(--admin-border)] p-2">
+                              <p className="text-xs text-[var(--admin-muted)]">
+                                SEO (необязательно). Если пусто — сайт сам соберёт заголовок и
+                                описание.
+                              </p>
+                              <input
+                                className="admin-input"
+                                value={draft.seoTitle}
+                                placeholder="Заголовок для поиска — автоматически"
+                                aria-label="SEO заголовок"
+                                onChange={(event) =>
+                                  setDraft((prev) =>
+                                    prev ? { ...prev, seoTitle: event.target.value } : prev,
+                                  )
+                                }
+                              />
+                              <textarea
+                                className="admin-input"
+                                rows={2}
+                                value={draft.seoDescription}
+                                placeholder="Описание для поиска — автоматически"
+                                aria-label="SEO описание"
+                                onChange={(event) =>
+                                  setDraft((prev) =>
+                                    prev ? { ...prev, seoDescription: event.target.value } : prev,
+                                  )
+                                }
+                              />
+                              <label className="admin-check">
+                                <input
+                                  type="checkbox"
+                                  checked={draft.noIndex}
+                                  onChange={(event) =>
+                                    setDraft((prev) =>
+                                      prev ? { ...prev, noIndex: event.target.checked } : prev,
+                                    )
+                                  }
+                                />
+                                Скрыть страницу от поисковых систем
+                              </label>
+                            </div>
                           ) : null}
                         </div>
                       ) : (
