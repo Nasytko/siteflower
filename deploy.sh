@@ -39,6 +39,8 @@ on_err() {
     log "Deploy failed (exit ${code}). Attempting application container rollback."
     log "Database migrations are NOT reverted automatically."
     rollback_app_images || true
+  else
+    log "Deploy aborted early (exit ${code}) before image build/switch started."
   fi
   exit "$code"
 }
@@ -50,23 +52,33 @@ require_docker_access() {
 }
 
 resolve_ref() {
+  # Prints ONLY the commit SHA on stdout. All diagnostics go via log/die → stderr
+  # so callers can safely use: rev="$(resolve_ref)"
   cd "$SCRIPT_DIR"
   require_cmd git
   if [[ -n "$REF" ]]; then
     validate_git_ref "$REF"
+    log "Fetching and checking out ref: $REF"
     git fetch --tags --prune origin
     git rev-parse --verify "$REF^{commit}" >/dev/null
     git checkout --detach "$REF"
   else
-    if [[ -n "$(git status --porcelain)" ]]; then
-      die "Working tree is dirty. Commit/stash or deploy an explicit ref: ./deploy.sh <sha>"
+    local dirty
+    dirty="$(git status --porcelain)"
+    if [[ -n "$dirty" ]]; then
+      log "Dirty paths:"
+      printf '%s\n' "$dirty" >&2
+      die "Working tree is dirty. Commit/stash mode changes, or deploy an explicit ref: ./deploy.sh <sha>"
     fi
     local branch
     branch="$(git rev-parse --abbrev-ref HEAD)"
     if [[ "$branch" != "HEAD" ]]; then
+      log "Fetching origin/${branch}"
       git fetch --tags --prune origin
       if git show-ref --verify --quiet "refs/remotes/origin/${branch}"; then
         git pull --ff-only "origin" "$branch"
+      else
+        log "No origin/${branch} remote-tracking branch — using local HEAD"
       fi
     fi
   fi
@@ -168,18 +180,25 @@ prune_old_shopbuket1_images() {
 }
 
 main() {
+  log "Stage: acquire deploy lock"
   acquire_lock
+  log "Stage: require Docker access"
   require_docker_access
   [[ -f "$SHOPBUKET1_ENV_FILE" ]] || die "Missing $SHOPBUKET1_ENV_FILE — run sudo ./install.sh and edit secrets"
+  log "Stage: validate production env ($SHOPBUKET1_ENV_FILE)"
   validate_production_env
+  log "Stage: remember previous release images"
   remember_previous_images
 
   local rev
+  log "Stage: resolve git revision"
   rev="$(resolve_ref)"
+  [[ -n "$rev" ]] || die "resolve_ref returned an empty revision"
   log "Deploying revision $rev"
   tag_images "$rev"
   DEPLOY_STARTED=1
 
+  log "Stage: build images"
   build_images
 
   compose up -d postgres

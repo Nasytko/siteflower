@@ -22,7 +22,8 @@ SHOPBUKET1_PREVIOUS_FILE="${SHOPBUKET1_PREVIOUS_FILE:-${SHOPBUKET1_STATE_DIR}/pr
 # Sibling ERP stack on the same VPS — never touch these resources.
 ERPBUKET1_PREFIX="${ERPBUKET1_PREFIX:-erpbuket1}"
 
-log() { printf '%s %s\n' "$(date -u +'%Y-%m-%dT%H:%M:%SZ')" "$*"; }
+# Always log to stderr so messages survive command substitution (e.g. rev="$(resolve_ref)").
+log() { printf '%s %s\n' "$(date -u +'%Y-%m-%dT%H:%M:%SZ')" "$*" >&2; }
 die() { log "ERROR: $*"; exit 1; }
 require_cmd() { command -v "$1" >/dev/null 2>&1 || die "Required command not found: $1"; }
 
