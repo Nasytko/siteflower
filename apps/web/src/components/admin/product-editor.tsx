@@ -7,6 +7,7 @@ import {
   COMMERCIAL_AVAILABILITIES,
   COMPONENT_UNITS,
   formatPriceFromMinor,
+  normalizeSlug,
   PROMOTION_TYPES,
   type ComponentUnit,
   type CommercialAvailability,
@@ -34,6 +35,11 @@ import {
   toDateTimeLocalValue,
   variantStatusLabel,
 } from '@/lib/admin-labels';
+import {
+  mediaPreflightStatusLabel,
+  preflightMediaBatch,
+  type MediaPreflightStatus,
+} from '@/lib/admin-media-preflight';
 import { majorInputToMinor, minorToMajorInput } from '@/lib/admin-money';
 import { toSameOriginMediaUrl } from '@/lib/media';
 
@@ -165,8 +171,11 @@ export function ProductEditor({
   const [error, setError] = useState<string | null>(null);
   const [savedAt, setSavedAt] = useState<string | null>(null);
   const [uploadStates, setUploadStates] = useState<
-    Array<{ name: string; status: 'uploading' | 'processing' | 'ready' | 'failed'; error: string | null }>
+    Array<{ name: string; status: MediaPreflightStatus; error: string | null; sizeLabel?: string }>
   >([]);
+  const [slugManual, setSlugManual] = useState(
+    () => normalizeSlug(product.name) !== product.slug,
+  );
 
   const [basic, setBasic] = useState({
     name: product.name,
@@ -210,6 +219,7 @@ export function ProductEditor({
   function resync(updated: ProductAdminDto) {
     setServer(updated);
     setVersion(updated.version);
+    setSlugManual(normalizeSlug(updated.name) !== updated.slug);
     setBasic({
       name: updated.name,
       slug: updated.slug,
@@ -474,42 +484,63 @@ export function ProductEditor({
 
   async function onUploadMany(files: FileList | File[]) {
     if (!canUpdate) return;
-    const list = Array.from(files);
-    if (list.length === 0) return;
-    const remaining = 12 - server.media.length;
-    if (remaining <= 0) {
-      setError('Достигнут лимит: 12 фотографий на товар');
+    const { accepted, rejected, capacityError } = preflightMediaBatch(files, server.media.length);
+    const initialRows = [
+      ...rejected.map((row) => ({
+        name: row.name,
+        status: 'error' as const,
+        error: row.error,
+        sizeLabel: `${(row.sizeBytes / (1024 * 1024)).toFixed(1)} MB`,
+      })),
+      ...accepted.map((row) => ({
+        name: row.name,
+        status: 'ready' as const,
+        error: null,
+        sizeLabel: `${(row.sizeBytes / (1024 * 1024)).toFixed(1)} MB`,
+      })),
+    ];
+    setUploadStates(initialRows);
+    if (capacityError && accepted.length === 0) {
+      setError(capacityError);
       return;
     }
-    const batch = list.slice(0, remaining);
-    setUploadStates(
-      batch.map((file) => ({ name: file.name, status: 'uploading' as const, error: null })),
-    );
-    setError(null);
-    for (let i = 0; i < batch.length; i += 1) {
-      const file = batch[i]!;
+    if (accepted.length === 0) {
+      setError(rejected[0]?.error ?? 'Файлы не прошли проверку');
+      return;
+    }
+    setError(capacityError);
+    for (const row of accepted) {
       setUploadStates((prev) =>
-        prev.map((row, idx) =>
-          idx === i ? { ...row, status: 'processing' as const } : row,
+        prev.map((item) =>
+          item.name === row.name && item.status === 'ready'
+            ? { ...item, status: 'uploading' as const }
+            : item,
         ),
       );
       try {
-        await onUpload(file);
         setUploadStates((prev) =>
-          prev.map((row, idx) =>
-            idx === i ? { ...row, status: 'ready' as const } : row,
+          prev.map((item) =>
+            item.name === row.name && item.status === 'uploading'
+              ? { ...item, status: 'processing' as const }
+              : item,
+          ),
+        );
+        await onUpload(row.file);
+        setUploadStates((prev) =>
+          prev.map((item) =>
+            item.name === row.name ? { ...item, status: 'done' as const } : item,
           ),
         );
       } catch (err) {
         setUploadStates((prev) =>
-          prev.map((row, idx) =>
-            idx === i
+          prev.map((item) =>
+            item.name === row.name
               ? {
-                  ...row,
-                  status: 'failed' as const,
+                  ...item,
+                  status: 'error' as const,
                   error: errorMessage(err, 'Не удалось сохранить изображение'),
                 }
-              : row,
+              : item,
           ),
         );
       }
@@ -619,23 +650,32 @@ export function ProductEditor({
                 value={basic.name}
                 disabled={!canUpdate}
                 onChange={(event) => {
-                  setBasic((prev) => ({ ...prev, name: event.target.value }));
+                  const name = event.target.value;
+                  setBasic((prev) => ({
+                    ...prev,
+                    name,
+                    ...(slugManual ? {} : { slug: normalizeSlug(name) }),
+                  }));
                   touch();
                 }}
               />
             </label>
             <label className="admin-field">
-              <span>Адрес в ссылке</span>
+              <span>Адрес в ссылке (slug)</span>
               <input
                 className="admin-input"
                 value={basic.slug}
                 disabled={!canUpdate}
                 onChange={(event) => {
+                  setSlugManual(true);
                   setBasic((prev) => ({ ...prev, slug: event.target.value }));
                   touch();
                 }}
               />
-              <span className="admin-field__hint">/bukety/{basic.slug || '…'}</span>
+              <span className="admin-field__hint">
+                /bukety/{basic.slug || '…'} · заполняется автоматически из названия; можно изменить
+                вручную
+              </span>
             </label>
             <label className="admin-field">
               <span>Короткое описание</span>
@@ -850,37 +890,50 @@ export function ProductEditor({
         <section className="admin-section">
           <h2 className="admin-section__title">Фотографии</h2>
           <p className="admin-section__lead">
-            {server.media.length} из 12 фотографий. Главное фото показывается в каталоге и на карточке
-            товара.
+            Добавьте до 12 фотографий товара. {server.media.length} из 12 уже загружено. Главное фото
+            показывается в каталоге и на карточке товара.
           </p>
           {canUpdate ? (
-            <label className="admin-field">
-              <span>+ Добавить фотографии</span>
-              <input
-                type="file"
-                accept="image/jpeg,image/png,image/webp,image/avif"
-                multiple
-                disabled={pending || server.media.length >= 12}
-                onChange={(event) => {
-                  const files = event.target.files;
-                  if (files?.length) void onUploadMany(files);
-                  event.target.value = '';
-                }}
-              />
-            </label>
+            <div
+              className="admin-panel"
+              onDragOver={(event) => event.preventDefault()}
+              onDrop={(event) => {
+                event.preventDefault();
+                if (event.dataTransfer.files?.length) {
+                  void onUploadMany(event.dataTransfer.files);
+                }
+              }}
+            >
+              <p className="admin-help">JPG, PNG, WebP, AVIF · до 8 MB</p>
+              <p className="admin-field__hint mb-3">
+                Рекомендуемый размер: 1600–3000 px по длинной стороне. Можно перетащить файлы сюда.
+              </p>
+              <label className="admin-field">
+                <span className="admin-btn-ghost inline-flex cursor-pointer px-3 py-2">
+                  Добавить фотографии
+                  <input
+                    type="file"
+                    className="sr-only"
+                    accept="image/jpeg,image/png,image/webp,image/avif"
+                    multiple
+                    disabled={pending || server.media.length >= 12}
+                    onChange={(event) => {
+                      const files = event.target.files;
+                      if (files?.length) void onUploadMany(files);
+                      event.target.value = '';
+                    }}
+                  />
+                </span>
+              </label>
+            </div>
           ) : null}
           {uploadStates.length > 0 ? (
             <ul className="admin-help mt-2 space-y-1">
               {uploadStates.map((row) => (
-                <li key={`${row.name}-${row.status}`}>
-                  {row.name}:{' '}
-                  {row.status === 'uploading'
-                    ? 'загрузка…'
-                    : row.status === 'processing'
-                      ? 'обработка…'
-                      : row.status === 'ready'
-                        ? 'готово'
-                        : row.error ?? 'ошибка'}
+                <li key={`${row.name}-${row.status}-${row.error ?? ''}`}>
+                  {row.status === 'error' ? '✕' : '✓'} {row.name}
+                  {row.sizeLabel ? ` — ${row.sizeLabel}` : ''} · {mediaPreflightStatusLabel(row.status)}
+                  {row.error ? `: ${row.error}` : ''}
                 </li>
               ))}
             </ul>
@@ -1371,6 +1424,7 @@ export function ProductEditor({
                       touch();
                     }}
                   />
+                  <span className="admin-field__hint">По времени Минска (Europe/Minsk)</span>
                 </label>
                 <label className="admin-field">
                   <span>Окончание (необязательно)</span>
@@ -1384,6 +1438,7 @@ export function ProductEditor({
                       touch();
                     }}
                   />
+                  <span className="admin-field__hint">По времени Минска (Europe/Minsk)</span>
                 </label>
 
                 <div className="md:col-span-2">
@@ -1570,6 +1625,7 @@ export function ProductEditor({
                     touch();
                   }}
                 />
+                <span className="admin-field__hint">По времени Минска (Europe/Minsk)</span>
               </label>
               <label className="admin-field">
                 <span>Снять с витрины</span>
@@ -1583,6 +1639,7 @@ export function ProductEditor({
                     touch();
                   }}
                 />
+                <span className="admin-field__hint">По времени Минска (Europe/Minsk)</span>
               </label>
             </div>
 

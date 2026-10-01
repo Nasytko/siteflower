@@ -17,12 +17,14 @@ export class AdminRequestError extends Error {
 }
 
 function readMessage(body: unknown, status: number): string {
+  if (status === 409) {
+    return 'Данные изменены другим пользователем. Обновите страницу и сохраните снова.';
+  }
   if (body && typeof body === 'object' && 'message' in body) {
     const message = (body as { message?: unknown }).message;
-    if (typeof message === 'string') return message;
+    if (typeof message === 'string' && message.length > 0) return message;
     if (Array.isArray(message)) return message.join(', ');
   }
-  if (status === 409) return 'Данные изменены другим пользователем. Обновите страницу.';
   if (status === 403) return 'Недостаточно прав для этого действия.';
   return `Не удалось выполнить запрос (${status})`;
 }

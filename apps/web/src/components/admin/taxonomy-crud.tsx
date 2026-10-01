@@ -3,6 +3,7 @@
 import { FormEvent, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import type { PaginatedResponse, TaxonomyVisibility } from '@bouquet-one/contracts';
+import { normalizeSlug } from '@bouquet-one/contracts';
 import { Button } from '@bouquet-one/ui';
 import { adminGet, adminPatch, adminPost, errorMessage } from '@/lib/admin-client';
 import { adminEndpoints, withQuery, type TaxonomyKindMeta } from '@/lib/admin-endpoints';
@@ -57,6 +58,7 @@ export function TaxonomyCrud({ meta, initial, canCreate, canUpdate }: Props) {
   const [search, setSearch] = useState('');
   const [editingId, setEditingId] = useState<string | null>(null);
   const [draft, setDraft] = useState<Draft | null>(null);
+  const [slugManual, setSlugManual] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
@@ -117,12 +119,14 @@ export function TaxonomyCrud({ meta, initial, canCreate, canUpdate }: Props) {
   function startEdit(row: TaxonomyRow) {
     setEditingId(row.id);
     setDraft(toDraft(row));
+    setSlugManual(normalizeSlug(row.name) !== row.slug);
     setNotice(null);
   }
 
   function cancelEdit() {
     setEditingId(null);
     setDraft(null);
+    setSlugManual(false);
   }
 
   async function saveEdit(row: TaxonomyRow) {
@@ -215,7 +219,11 @@ export function TaxonomyCrud({ meta, initial, canCreate, canUpdate }: Props) {
           </label>
           <label className="admin-field">
             <span>Адрес в ссылке</span>
-            <input name="slug" className="admin-input w-48" placeholder="можно оставить пустым" />
+            <input
+              name="slug"
+              className="admin-input w-48"
+              placeholder="авто из названия"
+            />
           </label>
           {meta.hasSwatch ? (
             <label className="admin-field">
@@ -286,17 +294,29 @@ export function TaxonomyCrud({ meta, initial, canCreate, canUpdate }: Props) {
                             className="admin-input"
                             value={draft.name}
                             aria-label="Название"
-                            onChange={(event) =>
-                              setDraft((prev) => (prev ? { ...prev, name: event.target.value } : prev))
-                            }
+                            onChange={(event) => {
+                              const name = event.target.value;
+                              setDraft((prev) =>
+                                prev
+                                  ? {
+                                      ...prev,
+                                      name,
+                                      ...(slugManual ? {} : { slug: normalizeSlug(name) }),
+                                    }
+                                  : prev,
+                              );
+                            }}
                           />
                           <input
                             className="admin-input"
                             value={draft.slug}
                             aria-label="Адрес в ссылке"
-                            onChange={(event) =>
-                              setDraft((prev) => (prev ? { ...prev, slug: event.target.value } : prev))
-                            }
+                            onChange={(event) => {
+                              setSlugManual(true);
+                              setDraft((prev) =>
+                                prev ? { ...prev, slug: event.target.value } : prev,
+                              );
+                            }}
                           />
                           {meta.hasDescription ? (
                             <textarea

@@ -7,34 +7,12 @@ import type {
   TimeWindowDto,
 } from '@bouquet-one/contracts';
 import { Button } from '@bouquet-one/ui';
+import { adminPatch, errorMessage } from '@/lib/admin-client';
 
 type Props = {
   initial: FulfillmentSettingsAdminDto;
   canUpdate: boolean;
 };
-
-async function mutate(path: string, init?: RequestInit) {
-  const response = await fetch(path, {
-    credentials: 'include',
-    headers: {
-      'content-type': 'application/json',
-      origin: window.location.origin,
-      ...(init?.headers ?? {}),
-    },
-    ...init,
-  });
-  const body = await response.json().catch(() => null);
-  if (!response.ok) {
-    throw new Error(
-      typeof body?.message === 'string'
-        ? body.message
-        : Array.isArray(body?.message)
-          ? body.message.join(', ')
-          : `Request failed (${response.status})`,
-    );
-  }
-  return body as FulfillmentSettingsAdminDto;
-}
 
 export function FulfillmentSettingsEditor({ initial, canUpdate }: Props) {
   const router = useRouter();
@@ -61,9 +39,9 @@ export function FulfillmentSettingsEditor({ initial, canUpdate }: Props) {
     setError(null);
     setSavedAt(null);
     try {
-      const updated = await mutate('/api/v1/admin/fulfillment/settings', {
-        method: 'PATCH',
-        body: JSON.stringify({
+      const updated = await adminPatch<FulfillmentSettingsAdminDto>(
+        '/api/v1/admin/fulfillment/settings',
+        {
           expectedVersion: version,
           deliveryEnabled,
           pickupEnabled,
@@ -72,14 +50,14 @@ export function FulfillmentSettingsEditor({ initial, canUpdate }: Props) {
           maxAdvanceDays: Number(maxAdvanceDays),
           pickupInstructions: pickupInstructions.trim() || null,
           timeWindows,
-        }),
-      });
+        },
+      );
       setVersion(updated.version);
       setTimeWindows(updated.timeWindows);
       setSavedAt(new Date().toLocaleTimeString('ru-BY'));
       router.refresh();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Ошибка');
+      setError(errorMessage(err, 'Не удалось сохранить настройки'));
     } finally {
       setPending(false);
     }

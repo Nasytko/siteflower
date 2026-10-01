@@ -11,6 +11,11 @@ import type {
   TaxonomyVisibility,
   VariantStatus,
 } from '@bouquet-one/contracts';
+import {
+  ADMIN_BUSINESS_TIMEZONE,
+  businessLocalToUtcIso,
+  utcIsoToBusinessLocal,
+} from './admin-business-time';
 
 const LIFECYCLE: Record<ProductLifecycle, string> = {
   DRAFT: 'Черновик',
@@ -81,12 +86,13 @@ export function promotionTypeLabel(value: PromotionType): string {
   return PROMOTION_TYPE[value] ?? value;
 }
 
-/** Local date-time for operational screens (Europe/Minsk store clock). */
+/** Operational screens: always Europe/Minsk store clock. */
 export function formatAdminDateTime(iso: string | null | undefined): string {
   if (!iso) return '—';
   const date = new Date(iso);
   if (Number.isNaN(date.getTime())) return '—';
   return date.toLocaleString('ru-BY', {
+    timeZone: ADMIN_BUSINESS_TIMEZONE,
     day: '2-digit',
     month: '2-digit',
     year: 'numeric',
@@ -99,23 +105,20 @@ export function formatAdminDate(iso: string | null | undefined): string {
   if (!iso) return '—';
   const date = new Date(iso);
   if (Number.isNaN(date.getTime())) return '—';
-  return date.toLocaleDateString('ru-BY', { day: '2-digit', month: '2-digit', year: 'numeric' });
+  return date.toLocaleDateString('ru-BY', {
+    timeZone: ADMIN_BUSINESS_TIMEZONE,
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+  });
 }
 
-/** `datetime-local` input value from an ISO timestamp. */
+/** `datetime-local` value in Europe/Minsk (independent of browser TZ). */
 export function toDateTimeLocalValue(iso: string | null | undefined): string {
-  if (!iso) return '';
-  const date = new Date(iso);
-  if (Number.isNaN(date.getTime())) return '';
-  const pad = (n: number) => String(n).padStart(2, '0');
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+  return utcIsoToBusinessLocal(iso);
 }
 
-/** ISO timestamp from a `datetime-local` value; null when cleared. */
+/** ISO UTC from a `datetime-local` value interpreted as Europe/Minsk; null when cleared. */
 export function fromDateTimeLocalValue(value: string): string | null {
-  const trimmed = value.trim();
-  if (trimmed.length === 0) return null;
-  const date = new Date(trimmed);
-  if (Number.isNaN(date.getTime())) return null;
-  return date.toISOString();
+  return businessLocalToUtcIso(value);
 }
