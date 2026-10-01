@@ -9,7 +9,7 @@ Full HostFly VPS runbook: [deployment-hostfly.md](./deployment-hostfly.md).
 - [ ] Unique `SESSION_HMAC_SECRET` (≥32 chars, not a template placeholder)
 - [ ] Unique `ORDER_RECOVERY_ENCRYPTION_KEY` (base64 32 bytes); backed up offline for recovery window
 - [ ] `ORDER_RECOVERY_TTL_HOURS` chosen (default 48 is fine)
-- [ ] `REVALIDATE_SECRET` (≥16) if on-demand revalidation is used
+- [ ] `REVALIDATE_SECRET` (≥16) in `/etc/shopbuket1/production.env` if on-demand revalidation is wanted (Compose defaults `REVALIDATE_URL` to `http://web:3000/api/revalidate` on api)
 - [ ] `DATABASE_URL` points at production Postgres; backups configured
 - [ ] `CORS_ORIGINS` exact storefront origin(s); no `*`
 - [ ] `TRUST_PROXY=true` only behind a trusted reverse proxy

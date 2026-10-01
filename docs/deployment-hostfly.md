@@ -30,8 +30,14 @@ Internet
        -> 127.0.0.1:3001  shopbuket1-api   (/api/*)
   -> Docker network shopbuket1_internal
        -> web, api, postgres[(optional) worker]
+       -> api --POST /api/revalidate--> web:3000  (internal; REVALIDATE_SECRET)
 HostFly S3  <- API only (credentials never in NEXT_PUBLIC_*)
 ```
+
+**Storefront revalidation:** after admin catalog/storefront mutations the API calls
+`http://web:3000/api/revalidate` on the Compose network (not the public HTTPS domain).
+Set `REVALIDATE_SECRET` (≥16) in `production.env` to enable; leave unset for fail-soft no-op.
+Do not add `depends_on: web` on the api service (web already waits on healthy api).
 
 | Resource | shopbuket1 | erpbuket1 (future) |
 | --- | --- | --- |

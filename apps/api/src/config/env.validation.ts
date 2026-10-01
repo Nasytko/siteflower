@@ -38,8 +38,13 @@ export const envSchema = z
     MEDIA_MAX_BYTES: z.coerce.number().int().positive().default(8_000_000),
     /** Explicit opt-in for temporary/emergency local media in production. Prefer S3. */
     ALLOW_PRODUCTION_LOCAL_MEDIA: booleanFromString.default(false),
-    /** Optional Next.js on-demand revalidation endpoint (e.g. https://shop.example/api/revalidate). */
+    /**
+     * Optional Next.js on-demand revalidation endpoint.
+     * Production Compose default: http://web:3000/api/revalidate (Docker DNS).
+     * Prefer internal network over public HTTPS. Both URL and secret required to enable.
+     */
     REVALIDATE_URL: z.string().url().optional(),
+    /** Shared with web container via env_file; never NEXT_PUBLIC_*. Min 16 chars when set. */
     REVALIDATE_SECRET: z.string().min(16).optional(),
     S3_ENDPOINT: z.string().optional(),
     S3_REGION: z.string().default('auto'),

@@ -49,6 +49,9 @@ services:
       NODE_ENV: production
       API_PORT: '3001'
       # DATABASE_URL must come from the env file and use Docker DNS host "postgres".
+      # Internal storefront revalidation (no public HTTPS hop). Override via env file if needed.
+      # Secret stays optional: unset REVALIDATE_SECRET ⇒ fail-soft no-op in API.
+      REVALIDATE_URL: ${REVALIDATE_URL:-http://web:3000/api/revalidate}
     ports:
       - '127.0.0.1:3001:3001'
     networks:

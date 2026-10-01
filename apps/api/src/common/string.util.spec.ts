@@ -1,11 +1,14 @@
-import assert from 'node:assert/strict';
-import test from 'node:test';
 import { trimmedOrNull } from './string.util';
 
-test('trimmedOrNull', () => {
-  assert.equal(trimmedOrNull(null), null);
-  assert.equal(trimmedOrNull(undefined), null);
-  assert.equal(trimmedOrNull(''), null);
-  assert.equal(trimmedOrNull('   '), null);
-  assert.equal(trimmedOrNull('  hello  '), 'hello');
+describe('trimmedOrNull', () => {
+  it('returns null for nullish or blank', () => {
+    expect(trimmedOrNull(null)).toBeNull();
+    expect(trimmedOrNull(undefined)).toBeNull();
+    expect(trimmedOrNull('')).toBeNull();
+    expect(trimmedOrNull('   ')).toBeNull();
+  });
+
+  it('trims non-empty strings', () => {
+    expect(trimmedOrNull('  hello  ')).toBe('hello');
+  });
 });

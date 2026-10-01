@@ -42,8 +42,13 @@ This document records production-facing security decisions after the Phase 4.2 r
 
 ## Revalidation
 
+- API → web on-demand revalidation after catalog/storefront admin mutations
+- Production URL: `http://web:3000/api/revalidate` on Docker network `shopbuket1_internal` (Compose default on api; no public HTTPS hop)
+- Shared `REVALIDATE_SECRET` via env_file on both containers; unset ⇒ API fail-soft no-op
+- Never `NEXT_PUBLIC_*`; secret not baked into web image build args
 - `x-revalidate-secret` compared via SHA-256 + `timingSafeEqual`
-- Bounded body / tags / paths; internal path pattern only
+- Bounded body / tags / paths; internal path pattern only; 5s API timeout; HTTP/network errors logged as warn only
+- No `depends_on: web` on api (web already depends on healthy api — avoid circular wait)
 
 ## Swagger
 

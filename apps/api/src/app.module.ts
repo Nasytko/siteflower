@@ -48,6 +48,7 @@ import { IntegrationModule } from './integration/integration.module';
             paths: [
               'req.headers.authorization',
               'req.headers.cookie',
+              'req.headers["x-revalidate-secret"]',
               'req.body.password',
               'req.body.newPassword',
               'req.body.purchaserPhone',

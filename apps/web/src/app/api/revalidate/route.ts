@@ -1,10 +1,11 @@
-import { createHash, timingSafeEqual } from 'node:crypto';
 import { revalidatePath, revalidateTag } from 'next/cache';
 import { NextResponse } from 'next/server';
+import { authorizeRevalidateRequest } from '@/lib/revalidate-auth';
 
 /**
  * Secured on-demand revalidation for published catalog/storefront content.
- * Requires header `x-revalidate-secret` matching REVALIDATE_SECRET.
+ * Requires header `x-revalidate-secret` matching REVALIDATE_SECRET (server env only).
+ * Intended caller: API container via Docker DNS http://web:3000/api/revalidate.
  */
 
 const MAX_TAGS = 20;
@@ -15,20 +16,15 @@ const MAX_BODY_BYTES = 8_192;
 const TAG_PATTERN = /^[a-zA-Z0-9:_-]{1,64}$/;
 const PATH_PATTERN = /^\/[a-zA-Z0-9/_-]{0,198}$/;
 
-function safeEqualSecret(provided: string, expected: string): boolean {
-  const a = createHash('sha256').update(provided).digest();
-  const b = createHash('sha256').update(expected).digest();
-  return timingSafeEqual(a, b);
-}
-
 export async function POST(request: Request) {
-  const secret = process.env.REVALIDATE_SECRET;
-  if (!secret || secret.length < 16) {
+  const auth = authorizeRevalidateRequest(
+    request.headers.get('x-revalidate-secret'),
+    process.env.REVALIDATE_SECRET,
+  );
+  if (auth === 'not_configured') {
     return NextResponse.json({ error: 'Revalidation is not configured' }, { status: 503 });
   }
-
-  const provided = request.headers.get('x-revalidate-secret');
-  if (!provided || !safeEqualSecret(provided, secret)) {
+  if (auth === 'unauthorized') {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
