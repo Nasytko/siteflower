@@ -5,10 +5,11 @@ import { useRouter } from 'next/navigation';
 import type { PaginatedResponse, TaxonomyVisibility } from '@bouquet-one/contracts';
 import { normalizeSlug } from '@bouquet-one/contracts';
 import { Button } from '@bouquet-one/ui';
-import { adminGet, adminPatch, adminPost, errorMessage } from '@/lib/admin-client';
+import { adminGet, adminPatch, adminPost, AdminRequestError, errorMessage } from '@/lib/admin-client';
 import { adminEndpoints, withQuery, type TaxonomyKindMeta } from '@/lib/admin-endpoints';
 import { unwrapAdminList } from '@/lib/admin-list';
 import { formatAdminDate, visibilityLabel } from '@/lib/admin-labels';
+import { FormSaveStatus, phaseFromAdminError, type FormSavePhase } from '@/components/admin/form-status';
 
 /** Shape shared by TaxonomyAdminDto, ColorAdminDto and BouquetSizeAdminDto. */
 export type TaxonomyRow = {
@@ -60,6 +61,8 @@ export function TaxonomyCrud({ meta, initial, canCreate, canUpdate }: Props) {
   const [draft, setDraft] = useState<Draft | null>(null);
   const [slugManual, setSlugManual] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [requestId, setRequestId] = useState<string | null>(null);
+  const [phase, setPhase] = useState<FormSavePhase>('idle');
   const [notice, setNotice] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
 
@@ -82,13 +85,26 @@ export function TaxonomyCrud({ meta, initial, canCreate, canUpdate }: Props) {
   async function run(action: () => Promise<void>, successMessage?: string) {
     setPending(true);
     setError(null);
+    setRequestId(null);
     setNotice(null);
+    setPhase('saving');
     try {
       await action();
       await reload();
-      if (successMessage) setNotice(successMessage);
+      if (successMessage) {
+        setNotice(successMessage);
+        setPhase('saved');
+      } else {
+        setPhase('idle');
+      }
       router.refresh();
     } catch (err) {
+      if (err instanceof AdminRequestError) {
+        setPhase(phaseFromAdminError(err));
+        setRequestId(err.requestId ?? null);
+      } else {
+        setPhase('server');
+      }
       setError(errorMessage(err));
     } finally {
       setPending(false);
@@ -189,12 +205,17 @@ export function TaxonomyCrud({ meta, initial, canCreate, canUpdate }: Props) {
 
   return (
     <div className="space-y-6">
-      {error ? (
-        <p role="alert" className="admin-error">
-          {error}
-        </p>
-      ) : null}
-      {notice ? <p className="admin-notice">{notice}</p> : null}
+      <FormSaveStatus
+        phase={phase}
+        savedLabel={notice}
+        errorMessage={error}
+        requestId={requestId}
+        onRefresh={() => void reload()}
+        onDismiss={() => {
+          setError(null);
+          setPhase(notice ? 'saved' : 'idle');
+        }}
+      />
 
       <div className="admin-toolbar">
         <label className="admin-field">

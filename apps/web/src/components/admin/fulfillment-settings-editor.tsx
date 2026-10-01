@@ -7,7 +7,8 @@ import type {
   TimeWindowDto,
 } from '@bouquet-one/contracts';
 import { Button } from '@bouquet-one/ui';
-import { adminPatch, errorMessage } from '@/lib/admin-client';
+import { adminPatch, AdminRequestError, errorMessage } from '@/lib/admin-client';
+import { FormSaveStatus, phaseFromAdminError, type FormSavePhase } from '@/components/admin/form-status';
 
 type Props = {
   initial: FulfillmentSettingsAdminDto;
@@ -29,6 +30,8 @@ export function FulfillmentSettingsEditor({ initial, canUpdate }: Props) {
   );
   const [timeWindows, setTimeWindows] = useState<TimeWindowDto[]>(initial.timeWindows);
   const [error, setError] = useState<string | null>(null);
+  const [requestId, setRequestId] = useState<string | null>(null);
+  const [phase, setPhase] = useState<FormSavePhase>('idle');
   const [pending, setPending] = useState(false);
   const [savedAt, setSavedAt] = useState<string | null>(null);
 
@@ -37,7 +40,9 @@ export function FulfillmentSettingsEditor({ initial, canUpdate }: Props) {
     if (!canUpdate) return;
     setPending(true);
     setError(null);
+    setRequestId(null);
     setSavedAt(null);
+    setPhase('saving');
     try {
       const updated = await adminPatch<FulfillmentSettingsAdminDto>(
         '/api/v1/admin/fulfillment/settings',
@@ -55,8 +60,15 @@ export function FulfillmentSettingsEditor({ initial, canUpdate }: Props) {
       setVersion(updated.version);
       setTimeWindows(updated.timeWindows);
       setSavedAt(new Date().toLocaleTimeString('ru-BY'));
+      setPhase('saved');
       router.refresh();
     } catch (err) {
+      if (err instanceof AdminRequestError) {
+        setPhase(phaseFromAdminError(err));
+        setRequestId(err.requestId ?? null);
+      } else {
+        setPhase('server');
+      }
       setError(errorMessage(err, 'Не удалось сохранить настройки'));
     } finally {
       setPending(false);
@@ -71,6 +83,17 @@ export function FulfillmentSettingsEditor({ initial, canUpdate }: Props) {
 
   return (
     <form onSubmit={onSave} className="max-w-2xl space-y-8">
+      <FormSaveStatus
+        phase={phase === 'idle' && savedAt ? 'saved' : phase}
+        savedLabel={savedAt ? `Настройки сохранены · ${savedAt}` : null}
+        errorMessage={error}
+        requestId={requestId}
+        onRefresh={() => router.refresh()}
+        onDismiss={() => {
+          setError(null);
+          setPhase(savedAt ? 'saved' : 'idle');
+        }}
+      />
       <fieldset className="space-y-3">
         <legend className="text-lg font-semibold">Методы</legend>
         <label className="flex items-center gap-2 text-sm">
@@ -161,11 +184,6 @@ export function FulfillmentSettingsEditor({ initial, canUpdate }: Props) {
           ))}
         </ul>
       </fieldset>
-
-      {error ? <p className="text-sm text-red-700">{error}</p> : null}
-      {savedAt ? (
-        <p className="text-sm text-green-700">Сохранено в {savedAt}</p>
-      ) : null}
 
       {canUpdate ? (
         <Button type="submit" disabled={pending}>

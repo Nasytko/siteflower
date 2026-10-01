@@ -4,16 +4,23 @@ import { FormEvent, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import type { StorefrontSettingsAdminDto } from '@bouquet-one/contracts';
 import { Button } from '@bouquet-one/ui';
+import {
+  adminPatch,
+  AdminRequestError,
+  errorMessage,
+} from '@/lib/admin-client';
+import {
+  FormSaveStatus,
+  phaseFromAdminError,
+  type FormSavePhase,
+} from '@/components/admin/form-status';
 
 type Props = {
   initial: StorefrontSettingsAdminDto;
   canUpdate: boolean;
 };
 
-type FieldKey = Exclude<
-  keyof StorefrontSettingsAdminDto,
-  'version' | 'updatedAt'
->;
+type FieldKey = Exclude<keyof StorefrontSettingsAdminDto, 'version' | 'updatedAt'>;
 
 const FIELDS: Array<{ key: FieldKey; label: string; multiline?: boolean; required?: boolean }> = [
   { key: 'brandName', label: 'Бренд', required: true },
@@ -28,31 +35,6 @@ const FIELDS: Array<{ key: FieldKey; label: string; multiline?: boolean; require
   { key: 'telegramUrl', label: 'Telegram URL' },
   { key: 'substitutionNote', label: 'Замена цветов', multiline: true },
 ];
-
-async function mutate(path: string, init?: RequestInit) {
-  const response = await fetch(path, {
-    credentials: 'include',
-    headers: {
-      'content-type': 'application/json',
-      origin: window.location.origin,
-      ...(init?.headers ?? {}),
-    },
-    ...init,
-  });
-  const body = await response.json().catch(() => null);
-  if (!response.ok) {
-    const err = new Error(
-      typeof body?.message === 'string'
-        ? body.message
-        : Array.isArray(body?.message)
-          ? body.message.join(', ')
-          : `Request failed (${response.status})`,
-    ) as Error & { status?: number };
-    err.status = response.status;
-    throw err;
-  }
-  return body as StorefrontSettingsAdminDto;
-}
 
 function emptyToNull(value: string): string | null {
   const trimmed = value.trim();
@@ -76,6 +58,8 @@ export function StorefrontSettingsEditor({ initial, canUpdate }: Props) {
     substitutionNote: initial.substitutionNote ?? '',
   });
   const [error, setError] = useState<string | null>(null);
+  const [requestId, setRequestId] = useState<string | null>(null);
+  const [phase, setPhase] = useState<FormSavePhase>('idle');
   const [pending, setPending] = useState(false);
   const [savedAt, setSavedAt] = useState<string | null>(null);
 
@@ -84,11 +68,13 @@ export function StorefrontSettingsEditor({ initial, canUpdate }: Props) {
     if (!canUpdate) return;
     setPending(true);
     setError(null);
+    setRequestId(null);
     setSavedAt(null);
+    setPhase('saving');
     try {
-      const updated = await mutate('/api/v1/admin/storefront/settings', {
-        method: 'PATCH',
-        body: JSON.stringify({
+      const updated = await adminPatch<StorefrontSettingsAdminDto>(
+        '/api/v1/admin/storefront/settings',
+        {
           expectedVersion: version,
           brandName: form.brandName.trim(),
           city: form.city.trim(),
@@ -101,8 +87,8 @@ export function StorefrontSettingsEditor({ initial, canUpdate }: Props) {
           instagramUrl: emptyToNull(form.instagramUrl),
           telegramUrl: emptyToNull(form.telegramUrl),
           substitutionNote: emptyToNull(form.substitutionNote),
-        }),
-      });
+        },
+      );
       setVersion(updated.version);
       setForm({
         brandName: updated.brandName,
@@ -118,15 +104,16 @@ export function StorefrontSettingsEditor({ initial, canUpdate }: Props) {
         substitutionNote: updated.substitutionNote ?? '',
       });
       setSavedAt(new Date().toLocaleString('ru-BY'));
+      setPhase('saved');
       router.refresh();
     } catch (err) {
-      const status = err && typeof err === 'object' && 'status' in err ? Number(err.status) : 0;
-      if (status === 409) {
-        setError(
-          'Конфликт версий (409): настройки изменены другим пользователем. Обновите страницу и сохраните снова.',
-        );
+      if (err instanceof AdminRequestError) {
+        setPhase(phaseFromAdminError(err));
+        setRequestId(err.requestId ?? null);
+        setError(errorMessage(err, 'Не удалось сохранить настройки'));
       } else {
-        setError(err instanceof Error ? err.message : 'Ошибка сохранения');
+        setPhase('server');
+        setError(errorMessage(err, 'Не удалось сохранить настройки'));
       }
     } finally {
       setPending(false);
@@ -135,6 +122,22 @@ export function StorefrontSettingsEditor({ initial, canUpdate }: Props) {
 
   return (
     <form onSubmit={onSave} className="space-y-6">
+      <FormSaveStatus
+        phase={phase === 'idle' && savedAt ? 'saved' : phase}
+        savedLabel={savedAt ? `Настройки сохранены · ${savedAt}` : null}
+        errorMessage={error}
+        requestId={requestId}
+        onRetry={() => {
+          const formEl = document.querySelector('form');
+          formEl?.dispatchEvent(new Event('submit', { cancelable: true, bubbles: true }));
+        }}
+        onRefresh={() => router.refresh()}
+        onDismiss={() => {
+          setError(null);
+          setPhase(savedAt ? 'saved' : 'idle');
+        }}
+      />
+
       <div className="grid gap-4 md:grid-cols-2">
         {FIELDS.map((field) => (
           <label
@@ -148,7 +151,10 @@ export function StorefrontSettingsEditor({ initial, canUpdate }: Props) {
                 disabled={!canUpdate}
                 rows={3}
                 value={form[field.key]}
-                onChange={(e) => setForm((prev) => ({ ...prev, [field.key]: e.target.value }))}
+                onChange={(e) => {
+                  setForm((prev) => ({ ...prev, [field.key]: e.target.value }));
+                  if (phase === 'saved') setPhase('dirty');
+                }}
                 className="admin-input"
               />
             ) : (
@@ -156,7 +162,10 @@ export function StorefrontSettingsEditor({ initial, canUpdate }: Props) {
                 required={field.required}
                 disabled={!canUpdate}
                 value={form[field.key]}
-                onChange={(e) => setForm((prev) => ({ ...prev, [field.key]: e.target.value }))}
+                onChange={(e) => {
+                  setForm((prev) => ({ ...prev, [field.key]: e.target.value }));
+                  if (phase === 'saved') setPhase('dirty');
+                }}
                 className="admin-input"
               />
             )}
@@ -172,15 +181,7 @@ export function StorefrontSettingsEditor({ initial, canUpdate }: Props) {
         ) : (
           <p className="admin-help">Только просмотр: нет прав на изменение настроек.</p>
         )}
-        {savedAt ? (
-          <span className="text-sm text-[var(--admin-muted)]">Сохранено: {savedAt}</span>
-        ) : null}
       </div>
-      {error ? (
-        <p role="alert" className="admin-error">
-          {error}
-        </p>
-      ) : null}
     </form>
   );
 }
