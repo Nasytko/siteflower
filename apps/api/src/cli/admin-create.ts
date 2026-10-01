@@ -3,7 +3,9 @@
  * Production-safe bootstrap for the first SUPER_ADMIN.
  * Never invents a default password. Never runs during app startup.
  *
- * Usage:
+ * Usage (compiled production image / after nest build):
+ *   node dist/cli/admin-create.js --email admin@example.com --name "Director"
+ * Local monorepo:
  *   pnpm admin:create --email admin@example.com --name "Director"
  *   # interactive password prompt (preferred — avoids shell history / process list)
  *   pnpm admin:create --email admin@example.com --name "Director" --password "..."
@@ -23,7 +25,7 @@ import {
   hashPassword,
   normalizeEmail,
   PASSWORD_MIN_LENGTH,
-} from '../src/auth/crypto.util';
+} from '../auth/crypto.util';
 
 config({ path: resolve(process.cwd(), '../../.env') });
 config({ path: resolve(process.cwd(), '.env') });

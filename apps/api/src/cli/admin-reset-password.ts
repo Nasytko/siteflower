@@ -5,7 +5,7 @@
 import { config } from 'dotenv';
 import { resolve } from 'node:path';
 import { createPrismaClient } from '@bouquet-one/database';
-import { hashPassword, normalizeEmail, PASSWORD_MIN_LENGTH } from '../src/auth/crypto.util';
+import { hashPassword, normalizeEmail, PASSWORD_MIN_LENGTH } from '../auth/crypto.util';
 
 config({ path: resolve(process.cwd(), '../../.env') });
 config({ path: resolve(process.cwd(), '.env') });

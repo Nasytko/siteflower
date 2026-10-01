@@ -47,16 +47,39 @@ RUN pnpm --filter @bouquet-one/api --prod deploy /out
 # Verify Nest + native + workspace packages resolve from the deploy root (Node module resolution).
 # Transitive deps such as @prisma/client may live under the injected database package, not as
 # top-level /out/node_modules/@prisma/* — that is expected with pnpm.
+# Production CLIs are compiled into dist/cli (no apps/api/src, no tsx, no raw scripts/*.ts).
 WORKDIR /out
 RUN set -eux; \
   test -f dist/main.js; \
   test -f dist/worker-main.js; \
-  test -d scripts; \
+  test -f dist/cli/admin-create.js; \
+  test -f dist/cli/admin-reset-password.js; \
+  test -f dist/cli/compliance-check.js; \
+  test -f dist/cli/media-check.js; \
+  test -f dist/cli/media-cleanup.js; \
+  test -f dist/cli/media-repair.js; \
+  test -f dist/cli/media-migrate-local-to-s3.js; \
+  test -f dist/auth/crypto.util.js; \
+  test ! -e src; \
+  test ! -e scripts; \
+  test ! -e node_modules/tsx; \
   test -e node_modules/.bin/prisma; \
   test -e node_modules/@bouquet-one/database/prisma/schema.prisma; \
   test -e node_modules/@bouquet-one/database/prisma.config.ts; \
   test -d node_modules/@bouquet-one/database/dist; \
-  node -e "require('@nestjs/common'); require('@nestjs/core'); require('@nestjs/platform-express'); require('@nestjs/config'); require('@nestjs/swagger'); require('@nestjs/throttler'); require('@bouquet-one/contracts'); require('@bouquet-one/database'); require('argon2'); require('sharp'); require('@aws-sdk/client-s3'); console.log('api-runtime-deps-ok')"
+  node -e "require('@nestjs/common'); require('@nestjs/core'); require('@nestjs/platform-express'); require('@nestjs/config'); require('@nestjs/swagger'); require('@nestjs/throttler'); require('@bouquet-one/contracts'); require('@bouquet-one/database'); require('argon2'); require('sharp'); require('@aws-sdk/client-s3'); require('./dist/auth/crypto.util'); console.log('api-runtime-deps-ok')"; \
+  set +e; \
+  node dist/cli/admin-create.js >/tmp/admin-create.out 2>/tmp/admin-create.err; \
+  ac=$?; \
+  node dist/cli/admin-reset-password.js >/tmp/admin-reset.out 2>/tmp/admin-reset.err; \
+  ar=$?; \
+  set -e; \
+  test "$ac" -ne 0; \
+  test "$ar" -ne 0; \
+  grep -q 'Usage:' /tmp/admin-create.err; \
+  if grep -q 'Cannot find module' /tmp/admin-create.err /tmp/admin-create.out; then cat /tmp/admin-create.err /tmp/admin-create.out; exit 1; fi; \
+  if grep -q 'Cannot find module' /tmp/admin-reset.err /tmp/admin-reset.out; then cat /tmp/admin-reset.err /tmp/admin-reset.out; exit 1; fi; \
+  echo 'api-prod-cli-ok'
 
 FROM node:${NODE_VERSION}-bookworm-slim AS runtime
 ENV NODE_ENV=production \

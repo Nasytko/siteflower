@@ -4,11 +4,11 @@
  */
 import { join } from 'node:path';
 import { createPrismaClient, type PrismaClient } from '@bouquet-one/database';
-import { LocalMediaStorage } from '../src/media/local-media.storage';
-import { S3MediaStorage } from '../src/media/s3-media.storage';
-import type { MediaStorage } from '../src/media/media-storage';
-import { MediaHealthService, MediaRepairService } from '../src/media/media-health.service';
-import { MediaOrphanService } from '../src/media/media-orphan.service';
+import { LocalMediaStorage } from '../media/local-media.storage';
+import { S3MediaStorage } from '../media/s3-media.storage';
+import type { MediaStorage } from '../media/media-storage';
+import { MediaHealthService, MediaRepairService } from '../media/media-health.service';
+import { MediaOrphanService } from '../media/media-orphan.service';
 
 type PrismaServiceLike = { client: PrismaClient };
 

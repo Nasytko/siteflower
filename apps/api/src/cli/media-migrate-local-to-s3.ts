@@ -11,8 +11,8 @@
 import { config } from 'dotenv';
 import { resolve, join } from 'node:path';
 import { createPrismaClient } from '@bouquet-one/database';
-import { LocalMediaStorage } from '../src/media/local-media.storage';
-import { S3MediaStorage } from '../src/media/s3-media.storage';
+import { LocalMediaStorage } from '../media/local-media.storage';
+import { S3MediaStorage } from '../media/s3-media.storage';
 
 config({ path: resolve(process.cwd(), '../../.env') });
 config({ path: resolve(process.cwd(), '.env') });

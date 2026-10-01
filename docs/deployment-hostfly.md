@@ -212,7 +212,8 @@ Optional: `./deploy.sh <git-ref>`
 ./admin-create.sh --email director@example.com --name "Director"
 ```
 
-Runs inside `shopbuket1-api`. No default password.
+Runs inside `shopbuket1-api` as `node dist/cli/admin-create.js` (compiled production CLI; no TypeScript source tree required). No default password.
+
 
 ## H. Verify
 

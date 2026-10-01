@@ -418,7 +418,7 @@ describe('Media production hardening (integration)', () => {
       process.execPath,
       [
         path.join(__dirname, '..', 'node_modules', 'tsx', 'dist', 'cli.mjs'),
-        path.join(__dirname, '..', 'scripts', 'media-repair.ts'),
+        path.join(__dirname, '..', 'src', 'cli', 'media-repair.ts'),
         '--execute',
       ],
       {
@@ -529,7 +529,7 @@ describe('Media production hardening (integration)', () => {
       SESSION_HMAC_SECRET: 'test-session-hmac-secret-32chars!!',
     };
     const tsxCli = path.join(__dirname, '..', 'node_modules', 'tsx', 'dist', 'cli.mjs');
-    const cleanupScript = path.join(__dirname, '..', 'scripts', 'media-cleanup.ts');
+    const cleanupScript = path.join(__dirname, '..', 'src', 'cli', 'media-cleanup.ts');
 
     const dry = spawnSync(process.execPath, [tsxCli, cleanupScript, '--dry-run'], {
       cwd: path.join(__dirname, '..'),

@@ -3,8 +3,7 @@
   "version": "0.0.0",
   "private": true,
   "files": [
-    "dist",
-    "scripts"
+    "dist"
   ],
   "scripts": {
     "dev": "nest start --watch",
@@ -16,14 +15,14 @@
     "test": "jest && jest --config ./test/jest-integration.json",
     "test:unit": "jest",
     "test:integration": "jest --config ./test/jest-integration.json",
-    "admin:create": "tsx scripts/admin-create.ts",
-    "admin:reset-password": "tsx scripts/admin-reset-password.ts",
+    "admin:create": "tsx src/cli/admin-create.ts",
+    "admin:reset-password": "tsx src/cli/admin-reset-password.ts",
     "seed:dev-catalog": "tsx scripts/seed-dev-catalog.ts",
-    "compliance:check": "tsx scripts/compliance-check.ts",
-    "media:check": "tsx scripts/media-check.ts",
-    "media:cleanup": "tsx scripts/media-cleanup.ts",
-    "media:repair": "tsx scripts/media-repair.ts",
-    "media:migrate-local-to-s3": "tsx scripts/media-migrate-local-to-s3.ts",
+    "compliance:check": "tsx src/cli/compliance-check.ts",
+    "media:check": "tsx src/cli/media-check.ts",
+    "media:cleanup": "tsx src/cli/media-cleanup.ts",
+    "media:repair": "tsx src/cli/media-repair.ts",
+    "media:migrate-local-to-s3": "tsx src/cli/media-migrate-local-to-s3.ts",
     "worker": "node dist/worker-main.js",
     "worker:dev": "tsx src/worker-main.ts",
     "clean": "rimraf dist"
@@ -53,7 +52,6 @@
     "reflect-metadata": "0.2.2",
     "rxjs": "7.8.2",
     "sharp": "^0.35.4",
-    "tsx": "4.20.5",
     "zod": "4.1.5"
   },
   "devDependencies": {
@@ -76,6 +74,7 @@
     "rimraf": "6.0.1",
     "supertest": "7.1.4",
     "ts-jest": "29.4.1",
+    "tsx": "4.20.5",
     "typescript": "5.9.3",
     "typescript-eslint": "8.44.0"
   }

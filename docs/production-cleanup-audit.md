@@ -60,12 +60,13 @@ No duplicate-utility consolidations recommended: merging helpers could change ru
 
 | Item | Why it looked suspicious | Why keep |
 | --- | --- | --- |
-| `apps/api/src/media/media-orphan.service.ts` | Not registered in Nest module | Used by CLI via `scripts/media-cli-context.ts` → media-check/cleanup/repair |
-| `apps/api/scripts/media-cli-context.ts` | Not named in `package.json` scripts | Shared helper imported by media ops scripts |
+| `apps/api/src/media/media-orphan.service.ts` | Not registered in Nest module | Used by CLI via `src/cli/media-cli-context.ts` → media-check/cleanup/repair |
+| `apps/api/src/cli/media-cli-context.ts` | Not named in `package.json` scripts | Shared helper imported by media ops CLIs |
 | `install.sh` `migrate_legacy_siteflower_bootstrap` | Legacy SiteFlower paths | Required one-time VPS repair path |
 | `docs/phase-4.2-report.md`, `docs/admin-security-cleanup-audit.md` | Historical | Operational history; still linked/referenced as audit trail |
 | Root `docker-compose.yml` | Dev-only Postgres | Local development; not production |
-| `prisma` / `tsx` as API prod deps | Look heavy | Required for migrate + `admin-create.sh` in deploy image |
+| `prisma` as API prod dep | Look heavy | Required for migrate in deploy image |
+| `tsx` | Looked like prod CLI runner | Dev-only; production CLIs run as `node dist/cli/*.js` |
 | `pino-http`, `reflect-metadata`, `rxjs` | Few direct imports | NestJS runtime peers |
 | `pg` (api devDependency) | Not in `src/` | Integration tests import `pg` |
 | `pino-pretty` | Dev-looking | Wired in `app.module.ts` for non-prod logging |
