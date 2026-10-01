@@ -28,10 +28,17 @@ deploy/env/production.env.example
 *.log
 *.pem
 .tmp-*
+.tmp-prod-verify/
 api-out.log
 api-err.log
 web-out.log
 web-err.log
+
+# Local / editor / e2e tooling (not needed in image build context)
+playwright.config.ts
+.editorconfig
+.prettierrc
+.prettierignore
 
 e2e
 docs
