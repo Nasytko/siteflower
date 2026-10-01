@@ -139,6 +139,38 @@ describe('sharp guards', () => {
   });
 });
 
+describe('sharp decode edge cases', () => {
+  it('rejects random bytes pretending to be jpeg at magic layer', async () => {
+    const FileType = (await import('file-type')).default;
+    const junk = Buffer.from('not-an-image-at-all-xxxxx');
+    const detected = await FileType.fromBuffer(junk);
+    expect(detected == null || detected.mime !== 'image/jpeg').toBe(true);
+  });
+
+  it('decodes progressive JPEG', async () => {
+    const progressive = await sharp({
+      create: { width: 64, height: 48, channels: 3, background: { r: 10, g: 20, b: 30 } },
+    })
+      .jpeg({ progressive: true, quality: 80 })
+      .toBuffer();
+    const meta = await sharp(progressive, { failOn: 'error' }).metadata();
+    expect(meta.width).toBe(64);
+    expect(meta.format).toBe('jpeg');
+  });
+
+  it('applies EXIF orientation via rotate()', async () => {
+    const base = await sharp({
+      create: { width: 40, height: 20, channels: 3, background: { r: 1, g: 2, b: 3 } },
+    })
+      .jpeg()
+      .toBuffer();
+    const oriented = await sharp(base).rotate().jpeg().toBuffer();
+    const meta = await sharp(oriented).metadata();
+    expect(meta.width).toBeGreaterThan(0);
+    expect(meta.height).toBeGreaterThan(0);
+  });
+});
+
 describe('orphan eligibility helpers', () => {
   it('writes a local object that cleanup can target', async () => {
     const dir = await mkdtemp(join(tmpdir(), 'sf-orphan-'));

@@ -1,5 +1,4 @@
 import {
-  BadRequestException,
   Body,
   Controller,
   Delete,
@@ -23,6 +22,7 @@ import { CurrentAdmin, type AuthenticatedAdmin } from '../auth/current-admin.dec
 import { RequirePermissions } from '../auth/decorators';
 import { actorFrom } from '../common/actor.util';
 import { MEDIA_UPLOAD_THROTTLE } from '../media/media.constants';
+import { MEDIA_ERROR_CODES, mediaHttpException } from '../media/media-errors';
 import {
   CreateProductDto,
   ExpectedVersionDto,
@@ -213,7 +213,7 @@ export class AdminProductsController {
     @Req() req: Request,
   ) {
     if (!file) {
-      throw new BadRequestException('File field "file" is required');
+      throw mediaHttpException(MEDIA_ERROR_CODES.FILE_REQUIRED);
     }
     return this.products.addMedia(
       id,

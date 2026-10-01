@@ -1,10 +1,11 @@
 import { createHash, randomUUID } from 'node:crypto';
 import {
   BadRequestException,
+  HttpException,
+  HttpStatus,
   Inject,
   Injectable,
   Logger,
-  ServiceUnavailableException,
 } from '@nestjs/common';
 import sharp, { type Sharp, type Metadata } from 'sharp';
 import FileType from 'file-type';
@@ -23,6 +24,7 @@ import {
   MEDIA_MAX_INPUT_PIXELS,
   MEDIA_PROCESS_CONCURRENCY,
 } from './media.constants';
+import { MEDIA_ERROR_CODES, mediaHttpException } from './media-errors';
 import { MEDIA_STORAGE, type MediaStorage } from './media-storage';
 
 const ALLOWED = new Map<string, MediaFormat>([
@@ -83,7 +85,49 @@ async function encodeNormalizedMaster(
         ext: 'avif',
       };
     default:
-      throw new BadRequestException('Поддерживаются JPG, PNG, WebP и AVIF');
+      throw mediaHttpException(MEDIA_ERROR_CODES.MEDIA_UNSUPPORTED);
+  }
+}
+
+/**
+ * Decode + auto-orient. For JPEG that fails the strict pipeline, retry once
+ * with sRGB conversion (common for CMYK / odd ICC profiles from cameras).
+ */
+async function decodeImage(
+  buffer: Buffer,
+  format: MediaFormat,
+  log: Logger,
+): Promise<{ image: Sharp; meta: Metadata }> {
+  const tryDecode = async (pipeline: Sharp) => {
+    const image = pipeline.rotate();
+    const meta = await image.metadata();
+    return { image, meta };
+  };
+
+  try {
+    return await tryDecode(
+      sharp(buffer, {
+        failOn: 'error',
+        limitInputPixels: MEDIA_MAX_INPUT_PIXELS,
+      }),
+    );
+  } catch (err) {
+    const detail = err instanceof Error ? err.message : String(err);
+    log.warn(`media_decode_primary_failed format=${format} err=${detail}`);
+    if (format === 'JPEG') {
+      try {
+        return await tryDecode(
+          sharp(buffer, {
+            failOn: 'error',
+            limitInputPixels: MEDIA_MAX_INPUT_PIXELS,
+          }).toColourspace('srgb'),
+        );
+      } catch (retryErr) {
+        const retryDetail = retryErr instanceof Error ? retryErr.message : String(retryErr);
+        log.warn(`media_decode_srgb_failed format=${format} err=${retryDetail}`);
+      }
+    }
+    throw mediaHttpException(MEDIA_ERROR_CODES.IMAGE_DECODE_FAILED);
   }
 }
 
@@ -128,37 +172,28 @@ export class MediaService {
 
   private async uploadImageInner(buffer: Buffer): Promise<MediaAssetDto> {
     if (buffer.byteLength > this.appConfig.mediaMaxBytes) {
-      throw new BadRequestException('Файл слишком большой');
+      throw mediaHttpException(MEDIA_ERROR_CODES.MEDIA_TOO_LARGE);
     }
 
     const detected = await FileType.fromBuffer(buffer);
     if (!detected || !ALLOWED.has(detected.mime)) {
-      throw new BadRequestException('Поддерживаются JPG, PNG, WebP и AVIF');
+      throw mediaHttpException(MEDIA_ERROR_CODES.MEDIA_UNSUPPORTED);
     }
     const format = ALLOWED.get(detected.mime)!;
 
-    let image: Sharp;
-    let meta: Metadata;
-    try {
-      image = sharp(buffer, {
-        failOn: 'error',
-        limitInputPixels: MEDIA_MAX_INPUT_PIXELS,
-      }).rotate();
-      meta = await image.metadata();
-    } catch {
-      throw new BadRequestException('Некорректное или повреждённое изображение');
-    }
+    const { image, meta } = await decodeImage(buffer, format, this.logger);
 
     const width = meta.width ?? 0;
     const height = meta.height ?? 0;
     if (width <= 0 || height <= 0) {
-      throw new BadRequestException('Некорректное или повреждённое изображение');
+      this.logger.warn(`media_decode_zero_dimensions format=${format}`);
+      throw mediaHttpException(MEDIA_ERROR_CODES.IMAGE_DECODE_FAILED);
     }
     if (width > MEDIA_MAX_DIMENSION || height > MEDIA_MAX_DIMENSION) {
-      throw new BadRequestException('Изображение имеет слишком большое разрешение');
+      throw mediaHttpException(MEDIA_ERROR_CODES.IMAGE_DIMENSIONS_TOO_LARGE);
     }
     if (width * height > MEDIA_MAX_INPUT_PIXELS) {
-      throw new BadRequestException('Изображение имеет слишком большое разрешение');
+      throw mediaHttpException(MEDIA_ERROR_CODES.IMAGE_DIMENSIONS_TOO_LARGE);
     }
 
     let masterEncoded: { buffer: Buffer; mime: string; ext: string };
@@ -166,7 +201,9 @@ export class MediaService {
       masterEncoded = await encodeNormalizedMaster(image.clone(), format);
     } catch (err) {
       if (err instanceof BadRequestException) throw err;
-      throw new BadRequestException('Некорректное или повреждённое изображение');
+      const detail = err instanceof Error ? err.message : String(err);
+      this.logger.warn(`media_encode_failed format=${format} err=${detail}`);
+      throw mediaHttpException(MEDIA_ERROR_CODES.IMAGE_PROCESSING_FAILED);
     }
 
     const masterBuffer = masterEncoded.buffer;
@@ -278,24 +315,17 @@ export class MediaService {
         this.logger.error(
           `media_upload_db_failed assetId=${assetId} size=${masterBuffer.byteLength} err=${(err as Error).message}`,
         );
-        throw new ServiceUnavailableException(
-          'Не удалось сохранить изображение. Попробуйте ещё раз.',
-        );
+        throw mediaHttpException(MEDIA_ERROR_CODES.STORAGE_FAILED, HttpStatus.SERVICE_UNAVAILABLE);
       }
     } catch (err) {
-      if (
-        err instanceof BadRequestException ||
-        err instanceof ServiceUnavailableException
-      ) {
+      if (err instanceof HttpException) {
         throw err;
       }
       await compensate('storage_put_failed');
       this.logger.error(
         `media_upload_storage_failed assetId=${assetId} err=${(err as Error).message}`,
       );
-      throw new ServiceUnavailableException(
-        'Не удалось сохранить изображение. Попробуйте ещё раз.',
-      );
+      throw mediaHttpException(MEDIA_ERROR_CODES.STORAGE_FAILED, HttpStatus.SERVICE_UNAVAILABLE);
     }
 
     this.logger.log(
@@ -304,9 +334,7 @@ export class MediaService {
 
     const dto = await this.getAssetDto(assetId);
     if (!dto) {
-      throw new ServiceUnavailableException(
-        'Не удалось сохранить изображение. Попробуйте ещё раз.',
-      );
+      throw mediaHttpException(MEDIA_ERROR_CODES.STORAGE_FAILED, HttpStatus.SERVICE_UNAVAILABLE);
     }
     return dto;
   }
