@@ -369,7 +369,6 @@ export function ProductEditor({
       current = await adminPut<ProductAdminDto>(adminEndpoints.productVariants(server.id), {
         expectedVersion: current.version,
         variants: variants.map((variant, index) => ({
-          ...(variant.id ? { id: variant.id } : {}),
           name: variant.name.trim(),
           priceMinor: majorInputToMinor(variant.priceMajor) ?? '0',
           sortOrder: index,

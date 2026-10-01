@@ -62,7 +62,8 @@ function publishValidationException(issues: PublishValidationIssue[]): BadReques
   });
 }
 
-function trimmedOrNull(value: string): string | null {
+function trimmedOrNull(value: string | null | undefined): string | null {
+  if (value == null) return null;
   const trimmed = value.trim();
   return trimmed.length > 0 ? trimmed : null;
 }
@@ -257,10 +258,12 @@ export class ProductsService {
           ? {}
           : { seoDescription: trimmedOrNull(input.seoDescription) }),
         ...(input.noIndex === undefined ? {} : { noIndex: input.noIndex }),
-        ...(input.publishAt === undefined ? {} : { publishAt: new Date(input.publishAt) }),
+        ...(input.publishAt === undefined
+          ? {}
+          : { publishAt: input.publishAt ? new Date(input.publishAt) : null }),
         ...(input.unpublishAt === undefined
           ? {}
-          : { unpublishAt: new Date(input.unpublishAt) }),
+          : { unpublishAt: input.unpublishAt ? new Date(input.unpublishAt) : null }),
       };
 
       await this.guardVersion(tx, id, input.expectedVersion, data);

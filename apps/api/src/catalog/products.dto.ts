@@ -213,14 +213,16 @@ export class UpdateProductDto extends ExpectedVersionDto {
   slug?: string;
 
   @IsOptional()
+  @ValidateIf((_, value) => value !== null)
   @IsString()
   @MaxLength(500)
-  shortDescription?: string;
+  shortDescription?: string | null;
 
   @IsOptional()
+  @ValidateIf((_, value) => value !== null)
   @IsString()
   @MaxLength(20_000)
-  description?: string;
+  description?: string | null;
 
   @IsOptional()
   @IsIn(COMMERCIAL_AVAILABILITIES)
@@ -251,26 +253,30 @@ export class UpdateProductDto extends ExpectedVersionDto {
   currency?: string;
 
   @IsOptional()
+  @ValidateIf((_, value) => value !== null)
   @IsString()
   @MaxLength(200)
-  seoTitle?: string;
+  seoTitle?: string | null;
 
   @IsOptional()
+  @ValidateIf((_, value) => value !== null)
   @IsString()
   @MaxLength(500)
-  seoDescription?: string;
+  seoDescription?: string | null;
 
   @IsOptional()
   @IsBoolean()
   noIndex?: boolean;
 
   @IsOptional()
+  @ValidateIf((_, value) => value !== null)
   @IsDateString()
-  publishAt?: string;
+  publishAt?: string | null;
 
   @IsOptional()
+  @ValidateIf((_, value) => value !== null)
   @IsDateString()
-  unpublishAt?: string;
+  unpublishAt?: string | null;
 }
 
 export class SetProductVariantsDto extends ExpectedVersionDto {
