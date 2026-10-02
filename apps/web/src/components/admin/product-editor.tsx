@@ -458,61 +458,6 @@ export function ProductEditor({
     setSavedAt(null);
     setSavePhase('saving');
     try {
-      let current = await adminPatch<ProductAdminDto>(adminEndpoints.product(server.id), {
-        expectedVersion: version,
-        name: basic.name.trim(),
-        slug: basic.slug.trim(),
-        shortDescription: basic.shortDescription.trim() || null,
-        description: basic.description.trim() || null,
-        heightCm: basic.heightCm.trim().length > 0 ? Number(basic.heightCm) : null,
-        availability: publication.availability,
-        publishAt: fromDateTimeLocalValue(publication.publishAt),
-        unpublishAt: fromDateTimeLocalValue(publication.unpublishAt),
-        seoTitle: seo.seoTitle.trim() || null,
-        seoDescription: seo.seoDescription.trim() || null,
-        noIndex: seo.noIndex,
-      });
-      setVersion(current.version);
-      setServer(current);
-
-      current = await adminPut<ProductAdminDto>(adminEndpoints.productVariants(server.id), {
-        expectedVersion: current.version,
-        variants: variants.map((variant, index) => ({
-          name: variant.name.trim(),
-          priceMinor: majorInputToMinor(variant.priceMajor) ?? '0',
-          sortOrder: index,
-          status: variant.status,
-        })),
-      });
-      setVersion(current.version);
-      setServer(current);
-
-      current = await adminPut<ProductAdminDto>(adminEndpoints.productComponents(server.id), {
-        expectedVersion: current.version,
-        components: components.map((component, index) => ({
-          displayName: component.displayName.trim(),
-          quantity: component.quantity.trim().length > 0 ? Number(component.quantity) : null,
-          unit: component.unit,
-          flowerId: component.flowerId || null,
-          sortOrder: index,
-        })),
-      });
-      setVersion(current.version);
-      setServer(current);
-
-      current = await adminPut<ProductAdminDto>(adminEndpoints.productTaxonomies(server.id), {
-        expectedVersion: current.version,
-        bouquetSizeId: discovery.bouquetSizeId || null,
-        occasionIds: discovery.occasionIds,
-        recipientIds: discovery.recipientIds,
-        colorIds: discovery.colorIds,
-        productLineIds: discovery.productLineIds,
-      });
-      setVersion(current.version);
-      setServer(current);
-
-      // Variant ids can be created by the step above: map sale prices positionally.
-      const savedVariants = [...current.variants].sort((a, b) => a.sortOrder - b.sortOrder);
       const percentValue = Number(promotion.percentOff);
       const hasValidPercent =
         Number.isInteger(percentValue) && percentValue >= 1 && percentValue <= 99;
@@ -526,33 +471,52 @@ export function ProductEditor({
             : hasValidPercent
               ? 'PERCENT'
               : 'FIXED';
-      current = await adminPut<ProductAdminDto>(adminEndpoints.productPromotion(server.id), {
-        expectedVersion: current.version,
-        enabled: promotion.enabled,
-        type: promotionType,
-        percentOff: promotionType === 'PERCENT' ? percentValue : null,
-        startsAt: fromDateTimeLocalValue(promotion.startsAt),
-        endsAt: fromDateTimeLocalValue(promotion.endsAt),
-        variantSalePrices:
-          promotion.enabled && promotionType === 'FIXED'
-            ? variants.flatMap((variant, index) => {
-                const saved = savedVariants[index];
-                const saleMinor = majorInputToMinor(variant.salePriceMajor);
-                if (!saved || saleMinor === null || variant.status !== 'ACTIVE') return [];
-                return [{ variantId: saved.id, salePriceMinor: saleMinor }];
-              })
-            : [],
-      });
-      setVersion(current.version);
-      setServer(current);
 
-      current = await adminPut<ProductAdminDto>(
-        adminEndpoints.productBestsellerGroups(server.id),
-        {
-          expectedVersion: current.version,
-          groupIds,
+      const current = await adminPut<ProductAdminDto>(adminEndpoints.productEditor(server.id), {
+        expectedVersion: version,
+        name: basic.name.trim(),
+        slug: basic.slug.trim(),
+        shortDescription: basic.shortDescription.trim() || null,
+        description: basic.description.trim() || null,
+        heightCm: basic.heightCm.trim().length > 0 ? Number(basic.heightCm) : null,
+        availability: publication.availability,
+        publishAt: fromDateTimeLocalValue(publication.publishAt),
+        unpublishAt: fromDateTimeLocalValue(publication.unpublishAt),
+        seoTitle: seo.seoTitle.trim() || null,
+        seoDescription: seo.seoDescription.trim() || null,
+        noIndex: seo.noIndex,
+        variants: variants.map((variant, index) => ({
+          name: variant.name.trim(),
+          priceMinor: majorInputToMinor(variant.priceMajor) ?? '0',
+          sortOrder: index,
+          status: variant.status,
+          // FIXED sale price travels with this variant row — server binds it to the new id.
+          salePriceMinor:
+            promotion.enabled && promotionType === 'FIXED' && variant.status === 'ACTIVE'
+              ? (majorInputToMinor(variant.salePriceMajor) ?? null)
+              : null,
+        })),
+        components: components.map((component, index) => ({
+          displayName: component.displayName.trim(),
+          quantity: component.quantity.trim().length > 0 ? Number(component.quantity) : null,
+          unit: component.unit,
+          flowerId: component.flowerId || null,
+          sortOrder: index,
+        })),
+        bouquetSizeId: discovery.bouquetSizeId || null,
+        occasionIds: discovery.occasionIds,
+        recipientIds: discovery.recipientIds,
+        colorIds: discovery.colorIds,
+        productLineIds: discovery.productLineIds,
+        promotion: {
+          enabled: promotion.enabled,
+          type: promotionType,
+          percentOff: promotionType === 'PERCENT' ? percentValue : null,
+          startsAt: fromDateTimeLocalValue(promotion.startsAt),
+          endsAt: fromDateTimeLocalValue(promotion.endsAt),
         },
-      );
+        groupIds,
+      });
 
       resync(current);
       setDirty(false);

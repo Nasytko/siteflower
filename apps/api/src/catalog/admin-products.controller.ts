@@ -37,6 +37,7 @@ import {
   UpdateProductMediaDto,
   UploadProductMediaDto,
   UpsertProductPromotionDto,
+  SaveProductEditorDto,
 } from './products.dto';
 import { ProductsService } from './products.service';
 import { PromotionsService } from './promotions.service';
@@ -86,6 +87,18 @@ export class AdminProductsController {
     @Req() req: Request,
   ) {
     return this.products.update(id, body, actorFrom(admin, req));
+  }
+
+  /** Atomic editor save — preferred over the multi-step PATCH/PUT chain. */
+  @Put(':id/editor')
+  @RequirePermissions('CATALOG_UPDATE')
+  saveEditor(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() body: SaveProductEditorDto,
+    @CurrentAdmin() admin: AuthenticatedAdmin,
+    @Req() req: Request,
+  ) {
+    return this.products.saveEditor(id, body, actorFrom(admin, req));
   }
 
   @Put(':id/variants')

@@ -75,6 +75,9 @@ function mapPromotionPrismaError(err: unknown): never {
   throw err;
 }
 
+/** Re-export for atomic editor transaction catch. */
+export { mapPromotionPrismaError };
+
 /**
  * Promotion pricing is server-authoritative: the admin stores intent here, and
  * every read path (catalog, checkout, orders) recomputes the effective price.
@@ -173,62 +176,29 @@ export class PromotionsService {
     const startsAt = input.startsAt ? new Date(input.startsAt) : null;
     const endsAt = input.endsAt ? new Date(input.endsAt) : null;
 
-    const issues = validatePromotionInput({
+    this.assertPromotionValid({
       enabled: input.enabled,
       type: input.type,
       percentOff: input.percentOff ?? null,
       startsAt,
       endsAt,
       variantSalePrices,
-      activeVariantIds: activeVariants.map((variant) => variant.id),
-      variantRegularPrices: new Map(
-        activeVariants.map((variant) => [variant.id, variant.priceMinor] as const),
-      ),
+      activeVariants: activeVariants.map((variant) => ({
+        id: variant.id,
+        priceMinor: variant.priceMinor,
+      })),
     });
-    if (issues.length > 0) {
-      throw promotionValidationException(issues);
-    }
-    if (input.enabled && activeVariants.length === 0) {
-      throw new BadRequestException('Для акции нужен хотя бы один активный вариант');
-    }
 
     await this.prisma.client.$transaction(async (tx) => {
       await this.guardProductVersion(tx, productId, input.expectedVersion);
-
-      const promotion = await tx.productPromotion.upsert({
-        where: { productId },
-        create: {
-          productId,
-          enabled: input.enabled,
-          type: input.type,
-          percentOff: input.type === 'PERCENT' ? (input.percentOff ?? null) : null,
-          startsAt,
-          endsAt,
-        },
-        update: {
-          enabled: input.enabled,
-          type: input.type,
-          percentOff: input.type === 'PERCENT' ? (input.percentOff ?? null) : null,
-          startsAt,
-          endsAt,
-          version: { increment: 1 },
-        },
-        select: { id: true },
+      await this.applyPromotionUpsertInTx(tx, productId, {
+        enabled: input.enabled,
+        type: input.type,
+        percentOff: input.percentOff ?? null,
+        startsAt,
+        endsAt,
+        variantSalePrices,
       });
-
-      await tx.productPromotionVariantPrice.deleteMany({
-        where: { promotionId: promotion.id },
-      });
-      if (input.type === 'FIXED' && variantSalePrices.length > 0) {
-        await tx.productPromotionVariantPrice.createMany({
-          data: variantSalePrices.map((row) => ({
-            promotionId: promotion.id,
-            variantId: row.variantId,
-            salePriceMinor: row.salePriceMinor,
-          })),
-        });
-      }
-
       await this.recordAudit(tx, actor, productId, {
         enabled: input.enabled,
         type: input.type,
@@ -246,6 +216,86 @@ export class PromotionsService {
       paths: ['/', '/bukety', '/akcii', ...(dto.slug ? [`/bukety/${dto.slug}`] : [])],
     });
     return dto;
+  }
+
+  /**
+   * Upsert promotion + FIXED prices inside an existing transaction.
+   * Caller owns OCC / outer commit. Used by atomic product editor save.
+   */
+  async applyPromotionUpsertInTx(
+    tx: Prisma.TransactionClient,
+    productId: string,
+    input: {
+      enabled: boolean;
+      type: PromotionType;
+      percentOff: number | null;
+      startsAt: Date | null;
+      endsAt: Date | null;
+      variantSalePrices: Array<{ variantId: string; salePriceMinor: bigint }>;
+    },
+  ): Promise<void> {
+    const promotion = await tx.productPromotion.upsert({
+      where: { productId },
+      create: {
+        productId,
+        enabled: input.enabled,
+        type: input.type,
+        percentOff: input.type === 'PERCENT' ? input.percentOff : null,
+        startsAt: input.startsAt,
+        endsAt: input.endsAt,
+      },
+      update: {
+        enabled: input.enabled,
+        type: input.type,
+        percentOff: input.type === 'PERCENT' ? input.percentOff : null,
+        startsAt: input.startsAt,
+        endsAt: input.endsAt,
+        version: { increment: 1 },
+      },
+      select: { id: true },
+    });
+
+    await tx.productPromotionVariantPrice.deleteMany({
+      where: { promotionId: promotion.id },
+    });
+    if (input.type === 'FIXED' && input.variantSalePrices.length > 0) {
+      await tx.productPromotionVariantPrice.createMany({
+        data: input.variantSalePrices.map((row) => ({
+          promotionId: promotion.id,
+          variantId: row.variantId,
+          salePriceMinor: row.salePriceMinor,
+        })),
+      });
+    }
+  }
+
+  assertPromotionValid(input: {
+    enabled: boolean;
+    type: PromotionType;
+    percentOff: number | null;
+    startsAt: Date | null;
+    endsAt: Date | null;
+    variantSalePrices: Array<{ variantId: string; salePriceMinor: bigint }>;
+    activeVariants: Array<{ id: string; priceMinor: bigint }>;
+  }): void {
+    const issues = validatePromotionInput({
+      enabled: input.enabled,
+      type: input.type,
+      percentOff: input.percentOff,
+      startsAt: input.startsAt,
+      endsAt: input.endsAt,
+      variantSalePrices: input.variantSalePrices,
+      activeVariantIds: input.activeVariants.map((variant) => variant.id),
+      variantRegularPrices: new Map(
+        input.activeVariants.map((variant) => [variant.id, variant.priceMinor] as const),
+      ),
+    });
+    if (issues.length > 0) {
+      throw promotionValidationException(issues);
+    }
+    if (input.enabled && input.activeVariants.length === 0) {
+      throw new BadRequestException('Для акции нужен хотя бы один активный вариант');
+    }
   }
 
   async removeForProduct(

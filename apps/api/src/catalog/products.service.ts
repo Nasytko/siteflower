@@ -26,11 +26,16 @@ import { BestsellersService } from './bestsellers.service';
 import { BudgetRangesService } from './budget-ranges.service';
 import { OCC_CONFLICT_MESSAGE, validatePublishRequirements } from './catalog.logic';
 import { toProductAdminDto, toProductListItemDto, toProductPublicDto } from './catalog.mapper';
+import {
+  collectFixedSalePricesFromCreatedVariants,
+  resolveEditorPromotionType,
+} from './product-editor.util';
 import type {
   CreateProductDto,
   ProductListQueryDto,
   PublishProductDto,
   ReorderProductMediaDto,
+  SaveProductEditorDto,
   SetProductBestsellerGroupsDto,
   SetProductComponentsDto,
   SetProductTaxonomiesDto,
@@ -40,6 +45,7 @@ import type {
   UploadProductMediaDto,
 } from './products.dto';
 import { ProductsRepository } from './products.repository';
+import { mapPromotionPrismaError, PromotionsService } from './promotions.service';
 import { SlugRedirectsService } from './slug-redirects.service';
 
 type CatalogReference =
@@ -71,6 +77,7 @@ export class ProductsService {
     private readonly slugRedirects: SlugRedirectsService,
     private readonly bestsellers: BestsellersService,
     private readonly budgetRanges: BudgetRangesService,
+    private readonly promotions: PromotionsService,
     private readonly media: MediaService,
     private readonly audit: AuditService,
     private readonly prisma: PrismaService,
@@ -285,6 +292,164 @@ export class ProductsService {
 
     const updated = await this.finishAdminMutation(id);
     return updated;
+  }
+
+  /**
+   * Atomic product-editor save: one OCC check, one transaction, one version bump.
+   * FIXED promotion sale prices bind to each variant input object as it is created
+   * (no cross-request positional remapping).
+   */
+  async saveEditor(
+    id: string,
+    input: SaveProductEditorDto,
+    actor: ActorContext,
+  ): Promise<ProductAdminDto> {
+    const product = await this.products.findById(id);
+    if (!product) {
+      throw new NotFoundException('Product not found');
+    }
+
+    const nextSlug = normalizeSlug(input.slug);
+    if (!nextSlug) {
+      throw new BadRequestException('Slug could not be derived');
+    }
+    if (nextSlug !== product.slug) {
+      const taken = await this.products.findIdBySlug(nextSlug);
+      if (taken && taken.id !== id) {
+        throw new ConflictException('Slug already in use');
+      }
+    }
+
+    const promotionType = resolveEditorPromotionType({
+      enabled: input.promotion.enabled,
+      type: input.promotion.type,
+      percentOff: input.promotion.percentOff ?? null,
+    });
+    const startsAt = input.promotion.startsAt ? new Date(input.promotion.startsAt) : null;
+    const endsAt = input.promotion.endsAt ? new Date(input.promotion.endsAt) : null;
+
+    const flowerIds = input.components
+      .map((component) => component.flowerId)
+      .filter((flowerId): flowerId is string => Boolean(flowerId));
+
+    await this.prisma.client.$transaction(async (tx) => {
+      const data: Prisma.ProductUncheckedUpdateManyInput = {
+        name: input.name.trim(),
+        slug: nextSlug,
+        shortDescription: trimmedOrNull(input.shortDescription ?? null),
+        description: trimmedOrNull(input.description ?? null),
+        availability: input.availability,
+        heightCm: input.heightCm === undefined ? product.heightCm : input.heightCm,
+        seoTitle: trimmedOrNull(input.seoTitle ?? null),
+        seoDescription: trimmedOrNull(input.seoDescription ?? null),
+        noIndex: input.noIndex,
+        publishAt:
+          input.publishAt === undefined
+            ? product.publishAt
+            : input.publishAt
+              ? new Date(input.publishAt)
+              : null,
+        unpublishAt:
+          input.unpublishAt === undefined
+            ? product.unpublishAt
+            : input.unpublishAt
+              ? new Date(input.unpublishAt)
+              : null,
+        bouquetSizeId: input.bouquetSizeId === undefined ? undefined : input.bouquetSizeId,
+      };
+
+      if (input.bouquetSizeId) {
+        await this.assertReferencesExist(tx, 'bouquetSize', [input.bouquetSizeId]);
+      }
+      await this.assertReferencesExist(tx, 'flower', flowerIds);
+      await this.assertReferencesExist(tx, 'occasion', input.occasionIds);
+      await this.assertReferencesExist(tx, 'recipient', input.recipientIds);
+      await this.assertReferencesExist(tx, 'color', input.colorIds);
+      await this.assertReferencesExist(tx, 'productLine', input.productLineIds);
+
+      if (nextSlug !== product.slug) {
+        await this.slugRedirects.record(tx, 'PRODUCT', product.slug, nextSlug);
+      }
+
+      // Single OCC bump for the whole editor snapshot.
+      await this.guardVersion(tx, id, input.expectedVersion, data);
+
+      const createdVariants = await this.products.replaceVariantsReturning(
+        id,
+        input.variants.map((variant, index) => ({
+          name: variant.name.trim(),
+          priceMinor: BigInt(variant.priceMinor),
+          sortOrder: variant.sortOrder ?? index,
+          status: variant.status ?? 'ACTIVE',
+          salePriceMinor: variant.salePriceMinor,
+        })),
+        tx,
+      );
+
+      // salePriceMinor traveled with each create input → returned on the same object.
+      const variantSalePrices =
+        promotionType === 'FIXED'
+          ? collectFixedSalePricesFromCreatedVariants(
+              createdVariants.map((created) => ({
+                createdId: created.id,
+                status: created.status,
+                salePriceMinor: created.salePriceMinor,
+              })),
+            )
+          : [];
+
+      this.promotions.assertPromotionValid({
+        enabled: input.promotion.enabled,
+        type: promotionType,
+        percentOff: promotionType === 'PERCENT' ? (input.promotion.percentOff ?? null) : null,
+        startsAt,
+        endsAt,
+        variantSalePrices,
+        activeVariants: createdVariants
+          .filter((variant) => variant.status === 'ACTIVE')
+          .map((variant) => ({ id: variant.id, priceMinor: variant.priceMinor })),
+      });
+
+      await this.products.replaceComponents(
+        id,
+        input.components.map((component, index) => ({
+          flowerId: component.flowerId ?? null,
+          displayName: component.displayName.trim(),
+          quantity: component.quantity ?? null,
+          unit: component.unit ?? 'UNSPECIFIED',
+          sortOrder: component.sortOrder ?? index,
+        })),
+        tx,
+      );
+
+      await this.products.replaceOccasions(id, input.occasionIds, tx);
+      await this.products.replaceRecipients(id, input.recipientIds, tx);
+      await this.products.replaceColors(id, input.colorIds, tx);
+      await this.products.replaceProductLines(id, input.productLineIds, tx);
+
+      await this.promotions.applyPromotionUpsertInTx(tx, id, {
+        enabled: input.promotion.enabled,
+        type: promotionType,
+        percentOff: promotionType === 'PERCENT' ? (input.promotion.percentOff ?? null) : null,
+        startsAt,
+        endsAt,
+        variantSalePrices,
+      });
+
+      await this.bestsellers.setGroupsForProduct(id, input.groupIds, tx);
+
+      await this.recordAudit(tx, actor, 'PRODUCT_UPDATED', id, {
+        editor: true,
+        fields: Object.keys(data),
+        variants: input.variants.length,
+        components: input.components.length,
+        promotionType,
+        groups: input.groupIds.length,
+        ...(nextSlug !== product.slug ? { previousSlug: product.slug, slug: nextSlug } : {}),
+      });
+    }).catch(mapPromotionPrismaError);
+
+    return this.finishAdminMutation(id);
   }
 
   async setVariants(

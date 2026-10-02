@@ -360,12 +360,52 @@ export class ProductsRepository {
     }>,
     tx: Prisma.TransactionClient,
   ): Promise<void> {
+    await this.replaceVariantsReturning(productId, variants, tx);
+  }
+
+  /**
+   * Delete-all + recreate variants. Returns created rows carrying optional
+   * `salePriceMinor` from the same input object used to create each row.
+   */
+  async replaceVariantsReturning(
+    productId: string,
+    variants: Array<{
+      name: string;
+      priceMinor: bigint;
+      sortOrder: number;
+      status: 'ACTIVE' | 'INACTIVE';
+      salePriceMinor?: string | null;
+    }>,
+    tx: Prisma.TransactionClient,
+  ): Promise<
+    Array<{
+      id: string;
+      priceMinor: bigint;
+      status: 'ACTIVE' | 'INACTIVE';
+      salePriceMinor?: string | null;
+    }>
+  > {
     await tx.productVariant.deleteMany({ where: { productId } });
-    if (variants.length > 0) {
-      await tx.productVariant.createMany({
-        data: variants.map((variant) => ({ ...variant, productId })),
+    const created: Array<{
+      id: string;
+      priceMinor: bigint;
+      status: 'ACTIVE' | 'INACTIVE';
+      salePriceMinor?: string | null;
+    }> = [];
+    for (const variant of variants) {
+      const { salePriceMinor, ...data } = variant;
+      const row = await tx.productVariant.create({
+        data: { ...data, productId },
+        select: { id: true, priceMinor: true, status: true },
+      });
+      created.push({
+        id: row.id,
+        priceMinor: row.priceMinor,
+        status: row.status as 'ACTIVE' | 'INACTIVE',
+        salePriceMinor,
       });
     }
+    return created;
   }
 
   async replaceComponents(

@@ -82,6 +82,158 @@ export class ProductVariantInputDto {
   status?: VariantStatus;
 }
 
+/**
+ * Editor variant row: FIXED sale price is bound to this object (not a separate
+ * variantId list). Server creates the variant then attaches salePriceMinor to the
+ * new id inside the same transaction.
+ */
+export class EditorVariantInputDto extends ProductVariantInputDto {
+  @IsOptional()
+  @ValidateIf((_, value) => value !== null && value !== undefined && value !== '')
+  @IsString()
+  @Matches(PRICE_MINOR_PATTERN, {
+    message: 'salePriceMinor must be integer minor units as a string',
+  })
+  salePriceMinor?: string | null;
+}
+
+export class EditorPromotionInputDto {
+  @IsBoolean()
+  enabled!: boolean;
+
+  @IsIn(PROMOTION_TYPES)
+  type!: PromotionType;
+
+  @ValidateIf((o: EditorPromotionInputDto) => o.type === 'PERCENT')
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(99)
+  percentOff?: number | null;
+
+  @IsOptional()
+  @ValidateIf((_, value) => value !== null)
+  @IsDateString()
+  startsAt?: string | null;
+
+  @IsOptional()
+  @ValidateIf((_, value) => value !== null)
+  @IsDateString()
+  endsAt?: string | null;
+}
+
+/** Full product-editor snapshot — one OCC check, one transaction. */
+export class SaveProductEditorDto extends ExpectedVersionDto {
+  @IsString()
+  @MinLength(1)
+  @MaxLength(200)
+  name!: string;
+
+  @IsString()
+  @MinLength(1)
+  @MaxLength(160)
+  slug!: string;
+
+  @IsOptional()
+  @ValidateIf((_, value) => value !== null)
+  @IsString()
+  @MaxLength(500)
+  shortDescription?: string | null;
+
+  @IsOptional()
+  @ValidateIf((_, value) => value !== null)
+  @IsString()
+  @MaxLength(20_000)
+  description?: string | null;
+
+  @IsIn(COMMERCIAL_AVAILABILITIES)
+  availability!: CommercialAvailability;
+
+  @IsOptional()
+  @Transform(({ value }) => {
+    if (value === '' || value === null) return null;
+    if (value === undefined) return undefined;
+    const n = typeof value === 'number' ? value : Number(value);
+    return Number.isFinite(n) ? n : undefined;
+  })
+  @ValidateIf((_, v) => v !== null && v !== undefined)
+  @IsInt()
+  @Min(15)
+  @Max(250)
+  heightCm?: number | null;
+
+  @IsOptional()
+  @ValidateIf((_, value) => value !== null)
+  @IsString()
+  @MaxLength(200)
+  seoTitle?: string | null;
+
+  @IsOptional()
+  @ValidateIf((_, value) => value !== null)
+  @IsString()
+  @MaxLength(500)
+  seoDescription?: string | null;
+
+  @IsBoolean()
+  noIndex!: boolean;
+
+  @IsOptional()
+  @ValidateIf((_, value) => value !== null)
+  @IsDateString()
+  publishAt?: string | null;
+
+  @IsOptional()
+  @ValidateIf((_, value) => value !== null)
+  @IsDateString()
+  unpublishAt?: string | null;
+
+  @IsArray()
+  @ArrayMaxSize(50)
+  @ValidateNested({ each: true })
+  @Type(() => EditorVariantInputDto)
+  variants!: EditorVariantInputDto[];
+
+  @IsArray()
+  @ArrayMaxSize(100)
+  @ValidateNested({ each: true })
+  @Type(() => ProductComponentInputDto)
+  components!: ProductComponentInputDto[];
+
+  @IsOptional()
+  @ValidateIf((_, value) => value !== null)
+  @IsUUID()
+  bouquetSizeId?: string | null;
+
+  @IsArray()
+  @ArrayMaxSize(50)
+  @IsUUID(undefined, { each: true })
+  occasionIds!: string[];
+
+  @IsArray()
+  @ArrayMaxSize(50)
+  @IsUUID(undefined, { each: true })
+  recipientIds!: string[];
+
+  @IsArray()
+  @ArrayMaxSize(50)
+  @IsUUID(undefined, { each: true })
+  colorIds!: string[];
+
+  @IsArray()
+  @ArrayMaxSize(50)
+  @IsUUID(undefined, { each: true })
+  productLineIds!: string[];
+
+  @ValidateNested()
+  @Type(() => EditorPromotionInputDto)
+  promotion!: EditorPromotionInputDto;
+
+  @IsArray()
+  @ArrayMaxSize(20)
+  @IsUUID(undefined, { each: true })
+  groupIds!: string[];
+}
+
 export class ProductComponentInputDto {
   @IsOptional()
   @ValidateIf((_, value) => value !== null)
