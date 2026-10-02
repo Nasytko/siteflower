@@ -45,7 +45,12 @@ function fitInside(
 async function loadBitmap(file: File): Promise<ImageBitmap | null> {
   try {
     if (typeof createImageBitmap !== 'function') return null;
-    return await createImageBitmap(file);
+    // Prefer EXIF-aware decode so portrait phone photos keep correct orientation.
+    try {
+      return await createImageBitmap(file, { imageOrientation: 'from-image' } as ImageBitmapOptions);
+    } catch {
+      return await createImageBitmap(file);
+    }
   } catch {
     return null;
   }

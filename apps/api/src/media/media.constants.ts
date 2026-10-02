@@ -15,9 +15,10 @@ export const MEDIA_MAX_INPUT_PIXELS = 25_000_000;
 export const MEDIA_MAX_DIMENSION = 6000;
 
 /**
- * Hard ceiling for a single upload body (Multer + MediaService).
+ * Hard ceiling for a single upload body (Multer + MediaService + nginx body size).
  * Managers may select large phone photos; client may prepare first, but the
  * API still enforces this absolute byte limit.
+ * Keep deploy/nginx client_max_body_size ≥ this value (see shopbuket1-proxy.inc).
  */
 export const MEDIA_UPLOAD_MAX_INPUT_BYTES = 25_000_000;
 

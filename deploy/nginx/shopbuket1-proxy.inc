@@ -2,7 +2,8 @@
 # Do not put server_name / listen here.
 
 server_tokens off;
-client_max_body_size 10m;
+# Must stay above API MEDIA_MAX_BYTES (25 MB hard upload ceiling).
+client_max_body_size 26m;
 
 add_header X-Content-Type-Options nosniff always;
 add_header Referrer-Policy strict-origin-when-cross-origin always;

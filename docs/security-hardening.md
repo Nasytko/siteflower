@@ -28,7 +28,7 @@ This document records production-facing security decisions after the Phase 4.2 r
 
 - Magic-byte MIME via `file-type` (not extension trust)
 - Allowed: JPEG, PNG, WebP, AVIF (no SVG upload/serve from local media)
-- `limitInputPixels = 25_000_000`, max dimension 6000
+- `limitInputPixels = 25_000_000`; edges above 6000px are downscaled before master encode; upload hard ceiling `MEDIA_MAX_BYTES` default 25MB (keep nginx `client_max_body_size` ≥ that)
 - Metadata stripped (no `withMetadata()`)
 - Local serve resolves paths under media root (`resolve` + relative prefix check)
 

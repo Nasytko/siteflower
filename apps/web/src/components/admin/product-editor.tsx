@@ -350,12 +350,24 @@ export function ProductEditor({
         basic.shortDescription.trim() || server.shortDescription,
       );
     const slug = basic.slug.trim() || server.slug;
+    // Mirror API effectivelyPublishedWhere / SeoHealthService.isEffectivelyPublished.
+    const now = Date.now();
+    const publishAtMs = server.publishAt ? Date.parse(server.publishAt) : NaN;
+    const publishedAtMs = server.publishedAt ? Date.parse(server.publishedAt) : NaN;
+    const unpublishAtMs = server.unpublishAt ? Date.parse(server.unpublishAt) : NaN;
+    const scheduleStarted =
+      (!Number.isNaN(publishAtMs) && publishAtMs <= now) ||
+      (Number.isNaN(publishAtMs) && !Number.isNaN(publishedAtMs) && publishedAtMs <= now) ||
+      (Number.isNaN(publishAtMs) && Number.isNaN(publishedAtMs));
+    const scheduleOpen = Number.isNaN(unpublishAtMs) || unpublishAtMs > now;
+    const effectivelyPublished =
+      server.lifecycle === 'PUBLISHED' && scheduleStarted && scheduleOpen;
     return analyzeProductSeo({
       id: server.id,
       name: basic.name.trim() || server.name,
       slug,
       lifecycle: server.lifecycle,
-      effectivelyPublished: server.lifecycle === 'PUBLISHED',
+      effectivelyPublished,
       noIndex: seo.noIndex,
       seoTitle: titleManual || null,
       seoDescription: descriptionManual || null,
@@ -368,7 +380,7 @@ export function ProductEditor({
       jsonLdReady: variants.some((variant) => majorInputToMinor(variant.priceMajor) !== null),
       path: `/bukety/${slug}`,
       adminHref: `/admin/catalog/products/${server.id}`,
-      inSitemap: server.lifecycle === 'PUBLISHED' && !seo.noIndex && Boolean(slug),
+      inSitemap: effectivelyPublished && !seo.noIndex && Boolean(slug),
     });
   }, [seo, basic, server, variants]);
 
