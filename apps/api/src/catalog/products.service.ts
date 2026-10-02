@@ -236,6 +236,8 @@ export class ProductsService {
   /**
    * Clone a product into a new DRAFT. Reuses MediaAsset rows (no S3 copy).
    * Does not copy promotions, bestsellers, or publication schedule.
+   * ARCHIVED sources are allowed — the copy is always a fresh DRAFT template.
+   * Indexability: DRAFT never enters the public sitemap / catalog (lifecycle gate).
    */
   async duplicate(id: string, actor: ActorContext): Promise<ProductAdminDto> {
     const source = await this.products.findById(id);

@@ -76,6 +76,20 @@ Effective publication: `lifecycle=PUBLISHED` AND schedule window includes now.
 
 `version` integer on Product / taxonomies / promotions / bestseller groups / budget ranges. Updates send `expectedVersion`; mismatch → HTTP 409.
 
+## Duplicate product
+
+`POST /api/v1/admin/catalog/products/:id/duplicate` (`CATALOG_CREATE`) creates a new **DRAFT** from an existing product in one DB transaction:
+
+- New product / variant / component IDs; unique slug (`…-kopiya`, then `-2`, …)
+- Copies catalog template fields (name + « — копия», descriptions, taxonomies, composition, media links, manual SEO overrides)
+- **Reuses** existing `MediaAsset` rows (no S3 copy)
+- **Does not** copy promotions, bestseller membership, or publish schedule
+- **Does not** create stock / supply / inventory (Product is not ERP inventory)
+- Source may be `DRAFT`, `PUBLISHED`, or **`ARCHIVED`** — archive is allowed as a template source; the copy is always `DRAFT`
+- Indexability: lifecycle `DRAFT` keeps the copy out of the public catalog and sitemap until explicit publish (independent of `noIndex`)
+
+Audit: `PRODUCT_DUPLICATED` with `sourceProductId` / `slug` (only on successful commit).
+
 ## Cache readiness (future)
 
 Invalidate storefront cache on product publish/update and merchandising changes (promotions, bestsellers, homepage). No Redis in this phase.

@@ -34,6 +34,8 @@ Drafts are never exposed on public catalog endpoints.
 
 Removes from public catalog; keeps admin record, media, relationships. Hard delete is not the normal path for published products.
 
+Archived products may still be **duplicated** into a new DRAFT (template reuse). Duplicate never re-publishes and never copies promotions or bestsellers.
+
 ## Slug changes
 
 Changing a published (or any) slug records `SlugRedirect` (`entityType`, `fromSlug` → `toSlug`). Loop prevention on write. Public slug lookup follows redirects.

@@ -45,6 +45,7 @@ Category, Style, and Collection landing routes are **not** part of the current p
 Rules:
 
 1. Canonical URLs always from configured site origin — not raw `Host`
-2. Draft/unpublished content must be `noIndex: true`
+2. Draft/unpublished products are excluded from the public catalog and sitemap by **lifecycle** (`effectivelyPublished`); they are not indexable before explicit publish. The product `noIndex` flag is an additional override for published pages — duplicate does not need to force `noIndex=true`.
 3. Admin routes always noindex
 4. Sitemap includes only publicly indexable published URLs (static hubs + API sitemap entries)
+5. Manual `seoTitle` / `seoDescription` on a duplicated DRAFT are copied as-is; SEO Health shows them as manual overrides and the editor Reset clears them back to automatic titles/descriptions

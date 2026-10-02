@@ -105,6 +105,50 @@ test('draft product → SEO not critical for noIndex', () => {
   assert.ok(health.checks.some((c) => c.code === 'PRODUCT_NOINDEX' && c.severity === 'INFO'));
 });
 
+test('duplicated DRAFT with copied manual SEO → shows manual; Reset → automatic', () => {
+  const withManual = analyzeProductSeo(
+    baseProduct({
+      lifecycle: 'DRAFT',
+      effectivelyPublished: false,
+      noIndex: false,
+      inSitemap: false,
+      seoTitle: 'SEO title for roses',
+      seoDescription: 'SEO description for roses',
+      resolvedTitle: 'SEO title for roses',
+      resolvedDescription: 'SEO description for roses',
+    }),
+  );
+  assert.ok(withManual.checks.some((c) => c.code === 'PRODUCT_NOT_LIVE'));
+  assert.match(
+    withManual.checks.find((c) => c.title === 'Заголовок страницы')?.message ?? '',
+    /вручную/,
+  );
+  assert.ok(withManual.checks.some((c) => c.code === 'PRODUCT_SITEMAP_EXCLUDED'));
+  assert.equal(withManual.indexable, false);
+
+  // Manager Reset clears overrides → automatic generators for the new draft name/slug.
+  const afterReset = analyzeProductSeo(
+    baseProduct({
+      name: 'Красные розы — копия',
+      slug: 'krasnye-rozy-kopiya',
+      lifecycle: 'DRAFT',
+      effectivelyPublished: false,
+      noIndex: false,
+      inSitemap: false,
+      seoTitle: null,
+      seoDescription: null,
+      resolvedTitle: 'Букет «Красные розы — копия» с доставкой по Гродно | BUKET №1',
+      resolvedDescription: 'Закажите букет «Красные розы — копия» в BUKET №1 — доставка цветов по Гродно.',
+      path: '/bukety/krasnye-rozy-kopiya',
+    }),
+  );
+  assert.match(
+    afterReset.checks.find((c) => c.title === 'Заголовок страницы')?.message ?? '',
+    /автоматически/,
+  );
+  assert.ok(afterReset.checks.some((c) => c.code === 'PRODUCT_SITEMAP_EXCLUDED'));
+});
+
 test('missing primary image → WARNING', () => {
   const health = analyzeProductSeo(
     baseProduct({ mediaCount: 2, hasPrimaryMedia: false }),
