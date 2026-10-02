@@ -15,6 +15,18 @@ Product photography is delivered as **public-read objects** behind a stable publ
 - Write/delete remain credentialed
 - Object keys are UUID-based → long immutable cache is safe because replacement creates a **new** asset/key (never overwrite bytes under the same key)
 
+### next/image allowlist (critical)
+
+`apps/web/next.config.ts` builds `images.remotePatterns` from **`S3_PUBLIC_BASE_URL` (preferred) or `MEDIA_PUBLIC_BASE_URL`** at **web image build time**.
+
+- API uses the same public base at **runtime** for `getPublicUrl`
+- If the web image was built without the real public origin, `/_next/image?url=https://s3…` returns **400 `url parameter is not allowed`** even though direct S3 URLs work
+- Production Docker sets `REQUIRE_MEDIA_REMOTE_ORIGIN=true` so a missing/local origin fails the web build
+- Changing `S3_PUBLIC_BASE_URL` requires **rebuilding** the web image (runtime env alone is not enough for remotePatterns)
+- Never put S3 access keys in `NEXT_PUBLIC_*`
+
+Optimizer `deviceSizes` are aligned to Sharp derivatives: **400 / 800 / 1200 / 1600** (no 1920).
+
 CDN may sit in front later without schema changes:
 
 `public URL → CDN → S3`
@@ -46,6 +58,8 @@ Never fakes a green state. Never shows secrets.
 - [ ] `MEDIA_STORAGE=s3`
 - [ ] Bucket + prefix correct; credentials least-privilege
 - [ ] `S3_PUBLIC_BASE_URL` HTTPS and reachable from browsers/CDN
+- [ ] Web image rebuilt with that same `S3_PUBLIC_BASE_URL` build-arg (next/image allowlist)
+- [ ] Direct S3/public URL of a derivative returns 200; `/_next/image?url=…` also returns 200
 - [ ] Admin → Проверить хранилище → write/read/delete OK
 - [ ] Upload real test product image; storefront shows it after restart
 - [ ] `pnpm media:check` clean (no missing masters / multi-primary)

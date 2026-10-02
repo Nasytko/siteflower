@@ -1,52 +1,23 @@
 import type { NextConfig } from 'next';
+import {
+  STOREFRONT_IMAGE_DEVICE_SIZES,
+  STOREFRONT_IMAGE_SIZES,
+  buildMediaRemotePatterns,
+  shouldAllowLocalImageIp,
+  type MediaImageEnv,
+} from './src/lib/media-image-config';
 
-const apiUrl = process.env.API_URL ?? 'http://127.0.0.1:3001';
-const mediaPublicBase =
-  process.env.MEDIA_PUBLIC_BASE_URL ??
-  process.env.S3_PUBLIC_BASE_URL ??
-  'http://127.0.0.1:3001/api/v1/media';
+const imageEnv: MediaImageEnv = {
+  MEDIA_PUBLIC_BASE_URL: process.env.MEDIA_PUBLIC_BASE_URL,
+  S3_PUBLIC_BASE_URL: process.env.S3_PUBLIC_BASE_URL,
+  API_URL: process.env.API_URL,
+  NODE_ENV: process.env.NODE_ENV,
+  ALLOW_LOCAL_IMAGE_IP: process.env.ALLOW_LOCAL_IMAGE_IP,
+  REQUIRE_MEDIA_REMOTE_ORIGIN: process.env.REQUIRE_MEDIA_REMOTE_ORIGIN,
+};
 
-const nodeEnv = process.env.NODE_ENV ?? 'development';
-const allowLocalImageIp =
-  nodeEnv !== 'production' || process.env.ALLOW_LOCAL_IMAGE_IP === 'true';
-
-function toRemotePattern(raw: string): {
-  protocol: 'http' | 'https';
-  hostname: string;
-  port?: string;
-  pathname: string;
-} | null {
-  try {
-    const url = new URL(raw);
-    const protocol = url.protocol.replace(':', '') as 'http' | 'https';
-    if (protocol !== 'http' && protocol !== 'https') return null;
-    return {
-      protocol,
-      hostname: url.hostname,
-      ...(url.port ? { port: url.port } : {}),
-      pathname: '/**',
-    };
-  } catch {
-    return null;
-  }
-}
-
-const remotePatterns = [
-  toRemotePattern(apiUrl),
-  ...(allowLocalImageIp
-    ? [toRemotePattern('http://localhost:3001'), toRemotePattern('http://127.0.0.1:3001')]
-    : []),
-  toRemotePattern(mediaPublicBase),
-].filter((p): p is NonNullable<typeof p> => Boolean(p));
-
-// Deduplicate by host+port+protocol
-const seen = new Set<string>();
-const uniquePatterns = remotePatterns.filter((pattern) => {
-  const key = `${pattern.protocol}://${pattern.hostname}:${pattern.port ?? ''}`;
-  if (seen.has(key)) return false;
-  seen.add(key);
-  return true;
-});
+const uniquePatterns = buildMediaRemotePatterns(imageEnv);
+const allowLocalImageIp = shouldAllowLocalImageIp(imageEnv);
 
 const nextConfig: NextConfig = {
   reactStrictMode: true,
@@ -59,13 +30,18 @@ const nextConfig: NextConfig = {
     optimizePackageImports: ['@bouquet-one/ui'],
   },
   images: {
+    // Only our canonical media origin(s) — never hostname "**" / arbitrary remotes.
     remotePatterns: uniquePatterns,
+    // Align optimizer widths with Sharp derivative ladder (400/800/1200/1600).
+    deviceSizes: [...STOREFRONT_IMAGE_DEVICE_SIZES],
+    imageSizes: [...STOREFRONT_IMAGE_SIZES],
     // Local MEDIA_PUBLIC_BASE_URL points at 127.0.0.1 during development.
     // Production must not need this unless explicitly opted in.
     ...(allowLocalImageIp ? { dangerouslyAllowLocalIP: true } : {}),
     formats: ['image/avif', 'image/webp'],
   },
   async rewrites() {
+    const apiUrl = process.env.API_URL ?? 'http://127.0.0.1:3001';
     return [
       {
         source: '/api/v1/:path*',

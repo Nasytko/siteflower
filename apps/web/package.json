@@ -8,7 +8,7 @@
     "start": "next start --port 3000",
     "lint": "eslint .",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "node --import tsx --test src/lib/seo/seo.test.ts src/lib/favorites.test.ts src/lib/media.test.ts src/lib/seo/product-json-ld.test.ts src/lib/catalog-search-params.test.ts src/lib/cart.test.ts src/lib/admin-cookie.util.test.ts src/lib/admin-list.test.ts src/lib/admin-money.test.ts src/lib/admin-business-time.test.ts src/lib/admin-media-preflight.test.ts src/lib/admin-media-prepare.test.ts src/lib/admin-client.test.ts src/lib/admin-promotions.test.ts src/lib/admin-catalog-contract.test.ts src/components/storefront/discovery-tiles.test.ts",
+    "test": "node --import tsx --test src/lib/seo/seo.test.ts src/lib/favorites.test.ts src/lib/media.test.ts src/lib/media-image-config.test.ts src/lib/seo/product-json-ld.test.ts src/lib/catalog-search-params.test.ts src/lib/cart.test.ts src/lib/admin-cookie.util.test.ts src/lib/admin-list.test.ts src/lib/admin-money.test.ts src/lib/admin-business-time.test.ts src/lib/admin-media-preflight.test.ts src/lib/admin-media-prepare.test.ts src/lib/admin-client.test.ts src/lib/admin-promotions.test.ts src/lib/admin-catalog-contract.test.ts src/components/storefront/discovery-tiles.test.ts",
     "clean": "rimraf .next"
   },
   "dependencies": {

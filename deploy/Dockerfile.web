@@ -28,12 +28,17 @@ RUN pnpm install --frozen-lockfile
 FROM deps AS build
 ARG API_URL=http://api:3001
 ARG NEXT_PUBLIC_SITE_URL=https://example.invalid
+# Public media origin only (never credentials). Baked into next/image remotePatterns.
 ARG S3_PUBLIC_BASE_URL=
 ARG MEDIA_PUBLIC_BASE_URL=
+# Fail the web image build if the public media origin is missing/local — otherwise
+# storefront /_next/image returns 400 "url parameter is not allowed" for S3 URLs.
+ARG REQUIRE_MEDIA_REMOTE_ORIGIN=true
 ENV API_URL=${API_URL} \
     NEXT_PUBLIC_SITE_URL=${NEXT_PUBLIC_SITE_URL} \
     S3_PUBLIC_BASE_URL=${S3_PUBLIC_BASE_URL} \
     MEDIA_PUBLIC_BASE_URL=${MEDIA_PUBLIC_BASE_URL} \
+    REQUIRE_MEDIA_REMOTE_ORIGIN=${REQUIRE_MEDIA_REMOTE_ORIGIN} \
     NODE_ENV=production
 COPY . .
 RUN pnpm --filter @bouquet-one/contracts build \

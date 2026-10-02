@@ -149,7 +149,7 @@ Must set at least:
 | `S3_BUCKET` | e.g. `shopbuket1-media` (ERP: `erpbuket1-media`) |
 | `S3_ACCESS_KEY_ID` | Access key |
 | `S3_SECRET_ACCESS_KEY` | Secret key |
-| `S3_PUBLIC_BASE_URL` | Public HTTPS base for browsers / `next/image` |
+| `S3_PUBLIC_BASE_URL` | Public HTTPS base for browsers / API media URLs **and** Next.js `images.remotePatterns` (Docker **build-arg** — rebuild web image when this changes) |
 | `S3_FORCE_PATH_STYLE` | Default `true` |
 
 After deploy: Admin → **Медиа / Site Health** → **Проверить хранилище**, then upload a real product image.

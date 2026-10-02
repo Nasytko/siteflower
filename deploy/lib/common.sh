@@ -156,6 +156,14 @@ validate_production_env() {
   [[ -n "${S3_SECRET_ACCESS_KEY:-}" ]] || die "S3_SECRET_ACCESS_KEY is required"
   [[ -n "${S3_PUBLIC_BASE_URL:-}" || -n "${MEDIA_PUBLIC_BASE_URL:-}" ]] \
     || die "S3_PUBLIC_BASE_URL (or MEDIA_PUBLIC_BASE_URL) is required"
+  local media_public="${S3_PUBLIC_BASE_URL:-${MEDIA_PUBLIC_BASE_URL:-}}"
+  [[ "${media_public}" == https://* ]] \
+    || die "S3_PUBLIC_BASE_URL / MEDIA_PUBLIC_BASE_URL must be https:// (got: ${media_public})"
+  if [[ "${media_public}" == *"YOUR_PUBLIC_OBJECT_BASE"* ]] \
+    || [[ "${media_public}" == *"localhost"* ]] \
+    || [[ "${media_public}" == *"127.0.0.1"* ]]; then
+    die "S3_PUBLIC_BASE_URL / MEDIA_PUBLIC_BASE_URL still looks like a placeholder or localhost — required for next/image remotePatterns at web image build"
+  fi
 }
 
 write_release_metadata() {
