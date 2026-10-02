@@ -21,6 +21,14 @@ test('product editor path matches Nest atomic save controller', () => {
   assert.equal(adminEndpoints.productEditor(id), `/api/v1/admin/catalog/products/${id}/editor`);
 });
 
+test('product duplicate path matches Nest controller', () => {
+  const id = '11111111-1111-4111-8111-111111111111';
+  assert.equal(
+    adminEndpoints.productDuplicate(id),
+    `/api/v1/admin/catalog/products/${id}/duplicate`,
+  );
+});
+
 test('bestseller group products path and body use productIds', () => {
   const id = '22222222-2222-4222-8222-222222222222';
   assert.equal(

@@ -10,7 +10,7 @@ import {
   type ProductListItemDto,
 } from '@bouquet-one/contracts';
 import { Button } from '@bouquet-one/ui';
-import { adminPost, errorMessage } from '@/lib/admin-client';
+import { adminPost, AdminRequestError, errorMessage } from '@/lib/admin-client';
 import { adminEndpoints } from '@/lib/admin-endpoints';
 import { availabilityLabel, formatAdminDateTime, lifecycleLabel } from '@/lib/admin-labels';
 import { toSameOriginMediaUrl } from '@/lib/media';
@@ -46,7 +46,11 @@ export function ProductsManager({ data, filters, bestsellerGroups, canCreate }: 
   const searchParams = useSearchParams();
   const [navigating, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
+  const [requestId, setRequestId] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
+  const [duplicateTarget, setDuplicateTarget] = useState<ProductListItemDto | null>(null);
+  const [duplicating, setDuplicating] = useState(false);
+  const [duplicateSuccessId, setDuplicateSuccessId] = useState<string | null>(null);
 
   const groupNames = new Map(bestsellerGroups.map((group) => [group.id, group.name]));
 
@@ -74,13 +78,37 @@ export function ProductsManager({ data, filters, bestsellerGroups, canCreate }: 
     if (name.length === 0) return;
     setCreating(true);
     setError(null);
+    setRequestId(null);
     try {
       const created = await adminPost<{ id: string }>(adminEndpoints.products, { name });
       router.push(`/admin/catalog/products/${created.id}`);
     } catch (err) {
       setError(errorMessage(err, 'Не удалось создать товар'));
+      setRequestId(err instanceof AdminRequestError ? err.requestId ?? null : null);
     } finally {
       setCreating(false);
+    }
+  }
+
+  async function onConfirmDuplicate() {
+    if (!canCreate || !duplicateTarget) return;
+    setDuplicating(true);
+    setError(null);
+    setRequestId(null);
+    setDuplicateSuccessId(null);
+    try {
+      const created = await adminPost<{ id: string; slug: string; lifecycle: string; version: number }>(
+        adminEndpoints.productDuplicate(duplicateTarget.id),
+        {},
+      );
+      setDuplicateTarget(null);
+      setDuplicateSuccessId(created.id);
+      router.push(`/admin/catalog/products/${created.id}`);
+    } catch (err) {
+      setError(errorMessage(err, 'Не удалось дублировать товар'));
+      setRequestId(err instanceof AdminRequestError ? err.requestId ?? null : null);
+    } finally {
+      setDuplicating(false);
     }
   }
 
@@ -97,7 +125,54 @@ export function ProductsManager({ data, filters, bestsellerGroups, canCreate }: 
       {error ? (
         <p role="alert" className="admin-error">
           {error}
+          {requestId ? (
+            <span className="mt-1 block text-xs opacity-80">Код запроса: {requestId}</span>
+          ) : null}
         </p>
+      ) : null}
+
+      {duplicateSuccessId ? (
+        <p role="status" className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-900">
+          Товар создан как черновик.{' '}
+          <Link href={`/admin/catalog/products/${duplicateSuccessId}`} className="font-semibold underline">
+            Открыть товар
+          </Link>
+        </p>
+      ) : null}
+
+      {duplicateTarget ? (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="duplicate-product-title"
+          className="admin-panel space-y-3 border border-[var(--admin-brand)]/30 p-4"
+        >
+          <h2 id="duplicate-product-title" className="text-base font-semibold text-[var(--admin-ink)]">
+            Дублировать товар?
+          </h2>
+          <p className="text-sm text-[var(--admin-muted)]">
+            Будет создан новый черновик на основе «{duplicateTarget.name}». Акции и группы
+            бестселлеров не будут перенесены.
+          </p>
+          <div className="flex flex-wrap gap-2">
+            <Button
+              type="button"
+              disabled={duplicating}
+              onClick={() => void onConfirmDuplicate()}
+              className="!rounded-lg !bg-[var(--admin-brand)]"
+            >
+              {duplicating ? 'Дублирование…' : 'Дублировать'}
+            </Button>
+            <button
+              type="button"
+              className="admin-btn-ghost"
+              disabled={duplicating}
+              onClick={() => setDuplicateTarget(null)}
+            >
+              Отмена
+            </button>
+          </div>
+        </div>
       ) : null}
 
       {canCreate ? (
@@ -243,12 +318,13 @@ export function ProductsManager({ data, filters, bestsellerGroups, canCreate }: 
               <th className="w-36">Акция</th>
               <th className="w-40">Бестселлеры</th>
               <th className="w-40">Изменён</th>
+              {canCreate ? <th className="w-28">Действия</th> : null}
             </tr>
           </thead>
           <tbody>
             {data.items.length === 0 ? (
               <tr>
-                <td colSpan={8}>
+                <td colSpan={canCreate ? 9 : 8}>
                   <p className="admin-empty">
                     {hasFilters ? 'Ничего не найдено — измените фильтры' : 'Товаров пока нет'}
                   </p>
@@ -337,6 +413,21 @@ export function ProductsManager({ data, filters, bestsellerGroups, canCreate }: 
                     <td className="text-[var(--admin-muted)]">
                       {formatAdminDateTime(item.updatedAt)}
                     </td>
+                    {canCreate ? (
+                      <td>
+                        <button
+                          type="button"
+                          className="admin-link text-sm"
+                          disabled={duplicating}
+                          onClick={() => {
+                            setDuplicateSuccessId(null);
+                            setDuplicateTarget(item);
+                          }}
+                        >
+                          Дублировать
+                        </button>
+                      </td>
+                    ) : null}
                   </tr>
                 );
               })

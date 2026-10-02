@@ -66,6 +66,16 @@ export class AdminProductsController {
     return this.products.create(body, actorFrom(admin, req));
   }
 
+  @Post(':id/duplicate')
+  @RequirePermissions('CATALOG_CREATE')
+  duplicate(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentAdmin() admin: AuthenticatedAdmin,
+    @Req() req: Request,
+  ) {
+    return this.products.duplicate(id, actorFrom(admin, req));
+  }
+
   @Get(':id')
   @RequirePermissions('CATALOG_READ')
   get(@Param('id', ParseUUIDPipe) id: string) {

@@ -30,6 +30,10 @@ import {
   collectFixedSalePricesFromCreatedVariants,
   resolveEditorPromotionType,
 } from './product-editor.util';
+import {
+  allocateDuplicateSlug,
+  buildDuplicateProductName,
+} from './product-duplicate.util';
 import type {
   CreateProductDto,
   ProductListQueryDto,
@@ -227,6 +231,122 @@ export class ProductsService {
     });
 
     return this.getById(created.id);
+  }
+
+  /**
+   * Clone a product into a new DRAFT. Reuses MediaAsset rows (no S3 copy).
+   * Does not copy promotions, bestsellers, or publication schedule.
+   */
+  async duplicate(id: string, actor: ActorContext): Promise<ProductAdminDto> {
+    const source = await this.products.findById(id);
+    if (!source) {
+      throw new NotFoundException('Product not found');
+    }
+
+    const name = buildDuplicateProductName(source.name);
+
+    const createdId = await this.prisma.client.$transaction(async (tx) => {
+      const slug = await allocateDuplicateSlug(source.slug, async (candidate) => {
+        const owner = await this.products.findIdBySlug(candidate, tx);
+        return owner != null;
+      }).catch((err) => {
+        throw new ConflictException(
+          err instanceof Error ? err.message : 'Could not allocate a unique slug',
+        );
+      });
+
+      const product = await this.products.create(
+        {
+          name,
+          slug,
+          shortDescription: source.shortDescription,
+          description: source.description,
+          heightCm: source.heightCm,
+          lifecycle: 'DRAFT',
+          availability: source.availability,
+          currency: source.currency,
+          seoTitle: source.seoTitle,
+          seoDescription: source.seoDescription,
+          noIndex: source.noIndex,
+          ...(source.bouquetSizeId
+            ? { bouquetSize: { connect: { id: source.bouquetSizeId } } }
+            : {}),
+        },
+        tx,
+      );
+
+      if (source.variants.length > 0) {
+        await this.products.replaceVariants(
+          product.id,
+          source.variants.map((variant) => ({
+            name: variant.name,
+            priceMinor: variant.priceMinor,
+            sortOrder: variant.sortOrder,
+            status: variant.status,
+          })),
+          tx,
+        );
+      }
+
+      if (source.components.length > 0) {
+        await this.products.replaceComponents(
+          product.id,
+          source.components.map((component) => ({
+            flowerId: component.flowerId,
+            displayName: component.displayName,
+            quantity: component.quantity,
+            unit: component.unit,
+            sortOrder: component.sortOrder,
+          })),
+          tx,
+        );
+      }
+
+      await this.products.replaceOccasions(
+        product.id,
+        source.occasions.map((row) => row.occasionId),
+        tx,
+      );
+      await this.products.replaceRecipients(
+        product.id,
+        source.recipients.map((row) => row.recipientId),
+        tx,
+      );
+      await this.products.replaceColors(
+        product.id,
+        source.colors.map((row) => row.colorId),
+        tx,
+      );
+      await this.products.replaceProductLines(
+        product.id,
+        source.productLines.map((row) => row.productLineId),
+        tx,
+      );
+
+      // Shared MediaAsset references — new ProductMedia rows only (Restrict FK).
+      if (source.media.length > 0) {
+        await tx.productMedia.createMany({
+          data: source.media.map((item) => ({
+            productId: product.id,
+            mediaAssetId: item.mediaAssetId,
+            sortOrder: item.sortOrder,
+            isPrimary: item.isPrimary,
+            alt: item.alt,
+            caption: item.caption,
+          })),
+        });
+      }
+
+      await this.recordAudit(tx, actor, 'PRODUCT_DUPLICATED', product.id, {
+        sourceProductId: source.id,
+        sourceSlug: source.slug,
+        slug,
+      });
+
+      return product.id;
+    });
+
+    return this.finishAdminMutation(createdId);
   }
 
   async update(
