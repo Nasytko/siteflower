@@ -22,7 +22,11 @@ One lifecycle field — not boolean flags.
 
 Separate from lifecycle: `AVAILABLE` | `TEMPORARILY_UNAVAILABLE` | `PREORDER` | `SEASONAL`.
 
-Checkout enforcement comes in a later phase; catalog stores and exposes the value.
+Canonical field: `Product.availability`. Not warehouse stock and not lifecycle.
+
+- Storefront listing can show non-`AVAILABLE` published products; purchase is blocked only for `TEMPORARILY_UNAVAILABLE` (cart/checkout validation).
+- Admin Products Manager supports quick change via `PATCH /api/v1/admin/catalog/products/:id` (`CATALOG_UPDATE`, OCC `expectedVersion`) without opening the editor.
+- Audit: `PRODUCT_UPDATED` with `previousAvailability` / `newAvailability` when the field changes.
 
 ## Variants & pricing
 

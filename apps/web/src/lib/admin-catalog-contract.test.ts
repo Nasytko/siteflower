@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
   buildBestsellerGroupProductsBody,
+  buildProductAvailabilityPatchBody,
   buildProductBestsellerGroupsBody,
   buildProductListQueryParams,
 } from './admin-catalog-contract';
@@ -27,6 +28,14 @@ test('product duplicate path matches Nest controller', () => {
     adminEndpoints.productDuplicate(id),
     `/api/v1/admin/catalog/products/${id}/duplicate`,
   );
+});
+
+test('quick availability reuses product PATCH with OCC body', () => {
+  const id = '11111111-1111-4111-8111-111111111111';
+  assert.equal(adminEndpoints.product(id), `/api/v1/admin/catalog/products/${id}`);
+  const body = buildProductAvailabilityPatchBody(4, 'TEMPORARILY_UNAVAILABLE');
+  assert.deepEqual(body, { expectedVersion: 4, availability: 'TEMPORARILY_UNAVAILABLE' });
+  assert.equal(Object.keys(body).sort().join(','), 'availability,expectedVersion');
 });
 
 test('bestseller group products path and body use productIds', () => {

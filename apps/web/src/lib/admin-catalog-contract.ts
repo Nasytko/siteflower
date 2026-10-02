@@ -65,6 +65,14 @@ export function buildProductBestsellerGroupsBody(
   return { expectedVersion, groupIds: [...groupIds] };
 }
 
+/** Canonical body for PATCH /admin/catalog/products/:id (quick availability). */
+export function buildProductAvailabilityPatchBody(
+  expectedVersion: number,
+  availability: string,
+): { expectedVersion: number; availability: string } {
+  return { expectedVersion, availability };
+}
+
 export function productsListPath(query: ProductListQuery = {}): string {
   return withQuery(adminEndpoints.products, buildProductListQueryParams(query));
 }

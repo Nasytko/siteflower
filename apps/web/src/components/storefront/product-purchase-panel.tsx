@@ -91,6 +91,10 @@ export function ProductPurchasePanel({ product, variants, phone }: Props) {
       <div className="sf-pdp-buy__meta">
         {product.availability === 'AVAILABLE' ? (
           <span className="sf-pdp-badge sf-pdp-badge--ok">В наличии</span>
+        ) : product.availability === 'PREORDER' ? (
+          <span className="sf-pdp-badge">Под заказ</span>
+        ) : product.availability === 'SEASONAL' ? (
+          <span className="sf-pdp-badge">Сезонный</span>
         ) : (
           <span className="sf-pdp-badge">Временно нет</span>
         )}

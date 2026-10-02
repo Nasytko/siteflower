@@ -432,6 +432,7 @@ export function toProductListItemDto(
     name: product.name,
     lifecycle: product.lifecycle,
     availability: product.availability,
+    version: product.version,
     heightCm: product.heightCm ?? null,
     bouquetSize: product.bouquetSize ? toTaxonomyRef(product.bouquetSize) : null,
     price: activeVariantPrices(product.currency, product.variants),

@@ -29,6 +29,7 @@ async function fetchProductBySlug(slug: string): Promise<ProductListItemDto | nu
       name: product.name,
       lifecycle: 'PUBLISHED',
       availability: product.availability,
+      version: 0,
       heightCm: product.heightCm ?? null,
       bouquetSize: product.bouquetSize,
       price: product.price,

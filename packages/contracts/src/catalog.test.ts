@@ -3,9 +3,11 @@ import test from 'node:test';
 import {
   applyPercentOff,
   budgetRangeMatchesPrice,
+  COMMERCIAL_AVAILABILITIES,
   deriveDisplayPercentOff,
   derivePriceRange,
   formatPriceRangeLabel,
+  isCommercialAvailability,
   normalizeSlug,
   defaultProductSeoTitle,
 } from './catalog.js';
@@ -61,4 +63,18 @@ test('budgetRangeMatchesPrice', () => {
   assert.equal(budgetRangeMatchesPrice(25000n, 25000n, null), true);
   assert.equal(budgetRangeMatchesPrice(24999n, 25000n, null), false);
   assert.equal(budgetRangeMatchesPrice(10000n, 8000n, 12000n), true);
+});
+
+test('commercial availability enum is closed and validated', () => {
+  assert.deepEqual([...COMMERCIAL_AVAILABILITIES], [
+    'AVAILABLE',
+    'TEMPORARILY_UNAVAILABLE',
+    'PREORDER',
+    'SEASONAL',
+  ]);
+  for (const value of COMMERCIAL_AVAILABILITIES) {
+    assert.equal(isCommercialAvailability(value), true);
+  }
+  assert.equal(isCommercialAvailability('OUT_OF_STOCK'), false);
+  assert.equal(isCommercialAvailability('ARCHIVED'), false);
 });

@@ -219,6 +219,8 @@ export type ProductListItemDto = {
   name: string;
   lifecycle: ProductLifecycle;
   availability: CommercialAvailability;
+  /** OCC token — required for admin quick updates from the list. */
+  version: number;
   /** Optional factual height in cm; not a filter. */
   heightCm: number | null;
   bouquetSize: TaxonomyRefDto | null;

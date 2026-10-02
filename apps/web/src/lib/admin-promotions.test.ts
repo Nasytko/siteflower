@@ -22,6 +22,7 @@ function row(
     name: 'Розы',
     lifecycle: 'PUBLISHED',
     availability: 'AVAILABLE',
+    version: 1,
     heightCm: null,
     bouquetSize: null,
     price: {

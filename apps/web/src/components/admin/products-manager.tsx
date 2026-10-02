@@ -1,16 +1,18 @@
 'use client';
 
-import { FormEvent, useState, useTransition } from 'react';
+import { FormEvent, useEffect, useState, useTransition } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import {
   COMMERCIAL_AVAILABILITIES,
   PRODUCT_LIFECYCLES,
+  type CommercialAvailability,
   type PaginatedResponse,
   type ProductListItemDto,
 } from '@bouquet-one/contracts';
 import { Button } from '@bouquet-one/ui';
-import { adminPost, AdminRequestError, errorMessage } from '@/lib/admin-client';
+import { adminPatch, adminPost, AdminRequestError, errorMessage } from '@/lib/admin-client';
+import { buildProductAvailabilityPatchBody } from '@/lib/admin-catalog-contract';
 import { adminEndpoints } from '@/lib/admin-endpoints';
 import { availabilityLabel, formatAdminDateTime, lifecycleLabel } from '@/lib/admin-labels';
 import { toSameOriginMediaUrl } from '@/lib/media';
@@ -31,6 +33,14 @@ type Props = {
   filters: ProductFilters;
   bestsellerGroups: Array<{ id: string; name: string }>;
   canCreate: boolean;
+  canUpdate: boolean;
+};
+
+type AvailabilityPatchResult = {
+  id: string;
+  availability: CommercialAvailability;
+  version: number;
+  updatedAt: string;
 };
 
 const SORTS: Array<[string, string]> = [
@@ -41,16 +51,34 @@ const SORTS: Array<[string, string]> = [
   ['newest', 'Сначала новые'],
 ];
 
-export function ProductsManager({ data, filters, bestsellerGroups, canCreate }: Props) {
+export function ProductsManager({
+  data,
+  filters,
+  bestsellerGroups,
+  canCreate,
+  canUpdate,
+}: Props) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [navigating, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [requestId, setRequestId] = useState<string | null>(null);
+  const [retryable, setRetryable] = useState(false);
   const [creating, setCreating] = useState(false);
   const [duplicateTarget, setDuplicateTarget] = useState<ProductListItemDto | null>(null);
   const [duplicating, setDuplicating] = useState(false);
   const [duplicateSuccessId, setDuplicateSuccessId] = useState<string | null>(null);
+  const [rows, setRows] = useState(data.items);
+  const [savingAvailabilityId, setSavingAvailabilityId] = useState<string | null>(null);
+  const [availabilitySuccessId, setAvailabilitySuccessId] = useState<string | null>(null);
+  const [pendingAvailabilityRetry, setPendingAvailabilityRetry] = useState<{
+    id: string;
+    availability: CommercialAvailability;
+  } | null>(null);
+
+  useEffect(() => {
+    setRows(data.items);
+  }, [data.items]);
 
   const groupNames = new Map(bestsellerGroups.map((group) => [group.id, group.name]));
 
@@ -95,6 +123,7 @@ export function ProductsManager({ data, filters, bestsellerGroups, canCreate }: 
     setDuplicating(true);
     setError(null);
     setRequestId(null);
+    setRetryable(false);
     setDuplicateSuccessId(null);
     try {
       const created = await adminPost<{ id: string; slug: string; lifecycle: string; version: number }>(
@@ -107,9 +136,68 @@ export function ProductsManager({ data, filters, bestsellerGroups, canCreate }: 
     } catch (err) {
       setError(errorMessage(err, 'Не удалось дублировать товар'));
       setRequestId(err instanceof AdminRequestError ? err.requestId ?? null : null);
+      setRetryable(err instanceof AdminRequestError ? err.retryable : false);
     } finally {
       setDuplicating(false);
     }
+  }
+
+  async function onAvailabilityChange(
+    item: ProductListItemDto,
+    next: CommercialAvailability,
+  ) {
+    if (!canUpdate || next === item.availability || savingAvailabilityId) return;
+    const previous = item;
+    setSavingAvailabilityId(item.id);
+    setError(null);
+    setRequestId(null);
+    setRetryable(false);
+    setPendingAvailabilityRetry(null);
+    setAvailabilitySuccessId(null);
+    setDuplicateSuccessId(null);
+    setRows((current) =>
+      current.map((row) => (row.id === item.id ? { ...row, availability: next } : row)),
+    );
+    try {
+      const updated = await adminPatch<AvailabilityPatchResult>(
+        adminEndpoints.product(item.id),
+        buildProductAvailabilityPatchBody(item.version, next),
+      );
+      setRows((current) =>
+        current.map((row) =>
+          row.id === item.id
+            ? {
+                ...row,
+                availability: updated.availability,
+                version: updated.version,
+                updatedAt: updated.updatedAt,
+              }
+            : row,
+        ),
+      );
+      setAvailabilitySuccessId(item.id);
+    } catch (err) {
+      setRows((current) =>
+        current.map((row) => (row.id === item.id ? previous : row)),
+      );
+      const conflict =
+        err instanceof AdminRequestError && err.kind === 'conflict'
+          ? 'Товар был изменён в другом окне. Обновите данные.'
+          : errorMessage(err, 'Не удалось изменить доступность');
+      setError(conflict);
+      setRequestId(err instanceof AdminRequestError ? err.requestId ?? null : null);
+      setRetryable(err instanceof AdminRequestError ? err.retryable : false);
+      setPendingAvailabilityRetry({ id: item.id, availability: next });
+    } finally {
+      setSavingAvailabilityId(null);
+    }
+  }
+
+  async function onRetryAvailability() {
+    if (!pendingAvailabilityRetry) return;
+    const row = rows.find((item) => item.id === pendingAvailabilityRetry.id);
+    if (!row) return;
+    await onAvailabilityChange(row, pendingAvailabilityRetry.availability);
   }
 
   const pages = Math.max(1, Math.ceil(data.total / Math.max(1, data.pageSize)));
@@ -128,6 +216,24 @@ export function ProductsManager({ data, filters, bestsellerGroups, canCreate }: 
           {requestId ? (
             <span className="mt-1 block text-xs opacity-80">Код запроса: {requestId}</span>
           ) : null}
+          {retryable && pendingAvailabilityRetry ? (
+            <button
+              type="button"
+              className="admin-link mt-2 block text-sm"
+              onClick={() => void onRetryAvailability()}
+            >
+              Повторить
+            </button>
+          ) : null}
+        </p>
+      ) : null}
+
+      {availabilitySuccessId ? (
+        <p
+          role="status"
+          className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-900"
+        >
+          Доступность изменена
         </p>
       ) : null}
 
@@ -314,7 +420,7 @@ export function ProductsManager({ data, filters, bestsellerGroups, canCreate }: 
               <th>Товар</th>
               <th className="w-36">Цена</th>
               <th className="w-32">Публикация</th>
-              <th className="w-32">Наличие</th>
+              <th className="w-44">Наличие</th>
               <th className="w-36">Акция</th>
               <th className="w-40">Бестселлеры</th>
               <th className="w-40">Изменён</th>
@@ -322,7 +428,7 @@ export function ProductsManager({ data, filters, bestsellerGroups, canCreate }: 
             </tr>
           </thead>
           <tbody>
-            {data.items.length === 0 ? (
+            {rows.length === 0 ? (
               <tr>
                 <td colSpan={canCreate ? 9 : 8}>
                   <p className="admin-empty">
@@ -331,10 +437,11 @@ export function ProductsManager({ data, filters, bestsellerGroups, canCreate }: 
                 </td>
               </tr>
             ) : (
-              data.items.map((item) => {
+              rows.map((item) => {
                 const groups = (item.bestsellerGroupIds ?? [])
                   .map((id) => groupNames.get(id) ?? null)
                   .filter((name): name is string => Boolean(name));
+                const savingAvailability = savingAvailabilityId === item.id;
                 return (
                   <tr key={item.id}>
                     <td>
@@ -382,13 +489,44 @@ export function ProductsManager({ data, filters, bestsellerGroups, canCreate }: 
                       </span>
                     </td>
                     <td>
-                      <span
-                        className={`admin-chip ${
-                          item.availability === 'AVAILABLE' ? '' : 'admin-chip--warn'
-                        }`}
-                      >
-                        {availabilityLabel(item.availability)}
-                      </span>
+                      {canUpdate ? (
+                        <label className="block min-w-[9.5rem]">
+                          <span className="sr-only">Наличие: {item.name}</span>
+                          <select
+                            className={`admin-select w-full max-w-[11rem] text-sm ${
+                              item.availability === 'AVAILABLE' ? '' : 'border-amber-300'
+                            }`}
+                            value={item.availability}
+                            disabled={savingAvailability || Boolean(savingAvailabilityId)}
+                            aria-busy={savingAvailability}
+                            onChange={(event) => {
+                              void onAvailabilityChange(
+                                item,
+                                event.target.value as CommercialAvailability,
+                              );
+                            }}
+                          >
+                            {COMMERCIAL_AVAILABILITIES.map((value) => (
+                              <option key={value} value={value}>
+                                {availabilityLabel(value)}
+                              </option>
+                            ))}
+                          </select>
+                          {savingAvailability ? (
+                            <span className="mt-1 block text-xs text-[var(--admin-muted)]">
+                              Сохранение…
+                            </span>
+                          ) : null}
+                        </label>
+                      ) : (
+                        <span
+                          className={`admin-chip ${
+                            item.availability === 'AVAILABLE' ? '' : 'admin-chip--warn'
+                          }`}
+                        >
+                          {availabilityLabel(item.availability)}
+                        </span>
+                      )}
                     </td>
                     <td>
                       {item.promotion ? (

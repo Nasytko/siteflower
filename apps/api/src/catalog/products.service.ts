@@ -406,9 +406,17 @@ export class ProductsService {
       };
 
       await this.guardVersion(tx, id, input.expectedVersion, data);
+      const availabilityChanged =
+        input.availability !== undefined && input.availability !== product.availability;
       await this.recordAudit(tx, actor, 'PRODUCT_UPDATED', id, {
         fields: Object.keys(data),
         ...(slugChanged ? { previousSlug: product.slug, slug: nextSlug } : {}),
+        ...(availabilityChanged
+          ? {
+              previousAvailability: product.availability,
+              newAvailability: input.availability,
+            }
+          : {}),
       });
     });
 
