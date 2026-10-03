@@ -95,6 +95,7 @@ export function isTaxonomyKind(value: string): value is TaxonomyKind {
 
 export const adminEndpoints = {
   products: `${ADMIN}/catalog/products`,
+  productsBulk: `${ADMIN}/catalog/products/bulk`,
   product: (id: string) => `${ADMIN}/catalog/products/${id}`,
   productDuplicate: (id: string) => `${ADMIN}/catalog/products/${id}/duplicate`,
   productEditor: (id: string) => `${ADMIN}/catalog/products/${id}/editor`,

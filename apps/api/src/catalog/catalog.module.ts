@@ -11,6 +11,7 @@ import { AdminSeoController } from './admin-seo.controller';
 import { BestsellersService } from './bestsellers.service';
 import { BudgetRangesService } from './budget-ranges.service';
 import { ProductsRepository } from './products.repository';
+import { ProductsBulkService } from './products-bulk.service';
 import { ProductsService } from './products.service';
 import { PromotionsService } from './promotions.service';
 import { PublicCatalogController } from './public-catalog.controller';
@@ -38,6 +39,7 @@ import { TaxonomyService } from './taxonomy.service';
   providers: [
     ProductsRepository,
     ProductsService,
+    ProductsBulkService,
     TaxonomyService,
     BestsellersService,
     BudgetRangesService,

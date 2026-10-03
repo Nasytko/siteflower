@@ -4,15 +4,21 @@ import { FormEvent, useEffect, useState, useTransition } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import {
+  BULK_PRODUCTS_MAX_ITEMS,
   COMMERCIAL_AVAILABILITIES,
   PRODUCT_LIFECYCLES,
+  type BulkProductOperation,
+  type BulkProductOperationResultDto,
   type CommercialAvailability,
   type PaginatedResponse,
   type ProductListItemDto,
 } from '@bouquet-one/contracts';
 import { Button } from '@bouquet-one/ui';
 import { adminPatch, adminPost, AdminRequestError, errorMessage } from '@/lib/admin-client';
-import { buildProductAvailabilityPatchBody } from '@/lib/admin-catalog-contract';
+import {
+  buildProductAvailabilityPatchBody,
+  buildProductsBulkBody,
+} from '@/lib/admin-catalog-contract';
 import { adminEndpoints } from '@/lib/admin-endpoints';
 import { availabilityLabel, formatAdminDateTime, lifecycleLabel } from '@/lib/admin-labels';
 import { toSameOriginMediaUrl } from '@/lib/media';
@@ -34,7 +40,12 @@ type Props = {
   bestsellerGroups: Array<{ id: string; name: string }>;
   canCreate: boolean;
   canUpdate: boolean;
+  canPublish: boolean;
 };
+
+type BulkConfirm =
+  | { kind: 'PUBLISH' | 'UNPUBLISH' }
+  | { kind: 'SET_AVAILABILITY'; availability: CommercialAvailability };
 
 type AvailabilityPatchResult = {
   id: string;
@@ -57,6 +68,7 @@ export function ProductsManager({
   bestsellerGroups,
   canCreate,
   canUpdate,
+  canPublish,
 }: Props) {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -75,10 +87,24 @@ export function ProductsManager({
     id: string;
     availability: CommercialAvailability;
   } | null>(null);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
+  const [bulkConfirm, setBulkConfirm] = useState<BulkConfirm | null>(null);
+  const [bulkRunning, setBulkRunning] = useState(false);
+  const [bulkSummary, setBulkSummary] = useState<string | null>(null);
+  const [bulkProblems, setBulkProblems] = useState<Array<{ name: string; message: string }>>(
+    [],
+  );
+  const [showBulkProblems, setShowBulkProblems] = useState(false);
 
   useEffect(() => {
     setRows(data.items);
+    setSelectedIds(new Set());
+    setBulkConfirm(null);
   }, [data.items]);
+
+  const canBulk = canPublish || canUpdate;
+  const selectedRows = rows.filter((row) => selectedIds.has(row.id));
+  const allVisibleSelected = rows.length > 0 && rows.every((row) => selectedIds.has(row.id));
 
   const groupNames = new Map(bestsellerGroups.map((group) => [group.id, group.name]));
 
@@ -200,6 +226,109 @@ export function ProductsManager({
     await onAvailabilityChange(row, pendingAvailabilityRetry.availability);
   }
 
+  function toggleSelectAllVisible() {
+    if (allVisibleSelected) {
+      setSelectedIds(new Set());
+      return;
+    }
+    setSelectedIds(new Set(rows.map((row) => row.id)));
+  }
+
+  function toggleSelectRow(id: string) {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  function requestBulk(confirm: BulkConfirm) {
+    if (selectedRows.length === 0 || bulkRunning) return;
+    if (selectedRows.length > BULK_PRODUCTS_MAX_ITEMS) {
+      setError(`Можно выбрать не более ${BULK_PRODUCTS_MAX_ITEMS} товаров.`);
+      return;
+    }
+    setBulkConfirm(confirm);
+    setBulkSummary(null);
+    setBulkProblems([]);
+    setShowBulkProblems(false);
+  }
+
+  async function runBulk() {
+    if (!bulkConfirm || selectedRows.length === 0 || bulkRunning) return;
+    const operation: BulkProductOperation = bulkConfirm.kind;
+    if (operation === 'SET_AVAILABILITY' && !canUpdate) return;
+    if ((operation === 'PUBLISH' || operation === 'UNPUBLISH') && !canPublish) return;
+
+    setBulkRunning(true);
+    setError(null);
+    setRequestId(null);
+    setRetryable(false);
+    setAvailabilitySuccessId(null);
+    setDuplicateSuccessId(null);
+    try {
+      const body = buildProductsBulkBody(
+        operation,
+        selectedRows.map((row) => ({ productId: row.id, expectedVersion: row.version })),
+        bulkConfirm.kind === 'SET_AVAILABILITY' ? bulkConfirm.availability : undefined,
+      );
+      const result = await adminPost<BulkProductOperationResultDto>(
+        adminEndpoints.productsBulk,
+        body,
+      );
+      const byId = new Map(result.results.map((row) => [row.productId, row]));
+      setRows((current) =>
+        current.map((row) => {
+          const item = byId.get(row.id);
+          if (!item || item.status !== 'SUCCESS') return row;
+          return {
+            ...row,
+            version: item.version ?? row.version,
+            availability: item.availability ?? row.availability,
+            lifecycle: item.lifecycle ?? row.lifecycle,
+          };
+        }),
+      );
+      const problems = result.results
+        .filter((row) => row.status !== 'SUCCESS')
+        .map((row) => {
+          const product = selectedRows.find((item) => item.id === row.productId);
+          return {
+            name: product?.name ?? row.productId,
+            message: row.message ?? 'Не удалось обновить',
+          };
+        });
+      setBulkProblems(problems);
+      if (result.failed === 0) {
+        setBulkSummary(`${result.succeeded} товаров обновлено`);
+        setSelectedIds(new Set());
+      } else if (result.succeeded === 0) {
+        setBulkSummary('Не удалось обновить товары');
+        setShowBulkProblems(true);
+      } else {
+        setBulkSummary(
+          `${result.succeeded} товаров обновлено, ${result.failed} требуют внимания`,
+        );
+        setShowBulkProblems(true);
+        setSelectedIds(
+          new Set(
+            result.results
+              .filter((row) => row.status !== 'SUCCESS')
+              .map((row) => row.productId),
+          ),
+        );
+      }
+      setBulkConfirm(null);
+    } catch (err) {
+      setError(errorMessage(err, 'Не удалось выполнить массовое действие'));
+      setRequestId(err instanceof AdminRequestError ? err.requestId ?? null : null);
+      setRetryable(err instanceof AdminRequestError ? err.retryable : false);
+    } finally {
+      setBulkRunning(false);
+    }
+  }
+
   const pages = Math.max(1, Math.ceil(data.total / Math.max(1, data.pageSize)));
   const hasFilters =
     filters.search.length > 0 ||
@@ -235,6 +364,151 @@ export function ProductsManager({
         >
           Доступность изменена
         </p>
+      ) : null}
+
+      {bulkSummary ? (
+        <div
+          role="status"
+          className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-900"
+        >
+          <p>{bulkSummary}</p>
+          {bulkProblems.length > 0 ? (
+            <div className="mt-2">
+              <button
+                type="button"
+                className="admin-link text-sm"
+                onClick={() => setShowBulkProblems((open) => !open)}
+              >
+                {showBulkProblems ? 'Скрыть проблемы' : 'Посмотреть проблемы'}
+              </button>
+              {showBulkProblems ? (
+                <ul className="mt-2 list-disc space-y-1 pl-5 text-[var(--admin-ink)]">
+                  {bulkProblems.map((problem) => (
+                    <li key={`${problem.name}-${problem.message}`}>
+                      «{problem.name}» — {problem.message}
+                    </li>
+                  ))}
+                </ul>
+              ) : null}
+            </div>
+          ) : null}
+        </div>
+      ) : null}
+
+      {canBulk && selectedIds.size > 0 ? (
+        <div className="admin-panel flex flex-wrap items-center gap-2 border border-[var(--admin-brand)]/30 p-3">
+          <span className="text-sm font-medium text-[var(--admin-ink)]">
+            Выбрано: {selectedIds.size}
+            <span className="ml-1 font-normal text-[var(--admin-muted)]">
+              (на этой странице)
+            </span>
+          </span>
+          {bulkRunning ? (
+            <span className="text-sm text-[var(--admin-muted)]">
+              Обновление {selectedIds.size} товаров…
+            </span>
+          ) : (
+            <>
+              {canPublish ? (
+                <>
+                  <Button
+                    type="button"
+                    className="!rounded-lg !bg-[var(--admin-brand)]"
+                    disabled={bulkRunning}
+                    onClick={() => requestBulk({ kind: 'PUBLISH' })}
+                  >
+                    Опубликовать
+                  </Button>
+                  <button
+                    type="button"
+                    className="admin-btn-ghost"
+                    disabled={bulkRunning}
+                    onClick={() => requestBulk({ kind: 'UNPUBLISH' })}
+                  >
+                    Снять с публикации
+                  </button>
+                </>
+              ) : null}
+              {canUpdate ? (
+                <label className="admin-field mb-0">
+                  <span className="sr-only">Изменить доступность</span>
+                  <select
+                    className="admin-select text-sm"
+                    defaultValue=""
+                    disabled={bulkRunning}
+                    onChange={(event) => {
+                      const value = event.target.value as CommercialAvailability | '';
+                      if (!value) return;
+                      requestBulk({ kind: 'SET_AVAILABILITY', availability: value });
+                      event.currentTarget.value = '';
+                    }}
+                  >
+                    <option value="" disabled>
+                      Изменить доступность
+                    </option>
+                    {COMMERCIAL_AVAILABILITIES.map((value) => (
+                      <option key={value} value={value}>
+                        {availabilityLabel(value)}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              ) : null}
+              <button
+                type="button"
+                className="admin-btn-ghost"
+                disabled={bulkRunning}
+                onClick={() => setSelectedIds(new Set())}
+              >
+                Снять выбор
+              </button>
+            </>
+          )}
+        </div>
+      ) : null}
+
+      {bulkConfirm ? (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="bulk-confirm-title"
+          className="admin-panel space-y-3 border border-[var(--admin-brand)]/30 p-4"
+        >
+          <h2 id="bulk-confirm-title" className="text-base font-semibold text-[var(--admin-ink)]">
+            {bulkConfirm.kind === 'PUBLISH'
+              ? `Опубликовать ${selectedIds.size} товаров?`
+              : bulkConfirm.kind === 'UNPUBLISH'
+                ? `Снять с публикации ${selectedIds.size} товаров?`
+                : `Изменить доступность у ${selectedIds.size} товаров?`}
+          </h2>
+          <p className="text-sm text-[var(--admin-muted)]">
+            {bulkConfirm.kind === 'PUBLISH'
+              ? 'Будут применены текущие правила публикации каждого товара. Товары, которые не проходят проверку, не будут опубликованы.'
+              : bulkConfirm.kind === 'UNPUBLISH'
+                ? 'Товары вернутся в черновик. Архивация не выполняется.'
+                : bulkConfirm.kind === 'SET_AVAILABILITY'
+                  ? `Новое наличие: ${availabilityLabel(bulkConfirm.availability)}.`
+                  : null}
+          </p>
+          <div className="flex flex-wrap gap-2">
+            <Button
+              type="button"
+              disabled={bulkRunning}
+              onClick={() => void runBulk()}
+              className="!rounded-lg !bg-[var(--admin-brand)]"
+            >
+              {bulkRunning ? 'Обновление…' : 'Подтвердить'}
+            </Button>
+            <button
+              type="button"
+              className="admin-btn-ghost"
+              disabled={bulkRunning}
+              onClick={() => setBulkConfirm(null)}
+            >
+              Отмена
+            </button>
+          </div>
+        </div>
       ) : null}
 
       {duplicateSuccessId ? (
@@ -416,6 +690,20 @@ export function ProductsManager({
         <table className="admin-table min-w-[900px]">
           <thead>
             <tr>
+              {canBulk ? (
+                <th className="w-10">
+                  <label className="inline-flex items-center gap-1">
+                    <input
+                      type="checkbox"
+                      checked={allVisibleSelected}
+                      disabled={rows.length === 0 || bulkRunning}
+                      onChange={toggleSelectAllVisible}
+                      aria-label="Выбрать все на этой странице"
+                    />
+                    <span className="sr-only">Все на странице</span>
+                  </label>
+                </th>
+              ) : null}
               <th className="w-16">Фото</th>
               <th>Товар</th>
               <th className="w-36">Цена</th>
@@ -430,7 +718,7 @@ export function ProductsManager({
           <tbody>
             {rows.length === 0 ? (
               <tr>
-                <td colSpan={canCreate ? 9 : 8}>
+                <td colSpan={(canCreate ? 9 : 8) + (canBulk ? 1 : 0)}>
                   <p className="admin-empty">
                     {hasFilters ? 'Ничего не найдено — измените фильтры' : 'Товаров пока нет'}
                   </p>
@@ -444,6 +732,17 @@ export function ProductsManager({
                 const savingAvailability = savingAvailabilityId === item.id;
                 return (
                   <tr key={item.id}>
+                    {canBulk ? (
+                      <td>
+                        <input
+                          type="checkbox"
+                          checked={selectedIds.has(item.id)}
+                          disabled={bulkRunning}
+                          onChange={() => toggleSelectRow(item.id)}
+                          aria-label={`Выбрать ${item.name}`}
+                        />
+                      </td>
+                    ) : null}
                     <td>
                       {item.primaryImageUrl ? (
                         <img
@@ -497,7 +796,11 @@ export function ProductsManager({
                               item.availability === 'AVAILABLE' ? '' : 'border-amber-300'
                             }`}
                             value={item.availability}
-                            disabled={savingAvailability || Boolean(savingAvailabilityId)}
+                            disabled={
+                              savingAvailability ||
+                              Boolean(savingAvailabilityId) ||
+                              bulkRunning
+                            }
                             aria-busy={savingAvailability}
                             onChange={(event) => {
                               void onAvailabilityChange(

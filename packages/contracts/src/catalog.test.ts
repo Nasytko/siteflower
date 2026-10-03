@@ -3,10 +3,13 @@ import test from 'node:test';
 import {
   applyPercentOff,
   budgetRangeMatchesPrice,
+  BULK_PRODUCTS_MAX_ITEMS,
+  BULK_PRODUCT_OPERATIONS,
   COMMERCIAL_AVAILABILITIES,
   deriveDisplayPercentOff,
   derivePriceRange,
   formatPriceRangeLabel,
+  isBulkProductOperation,
   isCommercialAvailability,
   normalizeSlug,
   defaultProductSeoTitle,
@@ -77,4 +80,15 @@ test('commercial availability enum is closed and validated', () => {
   }
   assert.equal(isCommercialAvailability('OUT_OF_STOCK'), false);
   assert.equal(isCommercialAvailability('ARCHIVED'), false);
+});
+
+test('bulk product operations V1 are closed and capped', () => {
+  assert.deepEqual([...BULK_PRODUCT_OPERATIONS], [
+    'PUBLISH',
+    'UNPUBLISH',
+    'SET_AVAILABILITY',
+  ]);
+  assert.equal(isBulkProductOperation('PUBLISH'), true);
+  assert.equal(isBulkProductOperation('DELETE'), false);
+  assert.equal(BULK_PRODUCTS_MAX_ITEMS, 50);
 });

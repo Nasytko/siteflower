@@ -388,6 +388,53 @@ export function isCommercialAvailability(value: string): value is CommercialAvai
   return (COMMERCIAL_AVAILABILITIES as readonly string[]).includes(value);
 }
 
+/** Admin bulk product operations (V1). */
+export const BULK_PRODUCT_OPERATIONS = ['PUBLISH', 'UNPUBLISH', 'SET_AVAILABILITY'] as const;
+export type BulkProductOperation = (typeof BULK_PRODUCT_OPERATIONS)[number];
+
+export const BULK_ITEM_STATUSES = [
+  'SUCCESS',
+  'NOT_FOUND',
+  'FORBIDDEN',
+  'VALIDATION_ERROR',
+  'CONFLICT',
+  'FAILED',
+] as const;
+export type BulkItemStatus = (typeof BULK_ITEM_STATUSES)[number];
+
+/** Server + client hard cap — matches page-scale work, below bestsellers 100. */
+export const BULK_PRODUCTS_MAX_ITEMS = 50;
+
+export type BulkProductItemInputDto = {
+  productId: string;
+  expectedVersion: number;
+};
+
+export type BulkProductItemResultDto = {
+  productId: string;
+  status: BulkItemStatus;
+  message?: string;
+  version?: number;
+  availability?: CommercialAvailability;
+  lifecycle?: ProductLifecycle;
+};
+
+export type BulkProductOperationResultDto = {
+  operation: BulkProductOperation;
+  total: number;
+  succeeded: number;
+  failed: number;
+  results: BulkProductItemResultDto[];
+};
+
+export function isBulkProductOperation(value: string): value is BulkProductOperation {
+  return (BULK_PRODUCT_OPERATIONS as readonly string[]).includes(value);
+}
+
+export function isBulkItemStatus(value: string): value is BulkItemStatus {
+  return (BULK_ITEM_STATUSES as readonly string[]).includes(value);
+}
+
 export function isProductSort(value: string): value is ProductSort {
   return (PRODUCT_SORTS as readonly string[]).includes(value);
 }

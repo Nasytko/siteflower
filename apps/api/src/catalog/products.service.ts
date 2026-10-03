@@ -65,6 +65,14 @@ export type UploadedImage = {
   originalname?: string;
 };
 
+/** Options for single-item mutations when orchestrated by bulk. */
+export type ProductMutationOptions = {
+  /** Skip per-product storefront revalidation (bulk issues one deferred ping). */
+  deferStorefrontRevalidate?: boolean;
+  /** Marks audit metadata when invoked from bulk orchestration. */
+  bulk?: boolean;
+};
+
 function publishValidationException(issues: PublishValidationIssue[]): BadRequestException {
   return new BadRequestException({
     statusCode: 400,
@@ -96,9 +104,14 @@ export class ProductsService {
     });
   }
 
-  private async finishAdminMutation(id: string): Promise<ProductAdminDto> {
+  private async finishAdminMutation(
+    id: string,
+    options?: ProductMutationOptions,
+  ): Promise<ProductAdminDto> {
     const dto = await this.getById(id);
-    await this.bumpStorefrontCache(dto.slug);
+    if (!options?.deferStorefrontRevalidate) {
+      await this.bumpStorefrontCache(dto.slug);
+    }
     return dto;
   }
 
@@ -355,6 +368,7 @@ export class ProductsService {
     id: string,
     input: UpdateProductDto,
     actor: ActorContext,
+    options?: ProductMutationOptions,
   ): Promise<ProductAdminDto> {
     const product = await this.products.findById(id);
     if (!product) {
@@ -417,11 +431,11 @@ export class ProductsService {
               newAvailability: input.availability,
             }
           : {}),
+        ...(options?.bulk ? { bulk: true } : {}),
       });
     });
 
-    const updated = await this.finishAdminMutation(id);
-    return updated;
+    return this.finishAdminMutation(id, options);
   }
 
   /**
@@ -698,6 +712,7 @@ export class ProductsService {
     id: string,
     input: PublishProductDto,
     actor: ActorContext,
+    options?: ProductMutationOptions,
   ): Promise<ProductAdminDto> {
     const product = await this.products.findById(id);
     if (!product) {
@@ -733,16 +748,18 @@ export class ProductsService {
       await this.recordAudit(tx, actor, 'PRODUCT_PUBLISHED', id, {
         publishAt: publishAt?.toISOString() ?? null,
         unpublishAt: unpublishAt?.toISOString() ?? null,
+        ...(options?.bulk ? { bulk: true } : {}),
       });
     });
 
-    return this.finishAdminMutation(id);
+    return this.finishAdminMutation(id, options);
   }
 
   async unpublish(
     id: string,
     expectedVersion: number,
     actor: ActorContext,
+    options?: ProductMutationOptions,
   ): Promise<ProductAdminDto> {
     await this.prisma.client.$transaction(async (tx) => {
       await this.guardVersion(tx, id, expectedVersion, {
@@ -750,10 +767,12 @@ export class ProductsService {
         publishAt: null,
         unpublishAt: null,
       });
-      await this.recordAudit(tx, actor, 'PRODUCT_UNPUBLISHED', id);
+      await this.recordAudit(tx, actor, 'PRODUCT_UNPUBLISHED', id, {
+        ...(options?.bulk ? { bulk: true } : {}),
+      });
     });
 
-    return this.finishAdminMutation(id);
+    return this.finishAdminMutation(id, options);
   }
 
   async archive(

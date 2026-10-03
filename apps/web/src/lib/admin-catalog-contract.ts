@@ -73,6 +73,30 @@ export function buildProductAvailabilityPatchBody(
   return { expectedVersion, availability };
 }
 
+export type BulkProductRequestBody = {
+  operation: 'PUBLISH' | 'UNPUBLISH' | 'SET_AVAILABILITY';
+  items: Array<{ productId: string; expectedVersion: number }>;
+  availability?: string;
+};
+
+/** Canonical body for POST /admin/catalog/products/bulk */
+export function buildProductsBulkBody(
+  operation: BulkProductRequestBody['operation'],
+  items: ReadonlyArray<{ productId: string; expectedVersion: number }>,
+  availability?: string,
+): BulkProductRequestBody {
+  return {
+    operation,
+    items: items.map((item) => ({
+      productId: item.productId,
+      expectedVersion: item.expectedVersion,
+    })),
+    ...(operation === 'SET_AVAILABILITY' && availability
+      ? { availability }
+      : {}),
+  };
+}
+
 export function productsListPath(query: ProductListQuery = {}): string {
   return withQuery(adminEndpoints.products, buildProductListQueryParams(query));
 }

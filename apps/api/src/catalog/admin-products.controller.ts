@@ -3,6 +3,7 @@ import {
   Controller,
   Delete,
   Get,
+  HttpCode,
   Param,
   ParseUUIDPipe,
   Patch,
@@ -39,6 +40,8 @@ import {
   UpsertProductPromotionDto,
   SaveProductEditorDto,
 } from './products.dto';
+import { BulkProductsDto } from './products-bulk.dto';
+import { ProductsBulkService } from './products-bulk.service';
 import { ProductsService } from './products.service';
 import { PromotionsService } from './promotions.service';
 
@@ -47,6 +50,7 @@ import { PromotionsService } from './promotions.service';
 export class AdminProductsController {
   constructor(
     private readonly products: ProductsService,
+    private readonly productsBulk: ProductsBulkService,
     private readonly promotions: PromotionsService,
   ) {}
 
@@ -64,6 +68,18 @@ export class AdminProductsController {
     @Req() req: Request,
   ) {
     return this.products.create(body, actorFrom(admin, req));
+  }
+
+  /** Must be registered before `:id/*` routes so `bulk` is not parsed as a UUID. */
+  @Post('bulk')
+  @HttpCode(200)
+  @RequirePermissions('CATALOG_READ')
+  bulk(
+    @Body() body: BulkProductsDto,
+    @CurrentAdmin() admin: AuthenticatedAdmin,
+    @Req() req: Request,
+  ) {
+    return this.productsBulk.execute(body, actorFrom(admin, req), admin.role);
   }
 
   @Post(':id/duplicate')

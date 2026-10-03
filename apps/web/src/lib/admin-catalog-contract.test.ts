@@ -5,6 +5,7 @@ import {
   buildProductAvailabilityPatchBody,
   buildProductBestsellerGroupsBody,
   buildProductListQueryParams,
+  buildProductsBulkBody,
 } from './admin-catalog-contract';
 import { adminEndpoints, withQuery } from './admin-endpoints';
 
@@ -36,6 +37,27 @@ test('quick availability reuses product PATCH with OCC body', () => {
   const body = buildProductAvailabilityPatchBody(4, 'TEMPORARILY_UNAVAILABLE');
   assert.deepEqual(body, { expectedVersion: 4, availability: 'TEMPORARILY_UNAVAILABLE' });
   assert.equal(Object.keys(body).sort().join(','), 'availability,expectedVersion');
+});
+
+test('products bulk path and body match Nest controller', () => {
+  assert.equal(adminEndpoints.productsBulk, '/api/v1/admin/catalog/products/bulk');
+  const body = buildProductsBulkBody(
+    'SET_AVAILABILITY',
+    [
+      { productId: '11111111-1111-4111-8111-111111111111', expectedVersion: 2 },
+      { productId: '22222222-2222-4222-8222-222222222222', expectedVersion: 5 },
+    ],
+    'PREORDER',
+  );
+  assert.equal(body.operation, 'SET_AVAILABILITY');
+  assert.equal(body.availability, 'PREORDER');
+  assert.equal(body.items.length, 2);
+  assert.equal(body.items[0]?.expectedVersion, 2);
+
+  const publish = buildProductsBulkBody('PUBLISH', [
+    { productId: '11111111-1111-4111-8111-111111111111', expectedVersion: 1 },
+  ]);
+  assert.equal(publish.availability, undefined);
 });
 
 test('bestseller group products path and body use productIds', () => {

@@ -68,6 +68,7 @@ export default async function AdminProductsPage({
           bestsellerGroups={bestsellerGroups.map((group) => ({ id: group.id, name: group.name }))}
           canCreate={roleHasPermission(me.user.role, 'CATALOG_CREATE')}
           canUpdate={roleHasPermission(me.user.role, 'CATALOG_UPDATE')}
+          canPublish={roleHasPermission(me.user.role, 'CATALOG_PUBLISH')}
         />
       </Suspense>
     </main>
