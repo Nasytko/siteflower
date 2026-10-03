@@ -44,6 +44,7 @@ Storage and Postgres are not one ACID transaction. Upload tracks every newly wri
 5. Unreferenced assets wait **7 days** from `orphanedAt` (not `createdAt`)
 6. `pnpm media:cleanup` (dry-run) / `--execute` deletes derivatives → master → DB rows after a final reference check (idempotent; missing S3 keys OK)
 7. Shared media (e.g. duplicate product) is never orphan while any product still references it
+8. Purge holds `SELECT … FOR UPDATE` on `media_assets` **across** storage deletes so a concurrent `ProductMedia` insert (FK KEY SHARE) cannot commit against an asset mid-delete
 
 SAFE FIRST + EVENTUALLY CLEAN: detach succeeds for the manager immediately; physical cleanup is deferred and retryable.
 

@@ -575,8 +575,20 @@ describe('Media production hardening (integration)', () => {
       [raceId],
     );
     if (refs.rows[0].c > 0) {
+      // Attach won or interleaved after purge: DB row + S3 master must both remain.
+      // (FOR UPDATE held across storage.delete prevents ProductMedia → missing S3.)
       const stillThere = await pool.query(`SELECT id FROM media_assets WHERE id = $1`, [raceId]);
       expect(stillThere.rows).toHaveLength(1);
+      expect((await storage.head(raceKey)).exists).toBe(true);
+      const orphaned = await pool.query(
+        `SELECT orphaned_at FROM media_assets WHERE id = $1`,
+        [raceId],
+      );
+      expect(orphaned.rows[0].orphaned_at).toBeNull();
+    } else {
+      // Cleanup won: asset gone (or never attached). S3 key must not linger required.
+      const gone = await pool.query(`SELECT id FROM media_assets WHERE id = $1`, [raceId]);
+      expect(gone.rows).toHaveLength(0);
     }
 
     const oldRow = await pool.query(`SELECT id FROM media_assets WHERE id = $1`, [oldId]);

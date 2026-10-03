@@ -27,11 +27,22 @@ export type CleanupReport = {
 };
 
 /**
+ * Max time for one orphan purge transaction (FOR UPDATE held across S3 deletes).
+ * CLI-only path; keeps the MediaAsset row locked so ProductMedia FK inserts block.
+ */
+const ORPHAN_PURGE_TX_TIMEOUT_MS = 120_000;
+const ORPHAN_PURGE_TX_MAX_WAIT_MS = 10_000;
+
+/**
  * Orphan = MediaAsset with zero ProductMedia (sole business reference today).
  * Physical delete only after orphanedAt + grace period. Idempotent; missing objects OK.
  *
- * Deletion order: storage objects first (master + derivatives), then DB rows.
- * If storage delete fails mid-way, DB metadata remains so retry can find keys.
+ * Deletion order (single DB transaction, row locked):
+ *   FOR UPDATE → final ref/grace check → storage delete (master + derivatives) → DB delete
+ *
+ * Holding FOR UPDATE across storage deletes is intentional: PostgreSQL FK inserts into
+ * product_media take KEY SHARE on media_assets, which conflicts with FOR UPDATE, so a
+ * concurrent attach cannot commit ProductMedia while S3 objects are being removed.
  */
 @Injectable()
 export class MediaOrphanService {
@@ -155,62 +166,56 @@ export class MediaOrphanService {
     graceHours: number,
   ): Promise<void> {
     const cutoff = orphanGraceCutoff(graceHours);
-
-    // Lock row and re-verify no references + still past grace before storage deletes.
-    const stillOrphan = await this.prisma.client.$transaction(async (tx) => {
-      const rows = await tx.$queryRaw<Array<{ id: string; orphaned_at: Date | null }>>`
-        SELECT id, orphaned_at FROM media_assets WHERE id = ${candidate.id}::uuid FOR UPDATE
-      `;
-      if (rows.length === 0) return false;
-      const refs = await tx.productMedia.count({ where: { mediaAssetId: candidate.id } });
-      if (refs > 0) {
-        await tx.mediaAsset.update({
-          where: { id: candidate.id },
-          data: { orphanedAt: null },
-        });
-        return false;
-      }
-      const orphanedAt = rows[0]?.orphaned_at;
-      if (!orphanedAt || orphanedAt > cutoff) return false;
-      return true;
-    });
-
-    if (!stillOrphan) {
-      report.skippedLocked.push(candidate.id);
-      return;
-    }
-
-    // Re-check refs after lock release window before destructive deletes —
-    // second transaction with FOR UPDATE again immediately before DB delete.
     const keys = [candidate.storageKey, ...candidate.derivativeKeys];
-    for (const key of keys) {
-      try {
-        await this.storage.delete(key);
-        report.deletedKeys.push(key);
-      } catch (err) {
-        throw new Error(`storage_delete_failed key=${key}: ${(err as Error).message}`);
-      }
+
+    await this.prisma.client.$transaction(
+      async (tx) => {
+        const rows = await tx.$queryRaw<Array<{ id: string; orphaned_at: Date | null }>>`
+          SELECT id, orphaned_at FROM media_assets WHERE id = ${candidate.id}::uuid FOR UPDATE
+        `;
+        if (rows.length === 0) {
+          report.skippedLocked.push(candidate.id);
+          return;
+        }
+
+        const refs = await tx.productMedia.count({ where: { mediaAssetId: candidate.id } });
+        if (refs > 0) {
+          await tx.mediaAsset.update({
+            where: { id: candidate.id },
+            data: { orphanedAt: null },
+          });
+          report.skippedLocked.push(candidate.id);
+          return;
+        }
+
+        const orphanedAt = rows[0]?.orphaned_at;
+        if (!orphanedAt || orphanedAt > cutoff) {
+          report.skippedLocked.push(candidate.id);
+          return;
+        }
+
+        // Storage deletes while the row lock is held — closes TOCTOU vs attach.
+        for (const key of keys) {
+          try {
+            await this.storage.delete(key);
+            report.deletedKeys.push(key);
+          } catch (err) {
+            throw new Error(`storage_delete_failed key=${key}: ${(err as Error).message}`);
+          }
+        }
+
+        await tx.mediaDerivative.deleteMany({ where: { mediaAssetId: candidate.id } });
+        await tx.mediaAsset.delete({ where: { id: candidate.id } });
+        report.deletedAssets.push(candidate.id);
+      },
+      {
+        timeout: ORPHAN_PURGE_TX_TIMEOUT_MS,
+        maxWait: ORPHAN_PURGE_TX_MAX_WAIT_MS,
+      },
+    );
+
+    if (report.deletedAssets.includes(candidate.id)) {
+      this.logger.log(`media_orphan_deleted assetId=${candidate.id} keys=${keys.length}`);
     }
-
-    await this.prisma.client.$transaction(async (tx) => {
-      const rows = await tx.$queryRaw<Array<{ id: string }>>`
-        SELECT id FROM media_assets WHERE id = ${candidate.id}::uuid FOR UPDATE
-      `;
-      if (rows.length === 0) return;
-      const refs = await tx.productMedia.count({ where: { mediaAssetId: candidate.id } });
-      if (refs > 0) {
-        await tx.mediaAsset.update({
-          where: { id: candidate.id },
-          data: { orphanedAt: null },
-        });
-        report.skippedLocked.push(candidate.id);
-        return;
-      }
-      await tx.mediaDerivative.deleteMany({ where: { mediaAssetId: candidate.id } });
-      await tx.mediaAsset.delete({ where: { id: candidate.id } });
-      report.deletedAssets.push(candidate.id);
-    });
-
-    this.logger.log(`media_orphan_deleted assetId=${candidate.id} keys=${keys.length}`);
   }
 }
