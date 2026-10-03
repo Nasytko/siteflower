@@ -33,6 +33,7 @@ async function main(): Promise<void> {
           candidates: report.candidates.map((c) => ({
             id: c.id,
             createdAt: c.createdAt,
+            orphanedAt: c.orphanedAt,
             estimatedBytes: c.estimatedBytes,
           })),
           deletedAssets: report.deletedAssets,

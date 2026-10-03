@@ -12,7 +12,7 @@ Index for media subsystem docs (no behavior changes here).
 
 ```bash
 pnpm media:check -- --probe
-pnpm media:cleanup            # dry-run
+pnpm media:cleanup            # dry-run (7-day orphanedAt grace)
 pnpm media:cleanup -- --execute
 pnpm media:repair -- --execute
 pnpm media:migrate-local-to-s3

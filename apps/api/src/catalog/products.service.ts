@@ -350,6 +350,11 @@ export class ProductsService {
             caption: item.caption,
           })),
         });
+        const sharedAssetIds = [...new Set(source.media.map((item) => item.mediaAssetId))];
+        await tx.mediaAsset.updateMany({
+          where: { id: { in: sharedAssetIds } },
+          data: { orphanedAt: null },
+        });
       }
 
       await this.recordAudit(tx, actor, 'PRODUCT_DUPLICATED', product.id, {
@@ -841,6 +846,10 @@ export class ProductsService {
             caption: input.caption ? trimmedOrNull(input.caption) : null,
           },
         });
+        await tx.mediaAsset.update({
+          where: { id: asset.id },
+          data: { orphanedAt: null },
+        });
         await this.products.bumpVersion(id, tx);
         await this.recordAudit(tx, actor, 'PRODUCT_MEDIA_ADDED', id, {
           mediaAssetId: asset.id,
@@ -905,7 +914,7 @@ export class ProductsService {
     }
 
     await this.prisma.client.$transaction(async (tx) => {
-      // Detach association only — MediaAsset stays until orphan grace cleanup.
+      // Detach association only — MediaAsset / S3 stay until orphan grace cleanup.
       await tx.productMedia.delete({ where: { id: mediaId } });
       if (media.isPrimary) {
         const remaining = await tx.productMedia.findMany({
@@ -920,6 +929,13 @@ export class ProductsService {
           });
         }
       }
+      const refs = await tx.productMedia.count({
+        where: { mediaAssetId: media.mediaAssetId },
+      });
+      await tx.mediaAsset.update({
+        where: { id: media.mediaAssetId },
+        data: { orphanedAt: refs === 0 ? new Date() : null },
+      });
       await this.products.bumpVersion(id, tx);
       await this.recordAudit(tx, actor, 'PRODUCT_MEDIA_REMOVED', id, {
         mediaId,

@@ -12,6 +12,7 @@ import {
   MASTER_MAX_LONG_SIDE,
   MEDIA_MAX_DIMENSION,
   MEDIA_MAX_INPUT_PIXELS,
+  MEDIA_ORPHAN_GRACE_HOURS,
   MEDIA_UPLOAD_MAX_INPUT_BYTES,
   PRODUCT_MEDIA_MAX,
   fitMasterDimensions,
@@ -68,12 +69,13 @@ describe('LocalMediaStorage contract', () => {
 });
 
 describe('media constants', () => {
-  it('keeps gallery max, bomb limits, and upload hard ceiling', () => {
+  it('keeps gallery max, bomb limits, upload ceiling, and 7-day orphan grace', () => {
     expect(PRODUCT_MEDIA_MAX).toBe(12);
     expect(MEDIA_MAX_INPUT_PIXELS).toBe(25_000_000);
     expect(MEDIA_MAX_DIMENSION).toBe(6000);
     expect(MASTER_MAX_LONG_SIDE).toBe(1600);
     expect(MEDIA_UPLOAD_MAX_INPUT_BYTES).toBe(25_000_000);
+    expect(MEDIA_ORPHAN_GRACE_HOURS).toBe(168);
   });
 });
 

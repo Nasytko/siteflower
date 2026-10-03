@@ -62,12 +62,21 @@ export class S3MediaStorage implements MediaStorage {
   }
 
   async delete(key: string): Promise<void> {
-    await this.client.send(
-      new DeleteObjectCommand({
-        Bucket: this.options.bucket,
-        Key: key,
-      }),
-    );
+    try {
+      await this.client.send(
+        new DeleteObjectCommand({
+          Bucket: this.options.bucket,
+          Key: key,
+        }),
+      );
+    } catch (err) {
+      // Idempotent cleanup: already-deleted keys must not fail retry.
+      const name = (err as { name?: string }).name;
+      const status = (err as { $metadata?: { httpStatusCode?: number } }).$metadata
+        ?.httpStatusCode;
+      if (name === 'NoSuchKey' || name === 'NotFound' || status === 404) return;
+      throw err;
+    }
   }
 
   async get(key: string): Promise<Buffer | null> {

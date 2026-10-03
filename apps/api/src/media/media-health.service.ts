@@ -10,6 +10,7 @@ import {
   MEDIA_MAX_INPUT_PIXELS,
   MEDIA_ORPHAN_GRACE_HOURS,
 } from './media.constants';
+import { orphanGraceCutoff } from './media-orphan.util';
 import { MEDIA_STORAGE, type MediaStorage } from './media-storage';
 import sharp from 'sharp';
 import type { MediaFormat } from '@bouquet-one/database';
@@ -116,16 +117,43 @@ export class MediaHealthService {
   }): Promise<MediaConsistencyReport> {
     const sampleLimit = Math.min(Math.max(options?.sampleLimit ?? 200, 1), 1000);
     const checkedAt = new Date().toISOString();
-    const graceCutoff = new Date(Date.now() - MEDIA_ORPHAN_GRACE_HOURS * 60 * 60 * 1000);
+    const graceCutoff = orphanGraceCutoff(MEDIA_ORPHAN_GRACE_HOURS);
 
-    const [assetCount, referencedAssets, orphanTotal, orphanWithinGrace] = await Promise.all([
-      this.prisma.client.mediaAsset.count(),
-      this.prisma.client.mediaAsset.count({ where: { productMedia: { some: {} } } }),
-      this.prisma.client.mediaAsset.count({ where: { productMedia: { none: {} } } }),
-      this.prisma.client.mediaAsset.count({
-        where: { productMedia: { none: {} }, createdAt: { gte: graceCutoff } },
-      }),
-    ]);
+    // Heal marker drift before counting (cascade detach / attach races).
+    await this.prisma.client.$executeRaw`
+      UPDATE media_assets AS ma
+      SET orphaned_at = NOW()
+      WHERE ma.orphaned_at IS NULL
+        AND NOT EXISTS (
+          SELECT 1 FROM product_media pm WHERE pm.media_asset_id = ma.id
+        )
+    `;
+    await this.prisma.client.$executeRaw`
+      UPDATE media_assets AS ma
+      SET orphaned_at = NULL
+      WHERE ma.orphaned_at IS NOT NULL
+        AND EXISTS (
+          SELECT 1 FROM product_media pm WHERE pm.media_asset_id = ma.id
+        )
+    `;
+
+    const [assetCount, referencedAssets, orphanWithinGrace, orphanCandidates] =
+      await Promise.all([
+        this.prisma.client.mediaAsset.count(),
+        this.prisma.client.mediaAsset.count({ where: { productMedia: { some: {} } } }),
+        this.prisma.client.mediaAsset.count({
+          where: {
+            productMedia: { none: {} },
+            orphanedAt: { not: null, gt: graceCutoff },
+          },
+        }),
+        this.prisma.client.mediaAsset.count({
+          where: {
+            productMedia: { none: {} },
+            orphanedAt: { not: null, lte: graceCutoff },
+          },
+        }),
+      ]);
 
     const assets = await this.prisma.client.mediaAsset.findMany({
       take: sampleLimit,
@@ -206,7 +234,7 @@ export class MediaHealthService {
       driver: this.storage.driver,
       assetCount,
       referencedAssets,
-      orphanCandidates: orphanTotal - orphanWithinGrace,
+      orphanCandidates,
       orphanWithinGrace,
       missingMasters,
       missingDerivatives,

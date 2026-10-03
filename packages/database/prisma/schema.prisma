@@ -539,11 +539,15 @@ model MediaAsset {
   width        Int?
   height       Int?
   checksumSha256 String    @map("checksum_sha256") @db.Char(64)
+  /// Set when the asset has zero ProductMedia refs; cleared on re-attach.
+  /// Physical cleanup uses this timestamp (not createdAt) + grace period.
+  orphanedAt   DateTime?   @map("orphaned_at") @db.Timestamptz(3)
   createdAt    DateTime    @default(now()) @map("created_at") @db.Timestamptz(3)
 
   derivatives MediaDerivative[]
   productMedia ProductMedia[]
 
+  @@index([orphanedAt])
   @@map("media_assets")
 }
 

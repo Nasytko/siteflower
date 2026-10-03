@@ -418,10 +418,11 @@ describe('Product duplicate (integration)', () => {
     );
     expect(sourceRefs.rows[0].c).toBe(1);
 
-    // Age the asset past grace so it would be eligible IF truly orphaned.
-    await pool.query(`UPDATE media_assets SET created_at = NOW() - INTERVAL '48 hours' WHERE id = $1`, [
-      assetId,
-    ]);
+    // Age orphanedAt past grace so it would be eligible IF truly orphaned.
+    await pool.query(
+      `UPDATE media_assets SET orphaned_at = NOW() - INTERVAL '8 days' WHERE id = $1`,
+      [assetId],
+    );
 
     const tsxCli = path.join(__dirname, '..', 'node_modules', 'tsx', 'dist', 'cli.mjs');
     const cleanupScript = path.join(__dirname, '..', 'src', 'cli', 'media-cleanup.ts');

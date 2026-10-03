@@ -267,8 +267,12 @@ describe('Media production hardening (integration)', () => {
     expect(remove.body.media).toHaveLength(11);
     expect(remove.body.media.filter((m: { isPrimary: boolean }) => m.isPrimary)).toHaveLength(1);
 
-    const asset = await pool.query(`SELECT id FROM media_assets WHERE id = $1`, [assetId]);
+    const asset = await pool.query(
+      `SELECT id, orphaned_at FROM media_assets WHERE id = $1`,
+      [assetId],
+    );
     expect(asset.rows).toHaveLength(1);
+    expect(asset.rows[0].orphaned_at).not.toBeNull();
     const refs = await pool.query(
       `SELECT COUNT(*)::int AS c FROM product_media WHERE media_asset_id = $1`,
       [assetId],
@@ -482,8 +486,8 @@ describe('Media production hardening (integration)', () => {
       contentType: 'image/png',
     });
     await pool.query(
-      `INSERT INTO media_assets (id, storage_key, mime_type, format, byte_size, width, height, checksum_sha256, created_at)
-       VALUES ($1, $2, 'image/png', 'PNG', 12, 10, 10, $3, NOW())`,
+      `INSERT INTO media_assets (id, storage_key, mime_type, format, byte_size, width, height, checksum_sha256, orphaned_at, created_at)
+       VALUES ($1, $2, 'image/png', 'PNG', 12, 10, 10, $3, NOW(), NOW())`,
       [freshId, freshKey, createHash('sha256').update('fresh-orphan').digest('hex')],
     );
 
@@ -495,8 +499,8 @@ describe('Media production hardening (integration)', () => {
       contentType: 'image/png',
     });
     await pool.query(
-      `INSERT INTO media_assets (id, storage_key, mime_type, format, byte_size, width, height, checksum_sha256, created_at)
-       VALUES ($1, $2, 'image/png', 'PNG', 10, 10, 10, $3, NOW() - INTERVAL '25 hours')`,
+      `INSERT INTO media_assets (id, storage_key, mime_type, format, byte_size, width, height, checksum_sha256, orphaned_at, created_at)
+       VALUES ($1, $2, 'image/png', 'PNG', 10, 10, 10, $3, NOW() - INTERVAL '8 days', NOW() - INTERVAL '30 days')`,
       [oldId, oldKey, createHash('sha256').update('old-orphan').digest('hex')],
     );
 
@@ -508,8 +512,8 @@ describe('Media production hardening (integration)', () => {
       contentType: 'image/png',
     });
     await pool.query(
-      `INSERT INTO media_assets (id, storage_key, mime_type, format, byte_size, width, height, checksum_sha256, created_at)
-       VALUES ($1, $2, 'image/png', 'PNG', 11, 10, 10, $3, NOW() - INTERVAL '30 hours')`,
+      `INSERT INTO media_assets (id, storage_key, mime_type, format, byte_size, width, height, checksum_sha256, orphaned_at, created_at)
+       VALUES ($1, $2, 'image/png', 'PNG', 11, 10, 10, $3, NOW() - INTERVAL '8 days', NOW() - INTERVAL '30 days')`,
       [raceId, raceKey, createHash('sha256').update('race-orphan').digest('hex')],
     );
     const productId = uuid();
@@ -678,4 +682,121 @@ describe('Media production hardening (integration)', () => {
       pool.query(`DELETE FROM media_assets WHERE id = $1`, [assetId]),
     ).rejects.toThrow(/restrict|foreign key|product_media/i);
   });
+
+  it('orphanedAt marks last detach, clears on re-attach, and survives product archive', async () => {
+    const http = await login();
+    const stamp = Date.now();
+    const a = await http
+      .post('/api/v1/admin/catalog/products')
+      .set('Origin', origin)
+      .send({ name: 'Media Life A', slug: `media-hard-life-a-${stamp}` })
+      .expect(201);
+    const b = await http
+      .post('/api/v1/admin/catalog/products')
+      .set('Origin', origin)
+      .send({ name: 'Media Life B', slug: `media-hard-life-b-${stamp}` })
+      .expect(201);
+
+    const up = await http
+      .post(`/api/v1/admin/catalog/products/${a.body.id}/media`)
+      .set('Origin', origin)
+      .attach('file', await png(300, 300), 'life.png')
+      .expect(201);
+    const mediaRow = up.body.media[0] as { id: string; mediaAssetId: string };
+    const assetId = mediaRow.mediaAssetId;
+
+    const linked = await pool.query(
+      `SELECT orphaned_at FROM media_assets WHERE id = $1`,
+      [assetId],
+    );
+    expect(linked.rows[0].orphaned_at).toBeNull();
+
+    // Share the same MediaAsset with product B (duplicate-style).
+    await pool.query(
+      `INSERT INTO product_media (id, product_id, media_asset_id, sort_order, is_primary, created_at)
+       VALUES ($1, $2, $3, 0, true, NOW())`,
+      [uuid(), b.body.id, assetId],
+    );
+
+    await http
+      .delete(`/api/v1/admin/catalog/products/${a.body.id}/media/${mediaRow.id}`)
+      .set('Origin', origin)
+      .expect(200);
+
+    const afterOne = await pool.query(
+      `SELECT orphaned_at FROM media_assets WHERE id = $1`,
+      [assetId],
+    );
+    expect(afterOne.rows[0].orphaned_at).toBeNull();
+
+    const bMedia = await pool.query(
+      `SELECT id FROM product_media WHERE product_id = $1 AND media_asset_id = $2`,
+      [b.body.id, assetId],
+    );
+    await http
+      .delete(`/api/v1/admin/catalog/products/${b.body.id}/media/${bMedia.rows[0].id}`)
+      .set('Origin', origin)
+      .expect(200);
+
+    const orphaned = await pool.query(
+      `SELECT orphaned_at FROM media_assets WHERE id = $1`,
+      [assetId],
+    );
+    expect(orphaned.rows[0].orphaned_at).not.toBeNull();
+
+    // Re-attach + reconcile clears orphanedAt (same heal path as cleanup/health).
+    await pool.query(
+      `INSERT INTO product_media (id, product_id, media_asset_id, sort_order, is_primary, created_at)
+       VALUES ($1, $2, $3, 0, true, NOW())`,
+      [uuid(), a.body.id, assetId],
+    );
+    await pool.query(
+      `UPDATE media_assets AS ma
+       SET orphaned_at = NULL
+       WHERE ma.orphaned_at IS NOT NULL
+         AND EXISTS (SELECT 1 FROM product_media pm WHERE pm.media_asset_id = ma.id)
+         AND ma.id = $1`,
+      [assetId],
+    );
+
+    const reattached = await pool.query(
+      `SELECT orphaned_at FROM media_assets WHERE id = $1`,
+      [assetId],
+    );
+    expect(reattached.rows[0].orphaned_at).toBeNull();
+
+    // Archive keeps ProductMedia — asset must not become orphan.
+    const beforeArchive = await http
+      .get(`/api/v1/admin/catalog/products/${a.body.id}`)
+      .expect(200);
+    await http
+      .post(`/api/v1/admin/catalog/products/${a.body.id}/archive`)
+      .set('Origin', origin)
+      .send({ expectedVersion: beforeArchive.body.version })
+      .expect(201);
+    const afterArchive = await pool.query(
+      `SELECT orphaned_at,
+              (SELECT count(*)::int FROM product_media WHERE media_asset_id = $1) AS refs
+       FROM media_assets WHERE id = $1`,
+      [assetId],
+    );
+    expect(afterArchive.rows[0].refs).toBe(1);
+    expect(afterArchive.rows[0].orphaned_at).toBeNull();
+
+    // Simulate hard product delete cascading ProductMedia; reconcile marks orphan.
+    await pool.query(`DELETE FROM product_media WHERE media_asset_id = $1`, [assetId]);
+    await pool.query(
+      `UPDATE media_assets AS ma
+       SET orphaned_at = NOW()
+       WHERE ma.orphaned_at IS NULL
+         AND NOT EXISTS (SELECT 1 FROM product_media pm WHERE pm.media_asset_id = ma.id)
+         AND ma.id = $1`,
+      [assetId],
+    );
+    const afterCascade = await pool.query(
+      `SELECT orphaned_at FROM media_assets WHERE id = $1`,
+      [assetId],
+    );
+    expect(afterCascade.rows[0].orphaned_at).not.toBeNull();
+  }, 120_000);
 });

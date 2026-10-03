@@ -37,10 +37,15 @@ Storage and Postgres are not one ACID transaction. Upload tracks every newly wri
 
 ## Delete / orphan
 
-1. Admin delete → remove `ProductMedia` association only
+1. Admin delete → remove `ProductMedia` association only (S3 untouched)
 2. If primary removed → promote next by `sortOrder`
-3. Unreferenced `MediaAsset` waits **24h** grace
-4. `pnpm media:cleanup --execute` deletes derivatives → master → DB rows (idempotent)
+3. If the `MediaAsset` has **zero** remaining `ProductMedia` refs → set `orphanedAt = now`
+4. If the asset is attached again (upload link, duplicate share, etc.) → `orphanedAt = null`
+5. Unreferenced assets wait **7 days** from `orphanedAt` (not `createdAt`)
+6. `pnpm media:cleanup` (dry-run) / `--execute` deletes derivatives → master → DB rows after a final reference check (idempotent; missing S3 keys OK)
+7. Shared media (e.g. duplicate product) is never orphan while any product still references it
+
+SAFE FIRST + EVENTUALLY CLEAN: detach succeeds for the manager immediately; physical cleanup is deferred and retryable.
 
 ## Site Health
 

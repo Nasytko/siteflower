@@ -111,11 +111,11 @@ export function MediaHealthPanel({ initial, canProbe }: Props) {
           <dd>{status.missingDerivatives.length}</dd>
         </div>
         <div>
-          <dt className="text-sm text-muted">Orphan assets (готовы к cleanup)</dt>
+          <dt className="text-sm text-muted">Orphan готовы к cleanup (&gt;7 дн.)</dt>
           <dd>{status.orphanCandidates}</dd>
         </div>
         <div>
-          <dt className="text-sm text-muted">Orphan в grace-периоде</dt>
+          <dt className="text-sm text-muted">Orphan в grace (≤7 дн.)</dt>
           <dd>{status.orphanWithinGrace}</dd>
         </div>
         <div>

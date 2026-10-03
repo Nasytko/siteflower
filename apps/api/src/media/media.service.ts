@@ -343,6 +343,8 @@ export class MediaService {
               width: masterWidth,
               height: masterHeight,
               checksumSha256: checksum,
+              // Never-linked until ProductMedia attach; starts orphan grace clock.
+              orphanedAt: new Date(),
             },
           });
           if (derivatives.length > 0) {

@@ -1,8 +1,8 @@
 /** Max product photos (server-side invariant). */
 export const PRODUCT_MEDIA_MAX = 12;
 
-/** Orphan MediaAsset grace before physical cleanup (hours). */
-export const MEDIA_ORPHAN_GRACE_HOURS = 24;
+/** Orphan MediaAsset grace before physical cleanup (hours). 7 days from orphanedAt. */
+export const MEDIA_ORPHAN_GRACE_HOURS = 168;
 
 /** Decompression-bomb guard: ~25MP covers high-res bouquet photography. */
 export const MEDIA_MAX_INPUT_PIXELS = 25_000_000;

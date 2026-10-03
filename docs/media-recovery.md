@@ -39,7 +39,7 @@ Human recovery: re-upload from Admin, or restore object from backup/versioning. 
 
 ### Accidental ProductMedia deletion
 
-Association is gone; asset may still exist as orphan during grace. Re-upload or re-link via Admin (current UX: re-upload). Restore DB point-in-time if within backup window.
+Association is gone; asset may still exist as orphan during the **7-day** `orphanedAt` grace. Re-upload or re-link via Admin (current UX: re-upload). Restore DB point-in-time if within backup window.
 
 ### Leaked S3 credentials
 

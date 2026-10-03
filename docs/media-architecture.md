@@ -66,7 +66,8 @@ WebP quality 82, AVIF quality 60 (flower texture / color balance).
 
 - Max **12** photos per product (server invariant)
 - Publish requires exactly one primary
-- Detach removes `ProductMedia` only; asset becomes orphan after 24h grace, then `media:cleanup`
+- Detach removes `ProductMedia` only; last reference sets `orphanedAt`; after **7 days** grace, `media:cleanup` may delete S3 + DB
+- Shared `MediaAsset` (duplicate product) stays live until every `ProductMedia` link is gone
 
 ## Ops commands
 

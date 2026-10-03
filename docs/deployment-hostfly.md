@@ -271,6 +271,19 @@ shopbuket1 scripts:
 - Refuse names starting with `erpbuket1`
 - Never run `docker system prune` / `volume prune`
 
+## Media orphan cleanup (ops)
+
+Canonical command (dry-run by default — never destructive without `--execute`):
+
+```bash
+pnpm media:cleanup              # preview candidates past 7-day orphanedAt grace
+pnpm media:cleanup -- --execute # delete S3 master+derivatives then MediaAsset rows
+```
+
+Run on a schedule (cron/systemd timer) against the API host with production env. Prefer dry-run after deploy before the first `--execute`. Cleanup is retry-safe: S3 failures leave DB metadata; missing keys are treated as success.
+
+See [media-production.md](./media-production.md) for lifecycle details.
+
 ## Related docs
 
 - [production-readiness.md](./production-readiness.md)
