@@ -101,6 +101,11 @@ validate_nginx_site_file() {
       log "Nginx site missing HTTP→HTTPS redirect: $file"
       return 1
     fi
+    # HSTS belongs on the TLS vhost only (not the port-80 redirect server).
+    if ! grep -Eq 'Strict-Transport-Security' "$file"; then
+      log "Nginx HTTPS site missing Strict-Transport-Security: $file"
+      return 1
+    fi
   fi
 
   return 0
@@ -169,6 +174,10 @@ server {
     ssl_session_timeout 1d;
     ssl_session_cache shared:SSL:10m;
     ssl_protocols TLSv1.2 TLSv1.3;
+
+    # HSTS on HTTPS responses only. Single-host shopbuket1 FQDN — do not broaden to
+    # child hostnames; do not use HSTS preload (irreversocable without ops ownership).
+    add_header Strict-Transport-Security "max-age=31536000" always;
 
     include ${SHOPBUKET1_NGINX_SNIPPET_DST};
 }

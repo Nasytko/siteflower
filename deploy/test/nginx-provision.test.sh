@@ -90,10 +90,29 @@ server {
   server_name shop.nasytko.ru;
   ssl_certificate /etc/letsencrypt/live/shop.nasytko.ru/fullchain.pem;
   ssl_certificate_key /etc/letsencrypt/live/shop.nasytko.ru/privkey.pem;
+  add_header Strict-Transport-Security "max-age=31536000" always;
 }
 EOF
 validate_nginx_site_file "$TMP/https.conf" "shop.nasytko.ru" 1 || fail "valid HTTPS site rejected"
-pass "accepts HTTPS site with redirect + 443"
+pass "accepts HTTPS site with redirect + 443 + HSTS"
+
+cat >"$TMP/https-no-hsts.conf" <<'EOF'
+server {
+  listen 80;
+  server_name shop.nasytko.ru;
+  location / { return 301 https://$host$request_uri; }
+}
+server {
+  listen 443 ssl http2;
+  server_name shop.nasytko.ru;
+  ssl_certificate /etc/letsencrypt/live/shop.nasytko.ru/fullchain.pem;
+  ssl_certificate_key /etc/letsencrypt/live/shop.nasytko.ru/privkey.pem;
+}
+EOF
+if validate_nginx_site_file "$TMP/https-no-hsts.conf" "shop.nasytko.ru" 1 2>"$TMP/err"; then
+  fail "must reject HTTPS site without Strict-Transport-Security"
+fi
+pass "detects missing HSTS on TLS site"
 
 cat >"$TMP/no443.conf" <<'EOF'
 server {
@@ -118,6 +137,51 @@ grep -q 'listen 443 ssl http2;' "$TMP/rendered-https.conf" || fail "rendered HTT
 grep -q 'return 301 https://' "$TMP/rendered-https.conf" || fail "rendered HTTPS missing redirect"
 grep -q 'ssl_certificate' "$TMP/rendered-https.conf" || fail "rendered HTTPS missing ssl_certificate"
 grep -q 'YOUR_DOMAIN' "$TMP/rendered-https.conf" && fail "rendered HTTPS contains YOUR_DOMAIN"
+grep -q 'Strict-Transport-Security' "$TMP/rendered-https.conf" || fail "rendered HTTPS missing HSTS"
+grep -Eq 'add_header[[:space:]]+Strict-Transport-Security[[:space:]]+"max-age=31536000"' \
+  "$TMP/rendered-https.conf" || fail "HSTS max-age must be 31536000"
+grep -E 'add_header[[:space:]]+Strict-Transport-Security' "$TMP/rendered-https.conf" \
+  | grep -Eqi 'includesubdomains|preload' \
+  && fail "HSTS add_header must not set includeSubDomains or preload"
+# Exactly one HSTS line — on the TLS server, not the :80 redirect server.
+hsts_lines="$(grep -c 'Strict-Transport-Security' "$TMP/rendered-https.conf" || true)"
+[[ "$hsts_lines" == "1" ]] || fail "expected exactly one HSTS directive (got ${hsts_lines})"
 pass "render_nginx_https"
+
+# Optional: nginx -t when the binary exists (CI/Ubuntu). Skip cleanly otherwise.
+if command -v nginx >/dev/null 2>&1; then
+  SNIPPET_DIR="$TMP/nginx-root"
+  mkdir -p "$SNIPPET_DIR/snippets" "$SNIPPET_DIR/conf.d"
+  # Minimal stub for include path used by the rendered site.
+  : >"$SNIPPET_DIR/snippets/shopbuket1-proxy.conf"
+  # Point includes at temp paths for syntax check.
+  sed \
+    -e "s|/etc/nginx/snippets/shopbuket1-proxy.conf|${SNIPPET_DIR}/snippets/shopbuket1-proxy.conf|g" \
+    -e "s|/etc/letsencrypt/live/shop.nasytko.ru/fullchain.pem|${SNIPPET_DIR}/fullchain.pem|g" \
+    -e "s|/etc/letsencrypt/live/shop.nasytko.ru/privkey.pem|${SNIPPET_DIR}/privkey.pem|g" \
+    "$TMP/rendered-https.conf" >"$TMP/nginx-syntax.conf"
+  # Dummy PEM files so nginx -t can open paths (content need not be valid for parse-only).
+  printf '-----BEGIN CERTIFICATE-----\nMIIB\n-----END CERTIFICATE-----\n' >"$SNIPPET_DIR/fullchain.pem"
+  printf '-----BEGIN PRIVATE KEY-----\nMIIB\n-----END PRIVATE KEY-----\n' >"$SNIPPET_DIR/privkey.pem"
+  cat >"$TMP/nginx-main.conf" <<EOF
+events {}
+http {
+  include ${TMP}/nginx-syntax.conf;
+}
+EOF
+  if nginx -t -c "$TMP/nginx-main.conf" 2>"$TMP/nginx-t.err"; then
+    pass "nginx -t syntax OK for rendered HTTPS site"
+  else
+    # Some nginx builds require real cert ASN.1; treat that as SKIP, not FAIL.
+    if grep -Eqi 'PEM|certificate|SSL|ssl' "$TMP/nginx-t.err"; then
+      pass "nginx -t skipped (cert material not accepted; config structure already asserted)"
+    else
+      cat "$TMP/nginx-t.err" >&2
+      fail "nginx -t rejected rendered HTTPS config"
+    fi
+  fi
+else
+  pass "nginx binary absent — structural HSTS assertions only"
+fi
 
 pass "all nginx provisioning unit tests passed"

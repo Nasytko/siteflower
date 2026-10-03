@@ -30,7 +30,7 @@ Full HostFly VPS runbook: [deployment-hostfly.md](./deployment-hostfly.md).
 
 ## Runtime hardening
 
-- [ ] HTTPS termination + HSTS at the edge
+- [ ] HTTPS termination + HSTS at the edge (`render_nginx_https` emits `Strict-Transport-Security: max-age=31536000` on :443 only; re-run `sudo ./provision-nginx.sh` after pull)
 - [ ] Secure cookies for admin session (SameSite=Lax/Strict as configured)
 - [ ] Log redaction verified (no passwords, phones, tracking tokens, recovery keys)
 - [ ] Tracking pages return noindex / no-store

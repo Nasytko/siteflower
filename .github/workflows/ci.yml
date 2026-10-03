@@ -15,6 +15,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
 
+    # Real PostgreSQL for API integration suites (fail-closed locally without DB).
+    # Flow: Postgres healthy → migrate deploy → unit + integration via pnpm test.
     services:
       postgres:
         image: postgres:17-alpine
@@ -40,9 +42,13 @@ jobs:
       SWAGGER_ENABLED: 'false'
       TRUST_PROXY: 'false'
       LOG_LEVEL: error
-      SESSION_HMAC_SECRET: ci-test-session-hmac-secret
+      SESSION_HMAC_SECRET: ci-test-session-hmac-secret-32chars!!
       SESSION_ABSOLUTE_TTL_SECONDS: '43200'
       SESSION_IDLE_TTL_SECONDS: '1800'
+      # Local driver for media integration tests (no HostFly S3 in CI).
+      MEDIA_STORAGE: local
+      MEDIA_LOCAL_ROOT: ./storage/media-ci
+      MEDIA_PUBLIC_BASE_URL: http://127.0.0.1:3001/api/v1/media
 
     steps:
       - name: Checkout
@@ -65,8 +71,13 @@ jobs:
       - name: Generate Prisma client
         run: pnpm db:generate
 
-      - name: Run migrations
+      - name: Apply migrations (Postgres service)
         run: pnpm db:migrate:deploy
 
-      - name: Lint, typecheck, test, build
+      - name: Deploy nginx unit tests
+        run: bash deploy/test/nginx-provision.test.sh
+
+      - name: Lint, typecheck, unit+integration tests, build
+        # turbo `test` for @bouquet-one/api runs jest unit then jest-integration
+        # against DATABASE_URL (this job's Postgres). Missing DB must fail, not skip-as-pass.
         run: pnpm exec turbo run lint typecheck test build

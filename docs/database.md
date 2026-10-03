@@ -81,14 +81,35 @@ See [docs/catalog.md](catalog.md), [catalog-simplification-and-merchandising.md]
 
 **Media & redirects**
 
-- `media_assets`, `media_derivatives`, `product_media` (partial unique primary image)
+- `media_assets`, `media_derivatives`, `product_media`
 - `slug_redirects`
+
+### ProductMedia: one primary per product (SQL partial unique)
+
+PostgreSQL enforces **at most one primary image per product** via a **partial unique index** created in migration `20260920190000_catalog_domain`:
+
+```sql
+CREATE UNIQUE INDEX "product_media_one_primary_per_product"
+  ON "product_media"("product_id")
+  WHERE "is_primary" = true;
+```
+
+This is intentional: a normal unique on `(product_id, is_primary)` would incorrectly forbid multiple `is_primary = false` rows.
+
+**Prisma schema mismatch (documented, not a runtime bug):**  
+`ProductMedia` in `schema.prisma` does **not** declare this partial unique. Prisma Migrate cannot express `WHERE is_primary = true` partial uniques in the schema DSL the same way as SQL, so the constraint lives in the SQL migration history only.
+
+**Ops / migrate discipline:**
+
+- Do **not** drop `product_media_one_primary_per_product` if a future `prisma migrate dev` / schema diff proposes removing “unknown” indexes.
+- Before schema-only changes to `ProductMedia`, diff against the live DB (or use a shadow DB) and keep this index.
+- Application code also promotes a next primary when the current primary is detached; the DB index is the hard invariant.
 
 Money: `product_variants.price_minor` BIGINT with CHECK >= 0. Promotion sale prices and order line prices likewise use minor units.
 
 **Removed tables** (historical migrations retained): `categories`, `styles`, `collections`, `collection_products`, and related join tables.
 
-- Default for commerce entities: **soft delete** via `deleted_at timestamptz null` when historical references matter (orders must keep snapshots regardless)
+- Product lifecycle uses `ARCHIVED` (not a `deleted_at` column). Orders keep immutable line snapshots without product FKs.
 - Hard delete only for disposable operational data with no audit/reference need
 - Unique constraints involving soft-deleted rows should use partial unique indexes (`WHERE deleted_at IS NULL`) when introduced
 

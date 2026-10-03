@@ -240,6 +240,20 @@ docker compose -p shopbuket1 -f deploy/docker-compose.prod.yml --env-file "$SHOP
 ./backup.sh
 ```
 
+### Recommended Postgres backup schedule
+
+`./backup.sh` writes local dumps under `/var/backups/shopbuket1` (retention via `BACKUP_RETENTION_DAYS`, default 14). Offsite upload is intentional debt — rely on host snapshots until enabled.
+
+Example **cron** (root, daily 03:15 UTC):
+
+```cron
+15 3 * * * SHOPBUKET1_ENV_FILE=/etc/shopbuket1/production.env /opt/shopbuket1/backup.sh daily >>/var/log/shopbuket1-backup.log 2>&1
+```
+
+Example **systemd timer** (equivalent): unit `shopbuket1-backup.service` ExecStart=`/opt/shopbuket1/backup.sh daily`, timer `OnCalendar=*-*-* 03:15:00`.
+
+Always run a manual `./backup.sh pre-migrate` before risky deploys. Practice restore on a staging clone before you need it.
+
 Restore (destructive — practice on a staging clone first):
 
 ```bash
@@ -273,16 +287,37 @@ shopbuket1 scripts:
 
 ## Media orphan cleanup (ops)
 
-Canonical command (dry-run by default — never destructive without `--execute`):
+Canonical command (**dry-run by default** — never destructive without `--execute`):
 
 ```bash
-pnpm media:cleanup              # preview candidates past 7-day orphanedAt grace
-pnpm media:cleanup -- --execute # delete S3 master+derivatives then MediaAsset rows
+# From the API container / deploy tree with production env loaded:
+pnpm media:cleanup                 # dry-run: list candidates past 7-day orphanedAt grace
+pnpm media:cleanup -- --execute    # delete S3 master+derivatives then MediaAsset rows
 ```
 
-Run on a schedule (cron/systemd timer) against the API host with production env. Prefer dry-run after deploy before the first `--execute`. Cleanup is retry-safe: S3 failures leave DB metadata; missing keys are treated as success.
+### Recommended cleanup schedule
+
+1. After first deploy of the orphan lifecycle: run **dry-run** and review the JSON report.
+2. Then schedule a weekly dry-run + a separate weekly execute (or dry-run daily, execute weekly).
+
+Example **cron** (root, Sunday 04:30 UTC dry-run; Sunday 05:00 UTC execute) — run via the API container so production env + S3 credentials apply:
+
+```cron
+30 4 * * 0 cd /opt/shopbuket1 && docker compose -p shopbuket1 -f deploy/docker-compose.prod.yml --env-file /etc/shopbuket1/production.env exec -T api node dist/cli/media-cleanup.js >>/var/log/shopbuket1-media-cleanup.log 2>&1
+0 5 * * 0 cd /opt/shopbuket1 && docker compose -p shopbuket1 -f deploy/docker-compose.prod.yml --env-file /etc/shopbuket1/production.env exec -T api node dist/cli/media-cleanup.js --execute >>/var/log/shopbuket1-media-cleanup.log 2>&1
+```
+
+(Dev/monorepo equivalent remains `pnpm media:cleanup` / `pnpm media:cleanup -- --execute`.) Cleanup is retry-safe: S3 failures leave DB metadata; missing keys are treated as success.
 
 See [media-production.md](./media-production.md) for lifecycle details.
+
+## TLS / HSTS
+
+`provision-nginx.sh` / `deploy/lib/nginx.sh` `render_nginx_https` emits on the **443** server only:
+
+`Strict-Transport-Security: max-age=31536000`
+
+No `includeSubDomains`, no `preload` (single shopbuket1 FQDN; preload is irreversible without ops ownership). HTTP `:80` remains ACME + 301 redirect only — no HSTS on plaintext responses. After TLS changes: `sudo ./provision-nginx.sh` then `nginx -t && systemctl reload nginx`.
 
 ## Related docs
 
