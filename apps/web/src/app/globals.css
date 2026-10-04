@@ -1147,6 +1147,7 @@ select:focus-visible,
   --admin-ink: var(--color-ink);
   --admin-muted: var(--color-muted);
   --admin-border: var(--color-border);
+  --admin-border-strong: color-mix(in oklab, var(--admin-ink) 22%, var(--admin-border));
   --admin-brand: var(--color-brand);
   --admin-brand-soft: var(--color-brand-soft);
   --admin-radius: 0.85rem;
@@ -1904,6 +1905,52 @@ select:focus-visible,
   color: var(--admin-muted);
 }
 
+.admin-page-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.admin-page-header__text {
+  min-width: 0;
+  flex: 1 1 16rem;
+}
+
+.admin-page-header__actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.admin-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid transparent;
+  background: var(--admin-brand);
+  border-radius: 0.55rem;
+  padding: 0.5rem 1rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: #fff;
+  text-decoration: none;
+  cursor: pointer;
+  transition: opacity 0.15s ease, background-color 0.15s ease;
+}
+
+.admin-btn:hover {
+  opacity: 0.94;
+  color: #fff;
+}
+
+.admin-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
 .admin-btn-ghost {
   display: inline-flex;
   align-items: center;
@@ -1915,6 +1962,7 @@ select:focus-visible,
   font-size: 0.8125rem;
   font-weight: 600;
   color: var(--admin-ink);
+  text-decoration: none;
   cursor: pointer;
   transition:
     border-color 0.2s ease,
@@ -1932,6 +1980,19 @@ select:focus-visible,
 .admin-icon-btn:disabled {
   opacity: 0.45;
   cursor: not-allowed;
+}
+
+.admin-notice {
+  border-radius: 0.65rem;
+  border: 1px solid var(--admin-border);
+  padding: 0.65rem 0.85rem;
+  font-size: 0.875rem;
+}
+
+.admin-notice--success {
+  border-color: color-mix(in oklab, #1f6b3a 30%, var(--admin-border));
+  background: #f3faf5;
+  color: #1f6b3a;
 }
 
 .admin-icon-btn {

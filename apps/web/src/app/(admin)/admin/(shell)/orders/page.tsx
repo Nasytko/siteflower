@@ -44,9 +44,9 @@ export default async function AdminOrdersPage({
     <main id="main-content" className="space-y-6">
       <header>
         <h1 className="admin-page-title">Заказы</h1>
-        <p className="admin-page-lead">Операционный список на дату выполнения</p>
+        <p className="admin-page-lead">Список на дату выдачи или доставки</p>
       </header>
-      <Suspense fallback={<p className="text-stone-500">Загрузка…</p>}>
+      <Suspense fallback={<p className="admin-empty">Загрузка заказов…</p>}>
         <OrdersManager
           items={data.items}
           total={data.total}

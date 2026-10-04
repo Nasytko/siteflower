@@ -2,6 +2,7 @@ import { Suspense } from 'react';
 import { roleHasPermission } from '@bouquet-one/contracts';
 import { fetchBestsellerGroups, fetchProductsPage } from '@/lib/admin-catalog-api';
 import { requireAdminPermission } from '@/lib/admin-page-auth';
+import { AdminPageHeader } from '@/components/admin/admin-page-header';
 import { ProductsManager, type ProductFilters } from '@/components/admin/products-manager';
 
 type SearchParams = Promise<Record<string, string | string[] | undefined>>;
@@ -55,20 +56,27 @@ export default async function AdminProductsPage({
     fetchBestsellerGroups(),
   ]);
 
+  const canCreate = roleHasPermission(me.user.role, 'CATALOG_CREATE');
+
   return (
     <main id="main-content" className="space-y-6">
-      <header>
-        <h1 className="admin-page-title">Товары</h1>
-        <p className="admin-page-lead">
-          Найдите товар, измените наличие или откройте карточку для фото, цены и публикации.
-        </p>
-      </header>
-      <Suspense fallback={<p className="admin-empty">Загрузка…</p>}>
+      <AdminPageHeader
+        title="Товары"
+        lead="Найдите товар, измените наличие или откройте карточку для фото, цены и публикации."
+        actions={
+          canCreate ? (
+            <a href="#create-product" className="admin-btn">
+              Новый товар
+            </a>
+          ) : undefined
+        }
+      />
+      <Suspense fallback={<p className="admin-empty">Загрузка списка товаров…</p>}>
         <ProductsManager
           data={data}
           filters={filters}
           bestsellerGroups={bestsellerGroups.map((group) => ({ id: group.id, name: group.name }))}
-          canCreate={roleHasPermission(me.user.role, 'CATALOG_CREATE')}
+          canCreate={canCreate}
           canUpdate={roleHasPermission(me.user.role, 'CATALOG_UPDATE')}
           canPublish={roleHasPermission(me.user.role, 'CATALOG_PUBLISH')}
         />

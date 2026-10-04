@@ -17,33 +17,29 @@ export default async function AdminPromotionsPage() {
 
   return (
     <main id="main-content" className="space-y-6">
-      <header className="flex flex-wrap items-end justify-between gap-4">
-        <div>
+      <header className="admin-page-header">
+        <div className="admin-page-header__text">
           <h1 className="admin-page-title">Акции</h1>
           <p className="admin-page-lead">
             Обзор скидок по товарам. Создать или изменить акцию можно в карточке товара —
             раздел «Акция и витрины».
           </p>
         </div>
-        <Link href="/admin/catalog/products" className="admin-btn-ghost">
-          К товарам
-        </Link>
+        <div className="admin-page-header__actions">
+          <Link href="/admin/catalog/products" className="admin-btn">
+            К товарам
+          </Link>
+        </div>
       </header>
 
       {rows.length === 0 ? (
-        <div className="admin-panel space-y-3 py-10 text-center">
-          <p className="admin-empty text-base font-medium text-[var(--admin-ink)]">
-            Акций пока нет
-          </p>
-          <p className="mx-auto max-w-md text-sm text-[var(--admin-muted)]">
-            Создайте первую акцию, чтобы управлять скидками на товары: откройте товар и включите
-            скидку в разделе «Акция и витрины».
-          </p>
-          <div className="pt-2">
-            <Link
-              href="/admin/catalog/products"
-              className="inline-flex rounded-lg bg-[var(--admin-brand)] px-4 py-2 text-sm font-medium text-white hover:opacity-90"
-            >
+        <div className="admin-panel">
+          <div className="admin-empty admin-empty--action items-center text-center">
+            <p>Акций пока нет.</p>
+            <p className="text-sm text-[var(--admin-muted)]">
+              Откройте товар и включите скидку в разделе «Акция и витрины».
+            </p>
+            <Link href="/admin/catalog/products" className="admin-btn">
               Открыть каталог товаров
             </Link>
           </div>

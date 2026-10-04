@@ -92,20 +92,19 @@ export default async function AdminDashboardPage() {
 
   return (
     <main id="main-content" className="space-y-8">
-      <header className="flex flex-wrap items-start justify-between gap-4">
-        <div>
+      <header className="admin-page-header">
+        <div className="admin-page-header__text">
           <h1 className="admin-page-title">Сводка</h1>
           <p className="admin-page-lead">
             {me?.user.displayName ? `${me.user.displayName}, ` : ''}что нужно сделать сейчас.
           </p>
         </div>
         {canCreateCatalog ? (
-          <Link
-            href="/admin/catalog/products"
-            className="inline-flex items-center rounded-lg bg-[var(--admin-brand)] px-4 py-2.5 text-sm font-semibold text-white no-underline hover:opacity-95"
-          >
-            Новый товар
-          </Link>
+          <div className="admin-page-header__actions">
+            <Link href="/admin/catalog/products#create-product" className="admin-btn">
+              Новый товар
+            </Link>
+          </div>
         ) : null}
       </header>
 

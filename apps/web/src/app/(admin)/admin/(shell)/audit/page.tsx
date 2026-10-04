@@ -10,9 +10,9 @@ export default async function AdminAuditPage({
   const me = await fetchAdminMe();
   if (!me || !roleHasPermission(me.user.role, 'AUDIT_READ')) {
     return (
-      <main>
-        <h1 className="text-2xl font-semibold">Аудит</h1>
-        <p className="mt-2 text-stone-600">Недостаточно прав.</p>
+      <main id="main-content" className="space-y-2">
+        <h1 className="admin-page-title">Журнал действий</h1>
+        <p className="admin-page-lead">Недостаточно прав для просмотра журнала.</p>
       </main>
     );
   }
@@ -27,8 +27,8 @@ export default async function AdminAuditPage({
   return (
     <main id="main-content" className="space-y-6">
       <header>
-        <h1 className="admin-page-title">Аудит</h1>
-        <p className="admin-page-lead">Журнал административных действий</p>
+        <h1 className="admin-page-title">Журнал действий</h1>
+        <p className="admin-page-lead">Кто и что менял в панели магазина</p>
       </header>
       <AuditViewer initial={data} currentAction={params.action} />
     </main>

@@ -16,7 +16,7 @@ export default async function AdminStorefrontSettingsPage() {
   return (
     <main id="main-content" className="space-y-8">
       <header>
-        <h1 className="admin-page-title">Настройки</h1>
+        <h1 className="admin-page-title">Настройки магазина</h1>
         <p className="admin-page-lead">
           Контакты и тексты витрины. Ниже — диапазоны бюджета для фильтров каталога.
         </p>
