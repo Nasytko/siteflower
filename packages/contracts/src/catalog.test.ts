@@ -16,7 +16,38 @@ import {
   normalizeSlug,
   defaultProductSeoTitle,
   productCardSubtitle,
+  flowerItemDisplayName,
+  flowerItemIdentityKey,
+  suggestProductNameFromComposition,
 } from './catalog.js';
+
+test('flowerItemIdentityKey and display name', () => {
+  assert.equal(
+    flowerItemIdentityKey({
+      flowerTypeId: 't',
+      flowerVarietyId: null,
+      flowerOriginId: 'o',
+      heightCm: 50,
+    }),
+    't|_|o|50',
+  );
+  assert.equal(
+    flowerItemDisplayName({
+      typeName: 'Роза',
+      varietyName: 'Мондиаль',
+      originName: 'Эквадор',
+      heightCm: 60,
+    }),
+    'Роза Мондиаль · Эквадор · 60 см',
+  );
+});
+
+test('suggestProductNameFromComposition', () => {
+  assert.equal(
+    suggestProductNameFromComposition([{ displayName: 'Хризантема Бигуди', quantity: 9 }]),
+    'Букет из 9 Хризантема Бигуди',
+  );
+});
 
 test('derivePriceRange single', () => {
   const range = derivePriceRange('BYN', [9900n]);

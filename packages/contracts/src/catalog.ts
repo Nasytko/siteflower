@@ -3,10 +3,12 @@
  * No Prisma types.
  *
  * Navigation: CatalogCategory tree (Цветы → Розы, …).
- * Flower product attrs: FlowerType / FlowerVariety / FlowerOrigin (+ Product.heightCm).
+ * Flower dictionary: FlowerType → FlowerVariety → FlowerItem (type+variety+origin+height).
+ * Composition: ProductComponent → FlowerItem (+ quantity/unit). Legacy Flower facet optional.
+ * Product.flowerType/Variety/Origin/heightCm: legacy denormalized attrs (deprecated for discovery).
  * Cross-product UX: ProductFamily (not sellable).
- * In-card commerce: ProductVariant (unchanged).
- * Discovery facets: Budget, Occasion/Recipient, Color, Flower (composition), BouquetSize, ProductLine.
+ * In-card commerce: ProductVariant (unchanged; composition stays product-level).
+ * Discovery facets: Budget, Occasion/Recipient, Color, Flower (legacy), BouquetSize, ProductLine.
  * Merchandising: Promotions, Bestsellers.
  */
 
@@ -108,8 +110,12 @@ export type CatalogCategoryAdminDto = CatalogCategoryDto & {
   version: number;
   createdAt: string;
   updatedAt: string;
+  /** Direct children. */
   childrenCount: number;
+  /** Products assigned directly to this category. */
   productsCount: number;
+  /** Products on this category + all descendants (admin tree). */
+  descendantProductsCount: number;
 };
 
 export type FlowerTypeDto = {
@@ -118,6 +124,15 @@ export type FlowerTypeDto = {
   name: string;
   sortOrder: number;
   visibility: TaxonomyVisibility;
+};
+
+/** Admin list for flower types — includes usage for safe delete UX. */
+export type FlowerTypeAdminDto = FlowerTypeDto & {
+  version: number;
+  productsCount: number;
+  varietiesCount: number;
+  /** Concrete FlowerItem rows under this type. */
+  itemsCount?: number;
 };
 
 export type FlowerVarietyDto = {
@@ -129,6 +144,12 @@ export type FlowerVarietyDto = {
   visibility: TaxonomyVisibility;
 };
 
+export type FlowerVarietyAdminDto = FlowerVarietyDto & {
+  version: number;
+  productsCount: number;
+  itemsCount?: number;
+};
+
 export type FlowerOriginDto = {
   id: string;
   slug: string;
@@ -136,6 +157,96 @@ export type FlowerOriginDto = {
   sortOrder: number;
   visibility: TaxonomyVisibility;
 };
+
+export type FlowerOriginAdminDto = FlowerOriginDto & {
+  version: number;
+  productsCount: number;
+  itemsCount?: number;
+};
+
+/**
+ * Concrete reusable stem/SKU: Type + optional Variety + Origin + height.
+ * Quantity is NEVER on FlowerItem — only on ProductComponent.
+ */
+export type FlowerItemDto = {
+  id: string;
+  flowerTypeId: string;
+  flowerVarietyId: string | null;
+  flowerOriginId: string | null;
+  heightCm: number | null;
+  slug: string;
+  name: string;
+  sortOrder: number;
+  visibility: TaxonomyVisibility;
+  flowerType: TaxonomyRefDto;
+  flowerVariety: TaxonomyRefDto | null;
+  flowerOrigin: TaxonomyRefDto | null;
+};
+
+export type FlowerItemAdminDto = FlowerItemDto & {
+  version: number;
+  /** Products that reference this item via ProductComponent. */
+  componentsCount: number;
+  identityKey: string;
+};
+
+/** Why a destructive catalog-structure delete is blocked. */
+export type CatalogDeleteBlockerDto = {
+  code: 'HAS_CHILDREN' | 'HAS_PRODUCTS' | 'HAS_VARIETIES' | 'HAS_COMPONENTS' | 'HAS_ITEMS' | 'NOT_EMPTY';
+  message: string;
+  productsCount?: number;
+  childrenCount?: number;
+  varietiesCount?: number;
+  componentsCount?: number;
+  itemsCount?: number;
+};
+
+/** Stable uniqueness key for FlowerItem (null parts → `_`). */
+export function flowerItemIdentityKey(input: {
+  flowerTypeId: string;
+  flowerVarietyId?: string | null;
+  flowerOriginId?: string | null;
+  heightCm?: number | null;
+}): string {
+  return [
+    input.flowerTypeId,
+    input.flowerVarietyId ?? '_',
+    input.flowerOriginId ?? '_',
+    input.heightCm == null ? '_' : String(input.heightCm),
+  ].join('|');
+}
+
+/** Human label for a flower item (manager-facing). */
+export function flowerItemDisplayName(input: {
+  typeName: string;
+  varietyName?: string | null;
+  originName?: string | null;
+  heightCm?: number | null;
+}): string {
+  const parts: string[] = [input.typeName.trim()];
+  if (input.varietyName?.trim()) parts.push(input.varietyName.trim());
+  const detail: string[] = [];
+  if (input.originName?.trim()) detail.push(input.originName.trim());
+  if (input.heightCm != null) detail.push(`${input.heightCm} см`);
+  if (detail.length === 0) return parts.join(' ');
+  return `${parts.join(' ')} · ${detail.join(' · ')}`;
+}
+
+/** Suggest a product name from composition rows (manager confirms). */
+export function suggestProductNameFromComposition(
+  rows: Array<{ displayName: string; quantity: number | null }>,
+): string {
+  const usable = rows.filter((row) => row.displayName.trim().length > 0);
+  if (usable.length === 0) return '';
+  if (usable.length === 1) {
+    const row = usable[0]!;
+    const qty = row.quantity && row.quantity > 0 ? row.quantity : null;
+    const label = row.displayName.trim();
+    if (qty) return `Букет из ${qty} ${label}`;
+    return `Букет: ${label}`;
+  }
+  return `Авторский букет (${usable.length} позиции)`;
+}
 
 export type ProductFamilyMemberDto = {
   productId: string;
@@ -284,6 +395,9 @@ export type ProductVariantDto = {
 
 export type ProductComponentDto = {
   id: string;
+  flowerItemId: string | null;
+  flowerItem: FlowerItemDto | null;
+  /** @deprecated Prefer flowerItemId. Kept for /cvety legacy facet. */
   flowerId: string | null;
   flower: TaxonomyRefDto | null;
   displayName: string;
