@@ -1,4 +1,3 @@
-import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { roleHasPermission, type ProductAdminDto } from '@bouquet-one/contracts';
 import { AdminApiError } from '@/lib/admin-api';
@@ -34,9 +33,6 @@ export default async function AdminProductEditPage({ params }: Props) {
   return (
     <main id="main-content" className="space-y-6">
       <header className="space-y-2">
-        <Link href="/admin/catalog/products" className="admin-link text-sm">
-          ← Все товары
-        </Link>
         <h1 className="admin-page-title">{product.name}</h1>
         <div className="admin-status-row">
           <span className={lifecycleChipClass(product.lifecycle)}>

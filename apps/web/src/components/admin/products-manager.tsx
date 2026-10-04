@@ -893,10 +893,12 @@ export function ProductsManager({
         </table>
       </div>
 
-      {pages > 1 ? (
+      {data.total > 0 || pages > 1 ? (
         <div className="flex items-center gap-3 text-sm text-[var(--admin-muted)]">
           <span>
-            Стр. {data.page} из {pages} · всего {data.total}
+            {pages > 1
+              ? `Стр. ${data.page} из ${pages} · всего ${data.total}`
+              : `Всего ${data.total}`}
           </span>
           {data.page > 1 ? (
             <Link href={pageHref(data.page - 1)} className="admin-link">

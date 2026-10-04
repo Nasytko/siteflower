@@ -791,6 +791,19 @@ export function ProductEditor({
     <div className="space-y-6">
       <div className="admin-editor-header">
         <div className="space-y-2">
+          <a
+            href="/admin/catalog/products"
+            className="admin-link text-sm"
+            onClick={(event) => {
+              if (!dirty) return;
+              const ok = window.confirm(
+                'Есть несохранённые изменения. Уйти со страницы без сохранения?',
+              );
+              if (!ok) event.preventDefault();
+            }}
+          >
+            ← Все товары
+          </a>
           <div className="admin-status-row">
             <span className={lifecycleChipClass(server.lifecycle)}>
               {lifecycleLabel(server.lifecycle)}

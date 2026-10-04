@@ -42,21 +42,23 @@ function Metric({
   href?: string;
   emphasize?: boolean;
 }) {
+  const urgent = Boolean(emphasize && value !== null && value > 0);
+  const cardClass = `admin-card${href ? ' admin-card--link' : ''}${urgent ? ' admin-card--urgent' : ''}`;
   const body = (
     <>
       <p className="admin-card__label">{label}</p>
-      <p className={`admin-metric ${emphasize && value !== null && value > 0 ? 'text-[var(--admin-brand)]' : ''}`}>
+      <p className={`admin-metric ${urgent ? 'text-[#a12a1f]' : ''}`}>
         {value === null ? '—' : value}
       </p>
       <p className="text-sm text-[var(--admin-muted)]">{value === null ? 'Нет данных' : hint}</p>
     </>
   );
   return href ? (
-    <Link href={href} className="admin-card admin-card--link">
+    <Link href={href} className={cardClass}>
       {body}
     </Link>
   ) : (
-    <div className="admin-card">{body}</div>
+    <div className={cardClass}>{body}</div>
   );
 }
 

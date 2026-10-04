@@ -1232,6 +1232,20 @@ select:focus-visible,
   padding: 1rem 0.85rem 1.25rem;
 }
 
+@media (max-width: 1023px) {
+  .admin-aside__nav {
+    max-height: 40vh;
+  }
+}
+
+.admin-nav__group[data-tier='system'] .admin-nav__group-label {
+  opacity: 0.72;
+}
+
+.admin-nav__group[data-tier='system'] .admin-nav__link {
+  color: color-mix(in oklab, var(--admin-ink) 78%, var(--admin-muted));
+}
+
 .admin-aside__user {
   border-top: 1px solid var(--admin-border);
   padding: 1rem 1.35rem 1.25rem;
@@ -2206,6 +2220,11 @@ select:focus-visible,
 .admin-card--link:hover {
   border-color: color-mix(in oklab, var(--admin-brand) 35%, var(--admin-border));
   background: var(--admin-brand-soft);
+}
+
+.admin-card--urgent {
+  border-color: color-mix(in oklab, #a12a1f 40%, var(--admin-border));
+  background: #fff6f4;
 }
 
 .admin-metric {

@@ -17,6 +17,8 @@ type NavItem = {
 type NavGroup = {
   id: string;
   label: string;
+  /** Soft-demote rare/tech groups in the sidebar. */
+  tier?: 'system';
   items: NavItem[];
 };
 
@@ -31,6 +33,7 @@ function isDictionaryPath(pathname: string): boolean {
 /**
  * Florist store panel IA:
  * Работа → daily ops · Каталог → merchandising · Магазин → public site · Система → rare/tech
+ * Homepage editor is intentionally absent (fixed layout; route redirects to Сводка).
  */
 const NAV_GROUPS: NavGroup[] = [
   {
@@ -43,6 +46,11 @@ const NAV_GROUPS: NavGroup[] = [
         isActive: (pathname) => pathname === '/admin',
       },
       { href: '/admin/orders', label: 'Заказы', permission: 'ORDERS_READ' },
+      {
+        href: '/admin/fulfillment',
+        label: 'Доставка и самовывоз',
+        permission: 'SETTINGS_READ',
+      },
     ],
   },
   {
@@ -64,11 +72,6 @@ const NAV_GROUPS: NavGroup[] = [
     id: 'store',
     label: 'Магазин',
     items: [
-      {
-        href: '/admin/storefront/homepage',
-        label: 'Главная страница',
-        permission: 'CONTENT_READ',
-      },
       { href: '/admin/storefront/instagram', label: 'Instagram', permission: 'CONTENT_READ' },
       {
         href: '/admin/storefront/settings',
@@ -76,16 +79,16 @@ const NAV_GROUPS: NavGroup[] = [
         permission: 'SETTINGS_READ',
       },
       { href: '/admin/seo', label: 'SEO', permission: 'SEO_READ' },
-      { href: '/admin/fulfillment', label: 'Доставка и получение', permission: 'SETTINGS_READ' },
       { href: '/admin/legal', label: 'Юридическая информация', permission: 'LEGAL_READ' },
     ],
   },
   {
     id: 'system',
     label: 'Система',
+    tier: 'system',
     items: [
       { href: '/admin/users', label: 'Пользователи', permission: 'USERS_READ' },
-      { href: '/admin/audit', label: 'Аудит', permission: 'AUDIT_READ' },
+      { href: '/admin/audit', label: 'Журнал действий', permission: 'AUDIT_READ' },
       {
         href: '/admin/media-health',
         label: 'Состояние медиа',
@@ -93,7 +96,7 @@ const NAV_GROUPS: NavGroup[] = [
       },
       {
         href: '/admin/integrations/erp',
-        label: 'Интеграции',
+        label: 'Синхронизация заказов',
         permission: 'INTEGRATION_READ',
       },
     ],
@@ -122,7 +125,11 @@ export function AdminShellNav({ role }: Props) {
   return (
     <nav aria-label="Разделы админки" className="admin-nav">
       {groups.map((group) => (
-        <div key={group.id} className="admin-nav__group">
+        <div
+          key={group.id}
+          className="admin-nav__group"
+          data-tier={group.tier}
+        >
           <p className="admin-nav__group-label">{group.label}</p>
           <ul className="admin-nav__list">
             {group.items.map((item) => {

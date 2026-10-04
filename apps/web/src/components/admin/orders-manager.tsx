@@ -46,6 +46,16 @@ export function OrdersManager({ items, total, page, pageSize, filters }: Props) 
   }
 
   const pages = Math.max(1, Math.ceil(total / pageSize));
+  const date = filters.date || 'today';
+  const hasFilters = Boolean(filters.status || filters.fulfillmentType || filters.q);
+  const emptyMessage =
+    hasFilters
+      ? 'По выбранным фильтрам заказов нет. Сбросьте фильтры или измените поиск.'
+      : date === 'today'
+        ? 'На сегодня заказов нет.'
+        : date === 'tomorrow'
+          ? 'На завтра заказов пока нет.'
+          : 'Заказов пока нет.';
 
   return (
     <div className={`space-y-5 ${pending ? 'opacity-70' : ''}`}>
@@ -151,7 +161,14 @@ export function OrdersManager({ items, total, page, pageSize, filters }: Props) 
             {items.length === 0 ? (
               <tr>
                 <td colSpan={7}>
-                  <p className="admin-empty">Заказов нет</p>
+                  <div className="admin-empty admin-empty--action">
+                    <p>{emptyMessage}</p>
+                    {hasFilters ? (
+                      <Link href={`/admin/orders?date=${date}`} className="admin-btn-ghost">
+                        Сбросить фильтры
+                      </Link>
+                    ) : null}
+                  </div>
                 </td>
               </tr>
             ) : (
