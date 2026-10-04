@@ -19,7 +19,11 @@ export function categoryPickerOptions(
   }
 
   return categories
-    .map((row) => ({ id: row.id, name: pathLabel(row.id) }))
+    .map((row) => ({
+      id: row.id,
+      name:
+        row.visibility === 'HIDDEN' ? `${pathLabel(row.id)} (скрыта)` : pathLabel(row.id),
+    }))
     .sort((a, b) => a.name.localeCompare(b.name, 'ru'));
 }
 

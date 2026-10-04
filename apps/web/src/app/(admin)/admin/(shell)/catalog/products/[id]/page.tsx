@@ -53,13 +53,24 @@ export default async function AdminProductEditPage({ params }: Props) {
           bouquetSizes: taxonomies.bouquetSizes.map((item) => ({ id: item.id, name: item.name })),
           productLines: taxonomies.productLines.map((item) => ({ id: item.id, name: item.name })),
           categories: categoryPickerOptions(structure.categories),
-          flowerTypes: structure.flowerTypes.map((item) => ({ id: item.id, name: item.name })),
+          flowerTypes: structure.flowerTypes.map((item) => ({
+            id: item.id,
+            name: item.visibility === 'HIDDEN' ? `${item.name} (скрыт)` : item.name,
+          })),
           flowerVarieties: structure.flowerVarieties.map((item) => ({
             id: item.id,
-            name: item.name,
+            name: item.visibility === 'HIDDEN' ? `${item.name} (скрыт)` : item.name,
             flowerTypeId: item.flowerTypeId,
           })),
-          flowerOrigins: structure.flowerOrigins.map((item) => ({ id: item.id, name: item.name })),
+          flowerOrigins: structure.flowerOrigins.map((item) => ({
+            id: item.id,
+            name: item.visibility === 'HIDDEN' ? `${item.name} (скрыто)` : item.name,
+          })),
+          flowerItems: structure.flowerItems.map((item) => ({
+            id: item.id,
+            name: item.name,
+            visibility: item.visibility,
+          })),
           families: structure.families.map((item) => ({ id: item.id, name: item.name })),
         }}
         bestsellerGroups={bestsellerGroups

@@ -130,10 +130,24 @@ export const adminEndpoints = {
   catalogCategories: `${ADMIN}/catalog/categories`,
   catalogCategoriesTree: `${ADMIN}/catalog/categories/tree`,
   catalogCategory: (id: string) => `${ADMIN}/catalog/categories/${id}`,
+  catalogCategoryReorder: (id: string) => `${ADMIN}/catalog/categories/${id}/reorder`,
+  catalogCategoryReassignDelete: (id: string) =>
+    `${ADMIN}/catalog/categories/${id}/reassign-and-delete`,
 
   flowerTypes: `${ADMIN}/catalog/flower-refs/types`,
+  flowerType: (id: string) => `${ADMIN}/catalog/flower-refs/types/${id}`,
+  flowerTypeReassignDelete: (id: string) =>
+    `${ADMIN}/catalog/flower-refs/types/${id}/reassign-and-delete`,
   flowerVarieties: `${ADMIN}/catalog/flower-refs/varieties`,
+  flowerVariety: (id: string) => `${ADMIN}/catalog/flower-refs/varieties/${id}`,
+  flowerVarietyReassignDelete: (id: string) =>
+    `${ADMIN}/catalog/flower-refs/varieties/${id}/reassign-and-delete`,
   flowerOrigins: `${ADMIN}/catalog/flower-refs/origins`,
+  flowerOrigin: (id: string) => `${ADMIN}/catalog/flower-refs/origins/${id}`,
+  flowerOriginReassignDelete: (id: string) =>
+    `${ADMIN}/catalog/flower-refs/origins/${id}/reassign-and-delete`,
+  flowerItems: `${ADMIN}/catalog/flower-refs/items`,
+  flowerItem: (id: string) => `${ADMIN}/catalog/flower-refs/items/${id}`,
 
   productFamilies: `${ADMIN}/catalog/product-families`,
   productFamily: (id: string) => `${ADMIN}/catalog/product-families/${id}`,

@@ -1,6 +1,6 @@
 # Catalog domain
 
-> **Current model:** sellable **Product** (+ in-card **ProductVariant**), optional **ProductFamily** (cross-product UX only), hierarchical **CatalogCategory**, typed flower attrs (**FlowerType** / **FlowerVariety** / **FlowerOrigin** + `heightCm`), plus discovery facets (budget, occasion, recipient, color, composition Flower, size), promotions and bestsellers.
+> **Current model:** sellable **Product** (+ in-card **ProductVariant**), optional **ProductFamily** (cross-product UX only), hierarchical **CatalogCategory**, flower dictionary (**FlowerType** → **FlowerVariety** → **FlowerItem** with origin/height), composition via **ProductComponent** → FlowerItem + quantity, plus discovery facets (budget, occasion, recipient, color, legacy composition Flower, size), promotions and bestsellers.
 
 ## Product vs Variant vs Family
 
@@ -52,7 +52,13 @@ Never denormalize a stale `product.price`. Checkout uses `effectiveVariantPriceM
 
 ## Composition
 
-`ProductComponent` references optional `Flower` taxonomy + `displayName`, nullable `quantity`, `unit`. Linking a flower on a component makes the bouquet discoverable under that flower filter (no separate `ProductFlower` table).
+`ProductComponent` holds quantity/unit and preferably references a reusable **FlowerItem** (concrete stem/SKU). Quantity is never stored on FlowerItem — one FlowerItem can appear in hundreds of products with different quantities.
+
+Legacy optional `flowerId` → old `Flower` taxonomy still feeds `/cvety` discovery when set. Prefer `flowerItemId` for new work.
+
+Duplicate product copies component rows but **reuses** the same FlowerItem / Flower references (no dictionary cloning).
+
+Composition stays **product-level** (not per ProductVariant) so cart/checkout remain unchanged. Cross-height/origin “variants” continue as separate Products in a ProductFamily.
 
 ## Catalog navigation (CatalogCategory)
 
@@ -62,18 +68,23 @@ Hierarchical tree for storefront menus and PLPs (Цветы → Розы, Бук
 - Product.catalogCategoryId is nullable (legacy products stay valid until assigned).
 - Public list filters by `categorySlug` expand to the category **and its descendants**.
 
-## Flower structure (typed product attributes)
+## Flower dictionary
 
-Do **not** confuse with composition `Flower` taxonomy (bouquet ingredients / discovery facet).
+Do **not** confuse with legacy composition `Flower` taxonomy (`/cvety` SEO facet).
 
-| Entity | Example |
-| --- | --- |
-| **FlowerType** | Роза |
-| **FlowerVariety** | Мондиаль (belongs to a type) |
-| **FlowerOrigin** | Эквадор |
-| **Product.heightCm** | 60 — used for storefront height bands (`HEIGHT_BANDS`) |
+| Entity | Example | Role |
+| --- | --- | --- |
+| **FlowerType** | Роза | Dictionary level 1 |
+| **FlowerVariety** | Мондиаль | Dictionary level 2 under type |
+| **FlowerOrigin** | Эквадор | Shared origin dictionary |
+| **FlowerItem** | Роза Мондиаль · Эквадор · 60 см | Concrete reusable stem/SKU |
+| **Product.heightCm** | 60 | Bouquet/card height (ruler / legacy bands) |
 
-No universal attribute builder / PIM. Future category-specific fields can be added as typed columns without replacing this model.
+Storefront filters for type / variety / origin / height match **either** composition → FlowerItem **or** legacy denormalized `Product.flowerTypeId` / `flowerVarietyId` / `flowerOriginId` / `heightCm` (kept for migration; deprecated as source of truth).
+
+Used FlowerItems cannot be hard-deleted — archive with `visibility: HIDDEN`. Future ERP mapping should target FlowerItem (prefer a separate mapping table).
+
+No universal attribute builder / PIM.
 
 ## Taxonomies & merchandising dimensions
 

@@ -14,6 +14,7 @@ import {
   PROMOTION_TYPES,
   seoStatusEmoji,
   seoStatusLabel,
+  suggestProductNameFromComposition,
   type ComponentUnit,
   type CommercialAvailability,
   type ProductAdminDto,
@@ -77,6 +78,8 @@ type Props = {
     flowerTypes: PickerOption[];
     flowerVarieties: Array<PickerOption & { flowerTypeId: string }>;
     flowerOrigins: PickerOption[];
+    /** Concrete stem/SKU rows for composition (includes archived for current links). */
+    flowerItems: Array<PickerOption & { visibility?: string }>;
     families: Array<{ id: string; name: string }>;
   };
   bestsellerGroups: PickerOption[];
@@ -94,12 +97,12 @@ type SectionId =
   | 'seo'
   | 'publication';
 
-/** Manager workflow: identity → photos → price → merchandising → SEO → publish. */
+/** Manager workflow: identity → composition → variants → photos → merchandising → SEO → publish. */
 const SECTIONS: Array<[SectionId, string]> = [
   ['basic', 'Основное'],
-  ['photos', 'Фото'],
-  ['pricing', 'Цена и варианты'],
   ['composition', 'Состав'],
+  ['pricing', 'Варианты'],
+  ['photos', 'Фото'],
   ['discovery', 'Подбор'],
   ['promotion', 'Акция и витрины'],
   ['seo', 'SEO'],
@@ -121,6 +124,7 @@ type ComponentDraft = {
   displayName: string;
   quantity: string;
   unit: ComponentUnit;
+  flowerItemId: string;
   flowerId: string;
 };
 
@@ -165,6 +169,7 @@ function toComponentDrafts(product: ProductAdminDto): ComponentDraft[] {
       displayName: component.displayName,
       quantity: component.quantity === null ? '' : String(component.quantity),
       unit: component.unit,
+      flowerItemId: component.flowerItemId ?? '',
       flowerId: component.flowerId ?? '',
     }));
 }
@@ -567,6 +572,7 @@ export function ProductEditor({
           displayName: component.displayName.trim(),
           quantity: component.quantity.trim().length > 0 ? Number(component.quantity) : null,
           unit: component.unit,
+          flowerItemId: component.flowerItemId || null,
           flowerId: component.flowerId || null,
           sortOrder: index,
         })),
@@ -1665,16 +1671,17 @@ export function ProductEditor({
         <section className="admin-section">
           <h2 className="admin-section__title">Состав</h2>
           <p className="admin-section__lead">
-            Строки состава с выбранным цветком формируют фильтр «Цветок» на витрине.
+            Выберите конкретный цветок из справочника и укажите количество. Один и тот же цветок
+            можно использовать в разных товарах.
           </p>
           <div className="admin-panel overflow-x-auto">
             <table className="admin-table min-w-[720px]">
               <thead>
                 <tr>
-                  <th>Что входит</th>
+                  <th>Цветок</th>
                   <th className="w-28">Количество</th>
                   <th className="w-40">Единица</th>
-                  <th className="w-56">Цветок из справочника</th>
+                  <th className="w-48">Подпись на витрине</th>
                   <th className="w-24" />
                 </tr>
               </thead>
@@ -1689,21 +1696,35 @@ export function ProductEditor({
                   components.map((component, index) => (
                     <tr key={component.key}>
                       <td>
-                        <input
-                          className="admin-input"
-                          value={component.displayName}
+                        <select
+                          className="admin-select"
+                          value={component.flowerItemId}
                           disabled={!canUpdate}
-                          placeholder="Пион розовый"
                           onChange={(event) => {
                             const value = event.target.value;
+                            const item = options.flowerItems.find((row) => row.id === value);
                             setComponents((prev) =>
-                              prev.map((item, i) =>
-                                i === index ? { ...item, displayName: value } : item,
+                              prev.map((row, i) =>
+                                i === index
+                                  ? {
+                                      ...row,
+                                      flowerItemId: value,
+                                      displayName: item?.name || row.displayName,
+                                    }
+                                  : row,
                               ),
                             );
                             touch();
                           }}
-                        />
+                        >
+                          <option value="">Выберите цветок</option>
+                          {options.flowerItems.map((item) => (
+                            <option key={item.id} value={item.id}>
+                              {item.name}
+                              {item.visibility === 'HIDDEN' ? ' (архив)' : ''}
+                            </option>
+                          ))}
+                        </select>
                       </td>
                       <td>
                         <input
@@ -1744,27 +1765,21 @@ export function ProductEditor({
                         </select>
                       </td>
                       <td>
-                        <select
-                          className="admin-select"
-                          value={component.flowerId}
+                        <input
+                          className="admin-input"
+                          value={component.displayName}
                           disabled={!canUpdate}
+                          placeholder="Как показать покупателю"
                           onChange={(event) => {
                             const value = event.target.value;
                             setComponents((prev) =>
                               prev.map((item, i) =>
-                                i === index ? { ...item, flowerId: value } : item,
+                                i === index ? { ...item, displayName: value } : item,
                               ),
                             );
                             touch();
                           }}
-                        >
-                          <option value="">Не привязан к фильтру</option>
-                          {options.flowers.map((flower) => (
-                            <option key={flower.id} value={flower.id}>
-                              {flower.name}
-                            </option>
-                          ))}
-                        </select>
+                        />
                       </td>
                       <td>
                         <button
@@ -1786,25 +1801,45 @@ export function ProductEditor({
             </table>
           </div>
           {canUpdate ? (
-            <button
-              type="button"
-              className="admin-btn-ghost"
-              onClick={() => {
-                setComponents((prev) => [
-                  ...prev,
-                  {
-                    key: nextKey('component'),
-                    displayName: '',
-                    quantity: '',
-                    unit: 'PIECE',
-                    flowerId: '',
-                  },
-                ]);
-                touch();
-              }}
-            >
-              Добавить строку состава
-            </button>
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                className="admin-btn-ghost"
+                onClick={() => {
+                  setComponents((prev) => [
+                    ...prev,
+                    {
+                      key: nextKey('component'),
+                      displayName: '',
+                      quantity: '',
+                      unit: 'STEM',
+                      flowerItemId: '',
+                      flowerId: '',
+                    },
+                  ]);
+                  touch();
+                }}
+              >
+                + Добавить цветок
+              </button>
+              <button
+                type="button"
+                className="admin-btn-ghost"
+                onClick={() => {
+                  const suggested = suggestProductNameFromComposition(
+                    components.map((row) => ({
+                      displayName: row.displayName,
+                      quantity: row.quantity.trim() ? Number(row.quantity) : null,
+                    })),
+                  );
+                  if (!suggested) return;
+                  setBasic((prev) => ({ ...prev, name: suggested }));
+                  touch();
+                }}
+              >
+                Предложить название
+              </button>
+            </div>
           ) : null}
         </section>
       ) : null}

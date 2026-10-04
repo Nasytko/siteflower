@@ -12,7 +12,7 @@ export default async function AdminCatalogCategoriesPage() {
     <main id="main-content" className="space-y-6">
       <AdminPageHeader
         title="Категории"
-        lead="Дерево категорий каталога: создайте разделы и вложенные подкатегории для товаров."
+        lead="Дерево каталога: структура, количество товаров, скрытие и безопасное удаление с переносом."
       />
       <CatalogCategoriesManager
         initial={categories}

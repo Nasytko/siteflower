@@ -11,9 +11,9 @@ import type {
   CatalogCategoryAdminDto,
   CatalogCategoryTreeNodeDto,
   ColorAdminDto,
-  FlowerOriginDto,
-  FlowerTypeDto,
-  FlowerVarietyDto,
+  FlowerOriginAdminDto,
+  FlowerTypeAdminDto,
+  FlowerVarietyAdminDto,
   PaginatedResponse,
   ProductAdminDto,
   ProductListItemDto,
@@ -95,25 +95,37 @@ export async function fetchProductTaxonomies(): Promise<ProductPickerTaxonomies>
 export type CatalogStructurePickers = {
   categories: CatalogCategoryAdminDto[];
   categoryTree: CatalogCategoryTreeNodeDto[];
-  flowerTypes: FlowerTypeDto[];
-  flowerVarieties: FlowerVarietyDto[];
-  flowerOrigins: FlowerOriginDto[];
+  flowerTypes: FlowerTypeAdminDto[];
+  flowerVarieties: FlowerVarietyAdminDto[];
+  flowerOrigins: FlowerOriginAdminDto[];
+  flowerItems: import('@bouquet-one/contracts').FlowerItemAdminDto[];
   families: Array<{ id: string; name: string; version: number; membersCount: number }>;
 };
 
 export async function fetchCatalogStructurePickers(): Promise<CatalogStructurePickers> {
-  const [categories, categoryTree, flowerTypes, flowerVarieties, flowerOrigins, families] =
+  const [categories, categoryTree, flowerTypes, flowerVarieties, flowerOrigins, flowerItems, families] =
     await Promise.all([
       safeList<CatalogCategoryAdminDto>(adminEndpoints.catalogCategories),
       safeList<CatalogCategoryTreeNodeDto>(adminEndpoints.catalogCategoriesTree),
-      safeList<FlowerTypeDto>(adminEndpoints.flowerTypes),
-      safeList<FlowerVarietyDto>(adminEndpoints.flowerVarieties),
-      safeList<FlowerOriginDto>(adminEndpoints.flowerOrigins),
+      safeList<FlowerTypeAdminDto>(adminEndpoints.flowerTypes),
+      safeList<FlowerVarietyAdminDto>(adminEndpoints.flowerVarieties),
+      safeList<FlowerOriginAdminDto>(adminEndpoints.flowerOrigins),
+      safeList<import('@bouquet-one/contracts').FlowerItemAdminDto>(
+        `${adminEndpoints.flowerItems}?includeHidden=1`,
+      ),
       safeList<{ id: string; name: string; version: number; membersCount: number }>(
         adminEndpoints.productFamilies,
       ),
     ]);
-  return { categories, categoryTree, flowerTypes, flowerVarieties, flowerOrigins, families };
+  return {
+    categories,
+    categoryTree,
+    flowerTypes,
+    flowerVarieties,
+    flowerOrigins,
+    flowerItems,
+    families,
+  };
 }
 
 export function fetchBudgetRanges(): Promise<BudgetRangeDto[]> {
