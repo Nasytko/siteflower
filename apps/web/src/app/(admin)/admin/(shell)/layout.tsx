@@ -18,7 +18,7 @@ export default async function AdminShellLayout({ children }: { children: ReactNo
       <aside className="admin-aside">
         <div className="admin-aside__brand">
           <Link href="/admin" className="admin-aside__brand-link">
-            <span className="admin-aside__eyebrow">Панель магазина</span>
+            <span className="admin-aside__eyebrow">Админка</span>
             <Image
               src="/brand/logo.png"
               alt="BUKET №1"

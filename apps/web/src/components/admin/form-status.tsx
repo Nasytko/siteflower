@@ -97,7 +97,10 @@ export function FormSaveStatus({
           </p>
         ) : null}
         {phase === 'server' && requestId ? (
-          <p className="admin-form-status__hint">Код запроса: {requestId}</p>
+          <details className="admin-form-status__hint">
+            <summary>Технические детали</summary>
+            Код запроса: {requestId}
+          </details>
         ) : null}
         <div className="admin-form-status__actions">
           {phase === 'conflict' && onRefresh ? (

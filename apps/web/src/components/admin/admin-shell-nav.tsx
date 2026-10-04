@@ -28,12 +28,22 @@ function isDictionaryPath(pathname: string): boolean {
   );
 }
 
-/** Florist store panel: work first, catalog, storefront, then system. */
+/**
+ * Florist store panel IA:
+ * Работа → daily ops · Каталог → merchandising · Магазин → public site · Система → rare/tech
+ */
 const NAV_GROUPS: NavGroup[] = [
   {
     id: 'work',
     label: 'Работа',
-    items: [{ href: '/admin/orders', label: 'Заказы', permission: 'ORDERS_READ' }],
+    items: [
+      {
+        href: '/admin',
+        label: 'Сводка',
+        isActive: (pathname) => pathname === '/admin',
+      },
+      { href: '/admin/orders', label: 'Заказы', permission: 'ORDERS_READ' },
+    ],
   },
   {
     id: 'catalog',
@@ -51,17 +61,22 @@ const NAV_GROUPS: NavGroup[] = [
     ],
   },
   {
-    id: 'storefront',
-    label: 'Витрина',
+    id: 'store',
+    label: 'Магазин',
     items: [
+      {
+        href: '/admin/storefront/homepage',
+        label: 'Главная страница',
+        permission: 'CONTENT_READ',
+      },
       { href: '/admin/storefront/instagram', label: 'Instagram', permission: 'CONTENT_READ' },
       {
         href: '/admin/storefront/settings',
         label: 'Настройки магазина',
         permission: 'SETTINGS_READ',
       },
-      { href: '/admin/seo', label: 'SEO сайта', permission: 'SEO_READ' },
-      { href: '/admin/fulfillment', label: 'Получение и доставка', permission: 'SETTINGS_READ' },
+      { href: '/admin/seo', label: 'SEO', permission: 'SEO_READ' },
+      { href: '/admin/fulfillment', label: 'Доставка и получение', permission: 'SETTINGS_READ' },
       { href: '/admin/legal', label: 'Юридическая информация', permission: 'LEGAL_READ' },
     ],
   },
@@ -69,10 +84,18 @@ const NAV_GROUPS: NavGroup[] = [
     id: 'system',
     label: 'Система',
     items: [
-      { href: '/admin/integrations/erp', label: 'ERP', permission: 'INTEGRATION_READ' },
       { href: '/admin/users', label: 'Пользователи', permission: 'USERS_READ' },
       { href: '/admin/audit', label: 'Аудит', permission: 'AUDIT_READ' },
-      { href: '/admin/media-health', label: 'Медиа / Site Health', permission: 'SITE_HEALTH_READ' },
+      {
+        href: '/admin/media-health',
+        label: 'Состояние медиа',
+        permission: 'SITE_HEALTH_READ',
+      },
+      {
+        href: '/admin/integrations/erp',
+        label: 'Интеграции',
+        permission: 'INTEGRATION_READ',
+      },
     ],
   },
 ];
@@ -98,18 +121,6 @@ export function AdminShellNav({ role }: Props) {
 
   return (
     <nav aria-label="Разделы админки" className="admin-nav">
-      <ul className="admin-nav__list">
-        <li>
-          <Link
-            href="/admin"
-            className={`admin-nav__link ${pathname === '/admin' ? 'admin-nav__link--active' : ''}`}
-            aria-current={pathname === '/admin' ? 'page' : undefined}
-          >
-            Сводка
-          </Link>
-        </li>
-      </ul>
-
       {groups.map((group) => (
         <div key={group.id} className="admin-nav__group">
           <p className="admin-nav__group-label">{group.label}</p>
@@ -117,7 +128,7 @@ export function AdminShellNav({ role }: Props) {
             {group.items.map((item) => {
               const active = isActive(pathname, item);
               return (
-                <li key={item.href}>
+                <li key={`${group.id}-${item.href}`}>
                   <Link
                     href={item.href}
                     className={`admin-nav__link ${active ? 'admin-nav__link--active' : ''}`}
