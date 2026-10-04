@@ -19,7 +19,26 @@ import {
   flowerItemDisplayName,
   flowerItemIdentityKey,
   suggestProductNameFromComposition,
+  resolveCompositionSetupStatus,
 } from './catalog.js';
+
+test('resolveCompositionSetupStatus', () => {
+  assert.equal(
+    resolveCompositionSetupStatus({
+      flowerTypeId: 't',
+      components: [],
+    }),
+    'legacy_pending',
+  );
+  assert.equal(
+    resolveCompositionSetupStatus({
+      flowerTypeId: 't',
+      components: [{ flowerItemId: 'i1' }],
+    }),
+    'ready',
+  );
+  assert.equal(resolveCompositionSetupStatus({ components: [] }), 'empty');
+});
 
 test('flowerItemIdentityKey and display name', () => {
   assert.equal(

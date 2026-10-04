@@ -406,6 +406,25 @@ export type ProductComponentDto = {
   sortOrder: number;
 };
 
+/** Admin helper: whether composition is on FlowerItem or still on legacy flower attrs. */
+export type CompositionSetupStatus = 'ready' | 'legacy_pending' | 'empty';
+
+export function resolveCompositionSetupStatus(input: {
+  flowerTypeId?: string | null;
+  flowerVarietyId?: string | null;
+  flowerOriginId?: string | null;
+  components: Array<{ flowerItemId?: string | null; flowerId?: string | null }>;
+}): CompositionSetupStatus {
+  if (input.components.some((row) => Boolean(row.flowerItemId))) return 'ready';
+  const hasLegacyProduct =
+    Boolean(input.flowerTypeId) ||
+    Boolean(input.flowerVarietyId) ||
+    Boolean(input.flowerOriginId);
+  const hasLegacyComponent = input.components.some((row) => Boolean(row.flowerId));
+  if (hasLegacyProduct || hasLegacyComponent) return 'legacy_pending';
+  return 'empty';
+}
+
 export type ProductMediaDto = {
   id: string;
   mediaAssetId: string;
@@ -539,6 +558,8 @@ export type ProductAdminDto = {
   productLines: TaxonomyRefDto[];
   /** Derived from composition (ProductComponent.flowerId). */
   flowers: TaxonomyRefDto[];
+  /** ready = has FlowerItem composition; legacy_pending = old flower attrs without FlowerItem. */
+  compositionSetupStatus: CompositionSetupStatus;
   bestsellerGroupIds: string[];
   createdAt: string;
   updatedAt: string;

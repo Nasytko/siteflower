@@ -190,6 +190,7 @@ export class ProductsService {
         bouquetSizeSlugs: query.bouquetSizeSlugs,
         bestsellerGroupIds: query.bestsellerGroupIds,
         promotionalOnly: query.promotionalOnly,
+        needsCompositionMigration: query.needsCompositionMigration,
         budgetRanges,
         ...catalogFilters,
       },
@@ -747,6 +748,61 @@ export class ProductsService {
       );
       await this.recordAudit(tx, actor, 'PRODUCT_VARIANT_CHANGED', id, {
         count: input.variants.length,
+      });
+    });
+
+    return this.finishAdminMutation(id);
+  }
+
+  /**
+   * Manual migration helper: set a single FlowerItem composition row.
+   * Does not invent origin/height — manager picks an existing FlowerItem.
+   */
+  async setupCompositionFromItem(
+    id: string,
+    input: {
+      expectedVersion: number;
+      flowerItemId: string;
+      quantity: number;
+      unit?: 'PIECE' | 'STEM' | 'BUNCH' | 'UNSPECIFIED';
+      clearLegacyFlowerAttrs?: boolean;
+    },
+    actor: ActorContext,
+  ): Promise<ProductAdminDto> {
+    const item = await this.prisma.client.flowerItem.findUnique({
+      where: { id: input.flowerItemId },
+      include: {
+        flowerType: { select: { id: true, slug: true, name: true } },
+        flowerVariety: { select: { id: true, slug: true, name: true } },
+        flowerOrigin: { select: { id: true, slug: true, name: true } },
+      },
+    });
+    if (!item) throw new BadRequestException('Flower item not found');
+
+    await this.prisma.client.$transaction(async (tx) => {
+      const data: Prisma.ProductUncheckedUpdateManyInput = input.clearLegacyFlowerAttrs
+        ? { flowerTypeId: null, flowerVarietyId: null, flowerOriginId: null }
+        : {};
+      await this.guardVersion(tx, id, input.expectedVersion, data);
+      await this.products.replaceComponents(
+        id,
+        [
+          {
+            flowerItemId: item.id,
+            flowerId: null,
+            displayName: item.name,
+            quantity: input.quantity,
+            unit: input.unit ?? 'STEM',
+            sortOrder: 0,
+          },
+        ],
+        tx,
+      );
+      await this.recordAudit(tx, actor, 'PRODUCT_UPDATED', id, {
+        compositionSetup: true,
+        flowerItemId: item.id,
+        quantity: input.quantity,
+        clearLegacyFlowerAttrs: Boolean(input.clearLegacyFlowerAttrs),
       });
     });
 

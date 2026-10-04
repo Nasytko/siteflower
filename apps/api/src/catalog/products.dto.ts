@@ -488,6 +488,27 @@ export class SetProductComponentsDto extends ExpectedVersionDto {
   components!: ProductComponentInputDto[];
 }
 
+/** Manual migration: attach one FlowerItem as composition (no auto-guessing). */
+export class SetupCompositionFromItemDto extends ExpectedVersionDto {
+  @IsUUID()
+  flowerItemId!: string;
+
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(10_000)
+  quantity!: number;
+
+  @IsOptional()
+  @IsIn(COMPONENT_UNITS)
+  unit?: ComponentUnit;
+
+  /** Clear deprecated Product.flowerType/Variety/Origin after composition is set. Keeps heightCm. */
+  @IsOptional()
+  @IsBoolean()
+  clearLegacyFlowerAttrs?: boolean;
+}
+
 export class SetProductTaxonomiesDto extends ExpectedVersionDto {
   @IsOptional()
   @IsArray()
@@ -732,6 +753,12 @@ class ProductFacetQueryDto {
   @Transform(toOptionalBoolean)
   @IsBoolean()
   promotionalOnly?: boolean;
+
+  /** Admin: products with legacy flower data but no FlowerItem composition. */
+  @IsOptional()
+  @Transform(toOptionalBoolean)
+  @IsBoolean()
+  needsCompositionMigration?: boolean;
 
   @IsOptional()
   @IsUUID()

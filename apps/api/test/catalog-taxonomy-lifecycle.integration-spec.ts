@@ -631,5 +631,58 @@ describe('Catalog taxonomy lifecycle (integration)', () => {
 
     const still = await http.get(`/api/v1/admin/catalog/products/${product.id}`).expect(200);
     expect(still.body.components[0].flowerItemId).toBe(item.body.id);
+    expect(still.body.compositionSetupStatus).toBe('ready');
+  });
+
+  it('lists needsCompositionMigration and setupCompositionFromItem clears legacy attrs', async () => {
+    const http = await login();
+    const suffix = Date.now();
+
+    const type = await http
+      .post('/api/v1/admin/catalog/flower-refs/types')
+      .set('Origin', origin)
+      .send({ name: `MigType ${suffix}`, slug: `mig-type-${suffix}` })
+      .expect(201);
+    const item = await http
+      .post('/api/v1/admin/catalog/flower-refs/items')
+      .set('Origin', origin)
+      .send({ flowerTypeId: type.body.id, heightCm: 60 })
+      .expect(201);
+
+    const product = await createDraftProduct(http, `Legacy Mig ${suffix}`);
+    const linked = await http
+      .patch(`/api/v1/admin/catalog/products/${product.id}`)
+      .set('Origin', origin)
+      .send({ expectedVersion: product.version, flowerTypeId: type.body.id })
+      .expect(200);
+    expect(linked.body.compositionSetupStatus).toBe('legacy_pending');
+
+    const pending = await http
+      .get('/api/v1/admin/catalog/products?needsCompositionMigration=true&pageSize=100')
+      .expect(200);
+    expect(pending.body.items.some((row: { id: string }) => row.id === product.id)).toBe(true);
+
+    const setup = await http
+      .post(`/api/v1/admin/catalog/products/${product.id}/composition-setup`)
+      .set('Origin', origin)
+      .send({
+        expectedVersion: linked.body.version,
+        flowerItemId: item.body.id,
+        quantity: 9,
+        unit: 'STEM',
+        clearLegacyFlowerAttrs: true,
+      })
+      .expect(201);
+    expect(setup.body.compositionSetupStatus).toBe('ready');
+    expect(setup.body.flowerTypeId).toBeNull();
+    expect(setup.body.components[0].flowerItemId).toBe(item.body.id);
+    expect(setup.body.components[0].quantity).toBe(9);
+
+    const pendingAfter = await http
+      .get('/api/v1/admin/catalog/products?needsCompositionMigration=true&pageSize=100')
+      .expect(200);
+    expect(pendingAfter.body.items.some((row: { id: string }) => row.id === product.id)).toBe(
+      false,
+    );
   });
 });

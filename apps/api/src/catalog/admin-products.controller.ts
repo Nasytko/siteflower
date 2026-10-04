@@ -34,6 +34,7 @@ import {
   SetProductComponentsDto,
   SetProductTaxonomiesDto,
   SetProductVariantsDto,
+  SetupCompositionFromItemDto,
   UpdateProductDto,
   UpdateProductMediaDto,
   UploadProductMediaDto,
@@ -147,6 +148,18 @@ export class AdminProductsController {
     @Req() req: Request,
   ) {
     return this.products.setComponents(id, body, actorFrom(admin, req));
+  }
+
+  /** Manual FlowerItem composition setup for legacy products (no auto-guessing). */
+  @Post(':id/composition-setup')
+  @RequirePermissions('CATALOG_UPDATE')
+  setupComposition(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() body: SetupCompositionFromItemDto,
+    @CurrentAdmin() admin: AuthenticatedAdmin,
+    @Req() req: Request,
+  ) {
+    return this.products.setupCompositionFromItem(id, body, actorFrom(admin, req));
   }
 
   @Put(':id/taxonomies')

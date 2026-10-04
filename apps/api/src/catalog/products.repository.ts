@@ -40,6 +40,11 @@ export type ProductListFilters = {
   /** Inclusive heightCm bounds from heightBandWhere. */
   heightCm?: { gte?: number; lte?: number };
   familyId?: string;
+  /**
+   * Admin migration helper: legacy Product.flower* / component.flowerId present,
+   * but no ProductComponent.flowerItemId yet.
+   */
+  needsCompositionMigration?: boolean;
   /** Only products with a currently effective promotion (used by /akcii). */
   promotionalOnly?: boolean;
   minPriceMinor?: string;
@@ -541,14 +546,37 @@ export function buildProductWhere(
     }
   }
 
+  // /cvety + /bukety?flower= bridge: legacy Flower slug OR FlowerItem.flowerType.slug
+  // (same human slug, e.g. "rozy"). Flower.id UUIDs stay on the legacy path only.
   const flowerIds = nonEmpty(filters.flowerIds);
   if (flowerIds) {
     and.push({ components: { some: { flowerId: { in: flowerIds } } } });
   } else {
     const flowerSlugs = nonEmpty(filters.flowerSlugs);
     if (flowerSlugs) {
-      and.push({ components: { some: { flower: { slug: { in: flowerSlugs } } } } });
+      and.push({
+        OR: [
+          { components: { some: { flower: { slug: { in: flowerSlugs } } } } },
+          {
+            components: {
+              some: { flowerItem: { flowerType: { slug: { in: flowerSlugs } } } },
+            },
+          },
+        ],
+      });
     }
+  }
+
+  if (filters.needsCompositionMigration) {
+    and.push({
+      NOT: { components: { some: { flowerItemId: { not: null } } } },
+      OR: [
+        { flowerTypeId: { not: null } },
+        { flowerVarietyId: { not: null } },
+        { flowerOriginId: { not: null } },
+        { components: { some: { flowerId: { not: null } } } },
+      ],
+    });
   }
 
   const bouquetSizeIds = nonEmpty(filters.bouquetSizeIds);
