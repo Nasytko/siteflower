@@ -6,7 +6,6 @@ import type {
   FulfillmentSettingsAdminDto,
   TimeWindowDto,
 } from '@bouquet-one/contracts';
-import { Button } from '@bouquet-one/ui';
 import { adminGet, adminPatch, AdminRequestError, errorMessage } from '@/lib/admin-client';
 import { FormSaveStatus, phaseFromAdminError, type FormSavePhase } from '@/components/admin/form-status';
 
@@ -17,12 +16,40 @@ type Props = {
   canUpdate: boolean;
 };
 
+function appliesToLabel(value: string): string {
+  switch (value) {
+    case 'DELIVERY':
+      return 'Доставка';
+    case 'PICKUP':
+      return 'Самовывоз';
+    case 'BOTH':
+      return 'Оба';
+    default:
+      return value;
+  }
+}
+
+function minorToMajorInput(minor: string): string {
+  const n = Number(minor);
+  if (!Number.isFinite(n)) return '0';
+  return (n / 100).toFixed(2);
+}
+
+function majorInputToMinor(value: string): string {
+  const normalized = value.replace(',', '.').trim();
+  const n = Number(normalized);
+  if (!Number.isFinite(n) || n < 0) return '0';
+  return String(Math.round(n * 100));
+}
+
 export function FulfillmentSettingsEditor({ initial, canUpdate }: Props) {
   const router = useRouter();
   const [version, setVersion] = useState(initial.version);
   const [deliveryEnabled, setDeliveryEnabled] = useState(initial.deliveryEnabled);
   const [pickupEnabled, setPickupEnabled] = useState(initial.pickupEnabled);
-  const [deliveryFeeMinor, setDeliveryFeeMinor] = useState(initial.deliveryFeeMinor);
+  const [deliveryFeeMajor, setDeliveryFeeMajor] = useState(
+    minorToMajorInput(initial.deliveryFeeMinor),
+  );
   const [minLeadTimeMinutes, setMinLeadTimeMinutes] = useState(
     String(initial.minLeadTimeMinutes),
   );
@@ -41,7 +68,7 @@ export function FulfillmentSettingsEditor({ initial, canUpdate }: Props) {
     setVersion(updated.version);
     setDeliveryEnabled(updated.deliveryEnabled);
     setPickupEnabled(updated.pickupEnabled);
-    setDeliveryFeeMinor(updated.deliveryFeeMinor);
+    setDeliveryFeeMajor(minorToMajorInput(updated.deliveryFeeMinor));
     setMinLeadTimeMinutes(String(updated.minLeadTimeMinutes));
     setMaxAdvanceDays(String(updated.maxAdvanceDays));
     setPickupInstructions(updated.pickupInstructions ?? '');
@@ -61,7 +88,7 @@ export function FulfillmentSettingsEditor({ initial, canUpdate }: Props) {
         expectedVersion: version,
         deliveryEnabled,
         pickupEnabled,
-        deliveryFeeMinor,
+        deliveryFeeMinor: majorInputToMinor(deliveryFeeMajor),
         minLeadTimeMinutes: Number(minLeadTimeMinutes),
         maxAdvanceDays: Number(maxAdvanceDays),
         pickupInstructions: pickupInstructions.trim() || null,
@@ -88,6 +115,7 @@ export function FulfillmentSettingsEditor({ initial, canUpdate }: Props) {
     setTimeWindows((windows) =>
       windows.map((w) => (w.id === id ? { ...w, active: !w.active } : w)),
     );
+    setPhase('dirty');
   }
 
   return (
@@ -117,84 +145,106 @@ export function FulfillmentSettingsEditor({ initial, canUpdate }: Props) {
           setPhase(savedAt ? 'saved' : 'idle');
         }}
       />
-      <fieldset className="space-y-3">
-        <legend className="text-lg font-semibold">Методы</legend>
-        <label className="flex items-center gap-2 text-sm">
+
+      <section className="admin-section space-y-3">
+        <h2 className="admin-section__title">Методы</h2>
+        <label className="admin-check">
           <input
             type="checkbox"
             checked={deliveryEnabled}
             disabled={!canUpdate}
-            onChange={(e) => setDeliveryEnabled(e.target.checked)}
+            onChange={(e) => {
+              setDeliveryEnabled(e.target.checked);
+              setPhase('dirty');
+            }}
           />
           Доставка включена
         </label>
-        <label className="flex items-center gap-2 text-sm">
+        <label className="admin-check">
           <input
             type="checkbox"
             checked={pickupEnabled}
             disabled={!canUpdate}
-            onChange={(e) => setPickupEnabled(e.target.checked)}
+            onChange={(e) => {
+              setPickupEnabled(e.target.checked);
+              setPhase('dirty');
+            }}
           />
           Самовывоз включён
         </label>
-      </fieldset>
+      </section>
 
-      <fieldset className="grid gap-4 sm:grid-cols-2">
-        <legend className="col-span-full text-lg font-semibold">Параметры</legend>
-        <label className="block text-sm">
-          Стоимость доставки (копейки)
-          <input
-            value={deliveryFeeMinor}
+      <section className="admin-section space-y-4">
+        <h2 className="admin-section__title">Параметры</h2>
+        <div className="grid gap-4 sm:grid-cols-2">
+          <label className="admin-field">
+            <span>Стоимость доставки (BYN)</span>
+            <input
+              value={deliveryFeeMajor}
+              disabled={!canUpdate}
+              inputMode="decimal"
+              onChange={(e) => {
+                setDeliveryFeeMajor(e.target.value);
+                setPhase('dirty');
+              }}
+              className="admin-input"
+            />
+          </label>
+          <label className="admin-field">
+            <span>Минимальное время подготовки (мин)</span>
+            <input
+              type="number"
+              min={0}
+              value={minLeadTimeMinutes}
+              disabled={!canUpdate}
+              onChange={(e) => {
+                setMinLeadTimeMinutes(e.target.value);
+                setPhase('dirty');
+              }}
+              className="admin-input"
+            />
+          </label>
+          <label className="admin-field">
+            <span>Горизонт заказа (дней)</span>
+            <input
+              type="number"
+              min={1}
+              value={maxAdvanceDays}
+              disabled={!canUpdate}
+              onChange={(e) => {
+                setMaxAdvanceDays(e.target.value);
+                setPhase('dirty');
+              }}
+              className="admin-input"
+            />
+          </label>
+        </div>
+        <label className="admin-field">
+          <span>Инструкции самовывоза</span>
+          <textarea
+            rows={3}
+            value={pickupInstructions}
             disabled={!canUpdate}
-            onChange={(e) => setDeliveryFeeMinor(e.target.value.replace(/\D/g, ''))}
-            className="mt-1 w-full rounded-md border border-stone-300 px-3 py-2"
+            onChange={(e) => {
+              setPickupInstructions(e.target.value);
+              setPhase('dirty');
+            }}
+            className="admin-input"
           />
         </label>
-        <label className="block text-sm">
-          Мин. lead time (мин)
-          <input
-            type="number"
-            min={0}
-            value={minLeadTimeMinutes}
-            disabled={!canUpdate}
-            onChange={(e) => setMinLeadTimeMinutes(e.target.value)}
-            className="mt-1 w-full rounded-md border border-stone-300 px-3 py-2"
-          />
-        </label>
-        <label className="block text-sm">
-          Горизонт заказа (дней)
-          <input
-            type="number"
-            min={1}
-            value={maxAdvanceDays}
-            disabled={!canUpdate}
-            onChange={(e) => setMaxAdvanceDays(e.target.value)}
-            className="mt-1 w-full rounded-md border border-stone-300 px-3 py-2"
-          />
-        </label>
-      </fieldset>
+      </section>
 
-      <label className="block text-sm">
-        Инструкции самовывоза
-        <textarea
-          rows={3}
-          value={pickupInstructions}
-          disabled={!canUpdate}
-          onChange={(e) => setPickupInstructions(e.target.value)}
-          className="mt-1 w-full rounded-md border border-stone-300 px-3 py-2"
-        />
-      </label>
-
-      <fieldset className="space-y-2">
-        <legend className="text-lg font-semibold">Окна времени</legend>
-        <ul className="divide-y divide-stone-200">
+      <section className="admin-section space-y-2">
+        <h2 className="admin-section__title">Окна времени</h2>
+        <p className="admin-section__lead">По времени Минска (Europe/Minsk).</p>
+        <ul className="divide-y divide-[var(--admin-border)]">
           {timeWindows.map((w) => (
             <li key={w.id} className="flex items-center justify-between py-2 text-sm">
               <span>
                 {w.label}{' '}
-                <span className="text-stone-500">({w.appliesTo})</span>
+                <span className="text-[var(--admin-muted)]">({appliesToLabel(w.appliesTo)})</span>
               </span>
-              <label className="flex items-center gap-2">
+              <label className="admin-check mb-0">
                 <input
                   type="checkbox"
                   checked={w.active}
@@ -206,15 +256,21 @@ export function FulfillmentSettingsEditor({ initial, canUpdate }: Props) {
             </li>
           ))}
         </ul>
-      </fieldset>
+      </section>
 
-      {canUpdate ? (
-        <Button type="submit" disabled={pending}>
-          {pending ? 'Сохранение…' : 'Сохранить'}
-        </Button>
-      ) : (
-        <p className="text-sm text-stone-500">Только просмотр</p>
-      )}
+      <div className="admin-savebar">
+        {canUpdate ? (
+          <button type="submit" disabled={pending} className="admin-btn">
+            {pending ? 'Сохранение…' : 'Сохранить'}
+          </button>
+        ) : (
+          <p className="admin-help">Только просмотр: нет прав на изменение.</p>
+        )}
+        <FormSaveStatus
+          phase={pending ? 'saving' : phase === 'dirty' ? 'dirty' : phase === 'saved' ? 'saved' : 'idle'}
+          savedLabel={savedAt ? `Сохранено в ${savedAt}` : null}
+        />
+      </div>
     </form>
   );
 }

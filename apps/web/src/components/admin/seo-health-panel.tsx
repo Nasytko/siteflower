@@ -19,9 +19,9 @@ type Props = {
 
 const STATUS_FILTERS: Array<{ id: 'all' | SeoHealthStatus; label: string }> = [
   { id: 'all', label: 'Все' },
-  { id: 'attention', label: '🔴 Требуют внимания' },
-  { id: 'improve', label: '🟡 Можно улучшить' },
-  { id: 'good', label: '🟢 Хорошо' },
+  { id: 'attention', label: 'Требуют внимания' },
+  { id: 'improve', label: 'Можно улучшить' },
+  { id: 'good', label: 'Хорошо' },
 ];
 
 const TYPE_FILTERS: Array<{ id: 'all' | SeoEntityType; label: string }> = [
@@ -166,7 +166,7 @@ export function SeoHealthPanel({ initial }: Props) {
             <button
               key={item.id}
               type="button"
-              className={`admin-btn-ghost px-3 py-1.5 ${status === item.id ? 'ring-1 ring-[var(--admin-border-strong)]' : ''}`}
+              className={`admin-filter-chip ${status === item.id ? 'admin-filter-chip--active' : ''}`}
               disabled={pending}
               onClick={() => load({ status: item.id, page: 1 })}
             >
@@ -179,7 +179,7 @@ export function SeoHealthPanel({ initial }: Props) {
             <button
               key={item.id}
               type="button"
-              className={`admin-btn-ghost px-3 py-1.5 ${type === item.id ? 'ring-1 ring-[var(--admin-border-strong)]' : ''}`}
+              className={`admin-filter-chip ${type === item.id ? 'admin-filter-chip--active' : ''}`}
               disabled={pending}
               onClick={() => load({ type: item.id, page: 1 })}
             >

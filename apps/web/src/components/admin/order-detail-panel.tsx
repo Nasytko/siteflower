@@ -10,7 +10,6 @@ import {
   type OrderStatus,
   type OutboxEventAdminListItem,
 } from '@bouquet-one/contracts';
-import { Button } from '@bouquet-one/ui';
 import { OrderErpSection } from '@/components/admin/order-erp-section';
 import { formatPriceFromMinor, toSameOriginMediaUrl } from '@/lib/media';
 
@@ -30,6 +29,14 @@ const TRANSITION_LABELS: Partial<Record<OrderStatus, string>> = {
   COMPLETED: 'Завершить',
 };
 
+const EVENT_TYPE_LABELS: Record<string, string> = {
+  ORDER_CREATED: 'Заказ создан',
+  ORDER_STATUS_CHANGED: 'Статус изменён',
+  ORDER_CANCELLED: 'Заказ отменён',
+  ORDER_UPDATED: 'Заказ обновлён',
+  ORDER_NOTE: 'Комментарий',
+};
+
 async function mutate(path: string, init?: RequestInit) {
   const response = await fetch(path, {
     credentials: 'include',
@@ -47,7 +54,7 @@ async function mutate(path: string, init?: RequestInit) {
         ? body.message
         : Array.isArray(body?.message)
           ? body.message.join(', ')
-          : `Request failed (${response.status})`,
+          : 'Не удалось выполнить действие. Попробуйте ещё раз.',
     );
   }
   return body as OrderAdminDetailDto;
@@ -79,7 +86,7 @@ export function OrderDetailPanel({
       setOrder(updated);
       router.refresh();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Ошибка');
+      setError(err instanceof Error ? err.message : 'Не удалось изменить статус');
     } finally {
       setPending(false);
     }
@@ -98,89 +105,120 @@ export function OrderDetailPanel({
       setShowCancel(false);
       router.refresh();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Ошибка');
+      setError(err instanceof Error ? err.message : 'Не удалось отменить заказ');
     } finally {
       setPending(false);
     }
   }
 
   const nextActions = order.allowedTransitions.filter((s) => s !== 'CANCELLED');
+  const primaryNext = nextActions[0];
+  const secondaryNext = nextActions.slice(1);
 
   return (
-    <div className="space-y-10">
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <Link href="/admin/orders" className="text-sm text-stone-500 hover:underline">
+    <div className="space-y-8">
+      <header className="admin-page-header">
+        <div className="admin-page-header__text space-y-2">
+          <Link href="/admin/orders" className="admin-link text-sm">
             ← К заказам
           </Link>
-          <h1 className="mt-2 text-3xl font-semibold text-stone-900">
-            Заказ {order.orderNumber}
-          </h1>
-          <p className="mt-1 text-stone-600">
-            {orderStatusLabel(order.status)} · создан{' '}
-            {new Date(order.createdAt).toLocaleString('ru-BY')}
+          <h1 className="admin-page-title">Заказ {order.orderNumber}</h1>
+          <p className="admin-page-lead">
+            <span className="admin-chip">{orderStatusLabel(order.status)}</span>
+            <span className="ml-2">
+              создан {new Date(order.createdAt).toLocaleString('ru-BY')}
+            </span>
           </p>
         </div>
         {canUpdate ? (
-          <div className="flex flex-wrap gap-2">
-            {nextActions.map((status) => (
-              <Button
+          <div className="admin-page-header__actions">
+            {primaryNext ? (
+              <button
+                type="button"
+                className="admin-btn"
+                disabled={pending}
+                onClick={() => void doTransition(primaryNext)}
+              >
+                {TRANSITION_LABELS[primaryNext] ?? orderStatusLabel(primaryNext)}
+              </button>
+            ) : null}
+            {secondaryNext.map((status) => (
+              <button
                 key={status}
                 type="button"
+                className="admin-btn-ghost"
                 disabled={pending}
                 onClick={() => void doTransition(status)}
               >
                 {TRANSITION_LABELS[status] ?? orderStatusLabel(status)}
-              </Button>
+              </button>
             ))}
             {order.allowedTransitions.includes('CANCELLED') ? (
-              <Button
+              <button
                 type="button"
-                variant="outline"
+                className="admin-btn-ghost"
                 disabled={pending}
                 onClick={() => setShowCancel(true)}
               >
                 Отменить
-              </Button>
+              </button>
             ) : null}
           </div>
         ) : null}
-      </div>
+      </header>
 
-      {error ? <p className="text-sm text-red-700">{error}</p> : null}
+      {error ? (
+        <p role="alert" className="admin-error">
+          {error}
+        </p>
+      ) : null}
 
       {showCancel ? (
-        <div className="rounded-md border border-stone-200 bg-stone-50 p-4 space-y-3">
-          <p className="text-sm font-medium">Причина отмены (внутренняя)</p>
-          <textarea
-            value={cancelReason}
-            onChange={(e) => setCancelReason(e.target.value)}
-            rows={3}
-            className="w-full rounded-md border border-stone-300 px-3 py-2 text-sm"
-            placeholder="Минимум 3 символа"
-          />
-          <div className="flex gap-2">
-            <Button type="button" disabled={pending} onClick={() => void doCancel()}>
-              Подтвердить отмену
-            </Button>
-            <Button
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="order-cancel-title"
+          className="admin-panel space-y-3 border border-[var(--admin-brand)]/30 p-4"
+        >
+          <h2 id="order-cancel-title" className="text-base font-semibold text-[var(--admin-ink)]">
+            Отменить заказ?
+          </h2>
+          <label className="admin-field">
+            <span>Причина отмены (внутренняя)</span>
+            <textarea
+              value={cancelReason}
+              onChange={(e) => setCancelReason(e.target.value)}
+              rows={3}
+              className="admin-input"
+              placeholder="Минимум 3 символа"
+            />
+          </label>
+          <div className="flex flex-wrap gap-2">
+            <button
               type="button"
-              variant="outline"
+              className="admin-btn"
+              disabled={pending || cancelReason.trim().length < 3}
+              onClick={() => void doCancel()}
+            >
+              Подтвердить отмену
+            </button>
+            <button
+              type="button"
+              className="admin-btn-ghost"
+              disabled={pending}
               onClick={() => setShowCancel(false)}
             >
               Закрыть
-            </Button>
+            </button>
           </div>
         </div>
       ) : null}
 
-      <section className="grid gap-8 md:grid-cols-2">
-        <div className="space-y-2">
-          <h2 className="text-lg font-semibold">Получение</h2>
-          <p>
-            {order.fulfillmentType === 'DELIVERY' ? 'Доставка' : 'Самовывоз'}
-          </p>
-          <p className="text-sm text-stone-600">
+      <section className="grid gap-6 md:grid-cols-2">
+        <div className="admin-section space-y-2">
+          <h2 className="admin-section__title">Получение</h2>
+          <p>{order.fulfillmentType === 'DELIVERY' ? 'Доставка' : 'Самовывоз'}</p>
+          <p className="text-sm text-[var(--admin-muted)]">
             {order.fulfillmentDate} · {order.timeWindowLabel}
           </p>
           {order.fulfillmentType === 'DELIVERY' ? (
@@ -191,44 +229,44 @@ export function OrderDetailPanel({
                   : 'Адрес неизвестен (сюрприз / уточнить)'}
               </p>
               {order.addressDetails ? (
-                <p className="text-sm text-stone-600">{order.addressDetails}</p>
+                <p className="text-sm text-[var(--admin-muted)]">{order.addressDetails}</p>
               ) : null}
             </>
           ) : null}
           {order.surprise ? (
-            <p className="text-sm font-medium text-amber-800">Сюрприз</p>
+            <p className="text-sm font-medium text-[#8a5a10]">Сюрприз</p>
           ) : null}
         </div>
 
-        <div className="space-y-4">
-          <div>
-            <h2 className="text-lg font-semibold">Получатель</h2>
+        <div className="space-y-5">
+          <div className="admin-section space-y-2">
+            <h2 className="admin-section__title">Получатель</h2>
             <p>{order.recipientName ?? '—'}</p>
-            <p className="text-sm text-stone-600">{order.recipientPhoneE164 ?? '—'}</p>
+            <p className="text-sm text-[var(--admin-muted)]">{order.recipientPhoneE164 ?? '—'}</p>
           </div>
-          <div>
-            <h2 className="text-lg font-semibold">Заказчик</h2>
+          <div className="admin-section space-y-2">
+            <h2 className="admin-section__title">Заказчик</h2>
             <p>{order.purchaserName}</p>
-            <p className="text-sm text-stone-600">{order.purchaserPhoneE164}</p>
+            <p className="text-sm text-[var(--admin-muted)]">{order.purchaserPhoneE164}</p>
           </div>
         </div>
       </section>
 
-      <section className="space-y-3">
-        <h2 className="text-lg font-semibold">Позиции</h2>
-        <ul className="divide-y divide-stone-200">
+      <section className="admin-section space-y-3">
+        <h2 className="admin-section__title">Позиции</h2>
+        <ul className="divide-y divide-[var(--admin-border)]">
           {order.items.map((item) => {
             const img = toSameOriginMediaUrl(item.primaryImageUrl);
             return (
               <li key={item.id} className="flex gap-4 py-3">
-                <div className="relative h-16 w-14 shrink-0 overflow-hidden rounded bg-stone-100">
+                <div className="relative h-16 w-14 shrink-0 overflow-hidden rounded-lg bg-[var(--color-surface-muted)]">
                   {img ? (
                     <Image src={img} alt="" fill className="object-cover" sizes="56px" />
                   ) : null}
                 </div>
                 <div className="min-w-0 flex-1">
                   <p className="font-medium">{item.productName}</p>
-                  <p className="text-sm text-stone-600">
+                  <p className="text-sm text-[var(--admin-muted)]">
                     {item.variantName} · × {item.quantity} ·{' '}
                     {formatPriceFromMinor(item.unitPriceMinor, item.currency)}
                   </p>
@@ -240,7 +278,7 @@ export function OrderDetailPanel({
             );
           })}
         </ul>
-        <div className="border-t border-stone-200 pt-3 text-sm space-y-1">
+        <div className="space-y-1 border-t border-[var(--admin-border)] pt-3 text-sm">
           <p className="flex justify-between">
             <span>Товары</span>
             <span className="tabular-nums">
@@ -262,21 +300,21 @@ export function OrderDetailPanel({
         </div>
       </section>
 
-      <section className="space-y-2">
-        <h2 className="text-lg font-semibold">Сообщение</h2>
+      <section className="admin-section space-y-2">
+        <h2 className="admin-section__title">Сообщение</h2>
         {order.cardMessage ? (
           <p className="whitespace-pre-wrap text-sm">{order.cardMessage}</p>
         ) : (
-          <p className="text-sm text-stone-500">Без открытки</p>
+          <p className="text-sm text-[var(--admin-muted)]">Без открытки</p>
         )}
         {order.anonymousCard ? (
-          <p className="text-sm text-stone-600">Не указывать отправителя</p>
+          <p className="text-sm text-[var(--admin-muted)]">Не указывать отправителя</p>
         ) : null}
         {order.customerComment ? (
-          <p className="text-sm text-stone-600">Комментарий: {order.customerComment}</p>
+          <p className="text-sm text-[var(--admin-muted)]">Комментарий: {order.customerComment}</p>
         ) : null}
         {order.cancellationReason ? (
-          <p className="text-sm text-red-700">Отмена: {order.cancellationReason}</p>
+          <p className="admin-error">Отмена: {order.cancellationReason}</p>
         ) : null}
       </section>
 
@@ -288,21 +326,21 @@ export function OrderDetailPanel({
         />
       ) : null}
 
-      <section className="space-y-2">
-        <h2 className="text-lg font-semibold">История</h2>
+      <section className="admin-section space-y-2">
+        <h2 className="admin-section__title">История</h2>
         <ul className="space-y-2 text-sm">
           {order.events.map((ev) => (
-            <li key={ev.id} className="flex flex-wrap gap-x-3 text-stone-700">
-              <span className="tabular-nums text-stone-500">
+            <li key={ev.id} className="flex flex-wrap gap-x-3 text-[var(--admin-ink)]">
+              <span className="tabular-nums text-[var(--admin-muted)]">
                 {new Date(ev.createdAt).toLocaleString('ru-BY')}
               </span>
-              <span>{ev.type}</span>
+              <span>{EVENT_TYPE_LABELS[ev.type] ?? ev.type}</span>
               {ev.fromStatus && ev.toStatus ? (
                 <span>
                   {orderStatusLabel(ev.fromStatus)} → {orderStatusLabel(ev.toStatus)}
                 </span>
               ) : null}
-              {ev.message ? <span className="text-stone-500">{ev.message}</span> : null}
+              {ev.message ? <span className="text-[var(--admin-muted)]">{ev.message}</span> : null}
             </li>
           ))}
         </ul>

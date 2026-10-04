@@ -1,9 +1,9 @@
 'use client';
 
 import { FormEvent, useState } from 'react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import type { InstagramPostDto } from '@bouquet-one/contracts';
-import { Button } from '@bouquet-one/ui';
 import {
   adminDelete,
   adminGet,
@@ -41,7 +41,7 @@ export function InstagramManager({ initial, profileUrl, canUpdate }: Props) {
       await action();
       router.refresh();
     } catch (err) {
-      setError(errorMessage(err));
+      setError(errorMessage(err, 'Не удалось обновить Instagram'));
     } finally {
       setPending(false);
     }
@@ -102,21 +102,21 @@ export function InstagramManager({ initial, profileUrl, canUpdate }: Props) {
   return (
     <div className="space-y-6">
       {!profileUrl ? (
-        <p className="rounded-[var(--radius-md)] border border-border bg-surface px-4 py-3 text-sm text-muted">
+        <p className="admin-notice">
           Укажите Instagram URL в{' '}
-          <a href="/admin/storefront/settings" className="font-semibold text-brand hover:underline">
+          <Link href="/admin/storefront/settings" className="admin-link">
             настройках магазина
-          </a>
-          , чтобы на главной показывался @handle и ссылка на профиль.
+          </Link>
+          , чтобы на главной показывался профиль.
         </p>
       ) : (
-        <p className="text-sm text-muted">
+        <p className="text-sm text-[var(--admin-muted)]">
           Профиль:{' '}
           <a
             href={profileUrl}
             target="_blank"
             rel="noopener noreferrer"
-            className="font-semibold text-brand hover:underline"
+            className="admin-link font-semibold"
           >
             {profileUrl}
           </a>
@@ -124,45 +124,51 @@ export function InstagramManager({ initial, profileUrl, canUpdate }: Props) {
       )}
 
       {canUpdate ? (
-        <form
-          onSubmit={onCreate}
-          className="grid gap-3 rounded-[var(--radius-lg)] border border-border bg-surface p-4 md:grid-cols-2"
-        >
-          <label className="grid gap-1 text-sm md:col-span-2">
-            <span className="font-medium">URL фото</span>
+        <form onSubmit={onCreate} className="admin-card grid gap-3 md:grid-cols-2">
+          <label className="admin-field md:col-span-2">
+            <span>URL фото</span>
             <input
               name="imageUrl"
               required
-              placeholder="https://… или /api/v1/media/…"
+              placeholder="Ссылка на изображение"
               className="admin-input"
             />
           </label>
-          <label className="grid gap-1 text-sm">
-            <span className="font-medium">Ссылка на пост</span>
+          <label className="admin-field">
+            <span>Ссылка на пост</span>
             <input name="postUrl" placeholder="https://instagram.com/p/…" className="admin-input" />
           </label>
-          <label className="grid gap-1 text-sm">
-            <span className="font-medium">Подпись</span>
+          <label className="admin-field">
+            <span>Подпись</span>
             <input name="caption" maxLength={500} className="admin-input" />
           </label>
           <div className="md:col-span-2">
-            <Button type="submit" disabled={pending}>
+            <button type="submit" disabled={pending} className="admin-btn">
               Добавить пост
-            </Button>
+            </button>
           </div>
         </form>
       ) : null}
 
-      {error ? <p className="text-sm text-red-700">{error}</p> : null}
+      {error ? (
+        <p role="alert" className="admin-error">
+          {error}
+        </p>
+      ) : null}
 
       {posts.length === 0 ? (
-        <p className="text-sm text-muted">Пока нет постов — добавьте 2–6 сильных кадров.</p>
+        <div className="admin-empty admin-empty--action">
+          <p>Постов пока нет.</p>
+          <p className="text-sm text-[var(--admin-muted)]">
+            Добавьте 2–6 сильных кадров для блока Instagram на главной.
+          </p>
+        </div>
       ) : (
         <ul className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {posts.map((post, index) => (
             <li
               key={post.id}
-              className={`overflow-hidden rounded-[var(--radius-lg)] border border-border bg-surface ${
+              className={`admin-media-card overflow-hidden p-0 ${
                 post.enabled ? '' : 'opacity-60'
               }`}
             >
@@ -175,46 +181,49 @@ export function InstagramManager({ initial, profileUrl, canUpdate }: Props) {
                 />
               </div>
               <div className="space-y-2 p-3">
-                <p className="truncate text-sm font-medium">
-                  {post.caption || post.postUrl || 'Без подписи'}
-                </p>
+                <div className="flex items-center justify-between gap-2">
+                  <p className="truncate text-sm font-medium">
+                    {post.caption || post.postUrl || 'Без подписи'}
+                  </p>
+                  <span
+                    className={`admin-chip ${post.enabled ? '' : 'admin-chip--muted'}`}
+                  >
+                    {post.enabled ? 'На витрине' : 'Скрыт'}
+                  </span>
+                </div>
                 <div className="flex flex-wrap gap-2">
-                  <Button
+                  <button
                     type="button"
-                    variant="outline"
-                    size="sm"
+                    className="admin-btn-ghost"
                     disabled={pending || !canUpdate}
                     onClick={() => void toggleEnabled(post)}
                   >
                     {post.enabled ? 'Скрыть' : 'Показать'}
-                  </Button>
-                  <Button
+                  </button>
+                  <button
                     type="button"
-                    variant="outline"
-                    size="sm"
+                    className="admin-btn-ghost"
                     disabled={pending || !canUpdate || index === 0}
                     onClick={() => void move(index, -1)}
                   >
                     ↑
-                  </Button>
-                  <Button
+                  </button>
+                  <button
                     type="button"
-                    variant="outline"
-                    size="sm"
+                    className="admin-btn-ghost"
                     disabled={pending || !canUpdate || index === posts.length - 1}
                     onClick={() => void move(index, 1)}
                   >
                     ↓
-                  </Button>
-                  <Button
+                  </button>
+                  <button
                     type="button"
-                    variant="outline"
-                    size="sm"
+                    className="admin-btn-ghost"
                     disabled={pending || !canUpdate}
                     onClick={() => void remove(post)}
                   >
                     Удалить
-                  </Button>
+                  </button>
                 </div>
               </div>
             </li>
