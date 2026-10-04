@@ -1,4 +1,14 @@
-import { Body, Controller, Get, Param, ParseUUIDPipe, Patch, Post } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Param,
+  ParseUUIDPipe,
+  Patch,
+  Post,
+  Req,
+} from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import {
@@ -14,8 +24,11 @@ import {
   MinLength,
   ValidateIf,
 } from 'class-validator';
-import { RequirePermissions } from '../auth/decorators';
+import type { Request } from 'express';
 import { CATALOG_LISTING_KINDS } from '@bouquet-one/contracts';
+import { CurrentAdmin, type AuthenticatedAdmin } from '../auth/current-admin.decorator';
+import { RequirePermissions } from '../auth/decorators';
+import { actorFrom } from '../common/actor.util';
 import { CatalogCategoriesService } from './catalog-categories.service';
 import { ExpectedVersionDto } from './products.dto';
 
@@ -98,6 +111,16 @@ class UpdateCatalogCategoryDto extends ExpectedVersionDto {
   noIndex?: boolean;
 }
 
+class ReorderCategoryDto extends ExpectedVersionDto {
+  @IsIn(['up', 'down'])
+  direction!: 'up' | 'down';
+}
+
+class ReassignAndDeleteCategoryDto extends ExpectedVersionDto {
+  @IsUUID()
+  targetCategoryId!: string;
+}
+
 @ApiTags('admin-catalog')
 @Controller('admin/catalog/categories')
 export class AdminCatalogCategoriesController {
@@ -116,14 +139,56 @@ export class AdminCatalogCategoriesController {
   }
 
   @Post()
-  @RequirePermissions('CATALOG_UPDATE')
-  create(@Body() body: CreateCatalogCategoryDto) {
-    return this.categories.create(body);
+  @RequirePermissions('CATALOG_CREATE')
+  create(
+    @Body() body: CreateCatalogCategoryDto,
+    @CurrentAdmin() admin: AuthenticatedAdmin,
+    @Req() req: Request,
+  ) {
+    return this.categories.create(body, actorFrom(admin, req));
   }
 
   @Patch(':id')
   @RequirePermissions('CATALOG_UPDATE')
-  update(@Param('id', ParseUUIDPipe) id: string, @Body() body: UpdateCatalogCategoryDto) {
-    return this.categories.update(id, body);
+  update(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() body: UpdateCatalogCategoryDto,
+    @CurrentAdmin() admin: AuthenticatedAdmin,
+    @Req() req: Request,
+  ) {
+    return this.categories.update(id, body, actorFrom(admin, req));
+  }
+
+  @Post(':id/reorder')
+  @RequirePermissions('CATALOG_UPDATE')
+  reorder(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() body: ReorderCategoryDto,
+    @CurrentAdmin() admin: AuthenticatedAdmin,
+    @Req() req: Request,
+  ) {
+    return this.categories.reorderSibling(id, body.direction, body.expectedVersion, actorFrom(admin, req));
+  }
+
+  @Delete(':id')
+  @RequirePermissions('CATALOG_UPDATE')
+  deleteEmpty(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() body: ExpectedVersionDto,
+    @CurrentAdmin() admin: AuthenticatedAdmin,
+    @Req() req: Request,
+  ) {
+    return this.categories.deleteEmpty(id, body.expectedVersion, actorFrom(admin, req));
+  }
+
+  @Post(':id/reassign-and-delete')
+  @RequirePermissions('CATALOG_UPDATE')
+  reassignAndDelete(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() body: ReassignAndDeleteCategoryDto,
+    @CurrentAdmin() admin: AuthenticatedAdmin,
+    @Req() req: Request,
+  ) {
+    return this.categories.reassignProductsAndDelete(id, body, actorFrom(admin, req));
   }
 }

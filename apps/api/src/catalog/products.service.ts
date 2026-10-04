@@ -378,6 +378,7 @@ export class ProductsService {
         await this.products.replaceComponents(
           product.id,
           source.components.map((component) => ({
+            flowerItemId: component.flowerItemId,
             flowerId: component.flowerId,
             displayName: component.displayName,
             quantity: component.quantity,
@@ -551,6 +552,9 @@ export class ProductsService {
     const flowerIds = input.components
       .map((component) => component.flowerId)
       .filter((flowerId): flowerId is string => Boolean(flowerId));
+    const flowerItemIds = input.components
+      .map((component) => component.flowerItemId)
+      .filter((flowerItemId): flowerItemId is string => Boolean(flowerItemId));
 
     const nextFlowerTypeId =
       input.flowerTypeId === undefined ? product.flowerTypeId : input.flowerTypeId;
@@ -622,6 +626,7 @@ export class ProductsService {
         if (!origin) throw new BadRequestException('Flower origin not found');
       }
       await this.assertReferencesExist(tx, 'flower', flowerIds);
+      await this.flowerRefs.assertFlowerItemsExist(flowerItemIds);
       await this.assertReferencesExist(tx, 'occasion', input.occasionIds);
       await this.assertReferencesExist(tx, 'recipient', input.recipientIds);
       await this.assertReferencesExist(tx, 'color', input.colorIds);
@@ -673,6 +678,7 @@ export class ProductsService {
       await this.products.replaceComponents(
         id,
         input.components.map((component, index) => ({
+          flowerItemId: component.flowerItemId ?? null,
           flowerId: component.flowerId ?? null,
           displayName: component.displayName.trim(),
           quantity: component.quantity ?? null,
@@ -748,8 +754,8 @@ export class ProductsService {
   }
 
   /**
-   * Composition is also the flower facet: filters read `ProductComponent.flowerId`,
-   * so there is no separate product↔flower link to keep in sync.
+   * Composition source of truth: ProductComponent → FlowerItem (+ quantity/unit).
+   * Legacy `flowerId` still feeds /cvety discovery facet when set.
    */
   async setComponents(
     id: string,
@@ -759,13 +765,18 @@ export class ProductsService {
     const flowerIds = input.components
       .map((component) => component.flowerId)
       .filter((flowerId): flowerId is string => Boolean(flowerId));
+    const flowerItemIds = input.components
+      .map((component) => component.flowerItemId)
+      .filter((flowerItemId): flowerItemId is string => Boolean(flowerItemId));
 
     await this.prisma.client.$transaction(async (tx) => {
       await this.guardVersion(tx, id, input.expectedVersion);
       await this.assertReferencesExist(tx, 'flower', flowerIds);
+      await this.flowerRefs.assertFlowerItemsExist(flowerItemIds);
       await this.products.replaceComponents(
         id,
         input.components.map((component, index) => ({
+          flowerItemId: component.flowerItemId ?? null,
           flowerId: component.flowerId ?? null,
           displayName: component.displayName.trim(),
           quantity: component.quantity ?? null,
@@ -776,6 +787,7 @@ export class ProductsService {
       );
       await this.recordAudit(tx, actor, 'PRODUCT_UPDATED', id, {
         components: input.components.length,
+        flowerItems: flowerItemIds.length,
       });
     });
 

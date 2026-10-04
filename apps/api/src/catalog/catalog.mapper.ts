@@ -35,6 +35,7 @@ import {
   LIST_IMAGE_TARGET_WIDTH,
   pickDerivativeStorageUrl,
 } from '../media/media-url.util';
+import { toFlowerItemDto, type FlowerItemRow } from './flower-item.util';
 import {
   buildPublicPromotionDto,
   effectiveVariantPriceMinor,
@@ -52,7 +53,19 @@ export const PRODUCT_INCLUDE = {
   flowerOrigin: true,
   familyMember: { include: { family: { select: { id: true, name: true, version: true } } } },
   variants: { orderBy: { sortOrder: 'asc' } },
-  components: { orderBy: { sortOrder: 'asc' }, include: { flower: true } },
+  components: {
+    orderBy: { sortOrder: 'asc' },
+    include: {
+      flower: true,
+      flowerItem: {
+        include: {
+          flowerType: { select: { id: true, slug: true, name: true } },
+          flowerVariety: { select: { id: true, slug: true, name: true } },
+          flowerOrigin: { select: { id: true, slug: true, name: true } },
+        },
+      },
+    },
+  },
   media: {
     orderBy: { sortOrder: 'asc' },
     include: { mediaAsset: { include: { derivatives: { orderBy: { width: 'asc' } } } } },
@@ -370,6 +383,10 @@ export function toProductAdminDto(
     variants: toVariantDtos(product, now),
     components: product.components.map((component) => ({
       id: component.id,
+      flowerItemId: component.flowerItemId,
+      flowerItem: component.flowerItem
+        ? toFlowerItemDto(component.flowerItem as FlowerItemRow)
+        : null,
       flowerId: component.flowerId,
       flower: component.flower ? toTaxonomyRef(component.flower) : null,
       displayName: component.displayName,

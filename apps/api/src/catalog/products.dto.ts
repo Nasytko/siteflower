@@ -271,6 +271,12 @@ export class ProductComponentInputDto {
   @IsOptional()
   @ValidateIf((_, value) => value !== null)
   @IsUUID()
+  flowerItemId?: string | null;
+
+  /** @deprecated Prefer flowerItemId. Kept for /cvety legacy facet. */
+  @IsOptional()
+  @ValidateIf((_, value) => value !== null)
+  @IsUUID()
   flowerId?: string | null;
 
   @IsString()

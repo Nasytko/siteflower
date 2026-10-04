@@ -1,4 +1,7 @@
-import { collectCategoryDescendantIds } from './catalog-categories.service';
+import {
+  collectCategoryDescendantIds,
+  computeDescendantProductCounts,
+} from './catalog-categories.service';
 
 describe('collectCategoryDescendantIds', () => {
   const rows = [
@@ -26,5 +29,20 @@ describe('collectCategoryDescendantIds', () => {
       { id: 'b', parentId: 'a', visibility: 'VISIBLE' as const },
     ];
     expect(collectCategoryDescendantIds('a', cyclic).sort()).toEqual(['a', 'b'].sort());
+  });
+});
+
+describe('computeDescendantProductCounts', () => {
+  it('sums direct counts down the tree without N+1', () => {
+    const counts = computeDescendantProductCounts([
+      { id: 'root', parentId: null, productsCount: 1 },
+      { id: 'a', parentId: 'root', productsCount: 10 },
+      { id: 'b', parentId: 'root', productsCount: 5 },
+      { id: 'a1', parentId: 'a', productsCount: 3 },
+    ]);
+    expect(counts.get('a1')).toBe(3);
+    expect(counts.get('a')).toBe(13);
+    expect(counts.get('b')).toBe(5);
+    expect(counts.get('root')).toBe(19);
   });
 });

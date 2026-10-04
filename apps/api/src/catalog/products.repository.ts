@@ -422,6 +422,7 @@ export class ProductsRepository {
   async replaceComponents(
     productId: string,
     components: Array<{
+      flowerItemId?: string | null;
       flowerId: string | null;
       displayName: string;
       quantity: number | null;
@@ -570,42 +571,89 @@ export function buildProductWhere(
     and.push({ catalogCategoryId: { in: catalogCategoryIds } });
   }
 
+  // Discovery: legacy Product.flower* OR composition → FlowerItem (mixed bouquets).
   const flowerTypeIds = nonEmpty(filters.flowerTypeIds);
   if (flowerTypeIds) {
-    and.push({ flowerTypeId: { in: flowerTypeIds } });
+    and.push({
+      OR: [
+        { flowerTypeId: { in: flowerTypeIds } },
+        { components: { some: { flowerItem: { flowerTypeId: { in: flowerTypeIds } } } } },
+      ],
+    });
   } else {
     const flowerTypeSlugs = nonEmpty(filters.flowerTypeSlugs);
     if (flowerTypeSlugs) {
-      and.push({ flowerType: { slug: { in: flowerTypeSlugs } } });
+      and.push({
+        OR: [
+          { flowerType: { slug: { in: flowerTypeSlugs } } },
+          {
+            components: {
+              some: { flowerItem: { flowerType: { slug: { in: flowerTypeSlugs } } } },
+            },
+          },
+        ],
+      });
     }
   }
 
   const flowerVarietyIds = nonEmpty(filters.flowerVarietyIds);
   if (flowerVarietyIds) {
-    and.push({ flowerVarietyId: { in: flowerVarietyIds } });
+    and.push({
+      OR: [
+        { flowerVarietyId: { in: flowerVarietyIds } },
+        { components: { some: { flowerItem: { flowerVarietyId: { in: flowerVarietyIds } } } } },
+      ],
+    });
   } else {
     const flowerVarietySlugs = nonEmpty(filters.flowerVarietySlugs);
     if (flowerVarietySlugs) {
-      and.push({ flowerVariety: { slug: { in: flowerVarietySlugs } } });
+      and.push({
+        OR: [
+          { flowerVariety: { slug: { in: flowerVarietySlugs } } },
+          {
+            components: {
+              some: { flowerItem: { flowerVariety: { slug: { in: flowerVarietySlugs } } } },
+            },
+          },
+        ],
+      });
     }
   }
 
   const flowerOriginIds = nonEmpty(filters.flowerOriginIds);
   if (flowerOriginIds) {
-    and.push({ flowerOriginId: { in: flowerOriginIds } });
+    and.push({
+      OR: [
+        { flowerOriginId: { in: flowerOriginIds } },
+        { components: { some: { flowerItem: { flowerOriginId: { in: flowerOriginIds } } } } },
+      ],
+    });
   } else {
     const flowerOriginSlugs = nonEmpty(filters.flowerOriginSlugs);
     if (flowerOriginSlugs) {
-      and.push({ flowerOrigin: { slug: { in: flowerOriginSlugs } } });
+      and.push({
+        OR: [
+          { flowerOrigin: { slug: { in: flowerOriginSlugs } } },
+          {
+            components: {
+              some: { flowerItem: { flowerOrigin: { slug: { in: flowerOriginSlugs } } } },
+            },
+          },
+        ],
+      });
     }
   }
 
   if (filters.heightCm) {
+    const heightFilter = {
+      ...(filters.heightCm.gte !== undefined ? { gte: filters.heightCm.gte } : {}),
+      ...(filters.heightCm.lte !== undefined ? { lte: filters.heightCm.lte } : {}),
+    };
     and.push({
-      heightCm: {
-        ...(filters.heightCm.gte !== undefined ? { gte: filters.heightCm.gte } : {}),
-        ...(filters.heightCm.lte !== undefined ? { lte: filters.heightCm.lte } : {}),
-      },
+      OR: [
+        { heightCm: heightFilter },
+        { components: { some: { flowerItem: { heightCm: heightFilter } } } },
+      ],
     });
   }
 
