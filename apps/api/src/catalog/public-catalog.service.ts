@@ -72,11 +72,15 @@ export class PublicCatalogService {
   private async resolveCatalogFilters(query: PublicProductListQueryDto) {
     let catalogCategoryIds: string[] | undefined;
     if (query.catalogCategoryId) {
-      catalogCategoryIds = await this.categories.expandCategoryIds(query.catalogCategoryId);
+      catalogCategoryIds = await this.categories.expandCategoryIds(query.catalogCategoryId, {
+        visibleOnly: true,
+      });
     } else if (query.categorySlug) {
       try {
         const category = await this.categories.getBySlug(query.categorySlug);
-        catalogCategoryIds = await this.categories.expandCategoryIds(category.id);
+        catalogCategoryIds = await this.categories.expandCategoryIds(category.id, {
+          visibleOnly: true,
+        });
       } catch {
         catalogCategoryIds = ['00000000-0000-0000-0000-000000000000'];
       }

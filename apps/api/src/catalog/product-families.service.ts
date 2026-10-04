@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ConflictException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
@@ -41,7 +42,7 @@ export class ProductFamiliesService {
     const existing = await this.prisma.client.productFamily.findUnique({ where: { id } });
     if (!existing) throw new NotFoundException('Family not found');
     if (existing.version !== expectedVersion) {
-      throw new BadRequestException('Family was modified elsewhere');
+      throw new ConflictException('Family was modified elsewhere');
     }
     return this.prisma.client.productFamily.update({
       where: { id },

@@ -344,6 +344,19 @@ export class ProductsService {
           ...(source.bouquetSizeId
             ? { bouquetSize: { connect: { id: source.bouquetSizeId } } }
             : {}),
+          // Copy structured catalog attrs; never auto-join ProductFamily (explicit manager action).
+          ...(source.catalogCategoryId
+            ? { catalogCategory: { connect: { id: source.catalogCategoryId } } }
+            : {}),
+          ...(source.flowerTypeId
+            ? { flowerType: { connect: { id: source.flowerTypeId } } }
+            : {}),
+          ...(source.flowerVarietyId
+            ? { flowerVariety: { connect: { id: source.flowerVarietyId } } }
+            : {}),
+          ...(source.flowerOriginId
+            ? { flowerOrigin: { connect: { id: source.flowerOriginId } } }
+            : {}),
         },
         tx,
       );
@@ -539,10 +552,17 @@ export class ProductsService {
       .map((component) => component.flowerId)
       .filter((flowerId): flowerId is string => Boolean(flowerId));
 
-    await this.flowerRefs.assertVarietyMatchesType(
-      input.flowerTypeId === undefined ? product.flowerTypeId : input.flowerTypeId,
-      input.flowerVarietyId === undefined ? product.flowerVarietyId : input.flowerVarietyId,
-    );
+    const nextFlowerTypeId =
+      input.flowerTypeId === undefined ? product.flowerTypeId : input.flowerTypeId;
+    // Clearing type must clear variety — never leave an orphan variety FK.
+    const nextFlowerVarietyId =
+      nextFlowerTypeId == null
+        ? null
+        : input.flowerVarietyId === undefined
+          ? product.flowerVarietyId
+          : input.flowerVarietyId;
+
+    await this.flowerRefs.assertVarietyMatchesType(nextFlowerTypeId, nextFlowerVarietyId);
 
     await this.prisma.client.$transaction(async (tx) => {
       const data: Prisma.ProductUncheckedUpdateManyInput = {
@@ -571,7 +591,10 @@ export class ProductsService {
         catalogCategoryId:
           input.catalogCategoryId === undefined ? undefined : input.catalogCategoryId,
         flowerTypeId: input.flowerTypeId === undefined ? undefined : input.flowerTypeId,
-        flowerVarietyId: input.flowerVarietyId === undefined ? undefined : input.flowerVarietyId,
+        flowerVarietyId:
+          input.flowerTypeId === undefined && input.flowerVarietyId === undefined
+            ? undefined
+            : nextFlowerVarietyId,
         flowerOriginId: input.flowerOriginId === undefined ? undefined : input.flowerOriginId,
       };
 

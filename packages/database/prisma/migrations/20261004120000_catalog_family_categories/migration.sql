@@ -156,6 +156,7 @@ ALTER TABLE "products"
 -- Reference seed (categories / flower refs only — no product classification)
 -- ---------------------------------------------------------------------------
 
+-- Idempotent seed: safe if rows already exist (manual re-apply / partial recovery).
 INSERT INTO "catalog_categories" ("id", "parent_id", "slug", "name", "listing_kind", "sort_order", "visibility", "version", "created_at", "updated_at")
 VALUES
   ('a1000000-0000-4000-8000-000000000001', NULL, 'tsvety', 'Цветы', 'FLOWERS', 10, 'VISIBLE', 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
@@ -163,7 +164,8 @@ VALUES
   ('a1000000-0000-4000-8000-000000000003', NULL, 'kompozicii', 'Композиции', 'COMPOSITIONS', 30, 'VISIBLE', 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
   ('a1000000-0000-4000-8000-000000000004', NULL, 'podarki', 'Подарки', 'GIFTS', 40, 'VISIBLE', 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
   ('a1000000-0000-4000-8000-000000000005', NULL, 'otkrytki', 'Открытки', 'GIFTS', 50, 'VISIBLE', 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
-  ('a1000000-0000-4000-8000-000000000006', NULL, 'svechi', 'Свечи', 'GIFTS', 60, 'VISIBLE', 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
+  ('a1000000-0000-4000-8000-000000000006', NULL, 'svechi', 'Свечи', 'GIFTS', 60, 'VISIBLE', 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+ON CONFLICT ("id") DO NOTHING;
 
 INSERT INTO "catalog_categories" ("id", "parent_id", "slug", "name", "listing_kind", "sort_order", "visibility", "version", "created_at", "updated_at")
 VALUES
@@ -176,7 +178,8 @@ VALUES
   ('a1000000-0000-4000-8000-000000000022', 'a1000000-0000-4000-8000-000000000002', 'monobukety', 'Монобукеты', 'BOUQUETS', 20, 'VISIBLE', 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
   ('a1000000-0000-4000-8000-000000000023', 'a1000000-0000-4000-8000-000000000002', 'avtorskie-bukety', 'Авторские букеты', 'BOUQUETS', 30, 'VISIBLE', 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
   ('a1000000-0000-4000-8000-000000000031', 'a1000000-0000-4000-8000-000000000004', 'igrushki', 'Игрушки', 'GIFTS', 10, 'VISIBLE', 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
-  ('a1000000-0000-4000-8000-000000000032', 'a1000000-0000-4000-8000-000000000004', 'dopolneniya', 'Дополнения', 'GIFTS', 20, 'VISIBLE', 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
+  ('a1000000-0000-4000-8000-000000000032', 'a1000000-0000-4000-8000-000000000004', 'dopolneniya', 'Дополнения', 'GIFTS', 20, 'VISIBLE', 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+ON CONFLICT ("id") DO NOTHING;
 
 INSERT INTO "flower_types" ("id", "slug", "name", "sort_order", "visibility", "version", "created_at", "updated_at")
 VALUES
@@ -184,16 +187,19 @@ VALUES
   ('b1000000-0000-4000-8000-000000000002', 'hrizantema', 'Хризантема', 20, 'VISIBLE', 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
   ('b1000000-0000-4000-8000-000000000003', 'gerbera', 'Гербера', 30, 'VISIBLE', 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
   ('b1000000-0000-4000-8000-000000000004', 'tyulpan', 'Тюльпан', 40, 'VISIBLE', 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
-  ('b1000000-0000-4000-8000-000000000005', 'liliya', 'Лилия', 50, 'VISIBLE', 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
+  ('b1000000-0000-4000-8000-000000000005', 'liliya', 'Лилия', 50, 'VISIBLE', 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+ON CONFLICT ("id") DO NOTHING;
 
 INSERT INTO "flower_varieties" ("id", "flower_type_id", "slug", "name", "sort_order", "visibility", "version", "created_at", "updated_at")
 VALUES
   ('c1000000-0000-4000-8000-000000000001', 'b1000000-0000-4000-8000-000000000001', 'mondial', 'Мондиаль', 10, 'VISIBLE', 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
   ('c1000000-0000-4000-8000-000000000002', 'b1000000-0000-4000-8000-000000000001', 'zhizel', 'Жизель', 20, 'VISIBLE', 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
-  ('c1000000-0000-4000-8000-000000000003', 'b1000000-0000-4000-8000-000000000001', 'eksplorer', 'Эксплорер', 30, 'VISIBLE', 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
+  ('c1000000-0000-4000-8000-000000000003', 'b1000000-0000-4000-8000-000000000001', 'eksplorer', 'Эксплорер', 30, 'VISIBLE', 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+ON CONFLICT ("id") DO NOTHING;
 
 INSERT INTO "flower_origins" ("id", "slug", "name", "sort_order", "visibility", "version", "created_at", "updated_at")
 VALUES
   ('d1000000-0000-4000-8000-000000000001', 'ekvador', 'Эквадор', 10, 'VISIBLE', 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
   ('d1000000-0000-4000-8000-000000000002', 'keniya', 'Кения', 20, 'VISIBLE', 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
-  ('d1000000-0000-4000-8000-000000000003', 'fermerskaya', 'Фермерская', 30, 'VISIBLE', 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
+  ('d1000000-0000-4000-8000-000000000003', 'fermerskaya', 'Фермерская', 30, 'VISIBLE', 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+ON CONFLICT ("id") DO NOTHING;

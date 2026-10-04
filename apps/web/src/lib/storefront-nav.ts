@@ -7,7 +7,12 @@ const LEGACY_CATEGORY_HREFS: Record<string, string> = {
   cvety: '/cvety',
 };
 
+/**
+ * Discovery / service links that are not CatalogCategory nodes.
+ * Kept after the CMS tree so «Повод» and store pages stay reachable.
+ */
 const STATIC_NAV_TAIL: PrimaryNavItem[] = [
+  { id: 'povod', label: 'Повод', href: '/povod' },
   { id: 'akcii', label: 'Акции', href: '/akcii', accent: true },
   { id: 'dostavka', label: 'Доставка', href: '/dostavka' },
   { id: 'o-nas', label: 'О нас', href: '/o-nas' },

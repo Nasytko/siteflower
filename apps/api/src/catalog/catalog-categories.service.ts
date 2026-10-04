@@ -35,6 +35,37 @@ function listingKindOf(value: string | null): CatalogListingKind | null {
   return value && isCatalogListingKind(value) ? value : null;
 }
 
+/** Pure tree walk — exported for unit tests. Cycle-safe via visited set. */
+export function collectCategoryDescendantIds(
+  rootId: string,
+  rows: Array<{ id: string; parentId: string | null; visibility: TaxonomyVisibility }>,
+  options?: { visibleOnly?: boolean },
+): string[] {
+  const children = new Map<string, string[]>();
+  const visibility = new Map<string, TaxonomyVisibility>();
+  for (const row of rows) {
+    visibility.set(row.id, row.visibility);
+    if (!row.parentId) continue;
+    const list = children.get(row.parentId) ?? [];
+    list.push(row.id);
+    children.set(row.parentId, list);
+  }
+  const out: string[] = [];
+  const visited = new Set<string>();
+  const stack = [rootId];
+  while (stack.length > 0) {
+    const id = stack.pop()!;
+    if (visited.has(id)) continue;
+    visited.add(id);
+    out.push(id);
+    for (const childId of children.get(id) ?? []) {
+      if (options?.visibleOnly && visibility.get(childId) !== 'VISIBLE') continue;
+      stack.push(childId);
+    }
+  }
+  return out;
+}
+
 function toAdminDto(row: CategoryRow): CatalogCategoryAdminDto {
   return {
     id: row.id,
@@ -115,26 +146,19 @@ export class CatalogCategoriesService {
     };
   }
 
-  /** Expand a category to itself + all descendant ids (for PLP filters). */
-  async expandCategoryIds(rootId: string): Promise<string[]> {
+  /**
+   * Expand a category to itself + descendant ids (for PLP filters).
+   * `visibleOnly` excludes HIDDEN descendants so storefront parent PLPs
+   * do not leak products assigned only to hidden children.
+   */
+  async expandCategoryIds(
+    rootId: string,
+    options?: { visibleOnly?: boolean },
+  ): Promise<string[]> {
     const rows = await this.prisma.client.catalogCategory.findMany({
-      select: { id: true, parentId: true },
+      select: { id: true, parentId: true, visibility: true },
     });
-    const children = new Map<string, string[]>();
-    for (const row of rows) {
-      if (!row.parentId) continue;
-      const list = children.get(row.parentId) ?? [];
-      list.push(row.id);
-      children.set(row.parentId, list);
-    }
-    const out: string[] = [];
-    const stack = [rootId];
-    while (stack.length > 0) {
-      const id = stack.pop()!;
-      out.push(id);
-      for (const child of children.get(id) ?? []) stack.push(child);
-    }
-    return out;
+    return collectCategoryDescendantIds(rootId, rows, options);
   }
 
   async create(input: {

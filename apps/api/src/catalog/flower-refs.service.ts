@@ -147,7 +147,8 @@ export class FlowerRefsService {
       where: { id: flowerVarietyId },
     });
     if (!variety) throw new BadRequestException('Flower variety not found');
-    if (flowerTypeId && variety.flowerTypeId !== flowerTypeId) {
+    // Variety always requires its owning type — never allow orphan variety on Product.
+    if (!flowerTypeId || variety.flowerTypeId !== flowerTypeId) {
       throw new BadRequestException('Flower variety does not belong to the selected flower type');
     }
   }
