@@ -21,6 +21,7 @@ import {
 } from '@/lib/admin-catalog-contract';
 import { adminEndpoints } from '@/lib/admin-endpoints';
 import { availabilityLabel, formatAdminDateTime, lifecycleLabel } from '@/lib/admin-labels';
+import { availabilityChipClass, lifecycleChipClass } from '@/lib/admin-status';
 import { toSameOriginMediaUrl } from '@/lib/media';
 
 export type ProductFilters = {
@@ -301,14 +302,14 @@ export function ProductsManager({
         });
       setBulkProblems(problems);
       if (result.failed === 0) {
-        setBulkSummary(`${result.succeeded} товаров обновлено`);
+        setBulkSummary(`✓ ${result.succeeded} выполнено`);
         setSelectedIds(new Set());
       } else if (result.succeeded === 0) {
-        setBulkSummary('Не удалось обновить товары');
+        setBulkSummary(`⚠ Не удалось обновить товары (${result.failed})`);
         setShowBulkProblems(true);
       } else {
         setBulkSummary(
-          `${result.succeeded} товаров обновлено, ${result.failed} требуют внимания`,
+          `✓ ${result.succeeded} выполнено · ⚠ ${result.failed} не выполнено`,
         );
         setShowBulkProblems(true);
         setSelectedIds(
@@ -340,10 +341,13 @@ export function ProductsManager({
   return (
     <div className={`space-y-5 ${navigating ? 'opacity-70' : ''}`}>
       {error ? (
-        <p role="alert" className="admin-error">
-          {error}
+        <div role="alert" className="admin-error">
+          <p>{error}</p>
           {requestId ? (
-            <span className="mt-1 block text-xs opacity-80">Код запроса: {requestId}</span>
+            <details>
+              <summary>Технические детали</summary>
+              Код запроса: {requestId}
+            </details>
           ) : null}
           {retryable && pendingAvailabilityRetry ? (
             <button
@@ -354,7 +358,7 @@ export function ProductsManager({
               Повторить
             </button>
           ) : null}
-        </p>
+        </div>
       ) : null}
 
       {availabilitySuccessId ? (
@@ -396,7 +400,7 @@ export function ProductsManager({
       ) : null}
 
       {canBulk && selectedIds.size > 0 ? (
-        <div className="admin-panel flex flex-wrap items-center gap-2 border border-[var(--admin-brand)]/30 p-3">
+        <div className="admin-bulkbar">
           <span className="text-sm font-medium text-[var(--admin-ink)]">
             Выбрано: {selectedIds.size}
             <span className="ml-1 font-normal text-[var(--admin-muted)]">
@@ -444,7 +448,7 @@ export function ProductsManager({
                     }}
                   >
                     <option value="" disabled>
-                      Изменить доступность
+                      Изменить наличие
                     </option>
                     {COMMERCIAL_AVAILABILITIES.map((value) => (
                       <option key={value} value={value}>
@@ -719,9 +723,29 @@ export function ProductsManager({
             {rows.length === 0 ? (
               <tr>
                 <td colSpan={(canCreate ? 9 : 8) + (canBulk ? 1 : 0)}>
-                  <p className="admin-empty">
-                    {hasFilters ? 'Ничего не найдено — измените фильтры' : 'Товаров пока нет'}
-                  </p>
+                  {hasFilters ? (
+                    <div className="admin-empty admin-empty--action">
+                      <p>Ничего не найдено по текущим фильтрам.</p>
+                      <p className="text-sm text-[var(--admin-muted)]">
+                        Измените поиск или сбросьте фильтры, чтобы увидеть все товары.
+                      </p>
+                      <Link href="/admin/catalog/products" className="admin-btn-ghost">
+                        Сбросить фильтры
+                      </Link>
+                    </div>
+                  ) : (
+                    <div className="admin-empty admin-empty--action">
+                      <p>Товаров пока нет.</p>
+                      <p className="text-sm text-[var(--admin-muted)]">
+                        Создайте первый товар, чтобы он появился в каталоге.
+                      </p>
+                      {canCreate ? (
+                        <p className="text-sm text-[var(--admin-muted)]">
+                          Введите название в поле «Новый букет» выше и нажмите «Создать черновик».
+                        </p>
+                      ) : null}
+                    </div>
+                  )}
                 </td>
               </tr>
             ) : (
@@ -779,11 +803,7 @@ export function ProductsManager({
                       )}
                     </td>
                     <td>
-                      <span
-                        className={`admin-chip ${
-                          item.lifecycle === 'PUBLISHED' ? '' : 'admin-chip--muted'
-                        }`}
-                      >
+                      <span className={lifecycleChipClass(item.lifecycle)}>
                         {lifecycleLabel(item.lifecycle)}
                       </span>
                     </td>
@@ -822,11 +842,7 @@ export function ProductsManager({
                           ) : null}
                         </label>
                       ) : (
-                        <span
-                          className={`admin-chip ${
-                            item.availability === 'AVAILABLE' ? '' : 'admin-chip--warn'
-                          }`}
-                        >
+                        <span className={availabilityChipClass(item.availability)}>
                           {availabilityLabel(item.availability)}
                         </span>
                       )}

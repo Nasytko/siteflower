@@ -59,7 +59,9 @@ export default async function AdminProductsPage({
     <main id="main-content" className="space-y-6">
       <header>
         <h1 className="admin-page-title">Товары</h1>
-        <p className="admin-page-lead">Букеты магазина: цены, фото, подбор и продвижение</p>
+        <p className="admin-page-lead">
+          Найдите товар, измените наличие или откройте карточку для фото, цены и публикации.
+        </p>
       </header>
       <Suspense fallback={<p className="admin-empty">Загрузка…</p>}>
         <ProductsManager
