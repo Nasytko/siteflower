@@ -13,7 +13,6 @@ import {
   type PaginatedResponse,
   type ProductListItemDto,
 } from '@bouquet-one/contracts';
-import { Button } from '@bouquet-one/ui';
 import { adminPatch, adminPost, AdminRequestError, errorMessage } from '@/lib/admin-client';
 import {
   buildProductAvailabilityPatchBody,
@@ -362,19 +361,13 @@ export function ProductsManager({
       ) : null}
 
       {availabilitySuccessId ? (
-        <p
-          role="status"
-          className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-900"
-        >
-          Доступность изменена
+        <p role="status" className="admin-notice admin-notice--success">
+          Наличие изменено
         </p>
       ) : null}
 
       {bulkSummary ? (
-        <div
-          role="status"
-          className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-900"
-        >
+        <div role="status" className="admin-notice admin-notice--success">
           <p>{bulkSummary}</p>
           {bulkProblems.length > 0 ? (
             <div className="mt-2">
@@ -415,14 +408,14 @@ export function ProductsManager({
             <>
               {canPublish ? (
                 <>
-                  <Button
+                  <button
                     type="button"
-                    className="!rounded-lg !bg-[var(--admin-brand)]"
+                    className="admin-btn"
                     disabled={bulkRunning}
                     onClick={() => requestBulk({ kind: 'PUBLISH' })}
                   >
                     Опубликовать
-                  </Button>
+                  </button>
                   <button
                     type="button"
                     className="admin-btn-ghost"
@@ -495,14 +488,14 @@ export function ProductsManager({
                   : null}
           </p>
           <div className="flex flex-wrap gap-2">
-            <Button
+            <button
               type="button"
               disabled={bulkRunning}
               onClick={() => void runBulk()}
-              className="!rounded-lg !bg-[var(--admin-brand)]"
+              className="admin-btn"
             >
               {bulkRunning ? 'Обновление…' : 'Подтвердить'}
-            </Button>
+            </button>
             <button
               type="button"
               className="admin-btn-ghost"
@@ -516,9 +509,9 @@ export function ProductsManager({
       ) : null}
 
       {duplicateSuccessId ? (
-        <p role="status" className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-900">
+        <p role="status" className="admin-notice admin-notice--success">
           Товар создан как черновик.{' '}
-          <Link href={`/admin/catalog/products/${duplicateSuccessId}`} className="font-semibold underline">
+          <Link href={`/admin/catalog/products/${duplicateSuccessId}`} className="admin-link font-semibold">
             Открыть товар
           </Link>
         </p>
@@ -539,14 +532,14 @@ export function ProductsManager({
             бестселлеров не будут перенесены.
           </p>
           <div className="flex flex-wrap gap-2">
-            <Button
+            <button
               type="button"
               disabled={duplicating}
               onClick={() => void onConfirmDuplicate()}
-              className="!rounded-lg !bg-[var(--admin-brand)]"
+              className="admin-btn"
             >
               {duplicating ? 'Дублирование…' : 'Дублировать'}
-            </Button>
+            </button>
             <button
               type="button"
               className="admin-btn-ghost"
@@ -560,7 +553,7 @@ export function ProductsManager({
       ) : null}
 
       {canCreate ? (
-        <form onSubmit={onCreate} className="admin-toolbar">
+        <form id="create-product" onSubmit={onCreate} className="admin-toolbar">
           <label className="admin-field">
             <span>Новый букет</span>
             <input
@@ -570,13 +563,9 @@ export function ProductsManager({
               placeholder="Название, например «Амели»"
             />
           </label>
-          <Button
-            type="submit"
-            disabled={creating}
-            className="!rounded-lg !bg-[var(--admin-brand)]"
-          >
+          <button type="submit" disabled={creating} className="admin-btn">
             {creating ? 'Создаём…' : 'Создать черновик'}
-          </Button>
+          </button>
           <p className="admin-toolbar__hint">
             Адрес в ссылке и цену заполните в карточке товара.
           </p>

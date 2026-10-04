@@ -20,7 +20,6 @@ import {
   type PromotionType,
   type VariantStatus,
 } from '@bouquet-one/contracts';
-import { Button } from '@bouquet-one/ui';
 import {
   adminDelete,
   adminGet,
@@ -843,14 +842,14 @@ export function ProductEditor({
         </div>
         <div className="admin-editor-header__actions">
           {canUpdate ? (
-            <Button
+            <button
               type="button"
+              className="admin-btn"
               disabled={savePending || mediaPending}
-              className="!rounded-lg !bg-[var(--admin-brand)]"
               onClick={() => void onSave()}
             >
               {savePending ? 'Сохранение…' : 'Сохранить'}
-            </Button>
+            </button>
           ) : null}
           <a
             className="admin-btn-ghost"
@@ -859,14 +858,14 @@ export function ProductEditor({
             Предпросмотр
           </a>
           {canPublish && server.lifecycle !== 'PUBLISHED' ? (
-            <Button
+            <button
               type="button"
+              className="admin-btn-ghost"
               disabled={pending}
-              className="!rounded-lg !bg-[var(--admin-brand)]"
               onClick={() => void runLifecycle('publish')}
             >
               Опубликовать
-            </Button>
+            </button>
           ) : null}
           {canPublish && server.lifecycle === 'PUBLISHED' ? (
             <button
@@ -2045,14 +2044,14 @@ export function ProductEditor({
             <div className="flex flex-wrap items-center gap-2">
               {canPublish ? (
                 <>
-                  <Button
+                  <button
                     type="button"
+                    className="admin-btn"
                     disabled={pending || server.lifecycle === 'PUBLISHED'}
-                    className="!rounded-lg !bg-[var(--admin-brand)]"
                     onClick={() => void runLifecycle('publish')}
                   >
                     Опубликовать
-                  </Button>
+                  </button>
                   <button
                     type="button"
                     className="admin-btn-ghost"
