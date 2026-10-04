@@ -65,6 +65,11 @@ const NAV_GROUPS: NavGroup[] = [
         permission: 'CATALOG_READ',
       },
       {
+        href: '/admin/catalog/composition-setup',
+        label: 'Настройка состава',
+        permission: 'CATALOG_READ',
+      },
+      {
         href: '/admin/catalog/flowers',
         label: 'Справочники',
         permission: 'CATALOG_READ',

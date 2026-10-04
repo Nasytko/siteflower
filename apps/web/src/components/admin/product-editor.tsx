@@ -15,6 +15,7 @@ import {
   seoStatusEmoji,
   seoStatusLabel,
   suggestProductNameFromComposition,
+  resolveCompositionSetupStatus,
   type ComponentUnit,
   type CommercialAvailability,
   type ProductAdminDto,
@@ -235,6 +236,8 @@ export function ProductEditor({
   const [flowerTypeId, setFlowerTypeId] = useState(product.flowerTypeId ?? '');
   const [flowerVarietyId, setFlowerVarietyId] = useState(product.flowerVarietyId ?? '');
   const [flowerOriginId, setFlowerOriginId] = useState(product.flowerOriginId ?? '');
+  /** After FlowerItem composition is set, optionally clear deprecated product flower FKs. */
+  const [clearLegacyFlowerAttrs, setClearLegacyFlowerAttrs] = useState(false);
   const [familyId, setFamilyId] = useState(product.family?.id ?? '');
   const [familyMemberSortOrder, setFamilyMemberSortOrder] = useState<number | undefined>(() =>
     familyMemberSortOrderFor(product),
@@ -590,9 +593,9 @@ export function ProductEditor({
         },
         groupIds,
         catalogCategoryId: catalogCategoryId || null,
-        flowerTypeId: flowerTypeId || null,
-        flowerVarietyId: flowerVarietyId || null,
-        flowerOriginId: flowerOriginId || null,
+        flowerTypeId: clearLegacyFlowerAttrs ? null : flowerTypeId || null,
+        flowerVarietyId: clearLegacyFlowerAttrs ? null : flowerVarietyId || null,
+        flowerOriginId: clearLegacyFlowerAttrs ? null : flowerOriginId || null,
         familyId: familyId || null,
         ...(familyId
           ? {
@@ -1100,9 +1103,13 @@ export function ProductEditor({
               </select>
             </label>
 
+            <p className="text-xs text-[var(--admin-muted)]">
+              Поля вида/сорта/происхождения ниже — устаревшие (legacy). Основной источник истины —
+              блок «Состав» со справочником позиций.
+            </p>
             <div className="grid gap-4 sm:grid-cols-2">
               <label className="admin-field">
-                <span>Вид цветка</span>
+                <span>Вид цветка (legacy)</span>
                 <select
                   className="admin-select"
                   value={flowerTypeId}
@@ -1128,7 +1135,7 @@ export function ProductEditor({
                 </select>
               </label>
               <label className="admin-field">
-                <span>Сорт</span>
+                <span>Сорт (legacy)</span>
                 <select
                   className="admin-select"
                   value={flowerVarietyId}
@@ -1147,7 +1154,7 @@ export function ProductEditor({
                 </select>
               </label>
               <label className="admin-field">
-                <span>Происхождение</span>
+                <span>Происхождение (legacy)</span>
                 <select
                   className="admin-select"
                   value={flowerOriginId}
@@ -1674,6 +1681,36 @@ export function ProductEditor({
             Выберите конкретный цветок из справочника и укажите количество. Один и тот же цветок
             можно использовать в разных товарах.
           </p>
+          {(() => {
+            const status = resolveCompositionSetupStatus({
+              flowerTypeId: flowerTypeId || null,
+              flowerVarietyId: flowerVarietyId || null,
+              flowerOriginId: flowerOriginId || null,
+              components: components.map((row) => ({
+                flowerItemId: row.flowerItemId || null,
+                flowerId: row.flowerId || null,
+              })),
+            });
+            if (status === 'legacy_pending') {
+              return (
+                <div className="admin-panel border border-[var(--admin-warning,#b45309)]/40 p-3 text-sm">
+                  Используется устаревшая информация о цветке на карточке товара. Настройте состав
+                  через справочник позиций (FlowerItem) ниже.{' '}
+                  <a href="/admin/catalog/composition-setup" className="underline underline-offset-2">
+                    Открыть список «Требуют настройки состава»
+                  </a>
+                </div>
+              );
+            }
+            if (status === 'empty') {
+              return (
+                <div className="admin-panel border border-[var(--admin-border)] p-3 text-sm text-[var(--admin-muted)]">
+                  Состав товара не настроен. Добавьте хотя бы одну позицию из справочника цветов.
+                </div>
+              );
+            }
+            return null;
+          })()}
           <div className="admin-panel overflow-x-auto">
             <table className="admin-table min-w-[720px]">
               <thead>
@@ -1839,6 +1876,20 @@ export function ProductEditor({
               >
                 Предложить название
               </button>
+              {components.some((row) => row.flowerItemId) &&
+              (flowerTypeId || flowerVarietyId || flowerOriginId) ? (
+                <label className="flex items-center gap-2 text-sm text-[var(--admin-muted)]">
+                  <input
+                    type="checkbox"
+                    checked={clearLegacyFlowerAttrs}
+                    onChange={(event) => {
+                      setClearLegacyFlowerAttrs(event.target.checked);
+                      touch();
+                    }}
+                  />
+                  При сохранении очистить устаревшие вид/сорт/происхождение на карточке
+                </label>
+              ) : null}
             </div>
           ) : null}
         </section>

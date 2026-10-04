@@ -82,6 +82,10 @@ Do **not** confuse with legacy composition `Flower` taxonomy (`/cvety` SEO facet
 
 Storefront filters for type / variety / origin / height match **either** composition → FlowerItem **or** legacy denormalized `Product.flowerTypeId` / `flowerVarietyId` / `flowerOriginId` / `heightCm` (kept for migration; deprecated as source of truth).
 
+`/cvety` hub and SEO landings still use the legacy `Flower` taxonomy table. Product listing under `/cvety/:slug` also matches `ProductComponent → FlowerItem.flowerType.slug` when the Flower slug equals the FlowerType slug (bridge; Flower table is not dropped).
+
+Admin tool **«Настройка состава»** (`/admin/catalog/composition-setup`) lists products with legacy flower attrs but no FlowerItem composition. Managers pick an existing FlowerItem + quantity manually — no auto-guessing of height/origin from the product name.
+
 Used FlowerItems cannot be hard-deleted — archive with `visibility: HIDDEN`. Future ERP mapping should target FlowerItem (prefer a separate mapping table).
 
 No universal attribute builder / PIM.

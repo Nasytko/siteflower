@@ -98,6 +98,7 @@ export const adminEndpoints = {
   productsBulk: `${ADMIN}/catalog/products/bulk`,
   product: (id: string) => `${ADMIN}/catalog/products/${id}`,
   productDuplicate: (id: string) => `${ADMIN}/catalog/products/${id}/duplicate`,
+  productCompositionSetup: (id: string) => `${ADMIN}/catalog/products/${id}/composition-setup`,
   productEditor: (id: string) => `${ADMIN}/catalog/products/${id}/editor`,
   productPreview: (id: string) => `${ADMIN}/catalog/products/${id}/preview`,
   productVariants: (id: string) => `${ADMIN}/catalog/products/${id}/variants`,

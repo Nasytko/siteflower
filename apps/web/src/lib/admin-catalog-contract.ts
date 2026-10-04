@@ -25,6 +25,8 @@ export type ProductListQuery = {
   flowerVarietyId?: string;
   flowerOriginId?: string;
   familyId?: string;
+  /** Products with legacy flower attrs but no FlowerItem composition. */
+  needsCompositionMigration?: boolean;
   sort?: string;
   page?: number;
   pageSize?: number;
@@ -55,6 +57,8 @@ export function buildProductListQueryParams(
     flowerVarietyId: query.flowerVarietyId,
     flowerOriginId: query.flowerOriginId,
     familyId: query.familyId,
+    needsCompositionMigration:
+      query.needsCompositionMigration === true ? true : undefined,
     sort: query.sort,
   };
 }
