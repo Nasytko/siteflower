@@ -59,7 +59,10 @@ export const CATALOG_LISTING_KINDS = [
 ] as const;
 export type CatalogListingKind = (typeof CATALOG_LISTING_KINDS)[number];
 
-/** Storefront height filter bands mapped to Product.heightCm. */
+/**
+ * Storefront height filter bands.
+ * Matched against Product.heightCm (bouquet/card) OR FlowerItem.heightCm (stem) via composition.
+ */
 export const HEIGHT_BANDS = [
   { id: 'up_to_50', label: 'до 50 см', minCm: null, maxCm: 50 },
   { id: '50_60', label: '50–60 см', minCm: 50, maxCm: 60 },

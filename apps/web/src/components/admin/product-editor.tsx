@@ -1173,7 +1173,7 @@ export function ProductEditor({
                 </select>
               </label>
               <label className="admin-field">
-                <span>Высота, см</span>
+                <span>Высота букета, см</span>
                 <input
                   className="admin-input w-40"
                   type="number"
@@ -1182,6 +1182,7 @@ export function ProductEditor({
                   value={basic.heightCm}
                   disabled={!canUpdate}
                   placeholder="не указана"
+                  title="Высота готового букета на карточке (не высота стебля в справочнике)"
                   onChange={(event) => {
                     setBasic((prev) => ({ ...prev, heightCm: event.target.value }));
                     touch();

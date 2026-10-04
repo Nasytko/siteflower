@@ -77,10 +77,21 @@ Do **not** confuse with legacy composition `Flower` taxonomy (`/cvety` SEO facet
 | **FlowerType** | Роза | Dictionary level 1 |
 | **FlowerVariety** | Мондиаль | Dictionary level 2 under type |
 | **FlowerOrigin** | Эквадор | Shared origin dictionary |
-| **FlowerItem** | Роза Мондиаль · Эквадор · 60 см | Concrete reusable stem/SKU |
-| **Product.heightCm** | 60 | Bouquet/card height (ruler / legacy bands) |
+| **FlowerItem** | Роза Мондиаль · Эквадор · 60 см | Concrete reusable stem/SKU (**stem** height) |
+| **Product.heightCm** | 60 | **Bouquet/card** height (PDP ruler, family switcher, legacy height bands) |
 
-Storefront filters for type / variety / origin / height match **either** composition → FlowerItem **or** legacy denormalized `Product.flowerTypeId` / `flowerVarietyId` / `flowerOriginId` / `heightCm` (kept for migration; deprecated as source of truth).
+### Product.heightCm vs FlowerItem.heightCm
+
+These are **different semantics** — keep both.
+
+| Field | Meaning | Used for |
+| --- | --- | --- |
+| **FlowerItem.heightCm** | Stem/SKU height of a concrete flower position (e.g. Mondial 60 cm Ecuador) | Composition dictionary; `/katalog` height filter via `components.flowerItem` |
+| **Product.heightCm** | Finished bouquet/card height shown to the shopper | PDP height ruler, family member labels, product meta, legacy height-band OR match |
+
+A mixed bouquet can have stems of different heights; the card still has one display height. Do **not** delete `Product.heightCm` or treat it as a duplicate of FlowerItem height.
+
+Storefront filters for type / variety / origin / height match **either** composition → FlowerItem **or** legacy denormalized `Product.flowerTypeId` / `flowerVarietyId` / `flowerOriginId` / `heightCm` (kept for migration; deprecated as source of truth for flower identity — heightCm on Product remains the bouquet display height).
 
 `/cvety` hub and SEO landings still use the legacy `Flower` taxonomy table. Product listing under `/cvety/:slug` also matches `ProductComponent → FlowerItem.flowerType.slug` when the Flower slug equals the FlowerType slug (bridge; Flower table is not dropped).
 
