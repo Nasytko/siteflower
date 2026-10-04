@@ -110,9 +110,33 @@ export function SeoHealthPanel({ initial }: Props) {
   }
 
   const totalPages = Math.max(1, Math.ceil(report.total / report.pageSize));
+  const attention = report.summary.attention;
+  const improve = report.summary.improve;
+  const verdictOk = attention === 0 && improve === 0;
 
   return (
     <div className="space-y-8">
+      <div
+        className={`admin-verdict ${
+          verdictOk ? 'admin-verdict--ok' : 'admin-verdict--warn'
+        }`}
+      >
+        <p className="admin-verdict__title">
+          {verdictOk
+            ? '✓ Всё хорошо'
+            : attention > 0
+              ? '✕ Требует исправления'
+              : '⚠ Рекомендуется улучшить'}
+        </p>
+        <p className="admin-verdict__lead">
+          {verdictOk
+            ? 'Название, описание и фото страниц в порядке для поиска.'
+            : attention > 0
+              ? `${attention} страниц нужно исправить. Часто не хватает названия, описания или фото.`
+              : `${improve} страниц можно улучшить — это не срочно, но поможет в поиске.`}
+        </p>
+      </div>
+
       <section className="grid gap-4 sm:grid-cols-3">
         {summaryCards.map((card) => (
           <button
@@ -130,51 +154,13 @@ export function SeoHealthPanel({ initial }: Props) {
         ))}
       </section>
 
-      <section className="admin-section">
-        <h2 className="admin-section__title">Карта сайта</h2>
-        <p className="admin-section__lead">
-          Сколько страниц магазина попадает в sitemap и нет ли пропусков.
-        </p>
-        <dl className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          <div className="admin-card">
-            <dt className="admin-card__label">URL в sitemap</dt>
-            <dd className="admin-metric text-2xl">{report.sitemap.totalUrls}</dd>
-          </div>
-          <div className="admin-card">
-            <dt className="admin-card__label">Открыты для поиска</dt>
-            <dd className="admin-metric text-2xl">{report.sitemap.indexableEntityCount}</dd>
-          </div>
-          <div className="admin-card">
-            <dt className="admin-card__label">Опубликованы / видимы</dt>
-            <dd className="admin-metric text-2xl">{report.sitemap.publishedEntityCount}</dd>
-          </div>
-          <div className="admin-card">
-            <dt className="admin-card__label">Пропуски в sitemap</dt>
-            <dd className="admin-metric text-2xl">{report.sitemap.missingFromSitemap}</dd>
-          </div>
-        </dl>
-        {report.sitemap.missingSamples.length > 0 ? (
-          <ul className="admin-warnings mt-4">
-            {report.sitemap.missingSamples.map((sample) => (
-              <li key={sample.path}>
-                {sample.name} ({sample.path}) — нет в карте сайта
-                {sample.href ? (
-                  <>
-                    {' · '}
-                    <Link href={sample.href} className="underline underline-offset-2">
-                      Открыть
-                    </Link>
-                  </>
-                ) : null}
-              </li>
-            ))}
-          </ul>
-        ) : (
-          <p className="admin-help mt-3">Пропусков не найдено: опубликованные открытые страницы есть в sitemap.</p>
-        )}
-      </section>
-
       <section className="admin-section space-y-4">
+        <div>
+          <h2 className="admin-section__title">Страницы магазина</h2>
+          <p className="admin-section__lead">
+            Смотрите название, описание, фото и индексируемость. Технические детали — ниже.
+          </p>
+        </div>
         <div className="flex flex-wrap gap-2">
           {STATUS_FILTERS.map((item) => (
             <button
@@ -253,6 +239,56 @@ export function SeoHealthPanel({ initial }: Props) {
           </div>
         ) : null}
       </section>
+
+      <details className="admin-section">
+        <summary className="cursor-pointer text-base font-semibold text-[var(--admin-ink)]">
+          Техническая диагностика (sitemap, canonical)
+        </summary>
+        <div className="mt-4 space-y-3">
+          <p className="admin-section__lead">
+            Сколько страниц попадает в sitemap и нет ли пропусков.
+          </p>
+          <dl className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <div className="admin-card">
+              <dt className="admin-card__label">URL в sitemap</dt>
+              <dd className="admin-metric text-2xl">{report.sitemap.totalUrls}</dd>
+            </div>
+            <div className="admin-card">
+              <dt className="admin-card__label">Открыты для поиска</dt>
+              <dd className="admin-metric text-2xl">{report.sitemap.indexableEntityCount}</dd>
+            </div>
+            <div className="admin-card">
+              <dt className="admin-card__label">Опубликованы / видимы</dt>
+              <dd className="admin-metric text-2xl">{report.sitemap.publishedEntityCount}</dd>
+            </div>
+            <div className="admin-card">
+              <dt className="admin-card__label">Пропуски в sitemap</dt>
+              <dd className="admin-metric text-2xl">{report.sitemap.missingFromSitemap}</dd>
+            </div>
+          </dl>
+          {report.sitemap.missingSamples.length > 0 ? (
+            <ul className="admin-warnings">
+              {report.sitemap.missingSamples.map((sample) => (
+                <li key={sample.path}>
+                  {sample.name} ({sample.path}) — нет в карте сайта
+                  {sample.href ? (
+                    <>
+                      {' · '}
+                      <Link href={sample.href} className="underline underline-offset-2">
+                        Открыть
+                      </Link>
+                    </>
+                  ) : null}
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="admin-help">
+              Пропусков не найдено: опубликованные открытые страницы есть в sitemap.
+            </p>
+          )}
+        </div>
+      </details>
     </div>
   );
 }

@@ -26,9 +26,10 @@ export default async function AdminMediaHealthPage() {
   return (
     <main id="main-content" className="space-y-8">
       <header>
-        <h1 className="admin-page-title">Состояние сайта · Медиа</h1>
+        <h1 className="admin-page-title">Состояние медиа</h1>
         <p className="admin-page-lead">
-          Диагностика хранилища фотографий и согласованности БД. Не создаёт тестовые товары.
+          Техническая проверка фотографий. Обычно сюда заходят только при проблемах с загрузкой
+          или отображением картинок.
         </p>
       </header>
       <MediaHealthPanel

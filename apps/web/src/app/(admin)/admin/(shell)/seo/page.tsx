@@ -17,8 +17,8 @@ export default async function AdminSeoPage() {
       <header>
         <h1 className="admin-page-title">SEO сайта</h1>
         <p className="admin-page-lead">
-          Проверка страниц магазина и рекомендации по улучшению. Система сама собирает заголовки и
-          описания — вручную настраивать SEO нужно только если хотите изменить автоматический текст.
+          Проверка названий, описаний и фото для поиска. Технические детали (sitemap, canonical)
+          скрыты ниже списка страниц.
         </p>
       </header>
       <SeoHealthPanel initial={initial} />
