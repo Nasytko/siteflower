@@ -44,6 +44,7 @@ import {
   toDateTimeLocalValue,
   variantStatusLabel,
 } from '@/lib/admin-labels';
+import { availabilityChipClass, lifecycleChipClass } from '@/lib/admin-status';
 import {
   formatMediaBytes,
   mediaPreflightStatusLabel,
@@ -88,10 +89,11 @@ type SectionId =
   | 'seo'
   | 'publication';
 
+/** Manager workflow: identity → photos → price → merchandising → SEO → publish. */
 const SECTIONS: Array<[SectionId, string]> = [
   ['basic', 'Основное'],
-  ['pricing', 'Цена и варианты'],
   ['photos', 'Фото'],
+  ['pricing', 'Цена и варианты'],
   ['composition', 'Состав'],
   ['discovery', 'Подбор'],
   ['promotion', 'Акция и витрины'],
@@ -787,34 +789,85 @@ export function ProductEditor({
 
   return (
     <div className="space-y-6">
-      <FormSaveStatus
-        phase={statusPhase}
-        savedLabel={savedAt ? `Товар сохранён · ${savedAt}` : 'Все изменения сохранены'}
-        errorMessage={error}
-        requestId={requestId}
-        onRetry={() => void onSave()}
-        onRefresh={() => {
-          void (async () => {
-            try {
-              const fresh = await adminGet<ProductAdminDto>(adminEndpoints.product(server.id));
-              resync(fresh);
-              setDirty(false);
+      <div className="admin-editor-header">
+        <div className="space-y-2">
+          <div className="admin-status-row">
+            <span className={lifecycleChipClass(server.lifecycle)}>
+              {lifecycleLabel(server.lifecycle)}
+            </span>
+            <span className={availabilityChipClass(publication.availability)}>
+              {availabilityLabel(publication.availability)}
+            </span>
+          </div>
+          <FormSaveStatus
+            phase={statusPhase}
+            savedLabel={savedAt ? `Товар сохранён · ${savedAt}` : 'Все изменения сохранены'}
+            errorMessage={error}
+            requestId={requestId}
+            onRetry={() => void onSave()}
+            onRefresh={() => {
+              void (async () => {
+                try {
+                  const fresh = await adminGet<ProductAdminDto>(adminEndpoints.product(server.id));
+                  resync(fresh);
+                  setDirty(false);
+                  setError(null);
+                  setFieldErrors({});
+                  setRequestId(null);
+                  setSavePhase('idle');
+                  router.refresh();
+                } catch (err) {
+                  setError(errorMessage(err, 'Не удалось обновить данные'));
+                  setSavePhase('server');
+                }
+              })();
+            }}
+            onDismiss={() => {
               setError(null);
-              setFieldErrors({});
-              setRequestId(null);
-              setSavePhase('idle');
-              router.refresh();
-            } catch (err) {
-              setError(errorMessage(err, 'Не удалось обновить данные'));
-              setSavePhase('server');
-            }
-          })();
-        }}
-        onDismiss={() => {
-          setError(null);
-          setSavePhase(dirty ? 'dirty' : 'idle');
-        }}
-      />
+              setSavePhase(dirty ? 'dirty' : 'idle');
+            }}
+          />
+        </div>
+        <div className="admin-editor-header__actions">
+          {canUpdate ? (
+            <Button
+              type="button"
+              disabled={savePending || mediaPending}
+              className="!rounded-lg !bg-[var(--admin-brand)]"
+              onClick={() => void onSave()}
+            >
+              {savePending ? 'Сохранение…' : 'Сохранить'}
+            </Button>
+          ) : null}
+          <a
+            className="admin-btn-ghost"
+            href={`/admin/catalog/products/${server.id}/preview`}
+          >
+            Предпросмотр
+          </a>
+          {canPublish && server.lifecycle !== 'PUBLISHED' ? (
+            <Button
+              type="button"
+              disabled={pending}
+              className="!rounded-lg !bg-[var(--admin-brand)]"
+              onClick={() => void runLifecycle('publish')}
+            >
+              Опубликовать
+            </Button>
+          ) : null}
+          {canPublish && server.lifecycle === 'PUBLISHED' ? (
+            <button
+              type="button"
+              className="admin-btn-ghost"
+              disabled={pending}
+              onClick={() => void runLifecycle('unpublish')}
+            >
+              Снять с витрины
+            </button>
+          ) : null}
+        </div>
+      </div>
+
       {savePhase === 'validation' && Object.keys(fieldErrors).length > 0 ? (
         <FormErrorSummary
           message={error ?? 'Проверьте данные'}
@@ -1913,8 +1966,11 @@ export function ProductEditor({
         <section className="admin-section">
           <h2 className="admin-section__title">Публикация</h2>
           <div className="grid max-w-2xl gap-4">
-            <p className="text-sm text-[var(--admin-muted)]">
-              Состояние: <span className="admin-chip">{lifecycleLabel(server.lifecycle)}</span>
+            <p className="admin-status-row text-sm text-[var(--admin-muted)]">
+              <span>Состояние:</span>
+              <span className={lifecycleChipClass(server.lifecycle)}>
+                {lifecycleLabel(server.lifecycle)}
+              </span>
               {server.publishedAt
                 ? ` · опубликован ${formatAdminDateTime(server.publishedAt)}`
                 : ''}
@@ -2020,30 +2076,6 @@ export function ProductEditor({
         </section>
       ) : null}
 
-      {canUpdate ? (
-        <div className="admin-savebar">
-          <Button
-            type="button"
-            disabled={savePending || mediaPending}
-            className="!rounded-lg !bg-[var(--admin-brand)]"
-            onClick={() => void onSave()}
-          >
-            {savePending ? 'Сохранение…' : 'Сохранить'}
-          </Button>
-          <FormSaveStatus
-            phase={
-              savePending
-                ? 'saving'
-                : dirty
-                  ? 'dirty'
-                  : savedAt
-                    ? 'saved'
-                    : 'idle'
-            }
-            savedLabel={savedAt ? `Сохранено в ${savedAt}` : null}
-          />
-        </div>
-      ) : null}
     </div>
   );
 }

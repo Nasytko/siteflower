@@ -7,7 +7,8 @@ import {
   fetchProduct,
   fetchProductTaxonomies,
 } from '@/lib/admin-catalog-api';
-import { lifecycleLabel } from '@/lib/admin-labels';
+import { availabilityLabel, lifecycleLabel } from '@/lib/admin-labels';
+import { availabilityChipClass, lifecycleChipClass } from '@/lib/admin-status';
 import { requireAdminPermission } from '@/lib/admin-page-auth';
 import { ProductEditor } from '@/components/admin/product-editor';
 
@@ -32,14 +33,20 @@ export default async function AdminProductEditPage({ params }: Props) {
 
   return (
     <main id="main-content" className="space-y-6">
-      <header className="space-y-1">
+      <header className="space-y-2">
         <Link href="/admin/catalog/products" className="admin-link text-sm">
           ← Все товары
         </Link>
         <h1 className="admin-page-title">{product.name}</h1>
-        <p className="admin-page-lead">
-          {lifecycleLabel(product.lifecycle)} · /bukety/{product.slug}
-        </p>
+        <div className="admin-status-row">
+          <span className={lifecycleChipClass(product.lifecycle)}>
+            {lifecycleLabel(product.lifecycle)}
+          </span>
+          <span className={availabilityChipClass(product.availability)}>
+            {availabilityLabel(product.availability)}
+          </span>
+          <span className="text-sm text-[var(--admin-muted)]">/bukety/{product.slug}</span>
+        </div>
       </header>
       <ProductEditor
         product={product}
