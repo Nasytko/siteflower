@@ -5,11 +5,17 @@ import { DatabaseModule } from '../database/database.module';
 import { MediaModule } from '../media/media.module';
 import { AdminBestsellersController } from './admin-bestsellers.controller';
 import { AdminBudgetRangesController } from './admin-budget-ranges.controller';
+import { AdminCatalogCategoriesController } from './admin-catalog-categories.controller';
+import { AdminFlowerRefsController } from './admin-flower-refs.controller';
+import { AdminProductFamiliesController } from './admin-product-families.controller';
 import { AdminProductsController } from './admin-products.controller';
 import { AdminPromotionsController } from './admin-promotions.controller';
 import { AdminSeoController } from './admin-seo.controller';
 import { BestsellersService } from './bestsellers.service';
 import { BudgetRangesService } from './budget-ranges.service';
+import { CatalogCategoriesService } from './catalog-categories.service';
+import { FlowerRefsService } from './flower-refs.service';
+import { ProductFamiliesService } from './product-families.service';
 import { ProductsRepository } from './products.repository';
 import { ProductsBulkService } from './products-bulk.service';
 import { ProductsService } from './products.service';
@@ -32,6 +38,9 @@ import { TaxonomyService } from './taxonomy.service';
     AdminPromotionsController,
     AdminBestsellersController,
     AdminBudgetRangesController,
+    AdminCatalogCategoriesController,
+    AdminFlowerRefsController,
+    AdminProductFamiliesController,
     AdminSeoController,
     TaxonomyController,
     PublicCatalogController,
@@ -43,6 +52,9 @@ import { TaxonomyService } from './taxonomy.service';
     TaxonomyService,
     BestsellersService,
     BudgetRangesService,
+    CatalogCategoriesService,
+    FlowerRefsService,
+    ProductFamiliesService,
     PromotionsService,
     PublicCatalogService,
     SlugRedirectsService,

@@ -9,10 +9,13 @@ import {
   deriveDisplayPercentOff,
   derivePriceRange,
   formatPriceRangeLabel,
+  heightBandWhere,
   isBulkProductOperation,
   isCommercialAvailability,
+  isHeightBandId,
   normalizeSlug,
   defaultProductSeoTitle,
+  productCardSubtitle,
 } from './catalog.js';
 
 test('derivePriceRange single', () => {
@@ -91,4 +94,39 @@ test('bulk product operations V1 are closed and capped', () => {
   assert.equal(isBulkProductOperation('PUBLISH'), true);
   assert.equal(isBulkProductOperation('DELETE'), false);
   assert.equal(BULK_PRODUCTS_MAX_ITEMS, 50);
+});
+
+test('productCardSubtitle skips parts already in the name', () => {
+  assert.equal(
+    productCardSubtitle({
+      name: 'Роза Мондиаль 60 см Эквадор',
+      heightCm: 60,
+      originName: 'Эквадор',
+    }),
+    null,
+  );
+  assert.equal(
+    productCardSubtitle({
+      name: 'Роза Мондиаль',
+      heightCm: 60,
+      originName: 'Эквадор',
+    }),
+    '60 см · Эквадор',
+  );
+  assert.equal(
+    productCardSubtitle({
+      name: 'Роза Мондиаль 50 см',
+      heightCm: 50,
+      originName: 'Фермерская',
+    }),
+    'Фермерская',
+  );
+});
+
+test('heightBandWhere maps storefront bands', () => {
+  assert.equal(isHeightBandId('60_70'), true);
+  assert.equal(isHeightBandId('nope'), false);
+  assert.deepEqual(heightBandWhere('up_to_50'), { lte: 50 });
+  assert.deepEqual(heightBandWhere('50_60'), { gte: 50, lte: 60 });
+  assert.deepEqual(heightBandWhere('70_plus'), { gte: 70 });
 });

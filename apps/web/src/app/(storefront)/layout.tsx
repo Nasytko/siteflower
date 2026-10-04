@@ -3,7 +3,9 @@ import { defaultStorefrontSettings } from '@bouquet-one/contracts';
 import { FavoritesProvider } from '@/components/storefront/favorites-provider';
 import { StorefrontFooter } from '@/components/storefront/footer';
 import { StorefrontHeader } from '@/components/storefront/header';
-import { getLegalSeller, getStorefrontSettings } from '@/lib/public-api';
+import { PRIMARY_NAV } from '@/components/storefront/primary-nav';
+import { getLegalSeller, getStorefrontSettings, listCatalogCategoryTree } from '@/lib/public-api';
+import { navItemsFromCategoryTree } from '@/lib/storefront-nav';
 import { buildOrganizationJsonLd, serializeJsonLd } from '@/lib/seo/json-ld';
 import { getSiteUrl } from '@/lib/seo/site-url';
 
@@ -19,6 +21,16 @@ export default async function StorefrontLayout({ children }: { children: ReactNo
   }
 
   const seller = await getLegalSeller().catch(() => null);
+
+  let navItems = PRIMARY_NAV;
+  try {
+    const categoryTree = await listCatalogCategoryTree();
+    if (categoryTree.length > 0) {
+      navItems = navItemsFromCategoryTree(categoryTree);
+    }
+  } catch {
+    // Keep PRIMARY_NAV fallback when catalog API is unavailable.
+  }
 
   const orgLd = buildOrganizationJsonLd({
     name: settings.brandName,
@@ -37,6 +49,7 @@ export default async function StorefrontLayout({ children }: { children: ReactNo
           city={settings.city}
           phone={settings.phone}
           workingHours={settings.workingHours}
+          navItems={navItems}
         />
         <div className="flex-1">{children}</div>
         <StorefrontFooter settings={settings} seller={seller} />

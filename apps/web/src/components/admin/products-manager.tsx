@@ -30,6 +30,8 @@ export type ProductFilters = {
   /** Empty or "true" — maps to API promotionalOnly. */
   promotionalOnly: string;
   bestsellerGroupIds: string;
+  catalogCategoryId: string;
+  familyId: string;
   sort: string;
   page: number;
 };
@@ -38,6 +40,8 @@ type Props = {
   data: PaginatedResponse<ProductListItemDto>;
   filters: ProductFilters;
   bestsellerGroups: Array<{ id: string; name: string }>;
+  catalogCategories: Array<{ id: string; name: string }>;
+  families: Array<{ id: string; name: string }>;
   canCreate: boolean;
   canUpdate: boolean;
   canPublish: boolean;
@@ -66,6 +70,8 @@ export function ProductsManager({
   data,
   filters,
   bestsellerGroups,
+  catalogCategories,
+  families,
   canCreate,
   canUpdate,
   canPublish,
@@ -335,7 +341,9 @@ export function ProductsManager({
     filters.lifecycle.length > 0 ||
     filters.availability.length > 0 ||
     filters.promotionalOnly === 'true' ||
-    filters.bestsellerGroupIds.length > 0;
+    filters.bestsellerGroupIds.length > 0 ||
+    filters.catalogCategoryId.length > 0 ||
+    filters.familyId.length > 0;
 
   return (
     <div className={`space-y-5 ${navigating ? 'opacity-70' : ''}`}>
@@ -639,6 +647,42 @@ export function ProductsManager({
           </select>
         </label>
 
+        {catalogCategories.length > 0 ? (
+          <label className="admin-field">
+            <span>Категория</span>
+            <select
+              className="admin-select"
+              value={filters.catalogCategoryId}
+              onChange={(event) => setFilter('catalogCategoryId', event.target.value)}
+            >
+              <option value="">Любая</option>
+              {catalogCategories.map((option) => (
+                <option key={option.id} value={option.id}>
+                  {option.name}
+                </option>
+              ))}
+            </select>
+          </label>
+        ) : null}
+
+        {families.length > 0 ? (
+          <label className="admin-field">
+            <span>Семейство</span>
+            <select
+              className="admin-select"
+              value={filters.familyId}
+              onChange={(event) => setFilter('familyId', event.target.value)}
+            >
+              <option value="">Любое</option>
+              {families.map((option) => (
+                <option key={option.id} value={option.id}>
+                  {option.name}
+                </option>
+              ))}
+            </select>
+          </label>
+        ) : null}
+
         {bestsellerGroups.length > 0 ? (
           <label className="admin-field">
             <span>Бестселлеры</span>
@@ -699,6 +743,9 @@ export function ProductsManager({
               ) : null}
               <th className="w-16">Фото</th>
               <th>Товар</th>
+              <th className="w-36">Категория</th>
+              <th className="w-32">Сорт</th>
+              <th className="w-32">Семейство</th>
               <th className="w-36">Цена</th>
               <th className="w-32">Публикация</th>
               <th className="w-44">Наличие</th>
@@ -711,7 +758,7 @@ export function ProductsManager({
           <tbody>
             {rows.length === 0 ? (
               <tr>
-                <td colSpan={(canCreate ? 9 : 8) + (canBulk ? 1 : 0)}>
+                <td colSpan={(canCreate ? 12 : 11) + (canBulk ? 1 : 0)}>
                   {hasFilters ? (
                     <div className="admin-empty admin-empty--action">
                       <p>Ничего не найдено по текущим фильтрам.</p>
@@ -778,6 +825,15 @@ export function ProductsManager({
                         /{item.slug}
                         {item.bouquetSize ? ` · ${item.bouquetSize.name}` : ''}
                       </p>
+                    </td>
+                    <td className="text-sm text-[var(--admin-muted)]">
+                      {item.catalogCategory?.name ?? '—'}
+                    </td>
+                    <td className="text-sm text-[var(--admin-muted)]">
+                      {item.flowerVariety?.name ?? item.flowerType?.name ?? '—'}
+                    </td>
+                    <td className="text-sm text-[var(--admin-muted)]">
+                      {item.family?.name ?? '—'}
                     </td>
                     <td className="tabular-nums">
                       {item.promotion ? (

@@ -29,6 +29,17 @@ export type ProductListFilters = {
   bouquetSizeSlugs?: string[];
   budgetRanges?: BudgetBound[];
   bestsellerGroupIds?: string[];
+  /** CatalogCategory ids (already expanded to include descendants). */
+  catalogCategoryIds?: string[];
+  flowerTypeIds?: string[];
+  flowerTypeSlugs?: string[];
+  flowerVarietyIds?: string[];
+  flowerVarietySlugs?: string[];
+  flowerOriginIds?: string[];
+  flowerOriginSlugs?: string[];
+  /** Inclusive heightCm bounds from heightBandWhere. */
+  heightCm?: { gte?: number; lte?: number };
+  familyId?: string;
   /** Only products with a currently effective promotion (used by /akcii). */
   promotionalOnly?: boolean;
   minPriceMinor?: string;
@@ -552,6 +563,54 @@ export function buildProductWhere(
   const bestsellerGroupIds = nonEmpty(filters.bestsellerGroupIds);
   if (bestsellerGroupIds) {
     and.push({ bestsellerLinks: { some: { groupId: { in: bestsellerGroupIds } } } });
+  }
+
+  const catalogCategoryIds = nonEmpty(filters.catalogCategoryIds);
+  if (catalogCategoryIds) {
+    and.push({ catalogCategoryId: { in: catalogCategoryIds } });
+  }
+
+  const flowerTypeIds = nonEmpty(filters.flowerTypeIds);
+  if (flowerTypeIds) {
+    and.push({ flowerTypeId: { in: flowerTypeIds } });
+  } else {
+    const flowerTypeSlugs = nonEmpty(filters.flowerTypeSlugs);
+    if (flowerTypeSlugs) {
+      and.push({ flowerType: { slug: { in: flowerTypeSlugs } } });
+    }
+  }
+
+  const flowerVarietyIds = nonEmpty(filters.flowerVarietyIds);
+  if (flowerVarietyIds) {
+    and.push({ flowerVarietyId: { in: flowerVarietyIds } });
+  } else {
+    const flowerVarietySlugs = nonEmpty(filters.flowerVarietySlugs);
+    if (flowerVarietySlugs) {
+      and.push({ flowerVariety: { slug: { in: flowerVarietySlugs } } });
+    }
+  }
+
+  const flowerOriginIds = nonEmpty(filters.flowerOriginIds);
+  if (flowerOriginIds) {
+    and.push({ flowerOriginId: { in: flowerOriginIds } });
+  } else {
+    const flowerOriginSlugs = nonEmpty(filters.flowerOriginSlugs);
+    if (flowerOriginSlugs) {
+      and.push({ flowerOrigin: { slug: { in: flowerOriginSlugs } } });
+    }
+  }
+
+  if (filters.heightCm) {
+    and.push({
+      heightCm: {
+        ...(filters.heightCm.gte !== undefined ? { gte: filters.heightCm.gte } : {}),
+        ...(filters.heightCm.lte !== undefined ? { lte: filters.heightCm.lte } : {}),
+      },
+    });
+  }
+
+  if (filters.familyId) {
+    and.push({ familyMember: { is: { familyId: filters.familyId } } });
   }
 
   if (filters.promotionalOnly) {

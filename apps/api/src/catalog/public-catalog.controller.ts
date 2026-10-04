@@ -21,6 +21,36 @@ export class PublicCatalogController {
   constructor(private readonly catalog: PublicCatalogService) {}
 
   @Public()
+  @Get('categories/tree')
+  listCategoryTree() {
+    return this.catalog.listCategoryTree();
+  }
+
+  @Public()
+  @Get('categories/:slug')
+  getCategory(@Param('slug') slug: string) {
+    return this.catalog.getCategoryBySlug(slug);
+  }
+
+  @Public()
+  @Get('flower-types')
+  listFlowerTypes() {
+    return this.catalog.listFlowerTypes();
+  }
+
+  @Public()
+  @Get('flower-varieties')
+  listFlowerVarieties(@Query('flowerTypeId') flowerTypeId?: string) {
+    return this.catalog.listFlowerVarieties(flowerTypeId);
+  }
+
+  @Public()
+  @Get('flower-origins')
+  listFlowerOrigins() {
+    return this.catalog.listFlowerOrigins();
+  }
+
+  @Public()
   @Get('products')
   listProducts(@Query() query: PublicProductListQueryDto) {
     return this.catalog.listProducts(query);

@@ -32,6 +32,14 @@ async function fetchProductBySlug(slug: string): Promise<ProductListItemDto | nu
       version: 0,
       heightCm: product.heightCm ?? null,
       bouquetSize: product.bouquetSize,
+      catalogCategory: product.catalogCategory,
+      flowerType: product.flowerType,
+      flowerVariety: product.flowerVariety,
+      flowerOrigin: product.flowerOrigin,
+      family: product.family
+        ? { id: product.family.id, name: product.family.name }
+        : null,
+      cardSubtitle: product.cardSubtitle,
       price: product.price,
       promotion: product.promotion,
       defaultVariant: cheapest

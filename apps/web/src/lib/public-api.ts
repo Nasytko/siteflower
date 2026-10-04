@@ -2,6 +2,11 @@ import type {
   BestsellerGroupPublicDto,
   BouquetSizePublicDto,
   BudgetRangePublicDto,
+  CatalogCategoryDto,
+  CatalogCategoryTreeNodeDto,
+  FlowerOriginDto,
+  FlowerTypeDto,
+  FlowerVarietyDto,
   HomepageConfigDto,
   InstagramFeedPublicDto,
   LegalBankPublicDto,
@@ -85,6 +90,13 @@ export type CatalogListParams = {
   flower?: string;
   /** BouquetSize slugs */
   size?: string;
+  /** CatalogCategory slug (includes descendants). */
+  categorySlug?: string;
+  flowerTypeSlug?: string;
+  flowerVarietySlug?: string;
+  flowerOriginSlug?: string;
+  /** HEIGHT_BANDS id */
+  heightBand?: string;
   /** Only products with an effective promotion (powers /akcii). */
   promotion?: boolean;
   sort?: ProductSort;
@@ -98,7 +110,21 @@ export const EMPTY_PRODUCT_PAGE: PaginatedResponse<ProductListItemDto> = {
 };
 
 export function listProducts(params: CatalogListParams = {}) {
-  const { promotion, budget, occasion, recipient, color, flower, size, ...rest } = params;
+  const {
+    promotion,
+    budget,
+    occasion,
+    recipient,
+    color,
+    flower,
+    size,
+    categorySlug,
+    flowerTypeSlug,
+    flowerVarietySlug,
+    flowerOriginSlug,
+    heightBand,
+    ...rest
+  } = params;
   return publicFetch<PaginatedResponse<ProductListItemDto>>('/catalog/products', {
     searchParams: {
       ...rest,
@@ -109,10 +135,46 @@ export function listProducts(params: CatalogListParams = {}) {
       colorSlugs: color,
       flowerSlugs: flower,
       bouquetSizeSlugs: size,
+      categorySlug,
+      flowerTypeSlug,
+      flowerVarietySlug,
+      flowerOriginSlug,
+      heightBand,
       // API field is `promotionalOnly` (not `promotion`).
       promotionalOnly: promotion === true ? true : undefined,
     },
     tags: ['catalog', 'products'],
+  });
+}
+
+export function listCatalogCategoryTree() {
+  return publicFetch<CatalogCategoryTreeNodeDto[]>('/catalog/categories/tree', {
+    tags: ['catalog', 'categories'],
+  });
+}
+
+export function getCatalogCategory(slug: string) {
+  return publicFetch<CatalogCategoryDto>(`/catalog/categories/${encodeURIComponent(slug)}`, {
+    tags: ['catalog', 'categories', `category:${slug}`],
+  });
+}
+
+export function listFlowerTypes() {
+  return publicFetch<FlowerTypeDto[]>('/catalog/flower-types', {
+    tags: ['catalog', 'flower-refs'],
+  });
+}
+
+export function listFlowerVarieties(flowerTypeId?: string) {
+  return publicFetch<FlowerVarietyDto[]>('/catalog/flower-varieties', {
+    searchParams: { flowerTypeId },
+    tags: ['catalog', 'flower-refs'],
+  });
+}
+
+export function listFlowerOrigins() {
+  return publicFetch<FlowerOriginDto[]>('/catalog/flower-origins', {
+    tags: ['catalog', 'flower-refs'],
   });
 }
 

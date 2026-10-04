@@ -3,12 +3,18 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 
+export type PrimaryNavChild = {
+  label: string;
+  href: string;
+};
+
 export type PrimaryNavItem = {
   id: string;
   label: string;
   href: string;
   /** Promotional emphasis — used once, for Акции. */
   accent?: boolean;
+  children?: PrimaryNavChild[];
 };
 
 /**
@@ -28,14 +34,20 @@ function isCurrent(pathname: string, href: string): boolean {
   return pathname === href || pathname.startsWith(`${href}/`);
 }
 
+function isCurrentBranch(pathname: string, item: PrimaryNavItem): boolean {
+  if (isCurrent(pathname, item.href)) return true;
+  return item.children?.some((child) => isCurrent(pathname, child.href)) ?? false;
+}
+
 type Props = {
+  items?: PrimaryNavItem[];
   /** Compact spacing for the expanded header’s second row. */
   compact?: boolean;
   /** Single-row header: nav sits between contacts and actions. */
   inline?: boolean;
 };
 
-export function PrimaryNav({ compact = false, inline = false }: Props) {
+export function PrimaryNav({ items = PRIMARY_NAV, compact = false, inline = false }: Props) {
   const pathname = usePathname();
 
   return (
@@ -50,18 +62,25 @@ export function PrimaryNav({ compact = false, inline = false }: Props) {
         }
         style={inline ? { scrollbarWidth: 'none' } : undefined}
       >
-        {PRIMARY_NAV.map((item) => {
-          const current = isCurrent(pathname, item.href);
+        {items.map((item) => {
+          const current = isCurrentBranch(pathname, item);
+          const hasChildren = (item.children?.length ?? 0) > 0;
           return (
-            <li key={item.id} className="shrink-0">
+            <li key={item.id} className={`shrink-0 ${hasChildren ? 'group relative' : ''}`}>
               <Link
                 href={item.href}
                 aria-current={current ? 'page' : undefined}
+                aria-haspopup={hasChildren ? 'true' : undefined}
                 className={`sf-nav-link relative ${inline ? 'min-h-10 text-[0.8125rem]' : ''} ${
                   item.accent ? 'text-accent hover:text-accent' : 'hover:text-brand'
                 } ${current ? 'text-brand' : ''}`}
               >
                 {item.label}
+                {hasChildren ? (
+                  <span className="ml-0.5 inline-block text-[0.6em] opacity-60" aria-hidden>
+                    ▾
+                  </span>
+                ) : null}
                 <span
                   className={`absolute inset-x-0 bottom-1.5 h-px rounded-full bg-current transition-opacity ${
                     current ? 'opacity-100' : 'opacity-0'
@@ -69,6 +88,27 @@ export function PrimaryNav({ compact = false, inline = false }: Props) {
                   aria-hidden
                 />
               </Link>
+              {hasChildren ? (
+                <div className="pointer-events-none absolute left-1/2 top-full z-50 hidden min-w-[11rem] -translate-x-1/2 pt-2 opacity-0 transition-opacity group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100 lg:block">
+                  <ul
+                    className="rounded-[var(--radius-md)] border border-border bg-surface py-1.5 shadow-[var(--shadow-soft)]"
+                    role="list"
+                  >
+                    {item.children!.map((child) => (
+                      <li key={child.href}>
+                        <Link
+                          href={child.href}
+                          className={`block px-3.5 py-2 text-sm transition-colors hover:bg-[var(--color-surface-muted)] hover:text-brand ${
+                            isCurrent(pathname, child.href) ? 'font-semibold text-brand' : 'text-foreground'
+                          }`}
+                        >
+                          {child.label}
+                        </Link>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ) : null}
             </li>
           );
         })}

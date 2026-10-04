@@ -6,7 +6,7 @@ import { usePathname } from 'next/navigation';
 import { cartItemCount, readCart } from '@/lib/cart';
 import { nextCompactFromScroll } from '@/lib/scroll-chrome';
 import { BrandLogo } from './brand-logo';
-import { PRIMARY_NAV, PrimaryNav } from './primary-nav';
+import { PRIMARY_NAV, PrimaryNav, type PrimaryNavItem } from './primary-nav';
 import { SearchDialog } from './search-dialog';
 
 type Props = {
@@ -14,13 +14,14 @@ type Props = {
   brandName: string;
   phone?: string | null;
   workingHours?: string | null;
+  navItems?: PrimaryNavItem[];
 };
 
 /**
  * Sticky 2-row header → collapses to 1 row on scroll.
  * Single DOM tree (no dual panels / spacer / scroll compensation).
  */
-export function StorefrontHeader({ city, brandName, phone, workingHours }: Props) {
+export function StorefrontHeader({ city, brandName, phone, workingHours, navItems = PRIMARY_NAV }: Props) {
   const pathname = usePathname();
   const [menuOpen, setMenuOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
@@ -140,7 +141,7 @@ export function StorefrontHeader({ city, brandName, phone, workingHours }: Props
 
           {/* Compact desktop: nav sits in the single row */}
           <div className="sf-header-inline-nav hidden min-w-0 flex-1 justify-self-stretch lg:block">
-            <PrimaryNav inline />
+            <PrimaryNav items={navItems} inline />
           </div>
 
           <HeaderActions
@@ -154,7 +155,7 @@ export function StorefrontHeader({ city, brandName, phone, workingHours }: Props
         <div className="sf-header-nav" aria-hidden={compact}>
           <div className="sf-header-nav__inner">
             <div className="hidden border-t border-border lg:block">
-              <PrimaryNav />
+              <PrimaryNav items={navItems} />
             </div>
           </div>
         </div>
@@ -181,7 +182,7 @@ export function StorefrontHeader({ city, brandName, phone, workingHours }: Props
             </button>
           </div>
           <nav className="sf-container flex flex-col gap-1 pb-16 pt-2" aria-label="Мобильное меню">
-            {PRIMARY_NAV.map((item) => (
+            {navItems.map((item) => (
               <div key={item.id} className="border-b border-border py-1">
                 <Link
                   href={item.href}
@@ -192,6 +193,16 @@ export function StorefrontHeader({ city, brandName, phone, workingHours }: Props
                 >
                   {item.label}
                 </Link>
+                {item.children?.map((child) => (
+                  <Link
+                    key={child.href}
+                    href={child.href}
+                    className="sf-nav-link block py-2 pl-6 pr-2 text-sm text-muted hover:text-brand"
+                    onClick={() => setMenuOpen(false)}
+                  >
+                    {child.label}
+                  </Link>
+                ))}
               </div>
             ))}
             {telHref ? (

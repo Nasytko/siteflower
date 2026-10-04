@@ -54,6 +54,8 @@ describe('Catalog (integration)', () => {
     await pool.query('DELETE FROM product_occasions');
     await pool.query('DELETE FROM product_recipients');
     await pool.query('DELETE FROM product_colors');
+    await pool.query('DELETE FROM product_family_members');
+    await pool.query('DELETE FROM product_families');
     await pool.query('DELETE FROM products');
     await pool.query('DELETE FROM slug_redirects');
     await pool.query('DELETE FROM audit_logs');

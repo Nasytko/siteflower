@@ -5,6 +5,8 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import {
+  heightBandWhere,
+  isHeightBandId,
   normalizeSlug,
   type PaginatedResponse,
   type ProductAdminDto,
@@ -24,8 +26,11 @@ import { trimmedOrNull } from '../common/string.util';
 import { StorefrontRevalidateService } from '../storefront/storefront-revalidate.service';
 import { BestsellersService } from './bestsellers.service';
 import { BudgetRangesService } from './budget-ranges.service';
+import { CatalogCategoriesService } from './catalog-categories.service';
 import { OCC_CONFLICT_MESSAGE, validatePublishRequirements } from './catalog.logic';
 import { toProductAdminDto, toProductListItemDto, toProductPublicDto } from './catalog.mapper';
+import { FlowerRefsService } from './flower-refs.service';
+import { ProductFamiliesService } from './product-families.service';
 import {
   collectFixedSalePricesFromCreatedVariants,
   resolveEditorPromotionType,
@@ -89,6 +94,9 @@ export class ProductsService {
     private readonly slugRedirects: SlugRedirectsService,
     private readonly bestsellers: BestsellersService,
     private readonly budgetRanges: BudgetRangesService,
+    private readonly categories: CatalogCategoriesService,
+    private readonly flowerRefs: FlowerRefsService,
+    private readonly families: ProductFamiliesService,
     private readonly promotions: PromotionsService,
     private readonly media: MediaService,
     private readonly audit: AuditService,
@@ -117,6 +125,46 @@ export class ProductsService {
 
   private readonly urlFor = (storageKey: string) => this.media.getPublicUrl(storageKey);
 
+  private async resolveCatalogFilters(query: {
+    catalogCategoryId?: string;
+    categorySlug?: string;
+    flowerTypeId?: string[];
+    flowerTypeSlug?: string[];
+    flowerVarietyId?: string[];
+    flowerVarietySlug?: string[];
+    flowerOriginId?: string[];
+    flowerOriginSlug?: string[];
+    heightBand?: string;
+    familyId?: string;
+  }) {
+    let catalogCategoryIds: string[] | undefined;
+    if (query.catalogCategoryId) {
+      catalogCategoryIds = await this.categories.expandCategoryIds(query.catalogCategoryId);
+    } else if (query.categorySlug) {
+      const category = await this.categories.getBySlug(query.categorySlug).catch(() => null);
+      if (category) {
+        catalogCategoryIds = await this.categories.expandCategoryIds(category.id);
+      } else {
+        catalogCategoryIds = ['00000000-0000-0000-0000-000000000000'];
+      }
+    }
+    const heightCm =
+      query.heightBand && isHeightBandId(query.heightBand)
+        ? heightBandWhere(query.heightBand) ?? undefined
+        : undefined;
+    return {
+      catalogCategoryIds,
+      flowerTypeIds: query.flowerTypeId,
+      flowerTypeSlugs: query.flowerTypeSlug,
+      flowerVarietyIds: query.flowerVarietyId,
+      flowerVarietySlugs: query.flowerVarietySlug,
+      flowerOriginIds: query.flowerOriginId,
+      flowerOriginSlugs: query.flowerOriginSlug,
+      heightCm: heightCm ?? undefined,
+      familyId: query.familyId,
+    };
+  }
+
   async list(query: ProductListQueryDto): Promise<PaginatedResponse<ProductListItemDto>> {
     const page = query.page ?? 1;
     const pageSize = query.pageSize ?? 20;
@@ -124,6 +172,7 @@ export class ProductsService {
     const budgetRanges = query.budgetRangeIds?.length
       ? await this.budgetRanges.resolveBounds(query.budgetRangeIds)
       : [];
+    const catalogFilters = await this.resolveCatalogFilters(query);
     const { items, total } = await this.products.list({
       filters: {
         search: query.search,
@@ -142,6 +191,7 @@ export class ProductsService {
         bestsellerGroupIds: query.bestsellerGroupIds,
         promotionalOnly: query.promotionalOnly,
         budgetRanges,
+        ...catalogFilters,
       },
       skip: (page - 1) * pageSize,
       take: pageSize,
@@ -161,7 +211,11 @@ export class ProductsService {
     if (!product) {
       throw new NotFoundException('Product not found');
     }
-    return toProductAdminDto(product, this.urlFor);
+    const familyId = product.familyMember?.family.id;
+    const family = familyId
+      ? await this.families.getDto(familyId, this.urlFor, product.id)
+      : null;
+    return toProductAdminDto(product, this.urlFor, new Date(), family);
   }
 
   async preview(id: string): Promise<ProductPublicDto> {
@@ -169,7 +223,11 @@ export class ProductsService {
     if (!product) {
       throw new NotFoundException('Product not found');
     }
-    return toProductPublicDto(product, this.urlFor);
+    const familyId = product.familyMember?.family.id;
+    const family = familyId
+      ? await this.families.getDto(familyId, this.urlFor, product.id)
+      : null;
+    return toProductPublicDto(product, this.urlFor, new Date(), family);
   }
 
   async create(input: CreateProductDto, actor: ActorContext): Promise<ProductAdminDto> {
@@ -481,6 +539,11 @@ export class ProductsService {
       .map((component) => component.flowerId)
       .filter((flowerId): flowerId is string => Boolean(flowerId));
 
+    await this.flowerRefs.assertVarietyMatchesType(
+      input.flowerTypeId === undefined ? product.flowerTypeId : input.flowerTypeId,
+      input.flowerVarietyId === undefined ? product.flowerVarietyId : input.flowerVarietyId,
+    );
+
     await this.prisma.client.$transaction(async (tx) => {
       const data: Prisma.ProductUncheckedUpdateManyInput = {
         name: input.name.trim(),
@@ -505,10 +568,35 @@ export class ProductsService {
               ? new Date(input.unpublishAt)
               : null,
         bouquetSizeId: input.bouquetSizeId === undefined ? undefined : input.bouquetSizeId,
+        catalogCategoryId:
+          input.catalogCategoryId === undefined ? undefined : input.catalogCategoryId,
+        flowerTypeId: input.flowerTypeId === undefined ? undefined : input.flowerTypeId,
+        flowerVarietyId: input.flowerVarietyId === undefined ? undefined : input.flowerVarietyId,
+        flowerOriginId: input.flowerOriginId === undefined ? undefined : input.flowerOriginId,
       };
 
       if (input.bouquetSizeId) {
         await this.assertReferencesExist(tx, 'bouquetSize', [input.bouquetSizeId]);
+      }
+      if (input.catalogCategoryId) {
+        const category = await tx.catalogCategory.findUnique({
+          where: { id: input.catalogCategoryId },
+        });
+        if (!category) throw new BadRequestException('Catalog category not found');
+      }
+      if (input.flowerTypeId) {
+        const type = await tx.flowerType.findUnique({ where: { id: input.flowerTypeId } });
+        if (!type) throw new BadRequestException('Flower type not found');
+      }
+      if (input.flowerVarietyId) {
+        const variety = await tx.flowerVariety.findUnique({
+          where: { id: input.flowerVarietyId },
+        });
+        if (!variety) throw new BadRequestException('Flower variety not found');
+      }
+      if (input.flowerOriginId) {
+        const origin = await tx.flowerOrigin.findUnique({ where: { id: input.flowerOriginId } });
+        if (!origin) throw new BadRequestException('Flower origin not found');
       }
       await this.assertReferencesExist(tx, 'flower', flowerIds);
       await this.assertReferencesExist(tx, 'occasion', input.occasionIds);
@@ -587,6 +675,15 @@ export class ProductsService {
 
       await this.bestsellers.setGroupsForProduct(id, input.groupIds, tx);
 
+      if (input.familyId !== undefined) {
+        await this.families.setProductFamilyInTx(
+          tx,
+          id,
+          input.familyId,
+          input.familyMemberSortOrder,
+        );
+      }
+
       await this.recordAudit(tx, actor, 'PRODUCT_UPDATED', id, {
         editor: true,
         fields: Object.keys(data),
@@ -594,6 +691,7 @@ export class ProductsService {
         components: input.components.length,
         promotionType,
         groups: input.groupIds.length,
+        familyId: input.familyId === undefined ? undefined : input.familyId,
         ...(nextSlug !== product.slug ? { previousSlug: product.slug, slug: nextSlug } : {}),
       });
     }).catch(mapPromotionPrismaError);

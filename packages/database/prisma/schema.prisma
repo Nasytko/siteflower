@@ -324,6 +324,119 @@ model BudgetRange {
 }
 
 // ---------------------------------------------------------------------------
+// Catalog navigation (tree) — separate from discovery taxonomies (occasion/color/…)
+// ---------------------------------------------------------------------------
+
+/// Storefront navigation / PLP tree (Цветы → Розы, Букеты → …).
+/// Not sellable. Not ProductFamily. Not a ProductVariant.
+model CatalogCategory {
+  id             String             @id @default(uuid()) @db.Uuid
+  parentId       String?            @map("parent_id") @db.Uuid
+  slug           String             @unique @db.VarChar(120)
+  name           String             @db.VarChar(120)
+  /// Optional UI hint: FLOWERS | BOUQUETS | COMPOSITIONS | GIFTS | OTHER
+  listingKind    String?            @map("listing_kind") @db.VarChar(32)
+  sortOrder      Int                @default(0) @map("sort_order")
+  visibility     TaxonomyVisibility @default(VISIBLE)
+  version        Int                @default(1)
+  seoTitle       String?            @map("seo_title") @db.VarChar(200)
+  seoDescription String?            @map("seo_description") @db.VarChar(500)
+  noIndex        Boolean            @default(false) @map("no_index")
+  createdAt      DateTime           @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt      DateTime           @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  parent   CatalogCategory?  @relation("CatalogCategoryTree", fields: [parentId], references: [id], onDelete: Restrict)
+  children CatalogCategory[] @relation("CatalogCategoryTree")
+  products Product[]
+
+  @@index([parentId, sortOrder])
+  @@index([visibility, sortOrder])
+  @@map("catalog_categories")
+}
+
+/// Flower species / type (Роза, Хризантема) — typed product attribute, not composition Flower.
+model FlowerType {
+  id         String             @id @default(uuid()) @db.Uuid
+  slug       String             @unique @db.VarChar(120)
+  name       String             @db.VarChar(120)
+  sortOrder  Int                @default(0) @map("sort_order")
+  visibility TaxonomyVisibility @default(VISIBLE)
+  version    Int                @default(1)
+  createdAt  DateTime           @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt  DateTime           @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  varieties FlowerVariety[]
+  products  Product[]
+
+  @@index([visibility, sortOrder])
+  @@map("flower_types")
+}
+
+/// Cultivar / variety (Мондиаль, Жизель) under a FlowerType.
+model FlowerVariety {
+  id           String             @id @default(uuid()) @db.Uuid
+  flowerTypeId String             @map("flower_type_id") @db.Uuid
+  slug         String             @unique @db.VarChar(120)
+  name         String             @db.VarChar(120)
+  sortOrder    Int                @default(0) @map("sort_order")
+  visibility   TaxonomyVisibility @default(VISIBLE)
+  version      Int                @default(1)
+  createdAt    DateTime           @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt    DateTime           @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  flowerType FlowerType @relation(fields: [flowerTypeId], references: [id], onDelete: Cascade)
+  products   Product[]
+
+  @@index([flowerTypeId, sortOrder])
+  @@index([visibility, sortOrder])
+  @@map("flower_varieties")
+}
+
+/// Origin / provenance (Эквадор, Кения, Фермерская).
+model FlowerOrigin {
+  id         String             @id @default(uuid()) @db.Uuid
+  slug       String             @unique @db.VarChar(120)
+  name       String             @db.VarChar(120)
+  sortOrder  Int                @default(0) @map("sort_order")
+  visibility TaxonomyVisibility @default(VISIBLE)
+  version    Int                @default(1)
+  createdAt  DateTime           @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt  DateTime           @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  products Product[]
+
+  @@index([visibility, sortOrder])
+  @@map("flower_origins")
+}
+
+/// Logical link between sellable Products (e.g. Роза Мондиаль sizes).
+/// Not purchasable. No price, stock, lifecycle, media, or sitemap entry.
+model ProductFamily {
+  id        String   @id @default(uuid()) @db.Uuid
+  name      String   @db.VarChar(200)
+  version   Int      @default(1)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  members ProductFamilyMember[]
+
+  @@map("product_families")
+}
+
+model ProductFamilyMember {
+  familyId  String @map("family_id") @db.Uuid
+  productId String @unique @map("product_id") @db.Uuid
+  sortOrder Int    @default(0) @map("sort_order")
+
+  family  ProductFamily @relation(fields: [familyId], references: [id], onDelete: Cascade)
+  product Product       @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@id([familyId, productId])
+  @@index([familyId, sortOrder])
+  @@map("product_family_members")
+}
+
+// ---------------------------------------------------------------------------
 // Products
 // ---------------------------------------------------------------------------
 
@@ -333,9 +446,13 @@ model Product {
   name             String                  @db.VarChar(200)
   shortDescription String?                 @map("short_description") @db.VarChar(500)
   description      String?                 @db.Text
-  /// Optional factual height in cm (not the primary size filter).
+  /// Optional stem/product height in cm (used for flower filters when set).
   heightCm         Int?                    @map("height_cm")
   bouquetSizeId    String?                 @map("bouquet_size_id") @db.Uuid
+  catalogCategoryId String?                @map("catalog_category_id") @db.Uuid
+  flowerTypeId     String?                 @map("flower_type_id") @db.Uuid
+  flowerVarietyId  String?                 @map("flower_variety_id") @db.Uuid
+  flowerOriginId   String?                 @map("flower_origin_id") @db.Uuid
   lifecycle        ProductLifecycle        @default(DRAFT)
   availability     CommercialAvailability  @default(AVAILABLE)
   currency         String                  @default("BYN") @db.Char(3)
@@ -349,20 +466,30 @@ model Product {
   createdAt        DateTime                @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt        DateTime                @updatedAt @map("updated_at") @db.Timestamptz(3)
 
-  bouquetSize     BouquetSize?             @relation(fields: [bouquetSizeId], references: [id], onDelete: SetNull)
-  variants        ProductVariant[]
-  media           ProductMedia[]
-  components      ProductComponent[]
-  occasions       ProductOccasion[]
-  recipients      ProductRecipient[]
-  colors          ProductColor[]
-  productLines    ProductProductLine[]
-  promotion       ProductPromotion?
-  bestsellerLinks BestsellerGroupProduct[]
+  bouquetSize      BouquetSize?             @relation(fields: [bouquetSizeId], references: [id], onDelete: SetNull)
+  catalogCategory  CatalogCategory?         @relation(fields: [catalogCategoryId], references: [id], onDelete: SetNull)
+  flowerType       FlowerType?              @relation(fields: [flowerTypeId], references: [id], onDelete: SetNull)
+  flowerVariety    FlowerVariety?           @relation(fields: [flowerVarietyId], references: [id], onDelete: SetNull)
+  flowerOrigin     FlowerOrigin?            @relation(fields: [flowerOriginId], references: [id], onDelete: SetNull)
+  familyMember     ProductFamilyMember?
+  variants         ProductVariant[]
+  media            ProductMedia[]
+  components       ProductComponent[]
+  occasions        ProductOccasion[]
+  recipients       ProductRecipient[]
+  colors           ProductColor[]
+  productLines     ProductProductLine[]
+  promotion        ProductPromotion?
+  bestsellerLinks  BestsellerGroupProduct[]
 
   @@index([lifecycle, publishAt])
   @@index([lifecycle, availability])
   @@index([bouquetSizeId])
+  @@index([catalogCategoryId, lifecycle])
+  @@index([flowerTypeId, lifecycle])
+  @@index([flowerVarietyId, lifecycle])
+  @@index([flowerOriginId, lifecycle])
+  @@index([heightCm, lifecycle])
   @@index([updatedAt(sort: Desc)])
   @@map("products")
 }

@@ -16,7 +16,10 @@ import {
   type BudgetRangePublicDto,
   type ColorAdminDto,
   type PriceRangeDto,
+  productCardSubtitle,
   type ProductAdminDto,
+  type ProductFamilyDto,
+  type ProductFamilyMemberDto,
   type ProductListItemDto,
   type ProductMediaDto,
   type ProductPromotionAdminDto,
@@ -43,6 +46,11 @@ export type MediaUrlResolver = (storageKey: string) => string;
 
 export const PRODUCT_INCLUDE = {
   bouquetSize: true,
+  catalogCategory: true,
+  flowerType: true,
+  flowerVariety: true,
+  flowerOrigin: true,
+  familyMember: { include: { family: { select: { id: true, name: true, version: true } } } },
   variants: { orderBy: { sortOrder: 'asc' } },
   components: { orderBy: { sortOrder: 'asc' }, include: { flower: true } },
   media: {
@@ -317,6 +325,7 @@ export function toProductAdminDto(
   product: ProductWithRelations,
   urlFor: MediaUrlResolver,
   now = new Date(),
+  family: ProductFamilyDto | null = null,
 ): ProductAdminDto {
   return {
     id: product.id,
@@ -329,6 +338,24 @@ export function toProductAdminDto(
     heightCm: product.heightCm ?? null,
     bouquetSize: product.bouquetSize ? toTaxonomyRef(product.bouquetSize) : null,
     bouquetSizeId: product.bouquetSizeId,
+    catalogCategoryId: product.catalogCategoryId,
+    catalogCategory: product.catalogCategory ? toTaxonomyRef(product.catalogCategory) : null,
+    flowerTypeId: product.flowerTypeId,
+    flowerType: product.flowerType ? toTaxonomyRef(product.flowerType) : null,
+    flowerVarietyId: product.flowerVarietyId,
+    flowerVariety: product.flowerVariety ? toTaxonomyRef(product.flowerVariety) : null,
+    flowerOriginId: product.flowerOriginId,
+    flowerOrigin: product.flowerOrigin ? toTaxonomyRef(product.flowerOrigin) : null,
+    family:
+      family ??
+      (product.familyMember
+        ? {
+            id: product.familyMember.family.id,
+            name: product.familyMember.family.name,
+            version: product.familyMember.family.version,
+            members: [],
+          }
+        : null),
     currency: product.currency,
     publishedAt: product.publishedAt?.toISOString() ?? null,
     publishAt: product.publishAt?.toISOString() ?? null,
@@ -366,11 +393,22 @@ export function toProductPublicDto(
   product: ProductWithRelations,
   urlFor: MediaUrlResolver,
   now = new Date(),
+  family: ProductFamilyDto | null = null,
 ): ProductPublicDto {
   const price: PriceRangeDto =
     activeVariantPrices(product.currency, product.variants) ??
     derivePriceRange(product.currency, [0n])!;
   const promo = toPromotionRow(product);
+  const resolvedFamily =
+    family ??
+    (product.familyMember
+      ? {
+          id: product.familyMember.family.id,
+          name: product.familyMember.family.name,
+          version: product.familyMember.family.version,
+          members: [],
+        }
+      : null);
 
   return {
     id: product.id,
@@ -381,6 +419,25 @@ export function toProductPublicDto(
     availability: product.availability,
     heightCm: product.heightCm ?? null,
     bouquetSize: product.bouquetSize ? toTaxonomyRef(product.bouquetSize) : null,
+    catalogCategory: product.catalogCategory ? toTaxonomyRef(product.catalogCategory) : null,
+    flowerType: product.flowerType ? toTaxonomyRef(product.flowerType) : null,
+    flowerVariety: product.flowerVariety ? toTaxonomyRef(product.flowerVariety) : null,
+    flowerOrigin: product.flowerOrigin ? toTaxonomyRef(product.flowerOrigin) : null,
+    family: resolvedFamily
+      ? {
+          ...resolvedFamily,
+          members: resolvedFamily.members.map((member) => ({
+            ...member,
+            isCurrent: member.productId === product.id,
+          })),
+        }
+      : null,
+    cardSubtitle: productCardSubtitle({
+      name: product.name,
+      heightCm: product.heightCm ?? null,
+      originName: product.flowerOrigin?.name ?? null,
+      varietyName: product.flowerVariety?.name ?? null,
+    }),
     currency: product.currency,
     price,
     promotion: buildPublicPromotionDto(product.currency, product.variants, promo, now),
@@ -435,6 +492,19 @@ export function toProductListItemDto(
     version: product.version,
     heightCm: product.heightCm ?? null,
     bouquetSize: product.bouquetSize ? toTaxonomyRef(product.bouquetSize) : null,
+    catalogCategory: product.catalogCategory ? toTaxonomyRef(product.catalogCategory) : null,
+    flowerType: product.flowerType ? toTaxonomyRef(product.flowerType) : null,
+    flowerVariety: product.flowerVariety ? toTaxonomyRef(product.flowerVariety) : null,
+    flowerOrigin: product.flowerOrigin ? toTaxonomyRef(product.flowerOrigin) : null,
+    family: product.familyMember
+      ? { id: product.familyMember.family.id, name: product.familyMember.family.name }
+      : null,
+    cardSubtitle: productCardSubtitle({
+      name: product.name,
+      heightCm: product.heightCm ?? null,
+      originName: product.flowerOrigin?.name ?? null,
+      varietyName: product.flowerVariety?.name ?? null,
+    }),
     price: activeVariantPrices(product.currency, product.variants),
     promotion: buildPublicPromotionDto(
       product.currency,
@@ -460,6 +530,57 @@ export function toProductListItemDto(
     productLines: product.productLines.map((link) => toTaxonomyRef(link.productLine)),
     updatedAt: product.updatedAt.toISOString(),
     bestsellerGroupIds: product.bestsellerLinks.map((link) => link.groupId),
+  };
+}
+
+/** Build a family DTO from already-loaded member products (sorted). */
+export function toProductFamilyDto(
+  family: { id: string; name: string; version: number },
+  members: Array<{
+    productId: string;
+    sortOrder: number;
+    product: ProductWithRelations;
+  }>,
+  urlFor: MediaUrlResolver,
+  currentProductId?: string,
+): ProductFamilyDto {
+  const mapped: ProductFamilyMemberDto[] = members
+    .slice()
+    .sort((a, b) => a.sortOrder - b.sortOrder)
+    .map((member) => {
+      const primary = primaryMedia(member.product);
+      return {
+        productId: member.productId,
+        slug: member.product.slug,
+        name: member.product.name,
+        sortOrder: member.sortOrder,
+        heightCm: member.product.heightCm ?? null,
+        flowerOrigin: member.product.flowerOrigin
+          ? toTaxonomyRef(member.product.flowerOrigin)
+          : null,
+        price: activeVariantPrices(member.product.currency, member.product.variants),
+        primaryImageUrl: primary
+          ? pickDerivativeStorageUrl(
+              primary.mediaAsset.storageKey,
+              primary.mediaAsset.derivatives.map((d) => ({
+                width: d.width,
+                format: d.format,
+                storageKey: d.storageKey,
+              })),
+              urlFor,
+              LIST_IMAGE_TARGET_WIDTH,
+            )
+          : null,
+        availability: member.product.availability,
+        lifecycle: member.product.lifecycle,
+        isCurrent: currentProductId ? member.productId === currentProductId : undefined,
+      };
+    });
+  return {
+    id: family.id,
+    name: family.name,
+    version: family.version,
+    members: mapped,
   };
 }
 

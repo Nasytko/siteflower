@@ -1,20 +1,23 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
-import type {
-  BestsellerGroupPublicDto,
-  BouquetSizePublicDto,
-  BudgetRangePublicDto,
-  PaginatedResponse,
-  ProductListItemDto,
-  ProductResolveDto,
-  SitemapEntryDto,
-  TaxonomyPublicDto,
-  TaxonomyRefDto,
+import {
+  heightBandWhere,
+  isHeightBandId,
+  type BestsellerGroupPublicDto,
+  type BouquetSizePublicDto,
+  type BudgetRangePublicDto,
+  type PaginatedResponse,
+  type ProductListItemDto,
+  type ProductResolveDto,
+  type SitemapEntryDto,
+  type TaxonomyPublicDto,
+  type TaxonomyRefDto,
 } from '@bouquet-one/contracts';
 import type { Prisma } from '@bouquet-one/database';
 import { PrismaService } from '../database/prisma.service';
 import { MediaService } from '../media/media.service';
 import { BestsellersService } from './bestsellers.service';
 import { BudgetRangesService } from './budget-ranges.service';
+import { CatalogCategoriesService } from './catalog-categories.service';
 import { isEffectivelyPublished } from './catalog.logic';
 import {
   PRODUCT_INCLUDE,
@@ -25,6 +28,8 @@ import {
   toTaxonomyRef,
   type TaxonomyRecord,
 } from './catalog.mapper';
+import { FlowerRefsService } from './flower-refs.service';
+import { ProductFamiliesService } from './product-families.service';
 import type { PublicProductListQueryDto } from './products.dto';
 import { effectivelyPublishedWhere, ProductsRepository } from './products.repository';
 import { PromotionsService } from './promotions.service';
@@ -53,6 +58,9 @@ export class PublicCatalogService {
     private readonly products: ProductsRepository,
     private readonly bestsellers: BestsellersService,
     private readonly budgetRanges: BudgetRangesService,
+    private readonly categories: CatalogCategoriesService,
+    private readonly flowerRefs: FlowerRefsService,
+    private readonly families: ProductFamiliesService,
     private readonly promotions: PromotionsService,
     private readonly slugRedirects: SlugRedirectsService,
     private readonly media: MediaService,
@@ -60,6 +68,35 @@ export class PublicCatalogService {
   ) {}
 
   private readonly urlFor = (storageKey: string) => this.media.getPublicUrl(storageKey);
+
+  private async resolveCatalogFilters(query: PublicProductListQueryDto) {
+    let catalogCategoryIds: string[] | undefined;
+    if (query.catalogCategoryId) {
+      catalogCategoryIds = await this.categories.expandCategoryIds(query.catalogCategoryId);
+    } else if (query.categorySlug) {
+      try {
+        const category = await this.categories.getBySlug(query.categorySlug);
+        catalogCategoryIds = await this.categories.expandCategoryIds(category.id);
+      } catch {
+        catalogCategoryIds = ['00000000-0000-0000-0000-000000000000'];
+      }
+    }
+    const heightCm =
+      query.heightBand && isHeightBandId(query.heightBand)
+        ? heightBandWhere(query.heightBand) ?? undefined
+        : undefined;
+    return {
+      catalogCategoryIds,
+      flowerTypeIds: query.flowerTypeId,
+      flowerTypeSlugs: query.flowerTypeSlug,
+      flowerVarietyIds: query.flowerVarietyId,
+      flowerVarietySlugs: query.flowerVarietySlug,
+      flowerOriginIds: query.flowerOriginId,
+      flowerOriginSlugs: query.flowerOriginSlug,
+      heightCm: heightCm ?? undefined,
+      familyId: query.familyId,
+    };
+  }
 
   async listProducts(
     query: PublicProductListQueryDto,
@@ -70,6 +107,7 @@ export class PublicCatalogService {
     const budgetRanges = query.budgetRangeIds?.length
       ? await this.budgetRanges.resolveBounds(query.budgetRangeIds)
       : [];
+    const catalogFilters = await this.resolveCatalogFilters(query);
     const { items, total } = await this.products.list({
       filters: {
         publishedAt: now,
@@ -89,6 +127,7 @@ export class PublicCatalogService {
         budgetRanges,
         minPriceMinor: query.minPriceMinor,
         maxPriceMinor: query.maxPriceMinor,
+        ...catalogFilters,
       },
       skip: (page - 1) * pageSize,
       take: pageSize,
@@ -109,14 +148,42 @@ export class PublicCatalogService {
     for (const candidate of candidates) {
       const product = await this.products.findBySlug(candidate);
       if (product && isEffectivelyPublished(product)) {
+        const familyId = product.familyMember?.family.id;
+        const now = new Date();
+        const family = familyId
+          ? await this.families.getDto(familyId, this.urlFor, product.id, {
+              publishedOnly: true,
+              now,
+            })
+          : null;
         return {
-          product: toProductPublicDto(product, this.urlFor),
+          product: toProductPublicDto(product, this.urlFor, now, family),
           redirectedFrom: slug !== product.slug ? slug : null,
           canonicalSlug: product.slug,
         };
       }
     }
     throw new NotFoundException('Product not found');
+  }
+
+  listCategoryTree() {
+    return this.categories.tree(true);
+  }
+
+  getCategoryBySlug(slug: string) {
+    return this.categories.getBySlug(slug);
+  }
+
+  listFlowerTypes() {
+    return this.flowerRefs.listTypes(true);
+  }
+
+  listFlowerVarieties(flowerTypeId?: string) {
+    return this.flowerRefs.listVarieties(flowerTypeId, true);
+  }
+
+  listFlowerOrigins() {
+    return this.flowerRefs.listOrigins(true);
   }
 
   async listRelatedProducts(slug: string, limit = 8): Promise<ProductListItemDto[]> {

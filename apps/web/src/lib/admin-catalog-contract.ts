@@ -20,6 +20,11 @@ export type ProductListQuery = {
   recipientIds?: string | readonly string[];
   colorIds?: string | readonly string[];
   bouquetSizeIds?: string | readonly string[];
+  catalogCategoryId?: string;
+  flowerTypeId?: string;
+  flowerVarietyId?: string;
+  flowerOriginId?: string;
+  familyId?: string;
   sort?: string;
   page?: number;
   pageSize?: number;
@@ -45,6 +50,11 @@ export function buildProductListQueryParams(
     recipientIds: query.recipientIds,
     colorIds: query.colorIds,
     bouquetSizeIds: query.bouquetSizeIds,
+    catalogCategoryId: query.catalogCategoryId,
+    flowerTypeId: query.flowerTypeId,
+    flowerVarietyId: query.flowerVarietyId,
+    flowerOriginId: query.flowerOriginId,
+    familyId: query.familyId,
     sort: query.sort,
   };
 }

@@ -58,6 +58,12 @@ const NAV_GROUPS: NavGroup[] = [
     label: 'Каталог',
     items: [
       { href: '/admin/catalog/products', label: 'Товары', permission: 'CATALOG_READ' },
+      { href: '/admin/catalog/categories', label: 'Категории', permission: 'CATALOG_READ' },
+      {
+        href: '/admin/catalog/flower-structure',
+        label: 'Виды цветов',
+        permission: 'CATALOG_READ',
+      },
       {
         href: '/admin/catalog/flowers',
         label: 'Справочники',

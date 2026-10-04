@@ -1,6 +1,16 @@
 # Catalog domain
 
-> **Current model:** florist-first dimensions (budget, occasion, recipient, color, flower, size) plus promotions and bestsellers. Full product direction and migration notes: [catalog-simplification-and-merchandising.md](./catalog-simplification-and-merchandising.md).
+> **Current model:** sellable **Product** (+ in-card **ProductVariant**), optional **ProductFamily** (cross-product UX only), hierarchical **CatalogCategory**, typed flower attrs (**FlowerType** / **FlowerVariety** / **FlowerOrigin** + `heightCm`), plus discovery facets (budget, occasion, recipient, color, composition Flower, size), promotions and bestsellers.
+
+## Product vs Variant vs Family
+
+| Concept | Role |
+| --- | --- |
+| **Product** | Independent sellable storefront card (own URL, media, price, SEO, lifecycle, availability). |
+| **ProductVariant** | Choice *inside* one card (e.g. 9 / 15 / 21 roses). Unchanged; used by cart/checkout. |
+| **ProductFamily** | Soft link between several Products the shopper sees as related options (e.g. Mondial 50 cm vs 60 cm). Not purchasable, no price/stock/lifecycle/media/sitemap. |
+
+Switching a family member on the PDP navigates to that Product’s URL. Family never enters the cart.
 
 ## Product vs ERP
 
@@ -44,13 +54,34 @@ Never denormalize a stale `product.price`. Checkout uses `effectiveVariantPriceM
 
 `ProductComponent` references optional `Flower` taxonomy + `displayName`, nullable `quantity`, `unit`. Linking a flower on a component makes the bouquet discoverable under that flower filter (no separate `ProductFlower` table).
 
+## Catalog navigation (CatalogCategory)
+
+Hierarchical tree for storefront menus and PLPs (Цветы → Розы, Букеты → …). Separate from discovery taxonomies.
+
+- Optional `listingKind`: `FLOWERS` | `BOUQUETS` | `COMPOSITIONS` | `GIFTS` | `OTHER` (UI hint for filters).
+- Product.catalogCategoryId is nullable (legacy products stay valid until assigned).
+- Public list filters by `categorySlug` expand to the category **and its descendants**.
+
+## Flower structure (typed product attributes)
+
+Do **not** confuse with composition `Flower` taxonomy (bouquet ingredients / discovery facet).
+
+| Entity | Example |
+| --- | --- |
+| **FlowerType** | Роза |
+| **FlowerVariety** | Мондиаль (belongs to a type) |
+| **FlowerOrigin** | Эквадор |
+| **Product.heightCm** | 60 — used for storefront height bands (`HEIGHT_BANDS`) |
+
+No universal attribute builder / PIM. Future category-specific fields can be added as typed columns without replacing this model.
+
 ## Taxonomies & merchandising dimensions
 
 Managed taxonomy entities (slug, name, sortOrder, visibility `VISIBLE`|`HIDDEN`, SEO fields, version):
 
 | Entity | Role |
 | --- | --- |
-| Flowers | Composition + flower filter facet |
+| Flowers | Composition + flower filter facet (not catalog tree) |
 | Occasions | «Повод» |
 | Recipients | «Кому» |
 | Colors | Merchandising colors (optional `swatch`) |
@@ -63,17 +94,13 @@ Additional catalog config (not generic CMS taxonomies):
 | **BudgetRange** | Admin-managed min/max minor BYN filter labels |
 | **ProductPromotion** | Sale (`PERCENT` or `FIXED`) with optional schedule |
 | **BestsellerGroup** | Manual homepage tabs + product membership |
-
-`heightCm` remains an optional factual attribute on the product; it is **not** a customer filter.
-
-## Removed (not current product)
-
-Category, Style, Collection (manual + rule-based), and product `featured` were removed end-to-end. Historical phase reports may still mention them; do not treat those as the live model.
+| **CatalogCategory** | Navigation / PLP hierarchy |
+| **ProductFamily** | Cross-product related options |
 
 ## Public vs admin API
 
-- Admin: `/api/v1/admin/catalog/...` (RBAC); also promotions, bestsellers, budget ranges
-- Public: `/api/v1/catalog/...` — only **effectively published** products
+- Admin: `/api/v1/admin/catalog/...` (RBAC); categories, flower-refs, product-families, promotions, bestsellers, budget ranges
+- Public: `/api/v1/catalog/...` — only **effectively published** products; `categories/tree`, flower-types/varieties/origins, product filters (`categorySlug`, `flowerVarietySlug`, `flowerOriginSlug`, `heightBand`, …)
 
 Effective publication: `lifecycle=PUBLISHED` AND schedule window includes now.
 
@@ -103,10 +130,17 @@ Invalidate storefront cache on product publish/update and merchandising changes 
 
 | Path | Entity |
 | --- | --- |
-| `/bukety`, `/bukety/[slug]` | Catalog listing / products |
+| `/katalog/[slug]` | CatalogCategory PLP (filters via `var`, `color`, `h`, `orig`) |
+| `/bukety`, `/bukety/[slug]` | Bouquet listing / **Product PDP** (canonical product URL) |
 | `/akcii` | Effective promotions |
-| `/cvety`, `/cvety/[slug]` | Flowers hub / landing |
+| `/cvety`, `/cvety/[slug]` | Composition-flower discovery hub (legacy facet, not CatalogCategory) |
 | `/povod`, `/povod/[slug]` | Occasions hub / landing |
 | `/komu/[slug]` | Recipients |
 
-Filter query URLs on `/bukety` are **not** SEO landing pages (canonical to `/bukety`, typically noindex). Legacy `/collections/*` permanently redirects away.
+Primary nav is driven by `GET /catalog/categories/tree` (not hardcoded React lists). Legacy slug `bukety` keeps `/bukety` href.
+
+Each Product remains its own indexable page. ProductFamily has **no** sitemap entry. Filter query URLs on `/bukety` and `/katalog/*` are typically noindex; canonical points at the clean path.
+
+## Migration notes (catalog structure)
+
+Additive migration `20261004120000_catalog_family_categories`: new tables + nullable Product FKs + seed categories / flower refs. Existing products keep `null` category/family/flower fields — **no** automatic name-based classification.

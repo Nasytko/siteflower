@@ -1,4 +1,4 @@
-import { derivePriceRange } from '@bouquet-one/contracts';
+import { derivePriceRange, heightBandWhere, productCardSubtitle } from '@bouquet-one/contracts';
 import {
   activeVariantPrices,
   isEffectivelyPublished,
@@ -165,5 +165,22 @@ describe('price derivation', () => {
 
   it('pads minor units below one unit', () => {
     expect(derivePriceRange('BYN', [5n])?.label).toBe('0,05 BYN');
+  });
+});
+
+describe('catalog structure helpers', () => {
+  it('maps height bands for flower PLP filters', () => {
+    expect(heightBandWhere('up_to_50')).toEqual({ lte: 50 });
+    expect(heightBandWhere('70_plus')).toEqual({ gte: 70 });
+  });
+
+  it('avoids duplicating height/origin already present in the product name', () => {
+    expect(
+      productCardSubtitle({
+        name: 'Роза Мондиаль 60 см Эквадор',
+        heightCm: 60,
+        originName: 'Эквадор',
+      }),
+    ).toBeNull();
   });
 });

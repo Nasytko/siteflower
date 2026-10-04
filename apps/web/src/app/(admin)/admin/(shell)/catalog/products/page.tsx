@@ -1,6 +1,11 @@
 import { Suspense } from 'react';
 import { roleHasPermission } from '@bouquet-one/contracts';
-import { fetchBestsellerGroups, fetchProductsPage } from '@/lib/admin-catalog-api';
+import {
+  fetchBestsellerGroups,
+  fetchCatalogStructurePickers,
+  fetchProductsPage,
+} from '@/lib/admin-catalog-api';
+import { categoryPickerOptions } from '@/lib/admin-catalog-picker-labels';
 import { requireAdminPermission } from '@/lib/admin-page-auth';
 import { AdminPageHeader } from '@/components/admin/admin-page-header';
 import { ProductsManager, type ProductFilters } from '@/components/admin/products-manager';
@@ -38,22 +43,27 @@ export default async function AdminProductsPage({
     availability: readParam(sp, 'availability'),
     promotionalOnly: promotionalOnlyRaw === 'true' ? 'true' : '',
     bestsellerGroupIds,
+    catalogCategoryId: readParam(sp, 'catalogCategoryId'),
+    familyId: readParam(sp, 'familyId'),
     sort: readParam(sp, 'sort'),
     page: Math.max(1, Number(readParam(sp, 'page', '1')) || 1),
   };
 
-  const [data, bestsellerGroups] = await Promise.all([
+  const [data, bestsellerGroups, structure] = await Promise.all([
     fetchProductsPage({
       search: filters.search || undefined,
       lifecycle: filters.lifecycle || undefined,
       availability: filters.availability || undefined,
       promotionalOnly: filters.promotionalOnly === 'true' ? true : undefined,
       bestsellerGroupIds: filters.bestsellerGroupIds || undefined,
+      catalogCategoryId: filters.catalogCategoryId || undefined,
+      familyId: filters.familyId || undefined,
       sort: filters.sort || undefined,
       page: filters.page,
       pageSize: 25,
     }),
     fetchBestsellerGroups(),
+    fetchCatalogStructurePickers(),
   ]);
 
   const canCreate = roleHasPermission(me.user.role, 'CATALOG_CREATE');
@@ -76,6 +86,8 @@ export default async function AdminProductsPage({
           data={data}
           filters={filters}
           bestsellerGroups={bestsellerGroups.map((group) => ({ id: group.id, name: group.name }))}
+          catalogCategories={categoryPickerOptions(structure.categories)}
+          families={structure.families.map((family) => ({ id: family.id, name: family.name }))}
           canCreate={canCreate}
           canUpdate={roleHasPermission(me.user.role, 'CATALOG_UPDATE')}
           canPublish={roleHasPermission(me.user.role, 'CATALOG_PUBLISH')}

@@ -60,6 +60,7 @@ import {
   phaseFromAdminError,
   type FormSavePhase,
 } from '@/components/admin/form-status';
+import { suggestedCommercialProductName } from '@/lib/admin-catalog-picker-labels';
 
 export type PickerOption = { id: string; name: string };
 
@@ -72,6 +73,11 @@ type Props = {
     flowers: PickerOption[];
     bouquetSizes: PickerOption[];
     productLines: PickerOption[];
+    categories: PickerOption[];
+    flowerTypes: PickerOption[];
+    flowerVarieties: Array<PickerOption & { flowerTypeId: string }>;
+    flowerOrigins: PickerOption[];
+    families: Array<{ id: string; name: string }>;
   };
   bestsellerGroups: PickerOption[];
   canUpdate: boolean;
@@ -163,6 +169,10 @@ function toComponentDrafts(product: ProductAdminDto): ComponentDraft[] {
     }));
 }
 
+function familyMemberSortOrderFor(product: ProductAdminDto): number | undefined {
+  return product.family?.members.find((member) => member.productId === product.id)?.sortOrder;
+}
+
 function toPromotionDraft(product: ProductAdminDto): PromotionDraft {
   const promotion = product.promotion;
   return {
@@ -216,6 +226,22 @@ export function ProductEditor({
     description: product.description ?? '',
     heightCm: product.heightCm === null ? '' : String(product.heightCm),
   });
+  const [catalogCategoryId, setCatalogCategoryId] = useState(product.catalogCategoryId ?? '');
+  const [flowerTypeId, setFlowerTypeId] = useState(product.flowerTypeId ?? '');
+  const [flowerVarietyId, setFlowerVarietyId] = useState(product.flowerVarietyId ?? '');
+  const [flowerOriginId, setFlowerOriginId] = useState(product.flowerOriginId ?? '');
+  const [familyId, setFamilyId] = useState(product.family?.id ?? '');
+  const [familyMemberSortOrder, setFamilyMemberSortOrder] = useState<number | undefined>(() =>
+    familyMemberSortOrderFor(product),
+  );
+  const [familyOptions, setFamilyOptions] = useState(options.families);
+  const [newFamilyName, setNewFamilyName] = useState('');
+  const [creatingFamily, setCreatingFamily] = useState(false);
+  const [familyReorderPending, setFamilyReorderPending] = useState(false);
+
+  useEffect(() => {
+    setFamilyOptions(options.families);
+  }, [options.families]);
   const [variants, setVariants] = useState<VariantDraft[]>(() => toVariantDrafts(product));
   const [components, setComponents] = useState<ComponentDraft[]>(() => toComponentDrafts(product));
   const [discovery, setDiscovery] = useState({
@@ -262,6 +288,12 @@ export function ProductEditor({
       description: updated.description ?? '',
       heightCm: updated.heightCm === null ? '' : String(updated.heightCm),
     });
+    setCatalogCategoryId(updated.catalogCategoryId ?? '');
+    setFlowerTypeId(updated.flowerTypeId ?? '');
+    setFlowerVarietyId(updated.flowerVarietyId ?? '');
+    setFlowerOriginId(updated.flowerOriginId ?? '');
+    setFamilyId(updated.family?.id ?? '');
+    setFamilyMemberSortOrder(familyMemberSortOrderFor(updated));
     setVariants(toVariantDrafts(updated));
     setComponents(toComponentDrafts(updated));
     setDiscovery({
@@ -300,6 +332,40 @@ export function ProductEditor({
   }
 
   const activeVariants = variants.filter((variant) => variant.status === 'ACTIVE');
+
+  const filteredVarieties = useMemo(
+    () =>
+      options.flowerVarieties.filter(
+        (variety) => !flowerTypeId || variety.flowerTypeId === flowerTypeId,
+      ),
+    [options.flowerVarieties, flowerTypeId],
+  );
+
+  const commercialNamePreview = useMemo(() => {
+    const typeName = options.flowerTypes.find((row) => row.id === flowerTypeId)?.name ?? null;
+    const varietyName =
+      options.flowerVarieties.find((row) => row.id === flowerVarietyId)?.name ?? null;
+    const originName = options.flowerOrigins.find((row) => row.id === flowerOriginId)?.name ?? null;
+    return suggestedCommercialProductName({
+      typeName,
+      varietyName,
+      heightCm: basic.heightCm,
+      originName,
+    });
+  }, [
+    options.flowerTypes,
+    options.flowerVarieties,
+    options.flowerOrigins,
+    flowerTypeId,
+    flowerVarietyId,
+    flowerOriginId,
+    basic.heightCm,
+  ]);
+
+  const familyMembers = useMemo(() => {
+    if (!server.family?.members.length) return [];
+    return [...server.family.members].sort((a, b) => a.sortOrder - b.sortOrder);
+  }, [server.family]);
 
   const promotionPreview = useMemo(() => {
     if (!promotion.enabled) return [];
@@ -517,6 +583,19 @@ export function ProductEditor({
           endsAt: fromDateTimeLocalValue(promotion.endsAt),
         },
         groupIds,
+        catalogCategoryId: catalogCategoryId || null,
+        flowerTypeId: flowerTypeId || null,
+        flowerVarietyId: flowerVarietyId || null,
+        flowerOriginId: flowerOriginId || null,
+        familyId: familyId || null,
+        ...(familyId
+          ? {
+              familyMemberSortOrder:
+                familyMemberSortOrder ??
+                familyMemberSortOrderFor(server) ??
+                familyMembers.length,
+            }
+          : {}),
       });
 
       resync(current);
@@ -744,6 +823,61 @@ export function ProductEditor({
     }
   }
 
+  async function onCreateFamily() {
+    if (!canUpdate) return;
+    const name = newFamilyName.trim();
+    if (name.length === 0) return;
+    setCreatingFamily(true);
+    setError(null);
+    try {
+      const created = await adminPost<{ id: string; name: string }>(adminEndpoints.productFamilies, {
+        name,
+      });
+      setFamilyOptions((prev) => {
+        if (prev.some((row) => row.id === created.id)) return prev;
+        return [...prev, { id: created.id, name: created.name }].sort((a, b) =>
+          a.name.localeCompare(b.name, 'ru'),
+        );
+      });
+      setFamilyId(created.id);
+      setFamilyMemberSortOrder(0);
+      setNewFamilyName('');
+      touch();
+    } catch (err) {
+      setError(errorMessage(err, 'Не удалось создать семейство'));
+    } finally {
+      setCreatingFamily(false);
+    }
+  }
+
+  async function reorderFamilyMember(productId: string, direction: -1 | 1) {
+    if (!canUpdate || !server.family || familyReorderPending) return;
+    const ordered = [...familyMembers];
+    const index = ordered.findIndex((member) => member.productId === productId);
+    const target = index + direction;
+    if (index < 0 || target < 0 || target >= ordered.length) return;
+    const next = [...ordered];
+    const [moved] = next.splice(index, 1);
+    next.splice(target, 0, moved!);
+
+    setFamilyReorderPending(true);
+    setError(null);
+    try {
+      await adminPut(adminEndpoints.productFamilyMembersOrder(server.family.id), {
+        orderedProductIds: next.map((member) => member.productId),
+      });
+      const fresh = await adminGet<ProductAdminDto>(adminEndpoints.product(server.id));
+      setServer(fresh);
+      setVersion(fresh.version);
+      setFamilyMemberSortOrder(familyMemberSortOrderFor(fresh));
+      router.refresh();
+    } catch (err) {
+      setError(errorMessage(err, 'Не удалось изменить порядок в семействе'));
+    } finally {
+      setFamilyReorderPending(false);
+    }
+  }
+
   async function reorderMedia(mediaId: string, direction: -1 | 1) {
     if (!canUpdate) return;
     const ordered = [...server.media].sort((a, b) => a.sortOrder - b.sortOrder);
@@ -939,6 +1073,227 @@ export function ProductEditor({
                 вручную
               </span>
             </label>
+
+            <label className="admin-field">
+              <span>Категория каталога</span>
+              <select
+                className="admin-select"
+                value={catalogCategoryId}
+                disabled={!canUpdate}
+                onChange={(event) => {
+                  setCatalogCategoryId(event.target.value);
+                  touch();
+                }}
+              >
+                <option value="">Не указана</option>
+                {options.categories.map((option) => (
+                  <option key={option.id} value={option.id}>
+                    {option.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <div className="grid gap-4 sm:grid-cols-2">
+              <label className="admin-field">
+                <span>Вид цветка</span>
+                <select
+                  className="admin-select"
+                  value={flowerTypeId}
+                  disabled={!canUpdate}
+                  onChange={(event) => {
+                    const nextTypeId = event.target.value;
+                    setFlowerTypeId(nextTypeId);
+                    setFlowerVarietyId((prev) => {
+                      if (!prev) return prev;
+                      const variety = options.flowerVarieties.find((row) => row.id === prev);
+                      if (variety && variety.flowerTypeId !== nextTypeId) return '';
+                      return prev;
+                    });
+                    touch();
+                  }}
+                >
+                  <option value="">Не указан</option>
+                  {options.flowerTypes.map((option) => (
+                    <option key={option.id} value={option.id}>
+                      {option.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="admin-field">
+                <span>Сорт</span>
+                <select
+                  className="admin-select"
+                  value={flowerVarietyId}
+                  disabled={!canUpdate || !flowerTypeId}
+                  onChange={(event) => {
+                    setFlowerVarietyId(event.target.value);
+                    touch();
+                  }}
+                >
+                  <option value="">Не указан</option>
+                  {filteredVarieties.map((option) => (
+                    <option key={option.id} value={option.id}>
+                      {option.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="admin-field">
+                <span>Происхождение</span>
+                <select
+                  className="admin-select"
+                  value={flowerOriginId}
+                  disabled={!canUpdate}
+                  onChange={(event) => {
+                    setFlowerOriginId(event.target.value);
+                    touch();
+                  }}
+                >
+                  <option value="">Не указано</option>
+                  {options.flowerOrigins.map((option) => (
+                    <option key={option.id} value={option.id}>
+                      {option.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="admin-field">
+                <span>Высота, см</span>
+                <input
+                  className="admin-input w-40"
+                  type="number"
+                  min={15}
+                  max={250}
+                  value={basic.heightCm}
+                  disabled={!canUpdate}
+                  placeholder="не указана"
+                  onChange={(event) => {
+                    setBasic((prev) => ({ ...prev, heightCm: event.target.value }));
+                    touch();
+                  }}
+                />
+              </label>
+            </div>
+
+            {commercialNamePreview.length > 0 ? (
+              <div className="admin-panel space-y-2 p-3">
+                <p className="text-sm text-[var(--admin-muted)]">
+                  Предложение коммерческого названия:{' '}
+                  <strong className="text-[var(--admin-ink)]">{commercialNamePreview}</strong>
+                </p>
+                {canUpdate ? (
+                  <button
+                    type="button"
+                    className="admin-btn-ghost px-3 py-2"
+                    onClick={() => {
+                      setBasic((prev) => ({ ...prev, name: commercialNamePreview }));
+                      touch();
+                    }}
+                  >
+                    Подставить в название
+                  </button>
+                ) : null}
+              </div>
+            ) : null}
+
+            <div className="admin-subsection space-y-3">
+              <h3 className="admin-subsection__title">Семейство вариантов</h3>
+              <label className="admin-field max-w-md">
+                <span>Семейство</span>
+                <select
+                  className="admin-select"
+                  value={familyId}
+                  disabled={!canUpdate}
+                  onChange={(event) => {
+                    setFamilyId(event.target.value);
+                    touch();
+                  }}
+                >
+                  <option value="">Без семейства</option>
+                  {familyOptions.map((option) => (
+                    <option key={option.id} value={option.id}>
+                      {option.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              {canUpdate ? (
+                <div className="flex flex-wrap items-end gap-2">
+                  <label className="admin-field">
+                    <span>Новое семейство</span>
+                    <input
+                      className="admin-input w-56"
+                      value={newFamilyName}
+                      disabled={creatingFamily}
+                      placeholder="Название семейства"
+                      onChange={(event) => setNewFamilyName(event.target.value)}
+                    />
+                  </label>
+                  <button
+                    type="button"
+                    className="admin-btn-ghost"
+                    disabled={creatingFamily || newFamilyName.trim().length === 0}
+                    onClick={() => void onCreateFamily()}
+                  >
+                    {creatingFamily ? 'Создание…' : 'Создать семейство'}
+                  </button>
+                </div>
+              ) : null}
+              {familyId && familyMembers.length > 0 ? (
+                <ul className="space-y-2">
+                  {familyMembers.map((member, index) => {
+                    const isCurrent = member.productId === server.id;
+                    return (
+                      <li
+                        key={member.productId}
+                        className={`flex flex-wrap items-center gap-2 rounded-lg border px-3 py-2 ${
+                          isCurrent
+                            ? 'border-[var(--admin-brand)] bg-[var(--admin-brand)]/5'
+                            : 'border-[var(--admin-border)]'
+                        }`}
+                      >
+                        <a
+                          href={`/admin/catalog/products/${member.productId}`}
+                          className="admin-link font-medium"
+                        >
+                          {member.name}
+                          {isCurrent ? ' (текущий)' : ''}
+                        </a>
+                        {canUpdate ? (
+                          <div className="admin-row-actions ml-auto">
+                            <button
+                              type="button"
+                              className="admin-icon-btn"
+                              aria-label="Выше"
+                              disabled={familyReorderPending || index === 0}
+                              onClick={() => void reorderFamilyMember(member.productId, -1)}
+                            >
+                              ↑
+                            </button>
+                            <button
+                              type="button"
+                              className="admin-icon-btn"
+                              aria-label="Ниже"
+                              disabled={
+                                familyReorderPending || index === familyMembers.length - 1
+                              }
+                              onClick={() => void reorderFamilyMember(member.productId, 1)}
+                            >
+                              ↓
+                            </button>
+                          </div>
+                        ) : null}
+                      </li>
+                    );
+                  })}
+                </ul>
+              ) : familyId ? (
+                <p className="admin-help">В семействе пока только этот товар или список загружается после сохранения.</p>
+              ) : null}
+            </div>
+
             <label className="admin-field">
               <span>Короткое описание</span>
               <textarea
@@ -965,26 +1320,6 @@ export function ProductEditor({
                   touch();
                 }}
               />
-            </label>
-            <label className="admin-field">
-              <span>Высота букета, см</span>
-              <input
-                className="admin-input w-40"
-                type="number"
-                min={15}
-                max={250}
-                value={basic.heightCm}
-                disabled={!canUpdate}
-                placeholder="не указана"
-                onChange={(event) => {
-                  setBasic((prev) => ({ ...prev, heightCm: event.target.value }));
-                  touch();
-                }}
-              />
-              <span className="admin-field__hint">
-                Для линейки на фото (см). Не путать с «Размерами» в подборе и вариантами цены
-                (S/M/L). Пусто — шкалу не показывать.
-              </span>
             </label>
           </div>
         </section>

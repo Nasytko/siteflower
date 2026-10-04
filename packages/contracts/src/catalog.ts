@@ -2,9 +2,12 @@
  * Catalog domain contracts — shared by API, admin web, and storefront.
  * No Prisma types.
  *
- * Discovery dimensions: Budget, Occasion/Recipient, Color, Flower, BouquetSize, ProductLine.
+ * Navigation: CatalogCategory tree (Цветы → Розы, …).
+ * Flower product attrs: FlowerType / FlowerVariety / FlowerOrigin (+ Product.heightCm).
+ * Cross-product UX: ProductFamily (not sellable).
+ * In-card commerce: ProductVariant (unchanged).
+ * Discovery facets: Budget, Occasion/Recipient, Color, Flower (composition), BouquetSize, ProductLine.
  * Merchandising: Promotions, Bestsellers.
- * Removed: Category, Style, Collection / rule engine.
  */
 
 export const PRODUCT_LIFECYCLES = ['DRAFT', 'PUBLISHED', 'ARCHIVED'] as const;
@@ -43,6 +46,144 @@ export type PromotionType = (typeof PROMOTION_TYPES)[number];
 /** Catalog sorts — "recommended" = Admin merchandising / newest fallback (not fake popularity). */
 export const PRODUCT_SORTS = ['recommended', 'price_asc', 'price_desc', 'newest'] as const;
 export type ProductSort = (typeof PRODUCT_SORTS)[number];
+
+/** Optional CatalogCategory.listingKind — drives filter UI, not a hard schema enum. */
+export const CATALOG_LISTING_KINDS = [
+  'FLOWERS',
+  'BOUQUETS',
+  'COMPOSITIONS',
+  'GIFTS',
+  'OTHER',
+] as const;
+export type CatalogListingKind = (typeof CATALOG_LISTING_KINDS)[number];
+
+/** Storefront height filter bands mapped to Product.heightCm. */
+export const HEIGHT_BANDS = [
+  { id: 'up_to_50', label: 'до 50 см', minCm: null, maxCm: 50 },
+  { id: '50_60', label: '50–60 см', minCm: 50, maxCm: 60 },
+  { id: '60_70', label: '60–70 см', minCm: 60, maxCm: 70 },
+  { id: '70_plus', label: '70+ см', minCm: 70, maxCm: null },
+] as const;
+export type HeightBandId = (typeof HEIGHT_BANDS)[number]['id'];
+
+export function isCatalogListingKind(value: string): value is CatalogListingKind {
+  return (CATALOG_LISTING_KINDS as readonly string[]).includes(value);
+}
+
+export function isHeightBandId(value: string): value is HeightBandId {
+  return HEIGHT_BANDS.some((band) => band.id === value);
+}
+
+export function heightBandWhere(
+  bandId: HeightBandId,
+): { gte?: number; lte?: number } | null {
+  const band = HEIGHT_BANDS.find((item) => item.id === bandId);
+  if (!band) return null;
+  if (band.minCm != null && band.maxCm != null) {
+    return { gte: band.minCm, lte: band.maxCm };
+  }
+  if (band.maxCm != null) return { lte: band.maxCm };
+  if (band.minCm != null) return { gte: band.minCm };
+  return null;
+}
+
+export type CatalogCategoryDto = {
+  id: string;
+  parentId: string | null;
+  slug: string;
+  name: string;
+  listingKind: CatalogListingKind | null;
+  sortOrder: number;
+  visibility: TaxonomyVisibility;
+  seoTitle: string | null;
+  seoDescription: string | null;
+  noIndex: boolean;
+};
+
+export type CatalogCategoryTreeNodeDto = CatalogCategoryDto & {
+  children: CatalogCategoryTreeNodeDto[];
+};
+
+export type CatalogCategoryAdminDto = CatalogCategoryDto & {
+  version: number;
+  createdAt: string;
+  updatedAt: string;
+  childrenCount: number;
+  productsCount: number;
+};
+
+export type FlowerTypeDto = {
+  id: string;
+  slug: string;
+  name: string;
+  sortOrder: number;
+  visibility: TaxonomyVisibility;
+};
+
+export type FlowerVarietyDto = {
+  id: string;
+  flowerTypeId: string;
+  slug: string;
+  name: string;
+  sortOrder: number;
+  visibility: TaxonomyVisibility;
+};
+
+export type FlowerOriginDto = {
+  id: string;
+  slug: string;
+  name: string;
+  sortOrder: number;
+  visibility: TaxonomyVisibility;
+};
+
+export type ProductFamilyMemberDto = {
+  productId: string;
+  slug: string;
+  name: string;
+  sortOrder: number;
+  heightCm: number | null;
+  flowerOrigin: TaxonomyRefDto | null;
+  price: PriceRangeDto | null;
+  primaryImageUrl: string | null;
+  availability: CommercialAvailability;
+  lifecycle?: ProductLifecycle;
+  /** Present on storefront when the member is the currently viewed product. */
+  isCurrent?: boolean;
+};
+
+export type ProductFamilyDto = {
+  id: string;
+  name: string;
+  version: number;
+  members: ProductFamilyMemberDto[];
+};
+
+/**
+ * Clean storefront card subtitle — avoids duplicating name when it already
+ * contains height/origin words.
+ */
+export function productCardSubtitle(input: {
+  name: string;
+  heightCm: number | null;
+  originName: string | null;
+  varietyName?: string | null;
+}): string | null {
+  const parts: string[] = [];
+  const nameLower = input.name.toLowerCase();
+  if (input.heightCm != null) {
+    const heightLabel = `${input.heightCm} см`;
+    if (!nameLower.includes(`${input.heightCm}`) && !nameLower.includes(heightLabel)) {
+      parts.push(heightLabel);
+    }
+  }
+  if (input.originName) {
+    if (!nameLower.includes(input.originName.toLowerCase())) {
+      parts.push(input.originName);
+    }
+  }
+  return parts.length > 0 ? parts.join(' · ') : null;
+}
 
 export type MoneyMinorDto = {
   currency: string;
@@ -221,9 +362,16 @@ export type ProductListItemDto = {
   availability: CommercialAvailability;
   /** OCC token — required for admin quick updates from the list. */
   version: number;
-  /** Optional factual height in cm; not a filter. */
+  /** Optional stem/product height in cm (flower filters when set). */
   heightCm: number | null;
   bouquetSize: TaxonomyRefDto | null;
+  catalogCategory: TaxonomyRefDto | null;
+  flowerType: TaxonomyRefDto | null;
+  flowerVariety: TaxonomyRefDto | null;
+  flowerOrigin: TaxonomyRefDto | null;
+  family: { id: string; name: string } | null;
+  /** Presentation helper for storefront cards. */
+  cardSubtitle: string | null;
   price: PriceRangeDto | null;
   promotion: ProductPromotionPublicDto | null;
   /** Cheapest active variant for quick-add (effective promotional price). */
@@ -248,6 +396,15 @@ export type ProductAdminDto = {
   heightCm: number | null;
   bouquetSize: TaxonomyRefDto | null;
   bouquetSizeId: string | null;
+  catalogCategoryId: string | null;
+  catalogCategory: TaxonomyRefDto | null;
+  flowerTypeId: string | null;
+  flowerType: TaxonomyRefDto | null;
+  flowerVarietyId: string | null;
+  flowerVariety: TaxonomyRefDto | null;
+  flowerOriginId: string | null;
+  flowerOrigin: TaxonomyRefDto | null;
+  family: ProductFamilyDto | null;
   currency: string;
   publishedAt: string | null;
   publishAt: string | null;
@@ -283,6 +440,13 @@ export type ProductPublicDto = {
   availability: CommercialAvailability;
   heightCm: number | null;
   bouquetSize: TaxonomyRefDto | null;
+  catalogCategory: TaxonomyRefDto | null;
+  flowerType: TaxonomyRefDto | null;
+  flowerVariety: TaxonomyRefDto | null;
+  flowerOrigin: TaxonomyRefDto | null;
+  /** Other sellable products in the same family (human UX: «Другие варианты»). */
+  family: ProductFamilyDto | null;
+  cardSubtitle: string | null;
   currency: string;
   price: PriceRangeDto;
   promotion: ProductPromotionPublicDto | null;

@@ -3,9 +3,11 @@ import { roleHasPermission, type ProductAdminDto } from '@bouquet-one/contracts'
 import { AdminApiError } from '@/lib/admin-api';
 import {
   fetchBestsellerGroups,
+  fetchCatalogStructurePickers,
   fetchProduct,
   fetchProductTaxonomies,
 } from '@/lib/admin-catalog-api';
+import { categoryPickerOptions } from '@/lib/admin-catalog-picker-labels';
 import { requireAdminPermission } from '@/lib/admin-page-auth';
 import { ProductEditor } from '@/components/admin/product-editor';
 
@@ -23,9 +25,10 @@ export default async function AdminProductEditPage({ params }: Props) {
     throw error;
   }
 
-  const [taxonomies, bestsellerGroups] = await Promise.all([
+  const [taxonomies, bestsellerGroups, structure] = await Promise.all([
     fetchProductTaxonomies(),
     fetchBestsellerGroups(),
+    fetchCatalogStructurePickers(),
   ]);
 
   return (
@@ -49,6 +52,15 @@ export default async function AdminProductEditPage({ params }: Props) {
           flowers: taxonomies.flowers.map((item) => ({ id: item.id, name: item.name })),
           bouquetSizes: taxonomies.bouquetSizes.map((item) => ({ id: item.id, name: item.name })),
           productLines: taxonomies.productLines.map((item) => ({ id: item.id, name: item.name })),
+          categories: categoryPickerOptions(structure.categories),
+          flowerTypes: structure.flowerTypes.map((item) => ({ id: item.id, name: item.name })),
+          flowerVarieties: structure.flowerVarieties.map((item) => ({
+            id: item.id,
+            name: item.name,
+            flowerTypeId: item.flowerTypeId,
+          })),
+          flowerOrigins: structure.flowerOrigins.map((item) => ({ id: item.id, name: item.name })),
+          families: structure.families.map((item) => ({ id: item.id, name: item.name })),
         }}
         bestsellerGroups={bestsellerGroups
           .filter((group) => group.active)

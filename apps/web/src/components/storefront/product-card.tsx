@@ -131,6 +131,10 @@ export function ProductCard({ product, priority = false, sizes = DEFAULT_SIZES }
           <Link href={`/bukety/${product.slug}`}>{product.name}</Link>
         </h3>
 
+        {product.cardSubtitle ? (
+          <p className="sf-small mt-0.5 text-muted">{product.cardSubtitle}</p>
+        ) : null}
+
         {priceLabel ? (
           <p className="sf-product-card__price">
             <span className={`sf-price ${promotion ? 'sf-price--sale' : ''}`}>{priceLabel}</span>

@@ -204,6 +204,39 @@ export class SaveProductEditorDto extends ExpectedVersionDto {
   @IsUUID()
   bouquetSizeId?: string | null;
 
+  @IsOptional()
+  @ValidateIf((_, value) => value !== null)
+  @IsUUID()
+  catalogCategoryId?: string | null;
+
+  @IsOptional()
+  @ValidateIf((_, value) => value !== null)
+  @IsUUID()
+  flowerTypeId?: string | null;
+
+  @IsOptional()
+  @ValidateIf((_, value) => value !== null)
+  @IsUUID()
+  flowerVarietyId?: string | null;
+
+  @IsOptional()
+  @ValidateIf((_, value) => value !== null)
+  @IsUUID()
+  flowerOriginId?: string | null;
+
+  /** null clears family membership; omit to leave unchanged. */
+  @IsOptional()
+  @ValidateIf((_, value) => value !== null)
+  @IsUUID()
+  familyId?: string | null;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  @Max(10_000)
+  familyMemberSortOrder?: number;
+
   @IsArray()
   @ArrayMaxSize(50)
   @IsUUID(undefined, { each: true })
@@ -693,6 +726,66 @@ class ProductFacetQueryDto {
   @Transform(toOptionalBoolean)
   @IsBoolean()
   promotionalOnly?: boolean;
+
+  @IsOptional()
+  @IsUUID()
+  catalogCategoryId?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(120)
+  categorySlug?: string;
+
+  @IsOptional()
+  @Transform(toStringList)
+  @IsArray()
+  @ArrayMaxSize(FACET_LIST_MAX)
+  @IsUUID(undefined, { each: true })
+  flowerTypeId?: string[];
+
+  @IsOptional()
+  @Transform(toStringList)
+  @IsArray()
+  @ArrayMaxSize(FACET_LIST_MAX)
+  @MaxLength(120, { each: true })
+  flowerTypeSlug?: string[];
+
+  @IsOptional()
+  @Transform(toStringList)
+  @IsArray()
+  @ArrayMaxSize(FACET_LIST_MAX)
+  @IsUUID(undefined, { each: true })
+  flowerVarietyId?: string[];
+
+  @IsOptional()
+  @Transform(toStringList)
+  @IsArray()
+  @ArrayMaxSize(FACET_LIST_MAX)
+  @MaxLength(120, { each: true })
+  flowerVarietySlug?: string[];
+
+  @IsOptional()
+  @Transform(toStringList)
+  @IsArray()
+  @ArrayMaxSize(FACET_LIST_MAX)
+  @IsUUID(undefined, { each: true })
+  flowerOriginId?: string[];
+
+  @IsOptional()
+  @Transform(toStringList)
+  @IsArray()
+  @ArrayMaxSize(FACET_LIST_MAX)
+  @MaxLength(120, { each: true })
+  flowerOriginSlug?: string[];
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(32)
+  heightBand?: string;
+
+  @IsOptional()
+  @IsUUID()
+  familyId?: string;
 }
 
 export class ProductListQueryDto extends ProductFacetQueryDto {

@@ -5,6 +5,7 @@ import { FavoriteButton } from '@/components/storefront/favorite-button';
 import { ProductDetailInfo } from '@/components/storefront/product-detail-info';
 import { ProductGallery } from '@/components/storefront/product-gallery';
 import { ProductGrid } from '@/components/storefront/product-grid';
+import { ProductFamilySwitcher } from '@/components/storefront/product-family-switcher';
 import { ProductPurchasePanel } from '@/components/storefront/product-purchase-panel';
 import { SectionRail } from '@/components/storefront/section-rail';
 import {
@@ -18,6 +19,7 @@ import { serializeJsonLd } from '@/lib/seo/json-ld';
 import { buildPageMetadata } from '@/lib/seo/metadata';
 import { buildBreadcrumbJsonLd, buildProductJsonLd } from '@/lib/seo/product-json-ld';
 import { pickDerivativeUrl } from '@/lib/media';
+import { categoryNavHref } from '@/lib/storefront-nav';
 
 type Params = Promise<{ slug: string }>;
 
@@ -70,9 +72,22 @@ export default async function ProductPage({ params }: { params: Params }) {
   ]);
 
   const productLd = buildProductJsonLd(product);
+  const catalogCrumb = product.catalogCategory
+    ? {
+        name: product.catalogCategory.name,
+        path: categoryNavHref(product.catalogCategory.slug),
+      }
+    : { name: 'Букеты', path: '/bukety' };
+
+  const breadcrumbItems = [
+    { name: 'Главная', href: '/' },
+    { name: catalogCrumb.name, href: catalogCrumb.path },
+    { name: product.name },
+  ];
+
   const breadcrumbLd = buildBreadcrumbJsonLd([
     { name: 'Главная', path: '/' },
-    { name: 'Каталог', path: '/bukety' },
+    { name: catalogCrumb.name, path: catalogCrumb.path },
     { name: product.name, path: `/bukety/${product.slug}` },
   ]);
 
@@ -93,14 +108,7 @@ export default async function ProductPage({ params }: { params: Params }) {
       />
 
       <div className="sf-container-wide sf-pdp__inner">
-        <Breadcrumbs
-          className="mb-4 text-center"
-          items={[
-            { name: 'Главная', href: '/' },
-            { name: 'Букеты', href: '/bukety' },
-            { name: product.name },
-          ]}
-        />
+        <Breadcrumbs className="mb-4 text-center" items={breadcrumbItems} />
 
         <article className="sf-pdp-shell">
           <header className="sf-pdp-shell__head">
@@ -127,6 +135,10 @@ export default async function ProductPage({ params }: { params: Params }) {
                 variants={product.variants}
                 phone={phone}
               />
+
+              {product.family ? (
+                <ProductFamilySwitcher family={product.family} currentSlug={product.slug} />
+              ) : null}
 
               <ProductDetailInfo
                 product={product}

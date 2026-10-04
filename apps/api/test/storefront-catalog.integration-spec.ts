@@ -55,6 +55,8 @@ describe('Storefront catalog (integration)', () => {
     await pool.query('DELETE FROM product_occasions');
     await pool.query('DELETE FROM product_recipients');
     await pool.query('DELETE FROM product_colors');
+    await pool.query('DELETE FROM product_family_members');
+    await pool.query('DELETE FROM product_families');
     await pool.query('DELETE FROM products');
     await pool.query('DELETE FROM budget_ranges');
     await pool.query('DELETE FROM bouquet_sizes');

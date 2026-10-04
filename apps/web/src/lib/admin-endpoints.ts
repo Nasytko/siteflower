@@ -127,6 +127,19 @@ export const adminEndpoints = {
 
   promotions: `${ADMIN}/catalog/promotions`,
 
+  catalogCategories: `${ADMIN}/catalog/categories`,
+  catalogCategoriesTree: `${ADMIN}/catalog/categories/tree`,
+  catalogCategory: (id: string) => `${ADMIN}/catalog/categories/${id}`,
+
+  flowerTypes: `${ADMIN}/catalog/flower-refs/types`,
+  flowerVarieties: `${ADMIN}/catalog/flower-refs/varieties`,
+  flowerOrigins: `${ADMIN}/catalog/flower-refs/origins`,
+
+  productFamilies: `${ADMIN}/catalog/product-families`,
+  productFamily: (id: string) => `${ADMIN}/catalog/product-families/${id}`,
+  productFamilyMembersOrder: (id: string) =>
+    `${ADMIN}/catalog/product-families/${id}/members/order`,
+
   orders: `${ADMIN}/orders`,
   storefrontSettings: `${ADMIN}/storefront/settings`,
   instagramPosts: `${ADMIN}/storefront/instagram/posts`,

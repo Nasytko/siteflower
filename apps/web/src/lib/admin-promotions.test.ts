@@ -25,6 +25,12 @@ function row(
     version: 1,
     heightCm: null,
     bouquetSize: null,
+    catalogCategory: null,
+    flowerType: null,
+    flowerVariety: null,
+    flowerOrigin: null,
+    family: null,
+    cardSubtitle: null,
     price: {
       currency: 'BYN',
       minMinor: '9900',
