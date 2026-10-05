@@ -18,8 +18,9 @@ export type PrimaryNavItem = {
 };
 
 /**
- * Deliberately small IA: catalog, two discovery hubs, promos, and the two
- * service pages. No category / style / collection trees.
+ * Outage-only fallback — used when NavigationMenu API throws/unavailable.
+ * Successful empty menu must NOT fall back here (manager may have cleared items).
+ * Live storefront nav comes from NavigationMenu (admin: Магазин → Главное меню).
  */
 export const PRIMARY_NAV: PrimaryNavItem[] = [
   { id: 'bukety', label: 'Букеты', href: '/bukety' },

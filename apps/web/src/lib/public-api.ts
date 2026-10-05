@@ -154,9 +154,18 @@ export function listCatalogCategoryTree() {
 }
 
 export function getCatalogCategory(slug: string) {
-  return publicFetch<CatalogCategoryDto>(`/catalog/categories/${encodeURIComponent(slug)}`, {
+  return publicFetch<
+    CatalogCategoryDto & { redirectedFrom?: string | null; canonicalSlug?: string }
+  >(`/catalog/categories/${encodeURIComponent(slug)}`, {
     tags: ['catalog', 'categories', `category:${slug}`],
   });
+}
+
+export function listCategoryFilters(slug: string) {
+  return publicFetch<import('@bouquet-one/contracts').CatalogCategoryFilterPublicDto[]>(
+    `/catalog/categories/${encodeURIComponent(slug)}/filters`,
+    { tags: ['catalog', 'categories', `category:${slug}`] },
+  );
 }
 
 export function listFlowerTypes() {
@@ -278,6 +287,13 @@ export function getStorefrontSettings() {
   return publicFetch<StorefrontSettingsPublicDto>('/storefront/settings', {
     tags: ['storefront', 'settings'],
   });
+}
+
+export function getMainNavigation() {
+  return publicFetch<import('@bouquet-one/contracts').NavigationMenuPublicDto>(
+    '/storefront/navigation/main',
+    { tags: ['storefront', 'navigation'] },
+  );
 }
 
 /** Public seller / contacts block for legal pages and footer. */

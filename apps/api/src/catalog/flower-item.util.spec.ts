@@ -25,15 +25,15 @@ describe('flowerItem helpers', () => {
         originName: 'Эквадор',
         heightCm: 70,
       }),
-    ).toBe('Хризантема Бигуди · Эквадор · 70 см');
+    ).toBe('Хризантема Бигуди 70 см Эквадор');
   });
 
   it('suggests mono and mixed product names', () => {
     expect(
       suggestProductNameFromComposition([
-        { displayName: 'Хризантема Бигуди · Эквадор · 70 см', quantity: 9 },
+        { displayName: 'Хризантема Бигуди 70 см Эквадор', quantity: 9 },
       ]),
-    ).toBe('Букет из 9 Хризантема Бигуди · Эквадор · 70 см');
+    ).toBe('Букет из 9 Хризантема Бигуди 70 см Эквадор');
     expect(
       suggestProductNameFromComposition([
         { displayName: 'Роза', quantity: 10 },
@@ -53,7 +53,7 @@ describe('flowerItem helpers', () => {
       originName: 'Эквадор',
     });
     expect(fields.identityKey).toBe('t1|v1|o1|60');
-    expect(fields.name).toBe('Роза Мондиаль · Эквадор · 60 см');
+    expect(fields.name).toBe('Роза Мондиаль 60 см Эквадор');
     expect(fields.slug.length).toBeGreaterThan(0);
   });
 });

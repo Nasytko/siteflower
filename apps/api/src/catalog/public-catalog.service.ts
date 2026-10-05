@@ -1,5 +1,6 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import {
+  gateListingFiltersByEnabledKeys,
   heightBandWhere,
   isHeightBandId,
   type BestsellerGroupPublicDto,
@@ -18,6 +19,7 @@ import { MediaService } from '../media/media.service';
 import { BestsellersService } from './bestsellers.service';
 import { BudgetRangesService } from './budget-ranges.service';
 import { CatalogCategoriesService } from './catalog-categories.service';
+import { CatalogFiltersService } from './catalog-filters.service';
 import { isEffectivelyPublished } from './catalog.logic';
 import {
   PRODUCT_INCLUDE,
@@ -59,6 +61,7 @@ export class PublicCatalogService {
     private readonly bestsellers: BestsellersService,
     private readonly budgetRanges: BudgetRangesService,
     private readonly categories: CatalogCategoriesService,
+    private readonly catalogFilters: CatalogFiltersService,
     private readonly flowerRefs: FlowerRefsService,
     private readonly families: ProductFamiliesService,
     private readonly promotions: PromotionsService,
@@ -112,26 +115,50 @@ export class PublicCatalogService {
       ? await this.budgetRanges.resolveBounds(query.budgetRangeIds)
       : [];
     const catalogFilters = await this.resolveCatalogFilters(query);
+
+    // /katalog/[slug]: only Filter Pool–enabled facets may affect Prisma WHERE.
+    let gatedFacet = {
+      occasionIds: query.occasionIds,
+      occasionSlugs: query.occasionSlugs,
+      recipientIds: query.recipientIds,
+      recipientSlugs: query.recipientSlugs,
+      colorIds: query.colorIds,
+      colorSlugs: query.colorSlugs,
+      bouquetSizeIds: query.bouquetSizeIds,
+      bouquetSizeSlugs: query.bouquetSizeSlugs,
+      promotionalOnly: query.promotionalOnly,
+      minPriceMinor: query.minPriceMinor,
+      maxPriceMinor: query.maxPriceMinor,
+      flowerTypeIds: catalogFilters.flowerTypeIds,
+      flowerTypeSlugs: catalogFilters.flowerTypeSlugs,
+      flowerVarietyIds: catalogFilters.flowerVarietyIds,
+      flowerVarietySlugs: catalogFilters.flowerVarietySlugs,
+      flowerOriginIds: catalogFilters.flowerOriginIds,
+      flowerOriginSlugs: catalogFilters.flowerOriginSlugs,
+      heightCm: catalogFilters.heightCm,
+    };
+    if (query.categorySlug) {
+      try {
+        const enabledKeys = await this.catalogFilters.getEnabledPublicFilterKeys(
+          query.categorySlug,
+        );
+        gatedFacet = gateListingFiltersByEnabledKeys(gatedFacet, enabledKeys);
+      } catch {
+        // Unknown/hidden category: resolveCatalogFilters already scopes to empty id.
+      }
+    }
+
     const { items, total } = await this.products.list({
       filters: {
         publishedAt: now,
         search: query.search,
         availability: query.availability,
-        occasionIds: query.occasionIds,
-        occasionSlugs: query.occasionSlugs,
-        recipientIds: query.recipientIds,
-        recipientSlugs: query.recipientSlugs,
-        colorIds: query.colorIds,
-        colorSlugs: query.colorSlugs,
         flowerIds: query.flowerIds,
         flowerSlugs: query.flowerSlugs,
-        bouquetSizeIds: query.bouquetSizeIds,
-        bouquetSizeSlugs: query.bouquetSizeSlugs,
-        promotionalOnly: query.promotionalOnly,
         budgetRanges,
-        minPriceMinor: query.minPriceMinor,
-        maxPriceMinor: query.maxPriceMinor,
-        ...catalogFilters,
+        catalogCategoryIds: catalogFilters.catalogCategoryIds,
+        familyId: catalogFilters.familyId,
+        ...gatedFacet,
       },
       skip: (page - 1) * pageSize,
       take: pageSize,
@@ -174,8 +201,26 @@ export class PublicCatalogService {
     return this.categories.tree(true);
   }
 
-  getCategoryBySlug(slug: string) {
-    return this.categories.getBySlug(slug);
+  async getCategoryBySlug(slug: string): Promise<
+    Awaited<ReturnType<CatalogCategoriesService['getBySlug']>> & {
+      redirectedFrom: string | null;
+      canonicalSlug: string;
+    }
+  > {
+    const candidates = await this.slugRedirects.resolveChain('CATALOG_CATEGORY', slug);
+    for (const candidate of candidates) {
+      try {
+        const category = await this.categories.getBySlug(candidate);
+        return {
+          ...category,
+          redirectedFrom: slug !== category.slug ? slug : null,
+          canonicalSlug: category.slug,
+        };
+      } catch {
+        // try next redirect hop
+      }
+    }
+    throw new NotFoundException('Category not found');
   }
 
   listFlowerTypes() {
@@ -202,10 +247,19 @@ export class PublicCatalogService {
     const flowerIds = product.components
       .map((component) => component.flowerId)
       .filter((id): id is string => Boolean(id));
+    const flowerTypeIds = product.components
+      .map((component) => component.flowerItem?.flowerTypeId)
+      .filter((id): id is string => Boolean(id));
+    const flowerItemIds = product.components
+      .map((component) => component.flowerItemId)
+      .filter((id): id is string => Boolean(id));
 
     const overlap: Prisma.ProductWhereInput[] = [];
     if (product.bouquetSizeId) {
       overlap.push({ bouquetSizeId: product.bouquetSizeId });
+    }
+    if (product.catalogCategoryId) {
+      overlap.push({ catalogCategoryId: product.catalogCategoryId });
     }
     if (occasionIds.length > 0) {
       overlap.push({ occasions: { some: { occasionId: { in: occasionIds } } } });
@@ -218,6 +272,13 @@ export class PublicCatalogService {
     }
     if (flowerIds.length > 0) {
       overlap.push({ components: { some: { flowerId: { in: flowerIds } } } });
+    }
+    if (flowerItemIds.length > 0) {
+      overlap.push({ components: { some: { flowerItemId: { in: flowerItemIds } } } });
+    } else if (flowerTypeIds.length > 0) {
+      overlap.push({
+        components: { some: { flowerItem: { flowerTypeId: { in: flowerTypeIds } } } },
+      });
     }
     if (overlap.length === 0) {
       return [];
@@ -313,7 +374,7 @@ export class PublicCatalogService {
 
   async getSitemap(): Promise<SitemapEntryDto[]> {
     const now = new Date();
-    const [products, flowers, occasions, recipients] = await Promise.all([
+    const [products, flowers, occasions, recipients, categories] = await Promise.all([
       this.prisma.client.product.findMany({
         where: { ...effectivelyPublishedWhere(now), noIndex: false },
         select: { slug: true, updatedAt: true },
@@ -334,9 +395,16 @@ export class PublicCatalogService {
         select: { slug: true, updatedAt: true },
         orderBy: { updatedAt: 'desc' },
       }),
+      this.prisma.client.catalogCategory.findMany({
+        where: { visibility: 'VISIBLE', noIndex: false },
+        select: { slug: true, updatedAt: true },
+        orderBy: { updatedAt: 'desc' },
+      }),
     ]);
 
     const newestProductUpdate = products[0]?.updatedAt.toISOString() ?? null;
+    // Keep legacy hubs for cvety/bukety; other visible categories land on /katalog/[slug].
+    const legacyNavSlugs = new Set(['cvety', 'bukety']);
 
     return [
       { path: '/bukety', updatedAt: newestProductUpdate },
@@ -345,6 +413,12 @@ export class PublicCatalogService {
         path: `/bukety/${product.slug}`,
         updatedAt: product.updatedAt.toISOString(),
       })),
+      ...categories
+        .filter((category) => !legacyNavSlugs.has(category.slug))
+        .map((category) => ({
+          path: `/katalog/${category.slug}`,
+          updatedAt: category.updatedAt.toISOString(),
+        })),
       ...flowers.map((flower) => ({
         path: `/cvety/${flower.slug}`,
         updatedAt: flower.updatedAt.toISOString(),

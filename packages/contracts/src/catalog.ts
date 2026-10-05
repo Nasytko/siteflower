@@ -39,6 +39,7 @@ export const SLUG_ENTITY_TYPES = [
   'COLOR',
   'FLOWER',
   'BOUQUET_SIZE',
+  'CATALOG_CATEGORY',
 ] as const;
 export type SlugEntityType = (typeof SLUG_ENTITY_TYPES)[number];
 
@@ -60,36 +61,178 @@ export const CATALOG_LISTING_KINDS = [
 export type CatalogListingKind = (typeof CATALOG_LISTING_KINDS)[number];
 
 /**
- * Storefront height filter bands.
- * Matched against Product.heightCm (bouquet/card) OR FlowerItem.heightCm (stem) via composition.
+ * Stem-height filter bands ("Высота цветка") — FlowerItem.heightCm only.
+ * Half-open ranges so boundaries do not overlap:
+ * <=50 | >50 && <=60 | >60 && <=70 | >70
  */
 export const HEIGHT_BANDS = [
-  { id: 'up_to_50', label: 'до 50 см', minCm: null, maxCm: 50 },
-  { id: '50_60', label: '50–60 см', minCm: 50, maxCm: 60 },
-  { id: '60_70', label: '60–70 см', minCm: 60, maxCm: 70 },
-  { id: '70_plus', label: '70+ см', minCm: 70, maxCm: null },
+  { id: 'up_to_50', label: 'до 50 см', minExclusive: null, maxInclusive: 50 },
+  { id: '50_60', label: '51–60 см', minExclusive: 50, maxInclusive: 60 },
+  { id: '60_70', label: '61–70 см', minExclusive: 60, maxInclusive: 70 },
+  { id: '70_plus', label: 'от 71 см', minExclusive: 70, maxInclusive: null },
 ] as const;
 export type HeightBandId = (typeof HEIGHT_BANDS)[number]['id'];
 
+/** Global catalog filter pool keys (definitions). */
+export const CATALOG_FILTER_KEYS = [
+  'price',
+  'promo',
+  'flower_type',
+  'variety',
+  'origin',
+  'stem_height',
+  'bouquet_height',
+  'color',
+  'quantity',
+  'bouquet_size',
+  'occasion',
+  'recipient',
+] as const;
+export type CatalogFilterKey = (typeof CATALOG_FILTER_KEYS)[number];
+
+export const CATALOG_FILTER_TYPES = [
+  'SELECT',
+  'MULTI_SELECT',
+  'RANGE',
+  'TOGGLE',
+  'CHECKBOX',
+  'NUMBER_RANGE',
+] as const;
+export type CatalogFilterType = (typeof CATALOG_FILTER_TYPES)[number];
+
+export const CATALOG_FILTER_PRESETS = ['FLOWERS', 'BOUQUETS', 'CARDS', 'CANDLES', 'OTHER'] as const;
+export type CatalogFilterPreset = (typeof CATALOG_FILTER_PRESETS)[number];
+
 export function isCatalogListingKind(value: string): value is CatalogListingKind {
   return (CATALOG_LISTING_KINDS as readonly string[]).includes(value);
+}
+
+export function isCatalogFilterKey(value: string): value is CatalogFilterKey {
+  return (CATALOG_FILTER_KEYS as readonly string[]).includes(value);
 }
 
 export function isHeightBandId(value: string): value is HeightBandId {
   return HEIGHT_BANDS.some((band) => band.id === value);
 }
 
+/** Prisma IntFilter bounds for stem-height bands (non-overlapping). */
 export function heightBandWhere(
   bandId: HeightBandId,
-): { gte?: number; lte?: number } | null {
+): { gt?: number; gte?: number; lte?: number } | null {
   const band = HEIGHT_BANDS.find((item) => item.id === bandId);
   if (!band) return null;
-  if (band.minCm != null && band.maxCm != null) {
-    return { gte: band.minCm, lte: band.maxCm };
+  const where: { gt?: number; gte?: number; lte?: number } = {};
+  if (band.minExclusive != null) where.gt = band.minExclusive;
+  if (band.maxInclusive != null) where.lte = band.maxInclusive;
+  return Object.keys(where).length > 0 ? where : null;
+}
+
+/** Default filter keys enabled for a category listingKind / preset. */
+export function defaultFilterKeysForPreset(preset: CatalogFilterPreset): CatalogFilterKey[] {
+  switch (preset) {
+    case 'FLOWERS':
+      return ['price', 'promo', 'flower_type', 'variety', 'origin', 'stem_height', 'color'];
+    case 'BOUQUETS':
+      return ['price', 'promo', 'flower_type', 'color', 'bouquet_size', 'occasion', 'recipient'];
+    case 'CARDS':
+      return ['price', 'occasion', 'recipient'];
+    case 'CANDLES':
+      return ['price', 'color', 'promo'];
+    default:
+      return ['price', 'promo', 'color', 'occasion', 'recipient'];
   }
-  if (band.maxCm != null) return { lte: band.maxCm };
-  if (band.minCm != null) return { gte: band.minCm };
-  return null;
+}
+
+export function listingKindToFilterPreset(
+  listingKind: CatalogListingKind | null | undefined,
+): CatalogFilterPreset {
+  switch (listingKind) {
+    case 'FLOWERS':
+      return 'FLOWERS';
+    case 'BOUQUETS':
+    case 'COMPOSITIONS':
+      return 'BOUQUETS';
+    case 'GIFTS':
+      return 'OTHER';
+    default:
+      return 'OTHER';
+  }
+}
+
+/**
+ * Strip listing filter fields that are not enabled for the category Filter Pool config.
+ * Sort / search / pagination / category scope are never gated.
+ */
+export type GatedListingFilterFields = {
+  flowerTypeIds?: string[];
+  flowerTypeSlugs?: string[];
+  flowerVarietyIds?: string[];
+  flowerVarietySlugs?: string[];
+  flowerOriginIds?: string[];
+  flowerOriginSlugs?: string[];
+  colorIds?: string[];
+  colorSlugs?: string[];
+  occasionIds?: string[];
+  occasionSlugs?: string[];
+  recipientIds?: string[];
+  recipientSlugs?: string[];
+  bouquetSizeIds?: string[];
+  bouquetSizeSlugs?: string[];
+  heightCm?: { gt?: number; gte?: number; lte?: number };
+  heightBand?: string;
+  promotionalOnly?: boolean;
+  minPriceMinor?: string;
+  maxPriceMinor?: string;
+};
+
+export function gateListingFiltersByEnabledKeys<T extends GatedListingFilterFields>(
+  filters: T,
+  enabledKeys: ReadonlySet<CatalogFilterKey> | readonly CatalogFilterKey[],
+): T {
+  const keys = enabledKeys instanceof Set ? enabledKeys : new Set(enabledKeys);
+  const next: GatedListingFilterFields = { ...filters };
+
+  if (!keys.has('flower_type')) {
+    delete next.flowerTypeIds;
+    delete next.flowerTypeSlugs;
+  }
+  if (!keys.has('variety')) {
+    delete next.flowerVarietyIds;
+    delete next.flowerVarietySlugs;
+  }
+  if (!keys.has('origin')) {
+    delete next.flowerOriginIds;
+    delete next.flowerOriginSlugs;
+  }
+  if (!keys.has('color')) {
+    delete next.colorIds;
+    delete next.colorSlugs;
+  }
+  if (!keys.has('occasion')) {
+    delete next.occasionIds;
+    delete next.occasionSlugs;
+  }
+  if (!keys.has('recipient')) {
+    delete next.recipientIds;
+    delete next.recipientSlugs;
+  }
+  if (!keys.has('bouquet_size')) {
+    delete next.bouquetSizeIds;
+    delete next.bouquetSizeSlugs;
+  }
+  if (!keys.has('stem_height')) {
+    delete next.heightCm;
+    delete next.heightBand;
+  }
+  if (!keys.has('promo')) {
+    delete next.promotionalOnly;
+  }
+  if (!keys.has('price')) {
+    delete next.minPriceMinor;
+    delete next.maxPriceMinor;
+  }
+
+  return next as T;
 }
 
 export type CatalogCategoryDto = {
@@ -119,6 +262,47 @@ export type CatalogCategoryAdminDto = CatalogCategoryDto & {
   productsCount: number;
   /** Products on this category + all descendants (admin tree). */
   descendantProductsCount: number;
+};
+
+export type CatalogFilterDefinitionDto = {
+  id: string;
+  key: CatalogFilterKey;
+  name: string;
+  description: string | null;
+  filterType: CatalogFilterType;
+  sourceKey: string;
+  supported: boolean;
+  defaultEnabled: boolean;
+  defaultSortOrder: number;
+};
+
+export type CatalogCategoryFilterConfigDto = {
+  id: string;
+  definitionId: string;
+  key: CatalogFilterKey;
+  name: string;
+  label: string;
+  filterType: CatalogFilterType;
+  enabled: boolean;
+  position: number;
+  labelOverride: string | null;
+  collapsed: boolean;
+  version: number;
+};
+
+export type CatalogFilterOptionDto = {
+  id: string;
+  slug: string;
+  name: string;
+};
+
+export type CatalogCategoryFilterPublicDto = {
+  key: CatalogFilterKey;
+  label: string;
+  filterType: CatalogFilterType;
+  collapsed: boolean;
+  /** Omitted/empty for price/promo; slug options for facets; band ids for stem_height. */
+  options: CatalogFilterOptionDto[];
 };
 
 export type FlowerTypeDto = {
@@ -219,7 +403,10 @@ export function flowerItemIdentityKey(input: {
   ].join('|');
 }
 
-/** Human label for a flower item (manager-facing). */
+/**
+ * Canonical FlowerItem label from dictionary fields.
+ * Format: "{Type} {Variety} {height} см {Origin}" — e.g. "Роза Мондиаль 60 см Эквадор".
+ */
 export function flowerItemDisplayName(input: {
   typeName: string;
   varietyName?: string | null;
@@ -228,11 +415,28 @@ export function flowerItemDisplayName(input: {
 }): string {
   const parts: string[] = [input.typeName.trim()];
   if (input.varietyName?.trim()) parts.push(input.varietyName.trim());
-  const detail: string[] = [];
-  if (input.originName?.trim()) detail.push(input.originName.trim());
-  if (input.heightCm != null) detail.push(`${input.heightCm} см`);
-  if (detail.length === 0) return parts.join(' ');
-  return `${parts.join(' ')} · ${detail.join(' · ')}`;
+  if (input.heightCm != null) parts.push(`${input.heightCm} см`);
+  if (input.originName?.trim()) parts.push(input.originName.trim());
+  return parts.filter(Boolean).join(' ');
+}
+
+/**
+ * ProductComponent must reference exactly one composition target:
+ * FlowerItem (new) XOR legacy Flower — never both, never neither.
+ */
+export function assertComponentFlowerRefXor(input: {
+  flowerItemId?: string | null;
+  flowerId?: string | null;
+}): { flowerItemId: string | null; flowerId: string | null } {
+  const flowerItemId = input.flowerItemId?.trim() ? input.flowerItemId.trim() : null;
+  const flowerId = input.flowerId?.trim() ? input.flowerId.trim() : null;
+  if (flowerItemId && flowerId) {
+    throw new Error('COMPONENT_BOTH_REFS');
+  }
+  if (!flowerItemId && !flowerId) {
+    throw new Error('COMPONENT_NO_REF');
+  }
+  return { flowerItemId, flowerId };
 }
 
 /** Suggest a product name from composition rows (manager confirms). */
@@ -498,7 +702,7 @@ export type ProductListItemDto = {
   availability: CommercialAvailability;
   /** OCC token — required for admin quick updates from the list. */
   version: number;
-  /** Optional stem/product height in cm (flower filters when set). */
+  /** Bouquet/card height in cm (Product.heightCm). Stem height lives on FlowerItem. */
   heightCm: number | null;
   bouquetSize: TaxonomyRefDto | null;
   catalogCategory: TaxonomyRefDto | null;

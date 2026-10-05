@@ -169,6 +169,25 @@ enum SlugEntityType {
   COLOR
   FLOWER
   BOUQUET_SIZE
+  CATALOG_CATEGORY
+}
+
+enum CatalogFilterType {
+  SELECT
+  MULTI_SELECT
+  RANGE
+  TOGGLE
+  CHECKBOX
+  NUMBER_RANGE
+}
+
+/// Storefront main menu target — independent of CatalogCategory hierarchy.
+enum NavigationTargetType {
+  CATEGORY
+  PROMOTIONS
+  BESTSELLERS
+  PAGE
+  CUSTOM_URL
 }
 
 enum MediaFormat {
@@ -349,10 +368,53 @@ model CatalogCategory {
   parent   CatalogCategory?  @relation("CatalogCategoryTree", fields: [parentId], references: [id], onDelete: Restrict)
   children CatalogCategory[] @relation("CatalogCategoryTree")
   products Product[]
+  filters  CatalogCategoryFilter[]
 
   @@index([parentId, sortOrder])
   @@index([visibility, sortOrder])
   @@map("catalog_categories")
+}
+
+/// Global pool of catalog filter definitions (not category-specific options).
+model CatalogFilterDefinition {
+  id               String            @id @default(uuid()) @db.Uuid
+  key              String            @unique @db.VarChar(64)
+  name             String            @db.VarChar(120)
+  description      String?           @db.VarChar(500)
+  filterType       CatalogFilterType @map("filter_type")
+  sourceKey        String            @map("source_key") @db.VarChar(64)
+  supported        Boolean           @default(true)
+  defaultEnabled   Boolean           @default(false) @map("default_enabled")
+  defaultSortOrder Int               @default(0) @map("default_sort_order")
+  configSchema     Json?             @map("config_schema")
+  createdAt        DateTime          @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt        DateTime          @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  categoryFilters CatalogCategoryFilter[]
+
+  @@map("catalog_filter_definitions")
+}
+
+/// Per-category filter configuration from the global pool.
+model CatalogCategoryFilter {
+  id            String   @id @default(uuid()) @db.Uuid
+  categoryId    String   @map("category_id") @db.Uuid
+  definitionId  String   @map("definition_id") @db.Uuid
+  enabled       Boolean  @default(true)
+  position      Int      @default(0)
+  labelOverride String?  @map("label_override") @db.VarChar(120)
+  config        Json?
+  collapsed     Boolean  @default(false)
+  version       Int      @default(1)
+  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt     DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  category   CatalogCategory         @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  definition CatalogFilterDefinition @relation(fields: [definitionId], references: [id], onDelete: Restrict)
+
+  @@unique([categoryId, definitionId])
+  @@index([categoryId, position])
+  @@map("catalog_category_filters")
 }
 
 /// Flower species / type (Роза, Хризантема) — dictionary level 1, not composition Flower.
@@ -778,6 +840,48 @@ model SlugRedirect {
 // ---------------------------------------------------------------------------
 // Storefront configuration (constrained CMS — not a page builder)
 // ---------------------------------------------------------------------------
+
+/// Named storefront menu (e.g. key = "main"). Independent of CatalogCategory.
+model NavigationMenu {
+  id        String               @id @default(uuid()) @db.Uuid
+  key       String               @unique @db.VarChar(64)
+  name      String               @db.VarChar(120)
+  version   Int                  @default(1)
+  createdAt DateTime             @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime             @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  items NavigationMenuItem[]
+
+  @@map("navigation_menus")
+}
+
+/// Menu item: entity reference and/or custom URL. Hierarchy is independent of category tree.
+model NavigationMenuItem {
+  id           String               @id @default(uuid()) @db.Uuid
+  menuId       String               @map("menu_id") @db.Uuid
+  parentId     String?              @map("parent_id") @db.Uuid
+  label        String               @db.VarChar(120)
+  targetType   NavigationTargetType @map("target_type")
+  /// CatalogCategory / BestsellerGroup id when target is an entity.
+  targetId     String?              @map("target_id") @db.Uuid
+  /// Static page key (dostavka, o-nas, kontakty, povod) or custom path/URL.
+  customHref   String?              @map("custom_href") @db.VarChar(500)
+  sortOrder    Int                  @default(0) @map("sort_order")
+  enabled      Boolean              @default(true)
+  openInNewTab Boolean              @default(false) @map("open_in_new_tab")
+  accent       Boolean              @default(false)
+  version      Int                  @default(1)
+  createdAt    DateTime             @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt    DateTime             @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  menu     NavigationMenu       @relation(fields: [menuId], references: [id], onDelete: Cascade)
+  parent   NavigationMenuItem?  @relation("NavigationMenuItemTree", fields: [parentId], references: [id], onDelete: Cascade)
+  children NavigationMenuItem[] @relation("NavigationMenuItemTree")
+
+  @@index([menuId, sortOrder])
+  @@index([parentId, sortOrder])
+  @@map("navigation_menu_items")
+}
 
 /// Singleton row (`id = 1`) for public business/contact copy.
 model StorefrontSettings {

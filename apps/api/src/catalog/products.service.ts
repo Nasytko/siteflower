@@ -5,6 +5,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import {
+  assertComponentFlowerRefXor,
   heightBandWhere,
   isHeightBandId,
   normalizeSlug,
@@ -376,6 +377,11 @@ export class ProductsService {
       }
 
       if (source.components.length > 0) {
+        const flowerItemIds = source.components
+          .map((component) => component.flowerItemId)
+          .filter((id): id is string => Boolean(id));
+        // Duplicate is a new assignment — HIDDEN FlowerItems must not be cloned onto the draft.
+        await this.flowerRefs.assertFlowerItemsAssignable(flowerItemIds);
         await this.products.replaceComponents(
           product.id,
           source.components.map((component) => ({
@@ -550,12 +556,17 @@ export class ProductsService {
     const startsAt = input.promotion.startsAt ? new Date(input.promotion.startsAt) : null;
     const endsAt = input.promotion.endsAt ? new Date(input.promotion.endsAt) : null;
 
-    const flowerIds = input.components
+    const previousFlowerItemIds = new Set(
+      product.components
+        .map((component) => component.flowerItemId)
+        .filter((id): id is string => Boolean(id)),
+    );
+    const normalizedComponents = await this.normalizeCompositionComponents(input.components, {
+      previouslyAssignedFlowerItemIds: previousFlowerItemIds,
+    });
+    const flowerIds = normalizedComponents
       .map((component) => component.flowerId)
       .filter((flowerId): flowerId is string => Boolean(flowerId));
-    const flowerItemIds = input.components
-      .map((component) => component.flowerItemId)
-      .filter((flowerItemId): flowerItemId is string => Boolean(flowerItemId));
 
     const nextFlowerTypeId =
       input.flowerTypeId === undefined ? product.flowerTypeId : input.flowerTypeId;
@@ -627,7 +638,6 @@ export class ProductsService {
         if (!origin) throw new BadRequestException('Flower origin not found');
       }
       await this.assertReferencesExist(tx, 'flower', flowerIds);
-      await this.flowerRefs.assertFlowerItemsExist(flowerItemIds);
       await this.assertReferencesExist(tx, 'occasion', input.occasionIds);
       await this.assertReferencesExist(tx, 'recipient', input.recipientIds);
       await this.assertReferencesExist(tx, 'color', input.colorIds);
@@ -676,18 +686,7 @@ export class ProductsService {
           .map((variant) => ({ id: variant.id, priceMinor: variant.priceMinor })),
       });
 
-      await this.products.replaceComponents(
-        id,
-        input.components.map((component, index) => ({
-          flowerItemId: component.flowerItemId ?? null,
-          flowerId: component.flowerId ?? null,
-          displayName: component.displayName.trim(),
-          quantity: component.quantity ?? null,
-          unit: component.unit ?? 'UNSPECIFIED',
-          sortOrder: component.sortOrder ?? index,
-        })),
-        tx,
-      );
+      await this.products.replaceComponents(id, normalizedComponents, tx);
 
       await this.products.replaceOccasions(id, input.occasionIds, tx);
       await this.products.replaceRecipients(id, input.recipientIds, tx);
@@ -778,6 +777,14 @@ export class ProductsService {
       },
     });
     if (!item) throw new BadRequestException('Flower item not found');
+    const product = await this.products.findById(id);
+    if (!product) throw new NotFoundException('Product not found');
+    const previousFlowerItemIds = new Set(
+      product.components
+        .map((component) => component.flowerItemId)
+        .filter((itemId): itemId is string => Boolean(itemId)),
+    );
+    await this.flowerRefs.assertFlowerItemsAssignable([item.id], previousFlowerItemIds);
 
     await this.prisma.client.$transaction(async (tx) => {
       const data: Prisma.ProductUncheckedUpdateManyInput = input.clearLegacyFlowerAttrs
@@ -818,32 +825,27 @@ export class ProductsService {
     input: SetProductComponentsDto,
     actor: ActorContext,
   ): Promise<ProductAdminDto> {
-    const flowerIds = input.components
+    const product = await this.products.findById(id);
+    if (!product) throw new NotFoundException('Product not found');
+    const previousFlowerItemIds = new Set(
+      product.components
+        .map((component) => component.flowerItemId)
+        .filter((itemId): itemId is string => Boolean(itemId)),
+    );
+    const normalizedComponents = await this.normalizeCompositionComponents(input.components, {
+      previouslyAssignedFlowerItemIds: previousFlowerItemIds,
+    });
+    const flowerIds = normalizedComponents
       .map((component) => component.flowerId)
       .filter((flowerId): flowerId is string => Boolean(flowerId));
-    const flowerItemIds = input.components
-      .map((component) => component.flowerItemId)
-      .filter((flowerItemId): flowerItemId is string => Boolean(flowerItemId));
 
     await this.prisma.client.$transaction(async (tx) => {
       await this.guardVersion(tx, id, input.expectedVersion);
       await this.assertReferencesExist(tx, 'flower', flowerIds);
-      await this.flowerRefs.assertFlowerItemsExist(flowerItemIds);
-      await this.products.replaceComponents(
-        id,
-        input.components.map((component, index) => ({
-          flowerItemId: component.flowerItemId ?? null,
-          flowerId: component.flowerId ?? null,
-          displayName: component.displayName.trim(),
-          quantity: component.quantity ?? null,
-          unit: component.unit ?? 'UNSPECIFIED',
-          sortOrder: component.sortOrder ?? index,
-        })),
-        tx,
-      );
+      await this.products.replaceComponents(id, normalizedComponents, tx);
       await this.recordAudit(tx, actor, 'PRODUCT_UPDATED', id, {
-        components: input.components.length,
-        flowerItems: flowerItemIds.length,
+        components: normalizedComponents.length,
+        flowerItems: normalizedComponents.filter((row) => row.flowerItemId).length,
       });
     });
 
@@ -1179,6 +1181,71 @@ export class ProductsService {
       throw new ConflictException(OCC_CONFLICT_MESSAGE);
     }
     throw new NotFoundException('Product not found');
+  }
+
+  /**
+   * Normalize composition rows: FlowerItem XOR legacy Flower; block newly assigned HIDDEN items.
+   */
+  private async normalizeCompositionComponents(
+    components: Array<{
+      flowerItemId?: string | null;
+      flowerId?: string | null;
+      displayName: string;
+      quantity?: number | null;
+      unit?: 'PIECE' | 'STEM' | 'BUNCH' | 'UNSPECIFIED';
+      sortOrder?: number;
+    }>,
+    options?: { previouslyAssignedFlowerItemIds?: ReadonlySet<string> },
+  ): Promise<
+    Array<{
+      flowerItemId: string | null;
+      flowerId: string | null;
+      displayName: string;
+      quantity: number | null;
+      unit: 'PIECE' | 'STEM' | 'BUNCH' | 'UNSPECIFIED';
+      sortOrder: number;
+    }>
+  > {
+    const previous = options?.previouslyAssignedFlowerItemIds ?? new Set<string>();
+    const normalized = components.map((component, index) => {
+      let refs: { flowerItemId: string | null; flowerId: string | null };
+      try {
+        refs = assertComponentFlowerRefXor({
+          flowerItemId: component.flowerItemId,
+          flowerId: component.flowerId,
+        });
+      } catch (err) {
+        const code = err instanceof Error ? err.message : 'COMPONENT_INVALID';
+        if (code === 'COMPONENT_BOTH_REFS') {
+          throw new BadRequestException(
+            'Строка состава не может ссылаться и на позицию справочника, и на устаревший Flower одновременно',
+          );
+        }
+        throw new BadRequestException(
+          'Строка состава должна ссылаться на позицию справочника (FlowerItem) или на устаревший Flower',
+        );
+      }
+      const displayName = component.displayName.trim();
+      if (!displayName) {
+        throw new BadRequestException('Укажите название строки состава');
+      }
+      return {
+        flowerItemId: refs.flowerItemId,
+        flowerId: refs.flowerId,
+        displayName,
+        quantity: component.quantity ?? null,
+        unit: component.unit ?? 'UNSPECIFIED',
+        sortOrder: component.sortOrder ?? index,
+      };
+    });
+
+    const flowerItemIds = normalized
+      .map((row) => row.flowerItemId)
+      .filter((id): id is string => Boolean(id));
+    if (flowerItemIds.length > 0) {
+      await this.flowerRefs.assertFlowerItemsAssignable(flowerItemIds, previous);
+    }
+    return normalized;
   }
 
   private async assertReferencesExist(

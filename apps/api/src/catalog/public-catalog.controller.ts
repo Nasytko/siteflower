@@ -3,6 +3,7 @@ import { ApiTags } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import { IsInt, IsOptional, Max, Min } from 'class-validator';
 import { Public } from '../auth/decorators';
+import { CatalogFiltersService } from './catalog-filters.service';
 import { PublicProductListQueryDto, RelatedProductsQueryDto } from './products.dto';
 import { PublicCatalogService } from './public-catalog.service';
 
@@ -18,12 +19,21 @@ class PromotionalProductsQueryDto {
 @ApiTags('catalog')
 @Controller('catalog')
 export class PublicCatalogController {
-  constructor(private readonly catalog: PublicCatalogService) {}
+  constructor(
+    private readonly catalog: PublicCatalogService,
+    private readonly filters: CatalogFiltersService,
+  ) {}
 
   @Public()
   @Get('categories/tree')
   listCategoryTree() {
     return this.catalog.listCategoryTree();
+  }
+
+  @Public()
+  @Get('categories/:slug/filters')
+  getCategoryFilters(@Param('slug') slug: string) {
+    return this.filters.getPublicCategoryFilters(slug);
   }
 
   @Public()

@@ -1,11 +1,12 @@
 import Link from 'next/link';
 import type { Metadata } from 'next';
-import { notFound } from 'next/navigation';
+import { notFound, permanentRedirect } from 'next/navigation';
 import { Breadcrumbs } from '@/components/storefront/breadcrumbs';
-import { KatalogFlowerFilters } from '@/components/storefront/katalog-flower-filters';
+import { KatalogFiltersPanel } from '@/components/storefront/katalog-filters-panel';
 import { ProductGrid } from '@/components/storefront/product-grid';
 import {
   bouquetCountLabel,
+  gateKatalogSearchState,
   katalogHasActiveFilters,
   katalogHref,
   katalogStateToListParams,
@@ -15,18 +16,12 @@ import {
   EMPTY_PRODUCT_PAGE,
   getCatalogCategory,
   listCatalogCategoryTree,
-  listColors,
-  listFlowerOrigins,
-  listFlowerVarieties,
+  listCategoryFilters,
   listProducts,
   PublicApiError,
 } from '@/lib/public-api';
 import { buildPageMetadata } from '@/lib/seo/metadata';
-import {
-  categoryNavHref,
-  categoryUsesFlowerFilters,
-  findCategoryInTree,
-} from '@/lib/storefront-nav';
+import { categoryNavHref, findCategoryInTree } from '@/lib/storefront-nav';
 
 type Params = Promise<{ slug: string }>;
 type SearchParams = Promise<Record<string, string | string[] | undefined>>;
@@ -40,7 +35,11 @@ export async function generateMetadata({
 }): Promise<Metadata> {
   const { slug } = await params;
   const raw = await searchParams;
-  const state = parseKatalogSearchParams(raw);
+  const rawState = parseKatalogSearchParams(raw);
+  const enabledKeys = await listCategoryFilters(slug)
+    .then((rows) => rows.map((row) => row.key))
+    .catch(() => [] as const);
+  const state = gateKatalogSearchState(rawState, enabledKeys);
   const filtered = katalogHasActiveFilters(state);
 
   try {
@@ -74,8 +73,7 @@ export default async function KatalogCategoryPage({
 }) {
   const { slug } = await params;
   const raw = await searchParams;
-  const state = parseKatalogSearchParams(raw);
-  const listParams = katalogStateToListParams(slug, state);
+  const rawState = parseKatalogSearchParams(raw);
 
   let category;
   try {
@@ -87,18 +85,22 @@ export default async function KatalogCategoryPage({
     throw error;
   }
 
+  if (category.redirectedFrom && category.canonicalSlug) {
+    permanentRedirect(`/katalog/${category.canonicalSlug}`);
+  }
+
   const tree = await listCatalogCategoryTree().catch(() => [] as Awaited<ReturnType<typeof listCatalogCategoryTree>>);
   const located = findCategoryInTree(slug, tree);
   const childCategories = located?.node.children?.filter((c) => c.visibility === 'VISIBLE') ?? [];
   const ancestors = located?.ancestors ?? [];
-  const showFlowerFilters = categoryUsesFlowerFilters(category, ancestors);
 
-  const [products, colors, varieties, origins] = await Promise.all([
-    listProducts(listParams).catch(() => EMPTY_PRODUCT_PAGE),
-    showFlowerFilters ? listColors().catch(() => []) : Promise.resolve([]),
-    showFlowerFilters ? listFlowerVarieties().catch(() => []) : Promise.resolve([]),
-    showFlowerFilters ? listFlowerOrigins().catch(() => []) : Promise.resolve([]),
-  ]);
+  const filters = await listCategoryFilters(slug).catch(() => []);
+  const state = gateKatalogSearchState(
+    rawState,
+    filters.map((row) => row.key),
+  );
+  const listParams = katalogStateToListParams(slug, state);
+  const products = await listProducts(listParams).catch(() => EMPTY_PRODUCT_PAGE);
 
   const totalPages =
     products.pageSize > 0 ? Math.max(1, Math.ceil(products.total / products.pageSize)) : 1;
@@ -130,18 +132,18 @@ export default async function KatalogCategoryPage({
         </nav>
       ) : null}
 
-      {showFlowerFilters ? (
+      {filters.length > 0 ? (
         <div className="mb-5">
-          <KatalogFlowerFilters
+          <KatalogFiltersPanel
             categorySlug={slug}
             state={state}
             total={products.total}
-            varieties={varieties}
-            colors={colors}
-            origins={origins}
+            filters={filters}
           />
         </div>
-      ) : null}
+      ) : (
+        <p className="sf-small mb-5 text-muted">{bouquetCountLabel(products.total)}</p>
+      )}
 
       {products.items.length === 0 ? (
         <p className="sf-body text-muted">По выбранным фильтрам ничего не найдено.</p>

@@ -77,21 +77,57 @@ Do **not** confuse with legacy composition `Flower` taxonomy (`/cvety` SEO facet
 | **FlowerType** | Роза | Dictionary level 1 |
 | **FlowerVariety** | Мондиаль | Dictionary level 2 under type |
 | **FlowerOrigin** | Эквадор | Shared origin dictionary |
-| **FlowerItem** | Роза Мондиаль · Эквадор · 60 см | Concrete reusable stem/SKU (**stem** height) |
-| **Product.heightCm** | 60 | **Bouquet/card** height (PDP ruler, family switcher, legacy height bands) |
+| **FlowerItem** | Роза Мондиаль 60 см Эквадор | Concrete reusable stem/SKU (**stem** height) |
+| **Product.heightCm** | 60 | **Bouquet/card** height (PDP ruler, family switcher) |
 
 ### Product.heightCm vs FlowerItem.heightCm
 
-These are **different semantics** — keep both.
+These are **different semantics** — keep both. Never OR them in one filter.
 
 | Field | Meaning | Used for |
 | --- | --- | --- |
-| **FlowerItem.heightCm** | Stem/SKU height of a concrete flower position (e.g. Mondial 60 cm Ecuador) | Composition dictionary; `/katalog` height filter via `components.flowerItem` |
-| **Product.heightCm** | Finished bouquet/card height shown to the shopper | PDP height ruler, family member labels, product meta, legacy height-band OR match |
+| **FlowerItem.heightCm** | Stem/SKU height | Filter **«Высота цветка»** (non-overlapping bands) |
+| **Product.heightCm** | Finished bouquet/card height | PDP ruler, family labels; optional filter **«Высота букета»** |
 
-A mixed bouquet can have stems of different heights; the card still has one display height. Do **not** delete `Product.heightCm` or treat it as a duplicate of FlowerItem height.
+A mixed bouquet can have stems of different heights; the card still has one display height. Do **not** delete `Product.heightCm`.
 
-Storefront filters for type / variety / origin / height match **either** composition → FlowerItem **or** legacy denormalized `Product.flowerTypeId` / `flowerVarietyId` / `flowerOriginId` / `heightCm` (kept for migration; deprecated as source of truth for flower identity — heightCm on Product remains the bouquet display height).
+### Category placement
+
+**Single** `Product.catalogCategoryId` is kept (not M:N). Navigation uses the category tree + descendant expansion; cross-cutting discovery stays on occasions/colors/composition facets. Revisit M:N only if the same SKU must appear in sibling branches without a shared ancestor.
+
+### Filter pool
+
+Global `CatalogFilterDefinition` rows define which filters exist (Цена, Акция, Цветы, Сорт, …).
+
+Per-category `CatalogCategoryFilter` rows choose which definitions are shown, their order, labels, and collapsed state.
+
+Public options are **contextual** to products in the category (+ descendants). Empty facets are hidden. Presets (`FLOWERS`, `BOUQUETS`, `CARDS`, …) only seed initial config.
+
+`/katalog/[slug]` renders filters from `GET /catalog/categories/:slug/filters` (runtime), not from `listingKind` hardcoding. Unsupported definitions (`price`, `quantity`, `bouquet_height`) stay in the admin pool but are not exposed publicly until wired.
+
+Query params for disabled category filters are ignored on both the web PLP and the public products API (Filter Pool gate). Sort / search / page are never gated.
+
+**Price sort / promo refinement:** Prisma cannot order by effective promotional price, so matching candidates are loaded in memory in stable pages (no silent truncation). Acceptable for boutique catalog sizes; rewrite to SQL only if inventory grows large enough that full-candidate loads become a memory concern.
+
+**«Цветы»** = `FlowerType` via composition. **«Цвет»** = product color facet. Do not mix.
+
+Storefront type / variety / origin filters match composition → FlowerItem **or** legacy `Product.flower*` for migration. Stem-height filter matches **only** `FlowerItem.heightCm`.
+
+### Navigation menu (separate from CatalogCategory)
+
+`NavigationMenu` / `NavigationMenuItem` drive the storefront header. Empty successful API response → empty nav. `PRIMARY_NAV` is outage-only fallback (API error), not used when the manager clears/disables all items.
+
+HIDDEN `CatalogCategory` targets cannot be newly assigned. Existing menu items that point at a later-hidden category stay in admin as **unavailable** (warning shown) and are omitted from the public menu until the category is VISIBLE again. Menu hierarchy stays independent of the category tree.
+
+A menu item may target:
+
+- `CATEGORY` (resolved from current category slug → `/katalog/…` or legacy hubs)
+- `PROMOTIONS` → `/akcii` (no CatalogCategory required)
+- `BESTSELLERS` → `/bukety` or a bestseller group
+- `PAGE` → static storefront pages (`dostavka`, `o-nas`, …)
+- `CUSTOM_URL` → internal `/…` or `https://…`
+
+Menu hierarchy is independent of the category tree. Admin: **Магазин → Главное меню**.
 
 `/cvety` hub and SEO landings still use the legacy `Flower` taxonomy table. Product listing under `/cvety/:slug` also matches `ProductComponent → FlowerItem.flowerType.slug` when the Flower slug equals the FlowerType slug (bridge; Flower table is not dropped).
 

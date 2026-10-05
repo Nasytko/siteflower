@@ -14,6 +14,7 @@ import {
 } from '@/lib/admin-client';
 import { adminEndpoints } from '@/lib/admin-endpoints';
 import { categoryPickerOptions } from '@/lib/admin-catalog-picker-labels';
+import { CategoryFiltersEditor } from '@/components/admin/category-filters-editor';
 import { FormSaveStatus, phaseFromAdminError, type FormSavePhase } from '@/components/admin/form-status';
 
 type Props = {
@@ -27,6 +28,7 @@ type DialogState =
   | { kind: 'edit'; row: CatalogCategoryAdminDto }
   | { kind: 'add-child'; parent: CatalogCategoryAdminDto }
   | { kind: 'move'; row: CatalogCategoryAdminDto }
+  | { kind: 'filters'; row: CatalogCategoryAdminDto }
   | { kind: 'delete'; row: CatalogCategoryAdminDto; targetCategoryId: string };
 
 function productCountLabel(n: number): string {
@@ -311,6 +313,13 @@ export function CatalogCategoriesManager({ initial, canCreate, canUpdate }: Prop
                           <button type="button" className="admin-btn-ghost text-xs" onClick={() => openEdit(row)}>
                             Изменить
                           </button>
+                          <button
+                            type="button"
+                            className="admin-btn-ghost text-xs"
+                            onClick={() => setDialog({ kind: 'filters', row })}
+                          >
+                            Фильтры
+                          </button>
                           {canCreate ? (
                             <button
                               type="button"
@@ -539,6 +548,14 @@ export function CatalogCategoriesManager({ initial, canCreate, canUpdate }: Prop
             </button>
           </div>
         </div>
+      ) : null}
+
+      {dialog?.kind === 'filters' ? (
+        <CategoryFiltersEditor
+          categoryId={dialog.row.id}
+          categoryName={dialog.row.name}
+          onClose={() => setDialog(null)}
+        />
       ) : null}
 
       {dialog?.kind === 'delete' ? (

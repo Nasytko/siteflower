@@ -16,6 +16,7 @@ import type { Prisma } from '@bouquet-one/database';
 import { AuditService } from '../audit/audit.service';
 import { PrismaService } from '../database/prisma.service';
 import { StorefrontRevalidateService } from '../storefront/storefront-revalidate.service';
+import { SlugRedirectsService } from './slug-redirects.service';
 
 type CategoryRow = {
   id: string;
@@ -136,6 +137,7 @@ export class CatalogCategoriesService {
     private readonly prisma: PrismaService,
     private readonly audit: AuditService,
     private readonly revalidate: StorefrontRevalidateService,
+    private readonly slugRedirects: SlugRedirectsService,
   ) {}
 
   async listAdmin(): Promise<CatalogCategoryAdminDto[]> {
@@ -318,6 +320,9 @@ export class CatalogCategoriesService {
     };
 
     try {
+      const existing = await this.prisma.client.catalogCategory.findUnique({ where: { id } });
+      if (!existing) throw new NotFoundException('Category not found');
+
       const updated = await this.prisma.client.$transaction(async (tx) => {
         const result = await tx.catalogCategory.updateMany({
           where: { id, version: input.expectedVersion },
@@ -330,6 +335,9 @@ export class CatalogCategoriesService {
           const exists = await tx.catalogCategory.findUnique({ where: { id } });
           if (!exists) throw new NotFoundException('Category not found');
           throw new ConflictException('Category was modified elsewhere');
+        }
+        if (slug !== undefined && slug !== existing.slug) {
+          await this.slugRedirects.record(tx, 'CATALOG_CATEGORY', existing.slug, slug);
         }
         const row = await tx.catalogCategory.findUniqueOrThrow({
           where: { id },
@@ -346,6 +354,9 @@ export class CatalogCategoriesService {
                 fields: Object.keys(input).filter((key) => key !== 'expectedVersion'),
                 ...(input.parentId !== undefined ? { parentId: input.parentId } : {}),
                 ...(input.visibility !== undefined ? { visibility: input.visibility } : {}),
+                ...(slug !== undefined && slug !== existing.slug
+                  ? { previousSlug: existing.slug, slug }
+                  : {}),
               },
               requestId: actor.requestId,
               ipHash: actor.ipHash,

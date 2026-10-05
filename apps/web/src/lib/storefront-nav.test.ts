@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import type { CatalogCategoryTreeNodeDto } from '@bouquet-one/contracts';
-import { navItemsFromCategoryTree } from './storefront-nav';
+import type { CatalogCategoryTreeNodeDto, NavigationMenuItemPublicDto } from '@bouquet-one/contracts';
+import { navItemsFromCategoryTree, navItemsFromNavigationMenu } from './storefront-nav';
 
 const tree: CatalogCategoryTreeNodeDto[] = [
   {
@@ -33,14 +33,38 @@ const tree: CatalogCategoryTreeNodeDto[] = [
   },
 ];
 
-test('nav from category tree keeps Повод discovery hub', () => {
+test('nav from category tree is category-only fallback (no static tail)', () => {
   const items = navItemsFromCategoryTree(tree);
   const ids = items.map((item) => item.id);
   assert.ok(ids.includes('tsvety'));
-  assert.ok(ids.includes('povod'));
-  assert.ok(ids.includes('akcii'));
+  assert.equal(ids.includes('povod'), false);
   assert.equal(items.find((item) => item.id === 'tsvety')?.href, '/katalog/tsvety');
-  assert.equal(items.find((item) => item.id === 'povod')?.href, '/povod');
+  assert.equal(items.find((item) => item.id === 'tsvety')?.children?.[0]?.href, '/katalog/rozy');
+});
+
+test('nav from NavigationMenu keeps Акции without CatalogCategory', () => {
+  const menu: NavigationMenuItemPublicDto[] = [
+    {
+      id: '1',
+      label: 'Розы',
+      href: '/katalog/rozy',
+      accent: false,
+      openInNewTab: false,
+      children: [],
+    },
+    {
+      id: '2',
+      label: 'Акции',
+      href: '/akcii',
+      accent: true,
+      openInNewTab: false,
+      children: [],
+    },
+  ];
+  const items = navItemsFromNavigationMenu(menu);
+  assert.equal(items.length, 2);
+  assert.equal(items[1]?.href, '/akcii');
+  assert.equal(items[1]?.accent, true);
 });
 
 test('nav hides HIDDEN children and keeps legacy bukety href', () => {

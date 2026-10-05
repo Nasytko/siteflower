@@ -3,9 +3,13 @@ import { defaultStorefrontSettings } from '@bouquet-one/contracts';
 import { FavoritesProvider } from '@/components/storefront/favorites-provider';
 import { StorefrontFooter } from '@/components/storefront/footer';
 import { StorefrontHeader } from '@/components/storefront/header';
-import { PRIMARY_NAV } from '@/components/storefront/primary-nav';
-import { getLegalSeller, getStorefrontSettings, listCatalogCategoryTree } from '@/lib/public-api';
-import { navItemsFromCategoryTree } from '@/lib/storefront-nav';
+import { PRIMARY_NAV, type PrimaryNavItem } from '@/components/storefront/primary-nav';
+import {
+  getLegalSeller,
+  getMainNavigation,
+  getStorefrontSettings,
+} from '@/lib/public-api';
+import { navItemsFromNavigationMenu } from '@/lib/storefront-nav';
 import { buildOrganizationJsonLd, serializeJsonLd } from '@/lib/seo/json-ld';
 import { getSiteUrl } from '@/lib/seo/site-url';
 
@@ -22,14 +26,15 @@ export default async function StorefrontLayout({ children }: { children: ReactNo
 
   const seller = await getLegalSeller().catch(() => null);
 
-  let navItems = PRIMARY_NAV;
+  // NavigationMenu is source of truth. Empty successful response = empty nav
+  // (do not resurrect PRIMARY_NAV after the manager cleared/disabled items).
+  // PRIMARY_NAV only when the navigation API itself is unavailable (outage).
+  let navItems: PrimaryNavItem[] = [];
   try {
-    const categoryTree = await listCatalogCategoryTree();
-    if (categoryTree.length > 0) {
-      navItems = navItemsFromCategoryTree(categoryTree);
-    }
+    const menu = await getMainNavigation();
+    navItems = navItemsFromNavigationMenu(menu.items);
   } catch {
-    // Keep PRIMARY_NAV fallback when catalog API is unavailable.
+    navItems = PRIMARY_NAV;
   }
 
   const orgLd = buildOrganizationJsonLd({

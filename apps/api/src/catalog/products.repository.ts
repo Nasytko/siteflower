@@ -37,8 +37,13 @@ export type ProductListFilters = {
   flowerVarietySlugs?: string[];
   flowerOriginIds?: string[];
   flowerOriginSlugs?: string[];
-  /** Inclusive heightCm bounds from heightBandWhere. */
-  heightCm?: { gte?: number; lte?: number };
+  /**
+   * Stem-height bounds for "Высота цветка" — matched ONLY against FlowerItem.heightCm.
+   * Product.heightCm (bouquet/card) is a separate filter (bouquetHeightCm).
+   */
+  heightCm?: { gt?: number; gte?: number; lte?: number };
+  /** Optional bouquet/card height filter — Product.heightCm only. */
+  bouquetHeightCm?: { gt?: number; gte?: number; lte?: number };
   familyId?: string;
   /**
    * Admin migration helper: legacy Product.flower* / component.flowerId present,
@@ -54,11 +59,9 @@ export type ProductListFilters = {
 };
 
 const SLUG_LIST_MAX = 16;
-/** Boutique catalog: in-memory refinement stays bounded and predictable. */
-const IN_MEMORY_CANDIDATE_CAP = 2_000;
-/** Soft safety bound for boutique catalogs: in-memory sort/filter candidates.
- *  Raising is fine when inventory grows; rewrite to SQL sort only if correctness
- *  or memory becomes a real problem at this scale. */
+/** Page size while loading all candidates for effective-price / promo refinement.
+ *  Must not silently truncate — incomplete loads break totals/sort/pagination. */
+const IN_MEMORY_CANDIDATE_PAGE = 500;
 
 /** Parse `a,b,c` (or a single value) into a de-duplicated list. */
 export function parseSlugList(value?: string | null): string[] | undefined {
@@ -189,9 +192,16 @@ function hasEffectivePromotion(candidate: CandidateRow, now: Date): boolean {
 }
 
 /**
- * Prisma relation `orderBy` cannot aggregate variant prices, so price sorts are
- * resolved in memory (see `list`). `recommended` puts merchandised (bestseller)
- * products first — a curated signal, not fake popularity.
+ * Prisma cannot order by effective (promo-discounted) price or refine budget
+ * matches that depend on discounted amounts, so those list modes load ALL
+ * matching candidates in pages of IN_MEMORY_CANDIDATE_PAGE and refine in memory.
+ *
+ * There is no silent truncation. Totals/pagination/sort use the full refined set.
+ * Composition / taxonomy filters stay in Prisma WHERE (not this path).
+ *
+ * Scale note (boutique florist): expected published catalog ≪ tens of thousands.
+ * Full-candidate load is acceptable until inventory growth forces SQL effective-price
+ * sorting. Not a release blocker for the current shop size.
  */
 function buildOrderBy(sort: ProductSort | undefined): Prisma.ProductOrderByWithRelationInput[] {
   switch (sort) {
@@ -276,11 +286,21 @@ export class ProductsRepository {
       params.filters.promotionalOnly === true;
 
     if (needsRefinement) {
-      const candidates = (await this.db().product.findMany({
-        where,
-        select: CANDIDATE_SELECT,
-        take: IN_MEMORY_CANDIDATE_CAP,
-      })) as CandidateRow[];
+      // Composition / taxonomy filters stay in Prisma WHERE. Effective price, budget, and
+      // precise promo effectiveness need JS (Prisma cannot order by discounted price).
+      // Load ALL matching candidates in stable pages — never truncate.
+      const candidates: CandidateRow[] = [];
+      for (;;) {
+        const batch = (await this.db().product.findMany({
+          where,
+          select: CANDIDATE_SELECT,
+          orderBy: { id: 'asc' },
+          skip: candidates.length,
+          take: IN_MEMORY_CANDIDATE_PAGE,
+        })) as CandidateRow[];
+        candidates.push(...batch);
+        if (batch.length < IN_MEMORY_CANDIDATE_PAGE) break;
+      }
 
       const refined = candidates.filter((candidate) => {
         if (params.filters.promotionalOnly && !hasEffectivePromotion(candidate, now)) {
@@ -674,15 +694,27 @@ export function buildProductWhere(
 
   if (filters.heightCm) {
     const heightFilter = {
+      ...(filters.heightCm.gt !== undefined ? { gt: filters.heightCm.gt } : {}),
       ...(filters.heightCm.gte !== undefined ? { gte: filters.heightCm.gte } : {}),
       ...(filters.heightCm.lte !== undefined ? { lte: filters.heightCm.lte } : {}),
     };
+    // Stem height only — do not OR with Product.heightCm (bouquet/card).
     and.push({
-      OR: [
-        { heightCm: heightFilter },
-        { components: { some: { flowerItem: { heightCm: heightFilter } } } },
-      ],
+      components: { some: { flowerItem: { heightCm: heightFilter } } },
     });
+  }
+
+  if (filters.bouquetHeightCm) {
+    const bouquetHeightFilter = {
+      ...(filters.bouquetHeightCm.gt !== undefined ? { gt: filters.bouquetHeightCm.gt } : {}),
+      ...(filters.bouquetHeightCm.gte !== undefined
+        ? { gte: filters.bouquetHeightCm.gte }
+        : {}),
+      ...(filters.bouquetHeightCm.lte !== undefined
+        ? { lte: filters.bouquetHeightCm.lte }
+        : {}),
+    };
+    and.push({ heightCm: bouquetHeightFilter });
   }
 
   if (filters.familyId) {

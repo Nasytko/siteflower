@@ -248,3 +248,165 @@ export function defaultStorefrontSettings(): StorefrontSettingsPublicDto {
       'Цветы — сезонный продукт. Отдельные позиции могут быть заменены на равноценные с сохранением стиля, палитры и стоимости букета.',
   };
 }
+
+/** Main storefront navigation — independent of CatalogCategory tree. */
+export const NAVIGATION_TARGET_TYPES = [
+  'CATEGORY',
+  'PROMOTIONS',
+  'BESTSELLERS',
+  'PAGE',
+  'CUSTOM_URL',
+] as const;
+export type NavigationTargetType = (typeof NAVIGATION_TARGET_TYPES)[number];
+
+export const NAVIGATION_PAGE_KEYS = [
+  'bukety',
+  'cvety',
+  'povod',
+  'dostavka',
+  'o-nas',
+  'kontakty',
+  'akcii',
+] as const;
+export type NavigationPageKey = (typeof NAVIGATION_PAGE_KEYS)[number];
+
+export const MAIN_NAVIGATION_MENU_KEY = 'main';
+
+export type NavigationMenuItemPublicDto = {
+  id: string;
+  label: string;
+  href: string;
+  accent: boolean;
+  openInNewTab: boolean;
+  children: NavigationMenuItemPublicDto[];
+};
+
+export type NavigationMenuPublicDto = {
+  key: string;
+  items: NavigationMenuItemPublicDto[];
+};
+
+export type NavigationMenuItemAdminDto = {
+  id: string;
+  parentId: string | null;
+  label: string;
+  targetType: NavigationTargetType;
+  targetId: string | null;
+  customHref: string | null;
+  /** Resolved preview href for admin UI (may be `#` when unavailable). */
+  href: string;
+  sortOrder: number;
+  enabled: boolean;
+  openInNewTab: boolean;
+  accent: boolean;
+  version: number;
+  /** Human target summary, e.g. "Категория · Розы". */
+  targetLabel: string;
+  /**
+   * True when the target cannot be shown on the storefront
+   * (e.g. CATEGORY → HIDDEN/deleted). Item is kept for admin; storefront hides it.
+   */
+  unavailable: boolean;
+  /** Admin warning when unavailable. */
+  unavailableReason: string | null;
+  children: NavigationMenuItemAdminDto[];
+};
+
+/** Resolve whether a CATEGORY nav target is storefront-visible. */
+export function navigationCategoryTargetAvailability(
+  category: { name: string; visibility: string } | null | undefined,
+): { available: boolean; reason: string | null; targetLabel: string } {
+  if (!category) {
+    return {
+      available: false,
+      reason: 'Категория удалена — пункт не показывается на витрине',
+      targetLabel: 'Категория · (удалена)',
+    };
+  }
+  if (category.visibility === 'HIDDEN') {
+    return {
+      available: false,
+      reason: 'Категория скрыта — пункт не показывается на витрине',
+      targetLabel: `Категория · ${category.name} (скрыта)`,
+    };
+  }
+  return {
+    available: true,
+    reason: null,
+    targetLabel: `Категория · ${category.name}`,
+  };
+}
+
+export type NavigationMenuAdminDto = {
+  id: string;
+  key: string;
+  name: string;
+  version: number;
+  items: NavigationMenuItemAdminDto[];
+};
+
+export type NavigationTargetOptionDto = {
+  id: string;
+  label: string;
+  /** Preview path for the target. */
+  href: string;
+};
+
+const PAGE_HREFS: Record<NavigationPageKey, string> = {
+  bukety: '/bukety',
+  cvety: '/cvety',
+  povod: '/povod',
+  dostavka: '/dostavka',
+  'o-nas': '/o-nas',
+  kontakty: '/kontakty',
+  akcii: '/akcii',
+};
+
+export function isNavigationTargetType(value: string): value is NavigationTargetType {
+  return (NAVIGATION_TARGET_TYPES as readonly string[]).includes(value);
+}
+
+export function isNavigationPageKey(value: string): value is NavigationPageKey {
+  return (NAVIGATION_PAGE_KEYS as readonly string[]).includes(value);
+}
+
+export function navigationPageHref(pageKey: string): string | null {
+  if (!isNavigationPageKey(pageKey)) return null;
+  return PAGE_HREFS[pageKey];
+}
+
+/**
+ * Validate custom menu href.
+ * Internal paths must start with `/` (not `//`). External must be https.
+ */
+export function validateNavigationCustomHref(raw: string): string {
+  const href = raw.trim();
+  if (!href) throw new Error('NAV_HREF_EMPTY');
+  const lower = href.toLowerCase();
+  if (
+    lower.startsWith('javascript:') ||
+    lower.startsWith('data:') ||
+    lower.startsWith('vbscript:')
+  ) {
+    throw new Error('NAV_HREF_UNSAFE');
+  }
+  if (href.startsWith('/')) {
+    if (href.startsWith('//')) throw new Error('NAV_HREF_UNSAFE');
+    return href;
+  }
+  try {
+    const url = new URL(href);
+    if (url.protocol !== 'https:') throw new Error('NAV_HREF_UNSAFE');
+    return url.toString();
+  } catch (err) {
+    if (err instanceof Error && err.message.startsWith('NAV_HREF_')) throw err;
+    throw new Error('NAV_HREF_INVALID');
+  }
+}
+
+/** Category slug → storefront path (legacy hubs preserved). */
+export function categoryPublicHref(slug: string): string {
+  if (slug === 'bukety') return '/bukety';
+  if (slug === 'cvety') return '/cvety';
+  return `/katalog/${encodeURIComponent(slug)}`;
+}

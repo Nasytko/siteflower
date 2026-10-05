@@ -131,6 +131,11 @@ class ReassignVarietyDto extends ExpectedVersionDto {
   targetVarietyId!: string;
 }
 
+class MoveVarietyDto extends ExpectedVersionDto {
+  @IsUUID()
+  targetFlowerTypeId!: string;
+}
+
 class ReassignOriginDto extends ExpectedVersionDto {
   @IsUUID()
   targetOriginId!: string;
@@ -392,6 +397,17 @@ export class AdminFlowerRefsController {
     @Req() req: Request,
   ) {
     return this.flowerRefs.reassignProductsAndDeleteVariety(id, body, actorFrom(admin, req));
+  }
+
+  @Post('varieties/:id/move')
+  @RequirePermissions('CATALOG_UPDATE')
+  moveVariety(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() body: MoveVarietyDto,
+    @CurrentAdmin() admin: AuthenticatedAdmin,
+    @Req() req: Request,
+  ) {
+    return this.flowerRefs.moveVarietyToType(id, body, actorFrom(admin, req));
   }
 
   @Delete('origins/:id')

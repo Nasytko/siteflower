@@ -14,6 +14,7 @@ import { AdminSeoController } from './admin-seo.controller';
 import { BestsellersService } from './bestsellers.service';
 import { BudgetRangesService } from './budget-ranges.service';
 import { CatalogCategoriesService } from './catalog-categories.service';
+import { CatalogFiltersService } from './catalog-filters.service';
 import { FlowerRefsService } from './flower-refs.service';
 import { ProductFamiliesService } from './product-families.service';
 import { ProductsRepository } from './products.repository';
@@ -53,6 +54,7 @@ import { TaxonomyService } from './taxonomy.service';
     BestsellersService,
     BudgetRangesService,
     CatalogCategoriesService,
+    CatalogFiltersService,
     FlowerRefsService,
     ProductFamiliesService,
     PromotionsService,

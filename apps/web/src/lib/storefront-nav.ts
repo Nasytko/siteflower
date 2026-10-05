@@ -1,29 +1,39 @@
-import type { CatalogCategoryTreeNodeDto } from '@bouquet-one/contracts';
+import {
+  categoryPublicHref,
+  type CatalogCategoryTreeNodeDto,
+  type NavigationMenuItemPublicDto,
+} from '@bouquet-one/contracts';
 import type { PrimaryNavItem } from '@/components/storefront/primary-nav';
 
-/** Legacy category slugs that keep pre-katalog URLs for SEO. */
-const LEGACY_CATEGORY_HREFS: Record<string, string> = {
-  bukety: '/bukety',
-  cvety: '/cvety',
-};
-
-/**
- * Discovery / service links that are not CatalogCategory nodes.
- * Kept after the CMS tree so «Повод» and store pages stay reachable.
- */
-const STATIC_NAV_TAIL: PrimaryNavItem[] = [
-  { id: 'povod', label: 'Повод', href: '/povod' },
-  { id: 'akcii', label: 'Акции', href: '/akcii', accent: true },
-  { id: 'dostavka', label: 'Доставка', href: '/dostavka' },
-  { id: 'o-nas', label: 'О нас', href: '/o-nas' },
-];
-
 export function categoryNavHref(slug: string): string {
-  return LEGACY_CATEGORY_HREFS[slug] ?? `/katalog/${slug}`;
+  return categoryPublicHref(slug);
 }
 
+/** Map public NavigationMenu items → header PrimaryNavItem shape. */
+export function navItemsFromNavigationMenu(
+  items: NavigationMenuItemPublicDto[],
+): PrimaryNavItem[] {
+  return items.map((item) => ({
+    id: item.id,
+    label: item.label,
+    href: item.href,
+    accent: item.accent || undefined,
+    ...(item.children.length > 0
+      ? {
+          children: item.children.map((child) => ({
+            label: child.label,
+            href: child.href,
+          })),
+        }
+      : {}),
+  }));
+}
+
+/**
+ * @deprecated Prefer NavigationMenu. Kept as emergency fallback when menu API is empty.
+ */
 export function navItemsFromCategoryTree(tree: CatalogCategoryTreeNodeDto[]): PrimaryNavItem[] {
-  const fromTree: PrimaryNavItem[] = tree
+  return tree
     .filter((node) => node.visibility === 'VISIBLE')
     .sort((a, b) => a.sortOrder - b.sortOrder)
     .map((node) => {
@@ -38,10 +48,6 @@ export function navItemsFromCategoryTree(tree: CatalogCategoryTreeNodeDto[]): Pr
         ...(children && children.length > 0 ? { children } : {}),
       };
     });
-
-  const slugs = new Set(fromTree.map((item) => item.id));
-  const tail = STATIC_NAV_TAIL.filter((item) => !slugs.has(item.id));
-  return [...fromTree, ...tail];
 }
 
 export function findCategoryInTree(
@@ -62,10 +68,3 @@ export function findCategoryInTree(
   return walk(nodes, []);
 }
 
-export function categoryUsesFlowerFilters(
-  category: { listingKind: string | null },
-  ancestors: Array<{ listingKind: string | null }>,
-): boolean {
-  if (category.listingKind === 'FLOWERS') return true;
-  return ancestors.some((item) => item.listingKind === 'FLOWERS');
-}

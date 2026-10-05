@@ -69,6 +69,8 @@ export function StorefrontHeader({ city, brandName, phone, workingHours, navItem
 
   const telHref = phone ? `tel:${phone.replace(/\s+/g, '')}` : null;
 
+  const [openMobileBranch, setOpenMobileBranch] = useState<string | null>(null);
+
   return (
     <>
       <header
@@ -76,6 +78,27 @@ export function StorefrontHeader({ city, brandName, phone, workingHours, navItem
           compact ? 'sf-site-header--compact border-b border-border' : ''
         }`}
       >
+        {/* Utility bar — service links, not CatalogCategory menu */}
+        <div className="hidden border-b border-border/70 bg-[color-mix(in_oklab,var(--surface)_88%,var(--background))] lg:block">
+          <div className="sf-container-wide flex h-8 items-center justify-between gap-4 text-[0.7rem] text-muted">
+            <span className="truncate">
+              {city}
+              {workingHours ? ` · ${workingHours}` : ''}
+            </span>
+            <nav className="flex items-center gap-4" aria-label="Служебные ссылки">
+              <Link href="/o-nas" className="hover:text-brand">
+                О нас
+              </Link>
+              <Link href="/dostavka" className="hover:text-brand">
+                Доставка и оплата
+              </Link>
+              <Link href="/kontakty" className="hover:text-brand">
+                Контакты
+              </Link>
+            </nav>
+          </div>
+        </div>
+
         {/* Row 1 — brand chrome (always visible) */}
         <div className="sf-header-row sf-container-wide">
           <div className="flex min-w-0 flex-col items-start gap-0.5 justify-self-start">
@@ -182,29 +205,50 @@ export function StorefrontHeader({ city, brandName, phone, workingHours, navItem
             </button>
           </div>
           <nav className="sf-container flex flex-col gap-1 pb-16 pt-2" aria-label="Мобильное меню">
-            {navItems.map((item) => (
-              <div key={item.id} className="border-b border-border py-1">
-                <Link
-                  href={item.href}
-                  className={`sf-nav-link block px-2 py-3 text-base transition-colors ${
-                    item.accent ? 'text-accent' : 'text-foreground'
-                  }`}
-                  onClick={() => setMenuOpen(false)}
-                >
-                  {item.label}
-                </Link>
-                {item.children?.map((child) => (
-                  <Link
-                    key={child.href}
-                    href={child.href}
-                    className="sf-nav-link block py-2 pl-6 pr-2 text-sm text-muted hover:text-brand"
-                    onClick={() => setMenuOpen(false)}
-                  >
-                    {child.label}
-                  </Link>
-                ))}
-              </div>
-            ))}
+            {navItems.map((item) => {
+              const hasChildren = (item.children?.length ?? 0) > 0;
+              const branchOpen = openMobileBranch === item.id;
+              return (
+                <div key={item.id} className="border-b border-border py-1">
+                  <div className="flex items-center gap-1">
+                    <Link
+                      href={item.href}
+                      className={`sf-nav-link block flex-1 px-2 py-3 text-base transition-colors ${
+                        item.accent ? 'text-accent' : 'text-foreground'
+                      }`}
+                      onClick={() => setMenuOpen(false)}
+                    >
+                      {item.label}
+                    </Link>
+                    {hasChildren ? (
+                      <button
+                        type="button"
+                        className="inline-flex h-10 w-10 items-center justify-center text-muted"
+                        aria-expanded={branchOpen}
+                        aria-label={branchOpen ? 'Свернуть' : 'Развернуть'}
+                        onClick={() =>
+                          setOpenMobileBranch((current) => (current === item.id ? null : item.id))
+                        }
+                      >
+                        <ChevronIcon open={branchOpen} />
+                      </button>
+                    ) : null}
+                  </div>
+                  {hasChildren && branchOpen
+                    ? item.children?.map((child) => (
+                        <Link
+                          key={`${item.id}-${child.href}`}
+                          href={child.href}
+                          className="sf-nav-link block py-2 pl-6 pr-2 text-sm text-muted hover:text-brand"
+                          onClick={() => setMenuOpen(false)}
+                        >
+                          {child.label}
+                        </Link>
+                      ))
+                    : null}
+                </div>
+              );
+            })}
             {telHref ? (
               <a href={telHref} className="mt-4 px-2 py-3 text-base font-medium">
                 {phone}

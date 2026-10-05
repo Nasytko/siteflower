@@ -3,6 +3,7 @@ import { ApiTags } from '@nestjs/swagger';
 import { Public } from '../auth/decorators';
 import { HomepageConfigService } from './homepage-config.service';
 import { InstagramService } from './instagram.service';
+import { NavigationMenuService } from './navigation-menu.service';
 import { StorefrontSettingsService } from './storefront-settings.service';
 
 @ApiTags('storefront')
@@ -12,6 +13,7 @@ export class PublicStorefrontController {
     private readonly settings: StorefrontSettingsService,
     private readonly homepage: HomepageConfigService,
     private readonly instagram: InstagramService,
+    private readonly navigation: NavigationMenuService,
   ) {}
 
   @Public()
@@ -30,5 +32,11 @@ export class PublicStorefrontController {
   @Get('instagram')
   getInstagram() {
     return this.instagram.getPublicFeed();
+  }
+
+  @Public()
+  @Get('navigation/main')
+  getMainNavigation() {
+    return this.navigation.getPublicMainMenu();
   }
 }

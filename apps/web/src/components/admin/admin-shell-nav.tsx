@@ -83,6 +83,11 @@ const NAV_GROUPS: NavGroup[] = [
     id: 'store',
     label: 'Магазин',
     items: [
+      {
+        href: '/admin/storefront/navigation',
+        label: 'Главное меню',
+        permission: 'SETTINGS_READ',
+      },
       { href: '/admin/storefront/instagram', label: 'Instagram', permission: 'CONTENT_READ' },
       {
         href: '/admin/storefront/settings',

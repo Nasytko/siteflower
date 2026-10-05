@@ -18,6 +18,8 @@ import {
   productCardSubtitle,
   flowerItemDisplayName,
   flowerItemIdentityKey,
+  assertComponentFlowerRefXor,
+  defaultFilterKeysForPreset,
   suggestProductNameFromComposition,
   resolveCompositionSetupStatus,
 } from './catalog.js';
@@ -57,7 +59,7 @@ test('flowerItemIdentityKey and display name', () => {
       originName: 'Эквадор',
       heightCm: 60,
     }),
-    'Роза Мондиаль · Эквадор · 60 см',
+    'Роза Мондиаль 60 см Эквадор',
   );
 });
 
@@ -173,10 +175,27 @@ test('productCardSubtitle skips parts already in the name', () => {
   );
 });
 
-test('heightBandWhere maps storefront bands', () => {
+test('heightBandWhere maps non-overlapping stem-height bands', () => {
   assert.equal(isHeightBandId('60_70'), true);
   assert.equal(isHeightBandId('nope'), false);
   assert.deepEqual(heightBandWhere('up_to_50'), { lte: 50 });
-  assert.deepEqual(heightBandWhere('50_60'), { gte: 50, lte: 60 });
-  assert.deepEqual(heightBandWhere('70_plus'), { gte: 70 });
+  assert.deepEqual(heightBandWhere('50_60'), { gt: 50, lte: 60 });
+  assert.deepEqual(heightBandWhere('60_70'), { gt: 60, lte: 70 });
+  assert.deepEqual(heightBandWhere('70_plus'), { gt: 70 });
+});
+
+test('assertComponentFlowerRefXor enforces FlowerItem XOR legacy Flower', () => {
+  assert.deepEqual(assertComponentFlowerRefXor({ flowerItemId: 'a', flowerId: null }), {
+    flowerItemId: 'a',
+    flowerId: null,
+  });
+  assert.throws(() => assertComponentFlowerRefXor({ flowerItemId: null, flowerId: null }));
+  assert.throws(() => assertComponentFlowerRefXor({ flowerItemId: 'a', flowerId: 'b' }));
+});
+
+test('defaultFilterKeysForPreset seeds category filter pools', () => {
+  assert.ok(defaultFilterKeysForPreset('FLOWERS').includes('flower_type'));
+  assert.ok(defaultFilterKeysForPreset('FLOWERS').includes('stem_height'));
+  assert.ok(defaultFilterKeysForPreset('BOUQUETS').includes('occasion'));
+  assert.equal(defaultFilterKeysForPreset('CARDS').includes('stem_height'), false);
 });

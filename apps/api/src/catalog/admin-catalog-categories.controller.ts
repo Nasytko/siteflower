@@ -7,11 +7,13 @@ import {
   ParseUUIDPipe,
   Patch,
   Post,
+  Put,
   Req,
 } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import {
+  IsArray,
   IsBoolean,
   IsIn,
   IsInt,
@@ -23,13 +25,18 @@ import {
   Min,
   MinLength,
   ValidateIf,
+  ValidateNested,
 } from 'class-validator';
 import type { Request } from 'express';
-import { CATALOG_LISTING_KINDS } from '@bouquet-one/contracts';
+import {
+  CATALOG_FILTER_PRESETS,
+  CATALOG_LISTING_KINDS,
+} from '@bouquet-one/contracts';
 import { CurrentAdmin, type AuthenticatedAdmin } from '../auth/current-admin.decorator';
 import { RequirePermissions } from '../auth/decorators';
 import { actorFrom } from '../common/actor.util';
 import { CatalogCategoriesService } from './catalog-categories.service';
+import { CatalogFiltersService } from './catalog-filters.service';
 import { ExpectedVersionDto } from './products.dto';
 
 class CreateCatalogCategoryDto {
@@ -121,10 +128,54 @@ class ReassignAndDeleteCategoryDto extends ExpectedVersionDto {
   targetCategoryId!: string;
 }
 
+class CategoryFilterRowDto {
+  @IsString()
+  @MinLength(1)
+  @MaxLength(64)
+  key!: string;
+
+  @IsOptional()
+  @IsBoolean()
+  enabled?: boolean;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  @Max(9999)
+  position?: number;
+
+  @IsOptional()
+  @ValidateIf((_, value) => value !== null)
+  @IsString()
+  @MaxLength(120)
+  labelOverride?: string | null;
+
+  @IsOptional()
+  @IsBoolean()
+  collapsed?: boolean;
+}
+
+class ReplaceCategoryFiltersDto {
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => CategoryFilterRowDto)
+  filters!: CategoryFilterRowDto[];
+}
+
+class ApplyFilterPresetDto {
+  @IsOptional()
+  @IsIn(CATALOG_FILTER_PRESETS)
+  preset?: (typeof CATALOG_FILTER_PRESETS)[number];
+}
+
 @ApiTags('admin-catalog')
 @Controller('admin/catalog/categories')
 export class AdminCatalogCategoriesController {
-  constructor(private readonly categories: CatalogCategoriesService) {}
+  constructor(
+    private readonly categories: CatalogCategoriesService,
+    private readonly filters: CatalogFiltersService,
+  ) {}
 
   @Get()
   @RequirePermissions('CATALOG_READ')
@@ -136,6 +187,36 @@ export class AdminCatalogCategoriesController {
   @RequirePermissions('CATALOG_READ')
   tree() {
     return this.categories.tree(false);
+  }
+
+  @Get('filter-definitions')
+  @RequirePermissions('CATALOG_READ')
+  listFilterDefinitions() {
+    return this.filters.listDefinitions();
+  }
+
+  @Get(':id/filters')
+  @RequirePermissions('CATALOG_READ')
+  getFilters(@Param('id', ParseUUIDPipe) id: string) {
+    return this.filters.getCategoryFiltersAdmin(id);
+  }
+
+  @Put(':id/filters')
+  @RequirePermissions('CATALOG_UPDATE')
+  replaceFilters(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() body: ReplaceCategoryFiltersDto,
+  ) {
+    return this.filters.replaceCategoryFilters(id, body);
+  }
+
+  @Post(':id/filters/apply-preset')
+  @RequirePermissions('CATALOG_UPDATE')
+  applyFilterPreset(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() body: ApplyFilterPresetDto,
+  ) {
+    return this.filters.applyPreset(id, body.preset);
   }
 
   @Post()

@@ -267,7 +267,7 @@ function primaryMedia(product: ProductWithRelations) {
   return product.media.find((item) => item.isPrimary) ?? product.media[0] ?? null;
 }
 
-/** Flowers are a derived facet: the composition is the single source of truth. */
+/** Legacy /cvety Flower facet from composition (optional flowerId). */
 export function derivedFlowers(product: ProductWithRelations): TaxonomyRefDto[] {
   const seen = new Set<string>();
   const flowers: TaxonomyRefDto[] = [];
@@ -277,6 +277,51 @@ export function derivedFlowers(product: ProductWithRelations): TaxonomyRefDto[] 
     flowers.push(toTaxonomyRef(component.flower));
   }
   return flowers;
+}
+
+/** First FlowerItem in composition order — preferred source for type/variety/origin display. */
+export function primaryFlowerItem(product: ProductWithRelations) {
+  for (const component of product.components) {
+    if (component.flowerItem) return component.flowerItem;
+  }
+  return null;
+}
+
+/**
+ * Display attrs for cards/PDP taxonomy chips.
+ * - Type/variety/origin: composition FlowerItem wins when present (never show stale Product.flower*).
+ * - heightCm here is bouquet/card height only (Product.heightCm); stem lives on FlowerItem.
+ */
+export function productDisplayFlowerAttrs(product: ProductWithRelations): {
+  heightCm: number | null;
+  stemHeightCm: number | null;
+  originName: string | null;
+  varietyName: string | null;
+  flowerType: TaxonomyRefDto | null;
+  flowerVariety: TaxonomyRefDto | null;
+  flowerOrigin: TaxonomyRefDto | null;
+} {
+  const item = primaryFlowerItem(product);
+  if (item) {
+    return {
+      heightCm: product.heightCm ?? null,
+      stemHeightCm: item.heightCm ?? null,
+      originName: item.flowerOrigin?.name ?? null,
+      varietyName: item.flowerVariety?.name ?? null,
+      flowerType: item.flowerType ? toTaxonomyRef(item.flowerType) : null,
+      flowerVariety: item.flowerVariety ? toTaxonomyRef(item.flowerVariety) : null,
+      flowerOrigin: item.flowerOrigin ? toTaxonomyRef(item.flowerOrigin) : null,
+    };
+  }
+  return {
+    heightCm: product.heightCm ?? null,
+    stemHeightCm: null,
+    originName: product.flowerOrigin?.name ?? null,
+    varietyName: product.flowerVariety?.name ?? null,
+    flowerType: product.flowerType ? toTaxonomyRef(product.flowerType) : null,
+    flowerVariety: product.flowerVariety ? toTaxonomyRef(product.flowerVariety) : null,
+    flowerOrigin: product.flowerOrigin ? toTaxonomyRef(product.flowerOrigin) : null,
+  };
 }
 
 function defaultVariantForList(
@@ -434,6 +479,7 @@ export function toProductPublicDto(
         }
       : null);
 
+  const displayFlower = productDisplayFlowerAttrs(product);
   return {
     id: product.id,
     slug: product.slug,
@@ -444,9 +490,9 @@ export function toProductPublicDto(
     heightCm: product.heightCm ?? null,
     bouquetSize: product.bouquetSize ? toTaxonomyRef(product.bouquetSize) : null,
     catalogCategory: product.catalogCategory ? toTaxonomyRef(product.catalogCategory) : null,
-    flowerType: product.flowerType ? toTaxonomyRef(product.flowerType) : null,
-    flowerVariety: product.flowerVariety ? toTaxonomyRef(product.flowerVariety) : null,
-    flowerOrigin: product.flowerOrigin ? toTaxonomyRef(product.flowerOrigin) : null,
+    flowerType: displayFlower.flowerType,
+    flowerVariety: displayFlower.flowerVariety,
+    flowerOrigin: displayFlower.flowerOrigin,
     family: resolvedFamily
       ? {
           ...resolvedFamily,
@@ -458,9 +504,9 @@ export function toProductPublicDto(
       : null,
     cardSubtitle: productCardSubtitle({
       name: product.name,
-      heightCm: product.heightCm ?? null,
-      originName: product.flowerOrigin?.name ?? null,
-      varietyName: product.flowerVariety?.name ?? null,
+      heightCm: displayFlower.heightCm,
+      originName: displayFlower.originName,
+      varietyName: displayFlower.varietyName,
     }),
     currency: product.currency,
     price,
@@ -479,7 +525,7 @@ export function toProductPublicDto(
       displayName: component.displayName,
       quantity: component.quantity,
       unit: component.unit,
-      flowerSlug: component.flower?.slug ?? null,
+      flowerSlug: component.flower?.slug ?? component.flowerItem?.flowerType?.slug ?? null,
     })),
     media: product.media.map((media) => {
       const dto = toProductMediaDto(media, urlFor);
@@ -507,6 +553,7 @@ export function toProductListItemDto(
   now = new Date(),
 ): ProductListItemDto {
   const primary = primaryMedia(product);
+  const displayFlower = productDisplayFlowerAttrs(product);
   return {
     id: product.id,
     slug: product.slug,
@@ -517,17 +564,17 @@ export function toProductListItemDto(
     heightCm: product.heightCm ?? null,
     bouquetSize: product.bouquetSize ? toTaxonomyRef(product.bouquetSize) : null,
     catalogCategory: product.catalogCategory ? toTaxonomyRef(product.catalogCategory) : null,
-    flowerType: product.flowerType ? toTaxonomyRef(product.flowerType) : null,
-    flowerVariety: product.flowerVariety ? toTaxonomyRef(product.flowerVariety) : null,
-    flowerOrigin: product.flowerOrigin ? toTaxonomyRef(product.flowerOrigin) : null,
+    flowerType: displayFlower.flowerType,
+    flowerVariety: displayFlower.flowerVariety,
+    flowerOrigin: displayFlower.flowerOrigin,
     family: product.familyMember
       ? { id: product.familyMember.family.id, name: product.familyMember.family.name }
       : null,
     cardSubtitle: productCardSubtitle({
       name: product.name,
-      heightCm: product.heightCm ?? null,
-      originName: product.flowerOrigin?.name ?? null,
-      varietyName: product.flowerVariety?.name ?? null,
+      heightCm: displayFlower.heightCm,
+      originName: displayFlower.originName,
+      varietyName: displayFlower.varietyName,
     }),
     price: activeVariantPrices(product.currency, product.variants),
     promotion: buildPublicPromotionDto(
@@ -573,15 +620,15 @@ export function toProductFamilyDto(
     .sort((a, b) => a.sortOrder - b.sortOrder)
     .map((member) => {
       const primary = primaryMedia(member.product);
+      const displayFlower = productDisplayFlowerAttrs(member.product);
       return {
         productId: member.productId,
         slug: member.product.slug,
         name: member.product.name,
         sortOrder: member.sortOrder,
-        heightCm: member.product.heightCm ?? null,
-        flowerOrigin: member.product.flowerOrigin
-          ? toTaxonomyRef(member.product.flowerOrigin)
-          : null,
+        // Family chips: bouquet height, else stem height for stem-SKU products.
+        heightCm: displayFlower.heightCm ?? displayFlower.stemHeightCm,
+        flowerOrigin: displayFlower.flowerOrigin,
         price: activeVariantPrices(member.product.currency, member.product.variants),
         primaryImageUrl: primary
           ? pickDerivativeStorageUrl(

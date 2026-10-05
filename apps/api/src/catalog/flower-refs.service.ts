@@ -315,12 +315,138 @@ export class FlowerRefsService {
     actor?: ActorContext,
   ): Promise<FlowerVarietyAdminDto> {
     if (input.flowerTypeId) {
-      const type = await this.prisma.client.flowerType.findUnique({
-        where: { id: input.flowerTypeId },
-      });
-      if (!type) throw new BadRequestException('Flower type not found');
+      const existing = await this.prisma.client.flowerVariety.findUnique({ where: { id } });
+      if (!existing) throw new NotFoundException('Flower variety not found');
+      if (existing.flowerTypeId !== input.flowerTypeId) {
+        // Parent change is a dedicated move — never a silent PATCH.
+        throw new BadRequestException(
+          'Нельзя просто сменить вид у сорта. Используйте операцию «Переместить сорт».',
+        );
+      }
     }
     return (await this.patchRef('flowerVariety', id, input, actor)) as FlowerVarietyAdminDto;
+  }
+
+  /**
+   * Atomically move a variety to another FlowerType and update all FlowerItems.
+   * Blocks when identityKey collisions would occur under the target type.
+   */
+  async moveVarietyToType(
+    id: string,
+    input: { expectedVersion: number; targetFlowerTypeId: string },
+    actor?: ActorContext,
+  ): Promise<FlowerVarietyAdminDto> {
+    if (input.targetFlowerTypeId === undefined) {
+      throw new BadRequestException('Укажите целевой вид цветка');
+    }
+    const result = await this.prisma.client.$transaction(async (tx) => {
+      const variety = await tx.flowerVariety.findUnique({ where: { id } });
+      if (!variety) throw new NotFoundException('Сорт не найден');
+      if (variety.version !== input.expectedVersion) {
+        throw new ConflictException('Сорт был изменён в другом окне');
+      }
+      if (variety.flowerTypeId === input.targetFlowerTypeId) {
+        throw new BadRequestException('Сорт уже принадлежит этому виду');
+      }
+      const target = await tx.flowerType.findUnique({ where: { id: input.targetFlowerTypeId } });
+      if (!target) throw new BadRequestException('Целевой вид цветка не найден');
+
+      const items = await tx.flowerItem.findMany({ where: { flowerVarietyId: id } });
+      for (const item of items) {
+        const nextKey = [
+          input.targetFlowerTypeId,
+          item.flowerVarietyId ?? '_',
+          item.flowerOriginId ?? '_',
+          item.heightCm == null ? '_' : String(item.heightCm),
+        ].join('|');
+        const clash = await tx.flowerItem.findFirst({
+          where: { identityKey: nextKey, NOT: { id: item.id } },
+        });
+        if (clash) {
+          throw new BadRequestException({
+            message: `Конфликт при переносе: позиция «${item.name}» совпадёт с уже существующей «${clash.name}». Перенос отменён.`,
+            error: 'VarietyMoveConflict',
+            code: 'IDENTITY_CONFLICT',
+            flowerItemId: item.id,
+            conflictItemId: clash.id,
+          });
+        }
+      }
+
+      for (const item of items) {
+        const nextKey = [
+          input.targetFlowerTypeId,
+          item.flowerVarietyId ?? '_',
+          item.flowerOriginId ?? '_',
+          item.heightCm == null ? '_' : String(item.heightCm),
+        ].join('|');
+        await tx.flowerItem.update({
+          where: { id: item.id },
+          data: {
+            flowerTypeId: input.targetFlowerTypeId,
+            identityKey: nextKey,
+            version: { increment: 1 },
+          },
+        });
+      }
+
+      const bumped = await tx.flowerVariety.updateMany({
+        where: { id, version: input.expectedVersion },
+        data: {
+          flowerTypeId: input.targetFlowerTypeId,
+          version: { increment: 1 },
+        },
+      });
+      if (bumped.count === 0) {
+        throw new ConflictException('Сорт был изменён в другом окне');
+      }
+
+      // Keep legacy Product.flowerVariety rows consistent when they still point here.
+      await tx.product.updateMany({
+        where: { flowerVarietyId: id },
+        data: { flowerTypeId: input.targetFlowerTypeId },
+      });
+
+      if (actor) {
+        await this.audit.record(
+          {
+            actorAdminUserId: actor.actorId,
+            action: 'TAXONOMY_UPDATED',
+            entityType: 'FlowerVariety',
+            entityId: id,
+            metadata: {
+              moveVariety: true,
+              fromFlowerTypeId: variety.flowerTypeId,
+              toFlowerTypeId: input.targetFlowerTypeId,
+              itemsMoved: items.length,
+            },
+            requestId: actor.requestId,
+            ipHash: actor.ipHash,
+            userAgent: actor.userAgent,
+          },
+          tx,
+        );
+      }
+
+      const updated = await tx.flowerVariety.findUniqueOrThrow({
+        where: { id },
+        include: { _count: { select: { products: true, items: true } } },
+      });
+      return updated;
+    });
+
+    await this.pingStorefront();
+    return {
+      id: result.id,
+      flowerTypeId: result.flowerTypeId,
+      slug: result.slug,
+      name: result.name,
+      sortOrder: result.sortOrder,
+      visibility: result.visibility,
+      version: result.version,
+      productsCount: result._count.products,
+      itemsCount: result._count.items,
+    };
   }
 
   async updateOrigin(
@@ -936,7 +1062,34 @@ export class FlowerRefsService {
       where: { id: { in: unique } },
     });
     if (count !== unique.length) {
-      throw new BadRequestException('One or more flower items were not found');
+      throw new BadRequestException('Одна или несколько позиций справочника не найдены');
+    }
+  }
+
+  /**
+   * New composition rows may only reference VISIBLE FlowerItems.
+   * Already-assigned HIDDEN items remain valid (archive does not break existing products).
+   */
+  async assertFlowerItemsAssignable(
+    ids: string[],
+    previouslyAssignedIds: ReadonlySet<string> = new Set(),
+  ): Promise<void> {
+    const unique = [...new Set(ids.filter(Boolean))];
+    if (unique.length === 0) return;
+    const rows = await this.prisma.client.flowerItem.findMany({
+      where: { id: { in: unique } },
+      select: { id: true, name: true, visibility: true },
+    });
+    if (rows.length !== unique.length) {
+      throw new BadRequestException('Одна или несколько позиций справочника не найдены');
+    }
+    const blocked = rows.filter(
+      (row) => row.visibility === 'HIDDEN' && !previouslyAssignedIds.has(row.id),
+    );
+    if (blocked.length > 0) {
+      throw new BadRequestException(
+        `Нельзя назначить архивную позицию справочника: ${blocked.map((row) => row.name).join(', ')}. Сначала восстановите её.`,
+      );
     }
   }
 

@@ -171,7 +171,7 @@ describe('price derivation', () => {
 describe('catalog structure helpers', () => {
   it('maps height bands for flower PLP filters', () => {
     expect(heightBandWhere('up_to_50')).toEqual({ lte: 50 });
-    expect(heightBandWhere('70_plus')).toEqual({ gte: 70 });
+    expect(heightBandWhere('70_plus')).toEqual({ gt: 70 });
   });
 
   it('avoids duplicating height/origin already present in the product name', () => {

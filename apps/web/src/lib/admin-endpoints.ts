@@ -134,6 +134,10 @@ export const adminEndpoints = {
   catalogCategoryReorder: (id: string) => `${ADMIN}/catalog/categories/${id}/reorder`,
   catalogCategoryReassignDelete: (id: string) =>
     `${ADMIN}/catalog/categories/${id}/reassign-and-delete`,
+  catalogFilterDefinitions: `${ADMIN}/catalog/categories/filter-definitions`,
+  catalogCategoryFilters: (id: string) => `${ADMIN}/catalog/categories/${id}/filters`,
+  catalogCategoryFiltersPreset: (id: string) =>
+    `${ADMIN}/catalog/categories/${id}/filters/apply-preset`,
 
   flowerTypes: `${ADMIN}/catalog/flower-refs/types`,
   flowerType: (id: string) => `${ADMIN}/catalog/flower-refs/types/${id}`,
@@ -157,6 +161,12 @@ export const adminEndpoints = {
 
   orders: `${ADMIN}/orders`,
   storefrontSettings: `${ADMIN}/storefront/settings`,
+  navigationMain: `${ADMIN}/storefront/navigation/main`,
+  navigationTargets: `${ADMIN}/storefront/navigation/targets`,
+  navigationItem: (id: string) => `${ADMIN}/storefront/navigation/main/items/${id}`,
+  navigationItems: `${ADMIN}/storefront/navigation/main/items`,
+  navigationItemReorder: (id: string) =>
+    `${ADMIN}/storefront/navigation/main/items/${id}/reorder`,
   instagramPosts: `${ADMIN}/storefront/instagram/posts`,
   instagramPost: (id: string) => `${ADMIN}/storefront/instagram/posts/${id}`,
   instagramPostsOrder: `${ADMIN}/storefront/instagram/posts/order`,
