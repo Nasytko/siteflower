@@ -75,10 +75,10 @@ export function validatePublishRequirements(input: {
       message: 'At least one active variant is required',
       field: 'variants',
     });
-  } else if (active.some((v) => v.priceMinor < 0n)) {
+  } else if (active.some((v) => v.priceMinor <= 0n)) {
     issues.push({
-      code: 'INVALID_PRICE',
-      message: 'Variant prices must be >= 0',
+      code: 'PRICE_REQUIRED',
+      message: 'Each active size must have a price greater than zero',
       field: 'variants',
     });
   }

@@ -21,6 +21,8 @@ import {
   assertComponentFlowerRefXor,
   defaultFilterKeysForPreset,
   suggestProductNameFromComposition,
+  deriveCompositionManagerSummary,
+  deriveProductEditorReadiness,
   resolveCompositionSetupStatus,
 } from './catalog.js';
 
@@ -92,9 +94,135 @@ test('flowerItemIdentityKey and display name', () => {
 
 test('suggestProductNameFromComposition', () => {
   assert.equal(
-    suggestProductNameFromComposition([{ displayName: 'Хризантема Бигуди', quantity: 9 }]),
-    'Букет из 9 Хризантема Бигуди',
+    suggestProductNameFromComposition([
+      {
+        displayName: 'Хризантема Бигуди',
+        quantity: 9,
+        typeName: 'Хризантема',
+        varietyName: 'Бигуди',
+      },
+    ]),
+    'Букет из хризантем Бигуди',
   );
+  assert.equal(
+    suggestProductNameFromComposition([
+      { displayName: 'Роза Мондиаль 60 см Эквадор', quantity: 1 },
+    ]),
+    'Роза Мондиаль',
+  );
+  assert.equal(
+    suggestProductNameFromComposition([
+      {
+        displayName: 'Роза Мондиаль 60 см Эквадор',
+        quantity: 15,
+        typeName: 'Роза',
+        varietyName: 'Мондиаль',
+      },
+    ]),
+    'Букет из роз Мондиаль',
+  );
+  assert.equal(
+    suggestProductNameFromComposition([
+      { displayName: 'Роза Мондиаль 60 см Эквадор', quantity: null },
+    ]),
+    'Роза Мондиаль',
+  );
+  assert.equal(
+    suggestProductNameFromComposition([
+      { displayName: 'Роза Мондиаль 60 см Эквадор', quantity: 7, typeName: 'Роза' },
+      { displayName: 'Эустома', quantity: 3, typeName: 'Эустома' },
+      { displayName: 'Эвкалипт', quantity: 2, typeName: 'Эвкалипт' },
+    ]),
+    'Букет из роз, эустомы и эвкалипта',
+  );
+  assert.equal(
+    suggestProductNameFromComposition([
+      {
+        displayName: 'Роза Мондиаль 60 см Эквадор',
+        quantity: 5,
+        typeName: 'Роза',
+        varietyName: 'Мондиаль',
+      },
+      {
+        displayName: 'Роза Жизель 50 см Кения',
+        quantity: 3,
+        typeName: 'Роза',
+        varietyName: 'Жизель',
+      },
+    ]),
+    'Букет из роз Мондиаль и Жизель',
+  );
+  assert.equal(
+    suggestProductNameFromComposition([
+      { displayName: 'Роза', quantity: 1, typeName: 'Роза', varietyName: 'А' },
+      { displayName: 'Роза', quantity: 1, typeName: 'Роза', varietyName: 'Б' },
+      { displayName: 'Роза', quantity: 1, typeName: 'Роза', varietyName: 'В' },
+    ]),
+    'Букет из роз разных сортов',
+  );
+  assert.equal(
+    suggestProductNameFromComposition([
+      { displayName: 'Роза', quantity: 1, typeName: 'Роза' },
+      { displayName: 'Эустома', quantity: 1, typeName: 'Эустома' },
+      { displayName: 'Эвкалипт', quantity: 1, typeName: 'Эвкалипт' },
+      { displayName: 'Хризантема', quantity: 1, typeName: 'Хризантема' },
+    ]),
+    'Авторский букет',
+  );
+});
+
+test('deriveCompositionManagerSummary', () => {
+  const summary = deriveCompositionManagerSummary([
+    {
+      typeName: 'Роза',
+      varietyName: 'Мондиаль',
+      originName: 'Эквадор',
+      stemLengthCm: 60,
+    },
+    { typeName: 'Эустома' },
+  ]);
+  assert.deepEqual(summary.flowerTypes, ['Роза', 'Эустома']);
+  assert.equal(summary.varieties.includes('Мондиаль'), true);
+  assert.equal(summary.origins.includes('Эквадор'), true);
+  assert.equal(summary.stemLengthLabel, '60 см');
+});
+
+test('deriveProductEditorReadiness', () => {
+  const ready = deriveProductEditorReadiness({
+    name: 'Букет',
+    slug: 'buket',
+    catalogCategoryId: 'cat-1',
+    variants: [{ status: 'ACTIVE', priceMajor: '69,00' }],
+    hasPrimaryImage: true,
+    shortDescription: 'Коротко',
+    description: 'Длинно',
+    compositionHasFlowerItem: true,
+  });
+  assert.equal(ready.readyToPublish, true);
+  const zeroPrice = deriveProductEditorReadiness({
+    name: 'Букет',
+    slug: 'buket',
+    catalogCategoryId: 'cat-1',
+    variants: [{ status: 'ACTIVE', priceMajor: '0,00' }],
+    hasPrimaryImage: true,
+    shortDescription: 'Коротко',
+    description: 'Длинно',
+    compositionHasFlowerItem: true,
+  });
+  assert.equal(zeroPrice.readyToPublish, false);
+  assert.equal(zeroPrice.items.find((item) => item.id === 'price')?.ok, false);
+  const blocked = deriveProductEditorReadiness({
+    name: 'Букет',
+    slug: 'buket',
+    catalogCategoryId: null,
+    variants: [{ status: 'ACTIVE', priceMajor: '' }],
+    hasPrimaryImage: false,
+    shortDescription: '',
+    description: '',
+    compositionHasFlowerItem: false,
+  });
+  assert.equal(blocked.readyToPublish, false);
+  assert.match(blocked.blockingLabels.join(' '), /цена|фото|описание/);
 });
 
 test('derivePriceRange single', () => {

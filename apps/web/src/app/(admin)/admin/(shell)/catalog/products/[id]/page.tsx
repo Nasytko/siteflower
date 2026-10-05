@@ -3,18 +3,23 @@ import { roleHasPermission, type ProductAdminDto } from '@bouquet-one/contracts'
 import { AdminApiError } from '@/lib/admin-api';
 import {
   fetchBestsellerGroups,
-  fetchCatalogStructurePickers,
   fetchProduct,
+  fetchProductEditorPickers,
   fetchProductTaxonomies,
 } from '@/lib/admin-catalog-api';
 import { categoryPickerOptions } from '@/lib/admin-catalog-picker-labels';
 import { requireAdminPermission } from '@/lib/admin-page-auth';
 import { ProductEditor } from '@/components/admin/product-editor';
 
-type Props = { params: Promise<{ id: string }> };
+type Props = {
+  params: Promise<{ id: string }>;
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+};
 
-export default async function AdminProductEditPage({ params }: Props) {
+export default async function AdminProductEditPage({ params, searchParams }: Props) {
   const { id } = await params;
+  const sp = await searchParams;
+  const justCreated = sp.created === '1' || sp.created === 'true';
   const me = await requireAdminPermission('CATALOG_READ');
 
   let product: ProductAdminDto;
@@ -28,7 +33,7 @@ export default async function AdminProductEditPage({ params }: Props) {
   const [taxonomies, bestsellerGroups, structure] = await Promise.all([
     fetchProductTaxonomies(),
     fetchBestsellerGroups(),
-    fetchCatalogStructurePickers(),
+    fetchProductEditorPickers(),
   ]);
 
   return (
@@ -41,6 +46,7 @@ export default async function AdminProductEditPage({ params }: Props) {
       </header>
       <ProductEditor
         product={product}
+        justCreated={justCreated}
         options={{
           occasions: taxonomies.occasions.map((item) => ({ id: item.id, name: item.name })),
           recipients: taxonomies.recipients.map((item) => ({ id: item.id, name: item.name })),
@@ -49,29 +55,9 @@ export default async function AdminProductEditPage({ params }: Props) {
             name: item.name,
             swatch: item.swatch,
           })),
-          flowers: taxonomies.flowers.map((item) => ({ id: item.id, name: item.name })),
           bouquetSizes: taxonomies.bouquetSizes.map((item) => ({ id: item.id, name: item.name })),
           productLines: taxonomies.productLines.map((item) => ({ id: item.id, name: item.name })),
           categories: categoryPickerOptions(structure.categories),
-          flowerTypes: structure.flowerTypes.map((item) => ({
-            id: item.id,
-            name: item.visibility === 'HIDDEN' ? `${item.name} (скрыт)` : item.name,
-          })),
-          flowerVarieties: structure.flowerVarieties.map((item) => ({
-            id: item.id,
-            name: item.visibility === 'HIDDEN' ? `${item.name} (скрыт)` : item.name,
-            flowerTypeId: item.flowerTypeId,
-          })),
-          flowerOrigins: structure.flowerOrigins.map((item) => ({
-            id: item.id,
-            name: item.visibility === 'HIDDEN' ? `${item.name} (скрыто)` : item.name,
-          })),
-          flowerItems: structure.flowerItems.map((item) => ({
-            id: item.id,
-            name: item.name,
-            visibility: item.visibility,
-          })),
-          // Composition autocomplete loads FlowerItems server-side; no full dictionary dump.
           families: structure.families.map((item) => ({ id: item.id, name: item.name })),
         }}
         bestsellerGroups={bestsellerGroups

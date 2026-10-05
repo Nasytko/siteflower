@@ -138,6 +138,22 @@ export async function fetchFlowerItemsPage(
   );
 }
 
+/** Categories + families only — for Product Editor (no flower-ref full dumps). */
+export async function fetchProductEditorPickers(): Promise<{
+  categories: CatalogCategoryAdminDto[];
+  categoryTree: CatalogCategoryTreeNodeDto[];
+  families: Array<{ id: string; name: string; version: number; membersCount: number }>;
+}> {
+  const [categories, categoryTree, families] = await Promise.all([
+    safeList<CatalogCategoryAdminDto>(adminEndpoints.catalogCategories),
+    safeList<CatalogCategoryTreeNodeDto>(adminEndpoints.catalogCategoriesTree),
+    safeList<{ id: string; name: string; version: number; membersCount: number }>(
+      adminEndpoints.productFamilies,
+    ),
+  ]);
+  return { categories, categoryTree, families };
+}
+
 export async function fetchCatalogStructurePickers(): Promise<CatalogStructurePickers> {
   const [
     categories,

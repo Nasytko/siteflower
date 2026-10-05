@@ -141,7 +141,7 @@ export function ProductsManager({
     setRequestId(null);
     try {
       const created = await adminPost<{ id: string }>(adminEndpoints.products, { name });
-      router.push(`/admin/catalog/products/${created.id}`);
+      router.push(`/admin/catalog/products/${created.id}?created=1`);
     } catch (err) {
       setError(errorMessage(err, 'Не удалось создать товар'));
       setRequestId(err instanceof AdminRequestError ? err.requestId ?? null : null);
@@ -667,13 +667,13 @@ export function ProductsManager({
 
         {families.length > 0 ? (
           <label className="admin-field">
-            <span>Семейство</span>
+            <span>Линейка</span>
             <select
               className="admin-select"
               value={filters.familyId}
               onChange={(event) => setFilter('familyId', event.target.value)}
             >
-              <option value="">Любое</option>
+              <option value="">Любая</option>
               {families.map((option) => (
                 <option key={option.id} value={option.id}>
                   {option.name}
@@ -745,7 +745,7 @@ export function ProductsManager({
               <th>Товар</th>
               <th className="w-36">Категория</th>
               <th className="w-32">Сорт</th>
-              <th className="w-32">Семейство</th>
+              <th className="w-32">Линейка</th>
               <th className="w-36">Цена</th>
               <th className="w-32">Публикация</th>
               <th className="w-44">Наличие</th>

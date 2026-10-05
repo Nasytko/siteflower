@@ -97,6 +97,14 @@ describe('validatePublishRequirements', () => {
     const issues = validatePublishRequirements({ ...publishReady, hasPrimaryImage: false });
     expect(issues.map((issue) => issue.code)).toEqual(['PRIMARY_IMAGE_REQUIRED']);
   });
+
+  it('rejects zero price as not commercially set', () => {
+    const issues = validatePublishRequirements({
+      ...publishReady,
+      variants: [{ status: 'ACTIVE', priceMinor: 0n }],
+    });
+    expect(issues.map((issue) => issue.code)).toEqual(['PRICE_REQUIRED']);
+  });
 });
 
 describe('wouldCreateRedirectLoop', () => {

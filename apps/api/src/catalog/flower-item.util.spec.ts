@@ -32,15 +32,20 @@ describe('flowerItem helpers', () => {
   it('suggests mono and mixed product names', () => {
     expect(
       suggestProductNameFromComposition([
-        { displayName: 'Хризантема Бигуди 70 см Эквадор', quantity: 9 },
+        {
+          displayName: 'Хризантема Бигуди 70 см Эквадор',
+          quantity: 9,
+          typeName: 'Хризантема',
+          varietyName: 'Бигуди',
+        },
       ]),
-    ).toBe('Букет из 9 Хризантема Бигуди 70 см Эквадор');
+    ).toBe('Букет из хризантем Бигуди');
     expect(
       suggestProductNameFromComposition([
-        { displayName: 'Роза', quantity: 10 },
-        { displayName: 'Эустома', quantity: 3 },
+        { displayName: 'Роза', quantity: 10, typeName: 'Роза' },
+        { displayName: 'Эустома', quantity: 3, typeName: 'Эустома' },
       ]),
-    ).toBe('Авторский букет (2 позиции)');
+    ).toBe('Букет из роз и эустомы');
   });
 
   it('derives slug and identity from type/form/variety/origin/stem', () => {

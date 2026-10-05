@@ -482,20 +482,234 @@ export function assertComponentFlowerRefXor(input: {
   return { flowerItemId, flowerId };
 }
 
-/** Suggest a product name from composition rows (manager confirms). */
+/** Default in-card variant name for new products (manager-facing). */
+export const DEFAULT_PRODUCT_VARIANT_NAME = 'Стандарт';
+
+/** Genitive plural hints for commercial bouquet titles (deterministic, not AI). */
+const FLOWER_TYPE_GENITIVE: Record<string, string> = {
+  роза: 'роз',
+  эустома: 'эустомы',
+  эвкалипт: 'эвкалипта',
+  хризантема: 'хризантем',
+  гипсофила: 'гипсофилы',
+  тюльпан: 'тюльпанов',
+  лилия: 'лилий',
+  пион: 'пионов',
+  орхидея: 'орхидей',
+  гербера: 'гербер',
+};
+
+function flowerTypeGenitive(typeName: string): string {
+  const trimmed = typeName.trim();
+  if (!trimmed) return '';
+  const mapped = FLOWER_TYPE_GENITIVE[trimmed.toLowerCase()];
+  return mapped ?? trimmed.toLowerCase();
+}
+
+function joinGenitiveTypes(types: string[]): string {
+  const parts = types.map(flowerTypeGenitive).filter(Boolean);
+  if (parts.length === 0) return '';
+  if (parts.length === 1) return parts[0]!;
+  if (parts.length === 2) return `${parts[0]} и ${parts[1]}`;
+  return `${parts.slice(0, -1).join(', ')} и ${parts[parts.length - 1]}`;
+}
+
+function inferCompositionTypeName(row: {
+  displayName: string;
+  typeName?: string | null;
+}): string {
+  const explicit = row.typeName?.trim();
+  if (explicit) return explicit;
+  const first = row.displayName.trim().split(/\s+/)[0];
+  return first ?? row.displayName.trim();
+}
+
+function inferCompositionVarietyName(row: {
+  displayName: string;
+  typeName?: string | null;
+  varietyName?: string | null;
+}): string {
+  const explicit = row.varietyName?.trim();
+  if (explicit) return explicit;
+  const type = inferCompositionTypeName(row);
+  const parts = row.displayName.trim().split(/\s+/);
+  if (parts.length >= 2 && parts[0] === type) return parts[1] ?? '';
+  return '';
+}
+
+/** Suggest a product name from composition rows (manager confirms — never auto-applied). */
 export function suggestProductNameFromComposition(
-  rows: Array<{ displayName: string; quantity: number | null }>,
+  rows: Array<{
+    displayName: string;
+    quantity: number | null;
+    typeName?: string | null;
+    varietyName?: string | null;
+  }>,
 ): string {
   const usable = rows.filter((row) => row.displayName.trim().length > 0);
   if (usable.length === 0) return '';
+
   if (usable.length === 1) {
     const row = usable[0]!;
     const qty = row.quantity && row.quantity > 0 ? row.quantity : null;
+    const type = inferCompositionTypeName(row);
     const label = row.displayName.trim();
-    if (qty) return `Букет из ${qty} ${label}`;
-    return `Букет: ${label}`;
+    const variety = inferCompositionVarietyName(row);
+    if (qty && qty > 1) {
+      if (variety) return `Букет из ${flowerTypeGenitive(type)} ${variety}`;
+      return `Букет из ${qty} ${label}`;
+    }
+    if (variety) return `${type} ${variety}`;
+    return label;
   }
-  return `Авторский букет (${usable.length} позиции)`;
+
+  const types = [...new Set(usable.map((row) => inferCompositionTypeName(row)))];
+  if (types.length >= 4) return 'Авторский букет';
+
+  if (types.length === 1) {
+    const type = types[0]!;
+    const varieties = [
+      ...new Set(usable.map((row) => inferCompositionVarietyName(row)).filter(Boolean)),
+    ];
+    if (varieties.length >= 3) {
+      return `Букет из ${flowerTypeGenitive(type)} разных сортов`;
+    }
+    if (varieties.length === 2) {
+      return `Букет из ${flowerTypeGenitive(type)} ${varieties[0]} и ${varieties[1]}`;
+    }
+    if (varieties.length === 1) {
+      return `Букет из ${flowerTypeGenitive(type)} ${varieties[0]}`;
+    }
+    return `Букет из ${flowerTypeGenitive(type)}`;
+  }
+
+  return `Букет из ${joinGenitiveTypes(types)}`;
+}
+
+export type CompositionManagerSummary = {
+  flowerTypes: string[];
+  varieties: string[];
+  origins: string[];
+  stemLengthLabel: string | null;
+};
+
+/** Read-only summary for managers — derived from FlowerItem-linked composition rows. */
+export function deriveCompositionManagerSummary(
+  rows: Array<{
+    typeName?: string | null;
+    varietyName?: string | null;
+    originName?: string | null;
+    stemLengthCm?: number | null;
+    flowerItem?: {
+      flowerType?: { name: string } | null;
+      flowerVariety?: { name: string } | null;
+      flowerOrigin?: { name: string } | null;
+      stemLengthCm?: number | null;
+    } | null;
+  }>,
+): CompositionManagerSummary {
+  const types = new Set<string>();
+  const varieties = new Set<string>();
+  const origins = new Set<string>();
+  const stems: number[] = [];
+
+  for (const row of rows) {
+    const type =
+      row.typeName?.trim() ||
+      row.flowerItem?.flowerType?.name?.trim() ||
+      '';
+    const variety =
+      row.varietyName?.trim() ||
+      row.flowerItem?.flowerVariety?.name?.trim() ||
+      '';
+    const origin =
+      row.originName?.trim() ||
+      row.flowerItem?.flowerOrigin?.name?.trim() ||
+      '';
+    const stem = row.stemLengthCm ?? row.flowerItem?.stemLengthCm ?? null;
+    if (type) types.add(type);
+    if (variety) varieties.add(variety);
+    if (origin) origins.add(origin);
+    if (stem != null && Number.isFinite(stem)) stems.push(stem);
+  }
+
+  stems.sort((a, b) => a - b);
+  let stemLengthLabel: string | null = null;
+  if (stems.length === 1) stemLengthLabel = `${stems[0]} см`;
+  else if (stems.length > 1) {
+    stemLengthLabel = `${stems[0]}–${stems[stems.length - 1]} см`;
+  }
+
+  return {
+    flowerTypes: [...types],
+    varieties: [...varieties],
+    origins: [...origins],
+    stemLengthLabel,
+  };
+}
+
+export type ProductEditorReadinessItem = {
+  id: string;
+  label: string;
+  ok: boolean;
+  requiredForPublish: boolean;
+};
+
+/** Parse major BYN input for readiness; null = unset/invalid. Zero is unset for commerce. */
+export function parsePositivePriceMajor(raw: string | null | undefined): number | null {
+  const trimmed = (raw ?? '').trim();
+  if (!trimmed) return null;
+  const normalized = trimmed.replace(',', '.');
+  const n = Number(normalized);
+  if (!Number.isFinite(n) || n <= 0) return null;
+  return n;
+}
+
+/** Mirrors backend publish validation + helpful draft hints for the admin editor. */
+export function deriveProductEditorReadiness(input: {
+  name: string;
+  slug?: string | null;
+  catalogCategoryId: string | null;
+  variants: Array<{ status: string; priceMajor: string | null | undefined }>;
+  hasPrimaryImage: boolean;
+  shortDescription: string | null | undefined;
+  description: string | null | undefined;
+  compositionHasFlowerItem: boolean;
+}): {
+  items: ProductEditorReadinessItem[];
+  readyToPublish: boolean;
+  blockingLabels: string[];
+} {
+  const nameOk = input.name.trim().length > 0;
+  const slugOk = (input.slug ?? '').trim().length >= 2;
+  const categoryOk = Boolean(input.catalogCategoryId);
+  const activeVariants = input.variants.filter((v) => v.status === 'ACTIVE');
+  const priceOk =
+    activeVariants.length > 0 &&
+    activeVariants.every((v) => parsePositivePriceMajor(v.priceMajor) !== null);
+  const photoOk = input.hasPrimaryImage;
+  const shortOk = Boolean(input.shortDescription?.trim());
+  const longOk = Boolean(input.description?.trim());
+  const compositionOk = input.compositionHasFlowerItem;
+
+  const items: ProductEditorReadinessItem[] = [
+    { id: 'name', label: 'Название', ok: nameOk, requiredForPublish: true },
+    { id: 'slug', label: 'Адрес в ссылке', ok: slugOk, requiredForPublish: true },
+    { id: 'shortDescription', label: 'Короткое описание', ok: shortOk, requiredForPublish: true },
+    { id: 'description', label: 'Полное описание', ok: longOk, requiredForPublish: true },
+    { id: 'price', label: 'Цена', ok: priceOk, requiredForPublish: true },
+    { id: 'photo', label: 'Основное фото', ok: photoOk, requiredForPublish: true },
+    { id: 'category', label: 'Категория', ok: categoryOk, requiredForPublish: false },
+    { id: 'composition', label: 'Состав', ok: compositionOk, requiredForPublish: false },
+  ];
+
+  const blockingLabels = items
+    .filter((item) => item.requiredForPublish && !item.ok)
+    .map((item) => item.label.toLowerCase());
+
+  const readyToPublish = blockingLabels.length === 0;
+
+  return { items, readyToPublish, blockingLabels };
 }
 
 export type ProductFamilyMemberDto = {

@@ -285,6 +285,19 @@ export class ProductsService {
           })),
           tx,
         );
+      } else {
+        await this.products.replaceVariants(
+          product.id,
+          [
+            {
+              name: 'Стандарт',
+              priceMinor: 0n,
+              sortOrder: 0,
+              status: 'ACTIVE',
+            },
+          ],
+          tx,
+        );
       }
       if (input.occasionIds?.length) {
         await this.products.replaceOccasions(product.id, input.occasionIds, tx);
