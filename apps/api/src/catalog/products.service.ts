@@ -567,16 +567,27 @@ export class ProductsService {
     const flowerIds = normalizedComponents
       .map((component) => component.flowerId)
       .filter((flowerId): flowerId is string => Boolean(flowerId));
+    const hasFlowerItemComposition = normalizedComponents.some((c) => Boolean(c.flowerItemId));
 
-    const nextFlowerTypeId =
-      input.flowerTypeId === undefined ? product.flowerTypeId : input.flowerTypeId;
-    // Clearing type must clear variety — never leave an orphan variety FK.
-    const nextFlowerVarietyId =
-      nextFlowerTypeId == null
+    // SoT: once FlowerItem composition exists, clear legacy Product.flower* server-side
+    // (do not rely on the admin UI). Migration-only products keep legacy until migrated.
+    const nextFlowerTypeId = hasFlowerItemComposition
+      ? null
+      : input.flowerTypeId === undefined
+        ? product.flowerTypeId
+        : input.flowerTypeId;
+    const nextFlowerVarietyId = hasFlowerItemComposition
+      ? null
+      : nextFlowerTypeId == null
         ? null
         : input.flowerVarietyId === undefined
           ? product.flowerVarietyId
           : input.flowerVarietyId;
+    const nextFlowerOriginId = hasFlowerItemComposition
+      ? null
+      : input.flowerOriginId === undefined
+        ? product.flowerOriginId
+        : input.flowerOriginId;
 
     await this.flowerRefs.assertVarietyMatchesType(nextFlowerTypeId, nextFlowerVarietyId);
 
@@ -606,12 +617,9 @@ export class ProductsService {
         bouquetSizeId: input.bouquetSizeId === undefined ? undefined : input.bouquetSizeId,
         catalogCategoryId:
           input.catalogCategoryId === undefined ? undefined : input.catalogCategoryId,
-        flowerTypeId: input.flowerTypeId === undefined ? undefined : input.flowerTypeId,
-        flowerVarietyId:
-          input.flowerTypeId === undefined && input.flowerVarietyId === undefined
-            ? undefined
-            : nextFlowerVarietyId,
-        flowerOriginId: input.flowerOriginId === undefined ? undefined : input.flowerOriginId,
+        flowerTypeId: nextFlowerTypeId,
+        flowerVarietyId: nextFlowerVarietyId,
+        flowerOriginId: nextFlowerOriginId,
       };
 
       if (input.bouquetSizeId) {
@@ -787,9 +795,10 @@ export class ProductsService {
     await this.flowerRefs.assertFlowerItemsAssignable([item.id], previousFlowerItemIds);
 
     await this.prisma.client.$transaction(async (tx) => {
-      const data: Prisma.ProductUncheckedUpdateManyInput = input.clearLegacyFlowerAttrs
-        ? { flowerTypeId: null, flowerVarietyId: null, flowerOriginId: null }
-        : {};
+      const data: Prisma.ProductUncheckedUpdateManyInput =
+        input.clearLegacyFlowerAttrs === false
+          ? {}
+          : { flowerTypeId: null, flowerVarietyId: null, flowerOriginId: null };
       await this.guardVersion(tx, id, input.expectedVersion, data);
       await this.products.replaceComponents(
         id,

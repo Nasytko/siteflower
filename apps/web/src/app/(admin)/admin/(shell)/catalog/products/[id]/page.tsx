@@ -71,6 +71,7 @@ export default async function AdminProductEditPage({ params }: Props) {
             name: item.name,
             visibility: item.visibility,
           })),
+          // Composition autocomplete loads FlowerItems server-side; no full dictionary dump.
           families: structure.families.map((item) => ({ id: item.id, name: item.name })),
         }}
         bestsellerGroups={bestsellerGroups

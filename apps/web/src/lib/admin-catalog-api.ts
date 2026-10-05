@@ -99,9 +99,44 @@ export type CatalogStructurePickers = {
   flowerVarieties: FlowerVarietyAdminDto[];
   flowerOrigins: FlowerOriginAdminDto[];
   flowerForms: import('@bouquet-one/contracts').FlowerFormAdminDto[];
+  /** Intentionally empty — FlowerItems are loaded via paginated search, not full dump. */
   flowerItems: import('@bouquet-one/contracts').FlowerItemAdminDto[];
   families: Array<{ id: string; name: string; version: number; membersCount: number }>;
 };
+
+export type FlowerItemListQuery = {
+  q?: string;
+  flowerTypeId?: string;
+  flowerFormId?: string;
+  flowerVarietyId?: string;
+  flowerOriginId?: string;
+  visibility?: 'VISIBLE' | 'HIDDEN';
+  includeHidden?: boolean;
+  page?: number;
+  pageSize?: number;
+};
+
+export async function fetchFlowerItemsPage(
+  query: FlowerItemListQuery = {},
+): Promise<PaginatedResponse<import('@bouquet-one/contracts').FlowerItemAdminDto>> {
+  const params: Record<string, QueryValue> = {
+    page: query.page ?? 1,
+    pageSize: query.pageSize ?? 50,
+  };
+  if (query.q) params.q = query.q;
+  if (query.flowerTypeId) params.flowerTypeId = query.flowerTypeId;
+  if (query.flowerFormId) params.flowerFormId = query.flowerFormId;
+  if (query.flowerVarietyId) params.flowerVarietyId = query.flowerVarietyId;
+  if (query.flowerOriginId) params.flowerOriginId = query.flowerOriginId;
+  if (query.visibility) params.visibility = query.visibility;
+  if (query.includeHidden) params.includeHidden = '1';
+  return unwrapAdminPage(
+    await adminFetch<PaginatedResponse<import('@bouquet-one/contracts').FlowerItemAdminDto>>(
+      withQuery(adminEndpoints.flowerItems, params),
+    ),
+    { page: Number(params.page), pageSize: Number(params.pageSize) },
+  );
+}
 
 export async function fetchCatalogStructurePickers(): Promise<CatalogStructurePickers> {
   const [
@@ -111,7 +146,6 @@ export async function fetchCatalogStructurePickers(): Promise<CatalogStructurePi
     flowerVarieties,
     flowerOrigins,
     flowerForms,
-    flowerItems,
     families,
   ] = await Promise.all([
     safeList<CatalogCategoryAdminDto>(adminEndpoints.catalogCategories),
@@ -121,9 +155,6 @@ export async function fetchCatalogStructurePickers(): Promise<CatalogStructurePi
     safeList<FlowerOriginAdminDto>(adminEndpoints.flowerOrigins),
     safeList<import('@bouquet-one/contracts').FlowerFormAdminDto>(
       `${adminEndpoints.flowerForms}?includeHidden=1`,
-    ),
-    safeList<import('@bouquet-one/contracts').FlowerItemAdminDto>(
-      `${adminEndpoints.flowerItems}?includeHidden=1`,
     ),
     safeList<{ id: string; name: string; version: number; membersCount: number }>(
       adminEndpoints.productFamilies,
@@ -136,7 +167,7 @@ export async function fetchCatalogStructurePickers(): Promise<CatalogStructurePi
     flowerVarieties,
     flowerOrigins,
     flowerForms,
-    flowerItems,
+    flowerItems: [],
     families,
   };
 }

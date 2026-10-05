@@ -17,8 +17,21 @@ function baseProduct(
 }
 
 describe('productDisplayFlowerAttrs composition-first', () => {
-  it('prefers FlowerItem taxonomy over conflicting Product.flower*', () => {
+  it('prefers FlowerItem taxonomy over conflicting Product.flower* (Rose vs Chrysanthemum)', () => {
     const product = baseProduct({
+      flowerType: { id: 'legacy-type', slug: 'roza', name: 'Роза', visibility: 'VISIBLE' },
+      flowerVariety: {
+        id: 'legacy-var',
+        slug: 'mondial',
+        name: 'Мондиаль',
+        visibility: 'VISIBLE',
+      },
+      flowerOrigin: {
+        id: 'legacy-origin',
+        slug: 'ekvador',
+        name: 'Эквадор',
+        visibility: 'VISIBLE',
+      },
       components: [
         {
           flowerItem: {
@@ -33,11 +46,14 @@ describe('productDisplayFlowerAttrs composition-first', () => {
     } as unknown as Partial<ProductWithRelations>);
 
     const attrs = productDisplayFlowerAttrs(product);
+    expect(attrs.flowerType?.name).toBe('Хризантема');
     expect(attrs.flowerType?.slug).toBe('hrizantema');
-    expect(attrs.flowerVariety?.slug).toBe('bigudi');
-    expect(attrs.flowerOrigin?.slug).toBe('ferma');
+    expect(attrs.flowerVariety?.name).toBe('Бигуди');
+    expect(attrs.flowerOrigin?.name).toBe('Фермерская');
+    // Bouquet height stays Product.bouquetHeightCm — never stemLengthCm.
     expect(attrs.heightCm).toBe(45);
     expect(attrs.stemHeightCm).toBe(60);
+    expect(attrs.heightCm).not.toBe(attrs.stemHeightCm);
   });
 
   it('falls back to Product.flower* when composition has no FlowerItem', () => {

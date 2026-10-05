@@ -612,9 +612,10 @@ describe('Catalog taxonomy lifecycle (integration)', () => {
 
     // Used item cannot hard-delete.
     const items = await http
-      .get('/api/v1/admin/catalog/flower-refs/items?includeHidden=1')
+      .get('/api/v1/admin/catalog/flower-refs/items?includeHidden=1&pageSize=100')
       .expect(200);
-    const used = items.body.find((row: { id: string }) => row.id === item.body.id);
+    const list = Array.isArray(items.body) ? items.body : items.body.items;
+    const used = list.find((row: { id: string }) => row.id === item.body.id);
     await http
       .delete(`/api/v1/admin/catalog/flower-refs/items/${item.body.id}`)
       .set('Origin', origin)

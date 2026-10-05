@@ -34,7 +34,7 @@ import {
   fieldErrorMap,
   mediaErrorUserText,
 } from '@/lib/admin-client';
-import { adminEndpoints } from '@/lib/admin-endpoints';
+import { adminEndpoints, withQuery } from '@/lib/admin-endpoints';
 import {
   availabilityLabel,
   componentUnitLabel,
@@ -350,29 +350,53 @@ export function ProductEditor({
   const [compositionSearch, setCompositionSearch] = useState('');
   const [compositionAddQty, setCompositionAddQty] = useState('1');
   const [compositionPickerOpen, setCompositionPickerOpen] = useState(false);
+  const [compositionHits, setCompositionHits] = useState<
+    Array<{ id: string; name: string; visibility?: string }>
+  >([]);
+  const [compositionSearchPending, setCompositionSearchPending] = useState(false);
 
-  const compositionSearchResults = useMemo(() => {
-    const q = compositionSearch.trim().toLowerCase();
-    const assigned = new Set(components.map((c) => c.flowerItemId).filter(Boolean));
-    return options.flowerItems
-      .filter((item) => item.visibility !== 'HIDDEN')
-      .filter((item) => !assigned.has(item.id))
-      .filter((item) => !q || item.name.toLowerCase().includes(q))
-      .slice(0, 12);
-  }, [compositionSearch, components, options.flowerItems]);
+  useEffect(() => {
+    if (!compositionPickerOpen) return;
+    const q = compositionSearch.trim();
+    const timer = window.setTimeout(() => {
+      setCompositionSearchPending(true);
+      const assigned = new Set(components.map((c) => c.flowerItemId).filter(Boolean));
+      void adminGet<{
+        items: Array<{ id: string; name: string; visibility?: string }>;
+      }>(
+        withQuery(adminEndpoints.flowerItems, {
+          q: q || undefined,
+          page: 1,
+          pageSize: 20,
+        }),
+      )
+        .then((data) => {
+          setCompositionHits(
+            (data.items ?? []).filter(
+              (item) => item.visibility !== 'HIDDEN' && !assigned.has(item.id),
+            ),
+          );
+        })
+        .catch(() => setCompositionHits([]))
+        .finally(() => setCompositionSearchPending(false));
+    }, 250);
+    return () => window.clearTimeout(timer);
+  }, [compositionSearch, compositionPickerOpen, components]);
 
-  function addFlowerItemToComposition(itemId: string) {
-    const item = options.flowerItems.find((row) => row.id === itemId);
-    if (!item) return;
+  function addFlowerItemToComposition(itemId: string, itemName?: string) {
+    const fromHits = compositionHits.find((row) => row.id === itemId);
+    const fromOptions = options.flowerItems.find((row) => row.id === itemId);
+    const name = itemName || fromHits?.name || fromOptions?.name;
+    if (!name) return;
     const qty = compositionAddQty.trim() || '1';
     setComponents((prev) => [
       ...prev,
       {
         key: nextKey('component'),
-        displayName: item.name,
+        displayName: name,
         quantity: qty,
         unit: 'STEM',
-        flowerItemId: item.id,
+        flowerItemId: itemId,
         flowerId: '',
       },
     ]);
@@ -1775,7 +1799,9 @@ export function ProductEditor({
                     />
                   </label>
                   <ul className="max-h-48 space-y-1 overflow-y-auto text-sm">
-                    {compositionSearchResults.length === 0 ? (
+                    {compositionSearchPending ? (
+                      <li className="text-[var(--admin-muted)]">Поиск…</li>
+                    ) : compositionHits.length === 0 ? (
                       <li className="text-[var(--admin-muted)]">
                         Ничего не найдено.{' '}
                         <a
@@ -1786,12 +1812,12 @@ export function ProductEditor({
                         </a>
                       </li>
                     ) : (
-                      compositionSearchResults.map((item) => (
+                      compositionHits.map((item) => (
                         <li key={item.id}>
                           <button
                             type="button"
                             className="w-full rounded px-2 py-1.5 text-left hover:bg-[var(--admin-surface-muted,rgba(0,0,0,0.04))]"
-                            onClick={() => addFlowerItemToComposition(item.id)}
+                            onClick={() => addFlowerItemToComposition(item.id, item.name)}
                           >
                             {item.name}
                           </button>

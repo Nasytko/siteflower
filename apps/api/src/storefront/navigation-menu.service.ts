@@ -412,7 +412,7 @@ export class NavigationMenuService {
       throw new BadRequestException('Неизвестный тип ссылки');
     }
 
-    let parentId = input.parentId ?? null;
+    const parentId = input.parentId ?? null;
     if (parentId) {
       const parent = await this.prisma.client.navigationMenuItem.findUnique({
         where: { id: parentId },

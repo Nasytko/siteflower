@@ -857,10 +857,15 @@ export class FlowerRefsService {
     /** VISIBLE | HIDDEN | omit for all when includeHidden */
     visibility?: TaxonomyVisibility;
     q?: string;
+    page?: number;
+    pageSize?: number;
+    /** @deprecated Prefer page/pageSize. Cap for autocomplete. */
     limit?: number;
-  }): Promise<FlowerItemAdminDto[]> {
+  }): Promise<{ items: FlowerItemAdminDto[]; total: number; page: number; pageSize: number }> {
     const q = options?.q?.trim();
-    const limit = options?.limit && options.limit > 0 ? Math.min(options.limit, 200) : undefined;
+    const page = Math.max(1, options?.page ?? 1);
+    const requestedSize = options?.limit ?? options?.pageSize ?? 50;
+    const pageSize = Math.min(Math.max(1, requestedSize), 100);
     const visibilityWhere =
       options?.visibility
         ? { visibility: options.visibility }
@@ -868,33 +873,45 @@ export class FlowerRefsService {
           ? {}
           : { visibility: 'VISIBLE' as const };
 
-    const rows = await this.prisma.client.flowerItem.findMany({
-      where: {
-        ...(options?.flowerTypeId ? { flowerTypeId: options.flowerTypeId } : {}),
-        ...(options?.flowerFormId ? { flowerFormId: options.flowerFormId } : {}),
-        ...(options?.flowerVarietyId ? { flowerVarietyId: options.flowerVarietyId } : {}),
-        ...(options?.flowerOriginId ? { flowerOriginId: options.flowerOriginId } : {}),
-        ...visibilityWhere,
-        ...(q
-          ? {
-              OR: [
-                { name: { contains: q, mode: 'insensitive' } },
-                { flowerType: { name: { contains: q, mode: 'insensitive' } } },
-                { flowerForm: { name: { contains: q, mode: 'insensitive' } } },
-                { flowerVariety: { name: { contains: q, mode: 'insensitive' } } },
-                { flowerOrigin: { name: { contains: q, mode: 'insensitive' } } },
-              ],
-            }
-          : {}),
-      },
-      orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }],
-      ...(limit ? { take: limit } : {}),
-      include: {
-        ...FLOWER_ITEM_INCLUDE,
-        _count: { select: { components: true } },
-      },
-    });
-    return rows.map((row) => toFlowerItemAdminDto(row as FlowerItemRow));
+    const where = {
+      ...(options?.flowerTypeId ? { flowerTypeId: options.flowerTypeId } : {}),
+      ...(options?.flowerFormId ? { flowerFormId: options.flowerFormId } : {}),
+      ...(options?.flowerVarietyId ? { flowerVarietyId: options.flowerVarietyId } : {}),
+      ...(options?.flowerOriginId ? { flowerOriginId: options.flowerOriginId } : {}),
+      ...visibilityWhere,
+      ...(q
+        ? {
+            OR: [
+              { name: { contains: q, mode: 'insensitive' as const } },
+              { flowerType: { name: { contains: q, mode: 'insensitive' as const } } },
+              { flowerForm: { name: { contains: q, mode: 'insensitive' as const } } },
+              { flowerVariety: { name: { contains: q, mode: 'insensitive' as const } } },
+              { flowerOrigin: { name: { contains: q, mode: 'insensitive' as const } } },
+            ],
+          }
+        : {}),
+    };
+
+    const [total, rows] = await Promise.all([
+      this.prisma.client.flowerItem.count({ where }),
+      this.prisma.client.flowerItem.findMany({
+        where,
+        orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }],
+        skip: (page - 1) * pageSize,
+        take: pageSize,
+        include: {
+          ...FLOWER_ITEM_INCLUDE,
+          _count: { select: { components: true } },
+        },
+      }),
+    ]);
+
+    return {
+      items: rows.map((row) => toFlowerItemAdminDto(row as FlowerItemRow)),
+      total,
+      page,
+      pageSize,
+    };
   }
 
   async getItemAdmin(id: string): Promise<FlowerItemAdminDto> {

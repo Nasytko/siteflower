@@ -129,7 +129,9 @@ Query params for disabled category filters are ignored on both the web PLP and t
 
 **«Цветы»** = `FlowerType` via composition. **«Цвет»** = product color facet. Do not mix.
 
-Storefront type / variety / origin filters match composition → FlowerItem **or** legacy `Product.flower*` for migration. Stem-height filter matches **only** `FlowerItem.heightCm`.
+Storefront type / variety / origin filters: if a product has any `ProductComponent.flowerItemId`, **only composition** matches. Legacy `Product.flower*` applies only to products still without FlowerItem composition (migration). Stem-height filter matches **only** `FlowerItem.stemLengthCm`. Bouquet-height filter matches **only** `Product.bouquetHeightCm`. Never `bouquetHeightCm ?? stemLengthCm` for bouquet display.
+
+Saving a product with FlowerItem composition **always clears** `Product.flowerType/Variety/Origin` server-side.
 
 ### Navigation menu (separate from CatalogCategory)
 

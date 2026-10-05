@@ -311,8 +311,12 @@ export class AdminFlowerRefsController {
     @Query('includeHidden') includeHidden?: string,
     @Query('visibility') visibility?: 'VISIBLE' | 'HIDDEN',
     @Query('q') q?: string,
+    @Query('page') page?: string,
+    @Query('pageSize') pageSize?: string,
     @Query('limit') limit?: string,
   ) {
+    const parsedPage = page ? Number(page) : undefined;
+    const parsedPageSize = pageSize ? Number(pageSize) : undefined;
     const parsedLimit = limit ? Number(limit) : undefined;
     return this.flowerRefs.listItemsAdmin({
       flowerTypeId,
@@ -322,6 +326,8 @@ export class AdminFlowerRefsController {
       includeHidden: includeHidden === '1' || includeHidden === 'true',
       visibility: visibility === 'VISIBLE' || visibility === 'HIDDEN' ? visibility : undefined,
       q,
+      page: Number.isFinite(parsedPage) ? parsedPage : undefined,
+      pageSize: Number.isFinite(parsedPageSize) ? parsedPageSize : undefined,
       limit: Number.isFinite(parsedLimit) ? parsedLimit : undefined,
     });
   }

@@ -10,6 +10,7 @@ import {
   type FlowerOriginAdminDto,
   type FlowerTypeAdminDto,
   type FlowerVarietyAdminDto,
+  type PaginatedResponse,
 } from '@bouquet-one/contracts';
 import {
   adminDelete,
@@ -19,7 +20,7 @@ import {
   AdminRequestError,
   errorMessage,
 } from '@/lib/admin-client';
-import { adminEndpoints } from '@/lib/admin-endpoints';
+import { adminEndpoints, withQuery } from '@/lib/admin-endpoints';
 import { FormSaveStatus, phaseFromAdminError, type FormSavePhase } from '@/components/admin/form-status';
 
 type Props = {
@@ -27,7 +28,7 @@ type Props = {
   initialVarieties: FlowerVarietyAdminDto[];
   initialOrigins: FlowerOriginAdminDto[];
   initialForms: FlowerFormAdminDto[];
-  initialItems: FlowerItemAdminDto[];
+  initialPage: PaginatedResponse<FlowerItemAdminDto>;
   canCreate: boolean;
   canUpdate: boolean;
 };
@@ -94,7 +95,7 @@ export function FlowerStructureManager({
   initialVarieties,
   initialOrigins,
   initialForms,
-  initialItems,
+  initialPage,
   canCreate,
   canUpdate,
 }: Props) {
@@ -103,9 +104,14 @@ export function FlowerStructureManager({
   const [varieties, setVarieties] = useState(initialVarieties);
   const [origins, setOrigins] = useState(initialOrigins);
   const [forms, setForms] = useState(initialForms);
-  const [items, setItems] = useState(initialItems);
+  const [items, setItems] = useState(initialPage.items);
+  const [total, setTotal] = useState(initialPage.total);
+  const [page, setPage] = useState(initialPage.page);
+  const [pageSize] = useState(initialPage.pageSize);
+  const [listLoading, setListLoading] = useState(false);
 
   const [search, setSearch] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
   const [filterTypeId, setFilterTypeId] = useState('');
   const [filterFormId, setFilterFormId] = useState('');
   const [filterVarietyId, setFilterVarietyId] = useState('');
@@ -128,7 +134,10 @@ export function FlowerStructureManager({
   const [notice, setNotice] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
 
-  const q = search.trim().toLowerCase();
+  useEffect(() => {
+    const timer = window.setTimeout(() => setDebouncedSearch(search.trim()), 300);
+    return () => window.clearTimeout(timer);
+  }, [search]);
 
   const filterForms = useMemo(
     () =>
@@ -163,42 +172,51 @@ export function FlowerStructureManager({
     [draft, types, forms, varieties, origins],
   );
 
-  const filteredItems = useMemo(() => {
-    return items.filter((item) => {
-      if (filterTypeId && item.flowerTypeId !== filterTypeId) return false;
-      if (filterFormId && item.flowerFormId !== filterFormId) return false;
-      if (filterVarietyId && item.flowerVarietyId !== filterVarietyId) return false;
-      if (filterOriginId && item.flowerOriginId !== filterOriginId) return false;
-      if (filterStatus !== 'ALL' && item.visibility !== filterStatus) return false;
-      if (!q) return true;
-      const hay = [
-        item.name,
-        item.flowerType.name,
-        item.flowerForm?.name,
-        item.flowerVariety?.name,
-        item.flowerOrigin?.name,
-        item.stemLengthCm != null ? String(item.stemLengthCm) : '',
-      ]
-        .filter(Boolean)
-        .join(' ')
-        .toLowerCase();
-      return hay.includes(q);
-    });
-  }, [items, filterTypeId, filterFormId, filterVarietyId, filterOriginId, filterStatus, q]);
+  async function loadItemsPage(nextPage = page) {
+    setListLoading(true);
+    try {
+      const params: Record<string, string | number | undefined> = {
+        includeHidden: '1',
+        page: nextPage,
+        pageSize,
+        q: debouncedSearch || undefined,
+        flowerTypeId: filterTypeId || undefined,
+        flowerFormId: filterFormId || undefined,
+        flowerVarietyId: filterVarietyId || undefined,
+        flowerOriginId: filterOriginId || undefined,
+        visibility: filterStatus === 'ALL' ? undefined : filterStatus,
+      };
+      const data = await adminGet<PaginatedResponse<FlowerItemAdminDto>>(
+        withQuery(adminEndpoints.flowerItems, params),
+      );
+      setItems(data.items);
+      setTotal(data.total);
+      setPage(data.page);
+    } finally {
+      setListLoading(false);
+    }
+  }
 
-  async function reload() {
-    const [nextTypes, nextVarieties, nextOrigins, nextForms, nextItems] = await Promise.all([
+  useEffect(() => {
+    void loadItemsPage(1);
+  }, [debouncedSearch, filterTypeId, filterFormId, filterVarietyId, filterOriginId, filterStatus]);
+
+  async function reloadRefs() {
+    const [nextTypes, nextVarieties, nextOrigins, nextForms] = await Promise.all([
       adminGet<FlowerTypeAdminDto[]>(adminEndpoints.flowerTypes),
       adminGet<FlowerVarietyAdminDto[]>(adminEndpoints.flowerVarieties),
       adminGet<FlowerOriginAdminDto[]>(adminEndpoints.flowerOrigins),
       adminGet<FlowerFormAdminDto[]>(`${adminEndpoints.flowerForms}?includeHidden=1`),
-      adminGet<FlowerItemAdminDto[]>(`${adminEndpoints.flowerItems}?includeHidden=1`),
     ]);
     setTypes(nextTypes);
     setVarieties(nextVarieties);
     setOrigins(nextOrigins);
     setForms(nextForms);
-    setItems(nextItems);
+  }
+
+  async function reload() {
+    await reloadRefs();
+    await loadItemsPage(page);
   }
 
   async function run(action: () => Promise<void>, successMessage: string) {
@@ -239,16 +257,22 @@ export function FlowerStructureManager({
   }
 
   async function openEdit(item: FlowerItemAdminDto) {
+    await openEditById(item.id, item);
+  }
+
+  async function openEditById(id: string, seed?: FlowerItemAdminDto) {
     setMode('edit');
-    setEditing(item);
-    setDraft(draftFromItem(item));
+    if (seed) {
+      setEditing(seed);
+      setDraft(draftFromItem(seed));
+    }
     setInlineKind(null);
     setInlineName('');
     setDuplicateExistingId(null);
     setError(null);
     setShowUsedIn(false);
     try {
-      const full = await adminGet<FlowerItemAdminDto>(adminEndpoints.flowerItem(item.id));
+      const full = await adminGet<FlowerItemAdminDto>(adminEndpoints.flowerItem(id));
       setEditing(full);
       setDraft(draftFromItem(full));
       setUsedIn(full.usedIn ?? []);
@@ -392,8 +416,7 @@ export function FlowerStructureManager({
               type="button"
               className="admin-btn-ghost underline"
               onClick={() => {
-                const existing = items.find((i) => i.id === duplicateExistingId);
-                if (existing) void openEdit(existing);
+                void openEditById(duplicateExistingId);
               }}
             >
               Открыть существующий цветок
@@ -833,18 +856,20 @@ export function FlowerStructureManager({
             </tr>
           </thead>
           <tbody>
-            {filteredItems.length === 0 ? (
+            {items.length === 0 ? (
               <tr>
                 <td colSpan={8}>
                   <p className="admin-empty">
-                    {items.length === 0
-                      ? 'Пока нет цветов. Нажмите «+ Добавить цветок».'
-                      : 'Ничего не найдено по фильтрам.'}
+                    {listLoading
+                      ? 'Загрузка…'
+                      : total === 0 && !debouncedSearch && !filterTypeId
+                        ? 'Пока нет цветов. Нажмите «+ Добавить цветок».'
+                        : 'Ничего не найдено по фильтрам.'}
                   </p>
                 </td>
               </tr>
             ) : (
-              filteredItems.map((item) => (
+              items.map((item) => (
                 <tr key={item.id}>
                   <td>
                     <button
@@ -877,10 +902,35 @@ export function FlowerStructureManager({
         </table>
       </div>
 
-      <p className="text-xs text-[var(--admin-muted)]">
-        Показано {filteredItems.length} из {items.length}. Количество в составе задаётся в карточке
-        товара, не здесь.
-      </p>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <p className="text-xs text-[var(--admin-muted)]">
+          {listLoading ? 'Загрузка…' : `Показано ${items.length} из ${total}.`} Количество в составе
+          задаётся в карточке товара, не здесь.
+        </p>
+        {Math.ceil(total / pageSize) > 1 ? (
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              className="admin-btn-ghost"
+              disabled={listLoading || page <= 1}
+              onClick={() => void loadItemsPage(page - 1)}
+            >
+              ←
+            </button>
+            <span className="text-sm tabular-nums">
+              {page} / {Math.max(1, Math.ceil(total / pageSize))}
+            </span>
+            <button
+              type="button"
+              className="admin-btn-ghost"
+              disabled={listLoading || page >= Math.ceil(total / pageSize)}
+              onClick={() => void loadItemsPage(page + 1)}
+            >
+              →
+            </button>
+          </div>
+        ) : null}
+      </div>
     </div>
   );
 }

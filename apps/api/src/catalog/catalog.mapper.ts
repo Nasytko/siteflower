@@ -628,7 +628,7 @@ export function toProductFamilyDto(
         name: member.product.name,
         sortOrder: member.sortOrder,
         // Family chips: bouquet height, else stem height for stem-SKU products.
-        heightCm: displayFlower.heightCm ?? displayFlower.stemHeightCm,
+        heightCm: displayFlower.stemHeightCm ?? displayFlower.heightCm,
         flowerOrigin: displayFlower.flowerOrigin,
         price: activeVariantPrices(member.product.currency, member.product.variants),
         primaryImageUrl: primary

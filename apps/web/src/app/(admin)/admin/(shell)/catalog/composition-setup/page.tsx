@@ -1,6 +1,6 @@
 import { roleHasPermission } from '@bouquet-one/contracts';
 import {
-  fetchCatalogStructurePickers,
+  fetchFlowerItemsPage,
   fetchProductsPage,
 } from '@/lib/admin-catalog-api';
 import { requireAdminPermission } from '@/lib/admin-page-auth';
@@ -9,14 +9,14 @@ import { CompositionSetupManager } from '@/components/admin/composition-setup-ma
 
 export default async function AdminCompositionSetupPage() {
   const me = await requireAdminPermission('CATALOG_READ');
-  const [data, structure] = await Promise.all([
+  const [data, flowerPage] = await Promise.all([
     fetchProductsPage({
       needsCompositionMigration: true,
       page: 1,
       pageSize: 50,
       sort: 'newest',
     }),
-    fetchCatalogStructurePickers(),
+    fetchFlowerItemsPage({ page: 1, pageSize: 100 }),
   ]);
 
   return (
@@ -27,7 +27,7 @@ export default async function AdminCompositionSetupPage() {
       />
       <CompositionSetupManager
         initial={data}
-        flowerItems={structure.flowerItems}
+        flowerItems={flowerPage.items}
         canUpdate={roleHasPermission(me.user.role, 'CATALOG_UPDATE')}
       />
     </main>
