@@ -133,6 +133,15 @@ Storefront type / variety / origin filters: if a product has any `ProductCompone
 
 Saving a product with FlowerItem composition **always clears** `Product.flowerType/Variety/Origin` server-side.
 
+### ProductComponent XOR (DB)
+
+PostgreSQL CHECK `product_components_flower_ref_xor` (migration `20261005140000_product_component_flower_ref_xor`):
+
+- exactly one of `flower_item_id` / `flower_id` is NOT NULL
+- migration aborts with sample IDs if invalid rows exist (no silent data rewrite)
+
+App-level: `assertComponentFlowerRefXor` on every composition write.
+
 ### Navigation menu (separate from CatalogCategory)
 
 `NavigationMenu` / `NavigationMenuItem` drive the storefront header. Empty successful API response → empty nav. `PRIMARY_NAV` is outage-only fallback (API error), not used when the manager clears/disables all items.

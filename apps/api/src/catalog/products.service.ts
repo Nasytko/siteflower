@@ -380,8 +380,18 @@ export class ProductsService {
         const flowerItemIds = source.components
           .map((component) => component.flowerItemId)
           .filter((id): id is string => Boolean(id));
-        // Duplicate is a new assignment — HIDDEN FlowerItems must not be cloned onto the draft.
-        await this.flowerRefs.assertFlowerItemsAssignable(flowerItemIds);
+        // Duplicate = new assignment. Archived FlowerItems cannot be copied onto the new draft.
+        // Existing source product keeps its archived composition (policy: archive does not break live products).
+        try {
+          await this.flowerRefs.assertFlowerItemsAssignable(flowerItemIds);
+        } catch (err) {
+          if (err instanceof BadRequestException) {
+            throw new ConflictException(
+              'Нельзя дублировать товар: в составе есть архивный цветок. Восстановите цветок или замените его в составе, затем повторите.',
+            );
+          }
+          throw err;
+        }
         await this.products.replaceComponents(
           product.id,
           source.components.map((component) => ({

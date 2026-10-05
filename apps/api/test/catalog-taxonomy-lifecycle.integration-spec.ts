@@ -686,4 +686,51 @@ describe('Catalog taxonomy lifecycle (integration)', () => {
       false,
     );
   });
+
+  it('rejects ProductComponent XOR violations at DB and concurrent FlowerItem create races to one row', async () => {
+    const http = await login();
+    const suffix = Date.now();
+
+    const type = await http
+      .post('/api/v1/admin/catalog/flower-refs/types')
+      .set('Origin', origin)
+      .send({ name: `XorType ${suffix}`, slug: `xor-type-${suffix}` })
+      .expect(201);
+
+    const product = await createDraftProduct(http, `Xor Product ${suffix}`);
+
+    // DB CHECK: both null rejected.
+    await expect(
+      pool.query(
+        `INSERT INTO product_components (
+           id, product_id, flower_item_id, flower_id, display_name, quantity, unit, sort_order, created_at, updated_at
+         ) VALUES ($1, $2, NULL, NULL, 'bad', 1, 'STEM', 0, NOW(), NOW())`,
+        [uuid(), product.id],
+      ),
+    ).rejects.toThrow(/product_components_flower_ref_xor|check/i);
+
+    // Concurrent identical creates → exactly one FlowerItem for identity.
+    const payload = {
+      flowerTypeId: type.body.id,
+      stemLengthCm: 77,
+    };
+    const [r1, r2] = await Promise.all([
+      http.post('/api/v1/admin/catalog/flower-refs/items').set('Origin', origin).send(payload),
+      http.post('/api/v1/admin/catalog/flower-refs/items').set('Origin', origin).send(payload),
+    ]);
+    const statuses = [r1.status, r2.status].sort();
+    expect(statuses).toEqual([201, 409]);
+    const created = r1.status === 201 ? r1.body : r2.body;
+    const conflict = r1.status === 409 ? r1.body : r2.body;
+    expect(conflict.code).toBe('FLOWER_ITEM_DUPLICATE');
+    if (conflict.existingId) {
+      expect(conflict.existingId).toBe(created.id);
+    }
+
+    const countMapped = await pool.query(
+      `SELECT COUNT(*)::int AS c FROM flower_items WHERE flower_type_id = $1 AND height_cm = 77`,
+      [type.body.id],
+    );
+    expect(countMapped.rows[0].c).toBe(1);
+  });
 });

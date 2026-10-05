@@ -650,6 +650,7 @@ model ProductComponent {
   /// Concrete stem/SKU from flower dictionary. Source of truth for composition filters.
   flowerItemId String?       @map("flower_item_id") @db.Uuid
   /// Legacy discovery Flower (/cvety facet). Optional; prefer flowerItemId.
+  /// DB CHECK product_components_flower_ref_xor: exactly one of flowerItemId / flowerId.
   flowerId     String?       @map("flower_id") @db.Uuid
   displayName  String        @map("display_name") @db.VarChar(160)
   quantity     Int?

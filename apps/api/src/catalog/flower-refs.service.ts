@@ -873,6 +873,11 @@ export class FlowerRefsService {
           ? {}
           : { visibility: 'VISIBLE' as const };
 
+    const stemFromQuery =
+      q && /^\d{1,3}$/.test(q) ? Number(q) : q && /^(\d{1,3})\s*см$/i.test(q)
+        ? Number(q.replace(/[^\d]/g, ''))
+        : null;
+
     const where = {
       ...(options?.flowerTypeId ? { flowerTypeId: options.flowerTypeId } : {}),
       ...(options?.flowerFormId ? { flowerFormId: options.flowerFormId } : {}),
@@ -887,6 +892,9 @@ export class FlowerRefsService {
               { flowerForm: { name: { contains: q, mode: 'insensitive' as const } } },
               { flowerVariety: { name: { contains: q, mode: 'insensitive' as const } } },
               { flowerOrigin: { name: { contains: q, mode: 'insensitive' as const } } },
+              ...(stemFromQuery != null && Number.isFinite(stemFromQuery)
+                ? [{ stemLengthCm: stemFromQuery }]
+                : []),
             ],
           }
         : {}),
@@ -1076,9 +1084,12 @@ export class FlowerRefsService {
       return toFlowerItemAdminDto(row as FlowerItemRow);
     } catch (err) {
       if (err instanceof ConflictException || err instanceof BadRequestException) throw err;
+      // Unique race (identity_key or slug): map to deterministic FLOWER_ITEM_DUPLICATE conflict.
       const raced = await this.prisma.client.flowerItem.findFirst({
-        where: { identityKey: fields.identityKey },
-        select: { id: true, name: true },
+        where: {
+          OR: [{ identityKey: fields.identityKey }, { slug: fields.slug }],
+        },
+        select: { id: true, name: true, identityKey: true },
       });
       if (raced) {
         throw new ConflictException({
@@ -1090,7 +1101,19 @@ export class FlowerRefsService {
           existingName: raced.name,
         });
       }
-      throw new ConflictException(`Такой цветок уже существует: ${fields.name}`);
+      const prismaCode =
+        err && typeof err === 'object' && 'code' in err
+          ? String((err as { code?: unknown }).code ?? '')
+          : '';
+      if (prismaCode === 'P2002') {
+        throw new ConflictException({
+          statusCode: 409,
+          error: 'Conflict',
+          message: `Такой цветок уже существует: ${fields.name}`,
+          code: 'FLOWER_ITEM_DUPLICATE',
+        });
+      }
+      throw err;
     }
   }
 
