@@ -151,6 +151,7 @@ export const adminEndpoints = {
   flowerOrigin: (id: string) => `${ADMIN}/catalog/flower-refs/origins/${id}`,
   flowerOriginReassignDelete: (id: string) =>
     `${ADMIN}/catalog/flower-refs/origins/${id}/reassign-and-delete`,
+  flowerForms: `${ADMIN}/catalog/flower-refs/forms`,
   flowerItems: `${ADMIN}/catalog/flower-refs/items`,
   flowerItem: (id: string) => `${ADMIN}/catalog/flower-refs/items/${id}`,
 

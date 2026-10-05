@@ -74,22 +74,23 @@ Do **not** confuse with legacy composition `Flower` taxonomy (`/cvety` SEO facet
 
 | Entity | Example | Role |
 | --- | --- | --- |
-| **FlowerType** | Роза | Dictionary level 1 |
-| **FlowerVariety** | Мондиаль | Dictionary level 2 under type |
-| **FlowerOrigin** | Эквадор | Shared origin dictionary |
-| **FlowerItem** | Роза Мондиаль 60 см Эквадор | Concrete reusable stem/SKU (**stem** height) |
-| **Product.heightCm** | 60 | **Bouquet/card** height (PDP ruler, family switcher) |
+| **FlowerType** | Роза | Вид |
+| **FlowerForm** | Классическая | Форма **внутри** вида (не глобальный enum) |
+| **FlowerVariety** | Мондиаль | Сорт под видом |
+| **FlowerOrigin** | Эквадор | Происхождение |
+| **FlowerItem** | Роза Мондиаль 60 см Эквадор | Конкретная позиция (`stemLengthCm`) |
+| **Product.bouquetHeightCm** | 45 | Высота готового букета (PDP ruler) |
 
-### Product.heightCm vs FlowerItem.heightCm
+Canonical name: `flowerItemDisplayName` only (no duplicated string builders).
 
-These are **different semantics** — keep both. Never OR them in one filter.
+Admin: **Каталог → Цветы**. Composition: ProductComponent → FlowerItem + quantity.
 
-| Field | Meaning | Used for |
+### Heights — never mix
+
+| Field | Column | Meaning |
 | --- | --- | --- |
-| **FlowerItem.heightCm** | Stem/SKU height | Filter **«Высота цветка»** (non-overlapping bands) |
-| **Product.heightCm** | Finished bouquet/card height | PDP ruler, family labels; optional filter **«Высота букета»** |
-
-A mixed bouquet can have stems of different heights; the card still has one display height. Do **not** delete `Product.heightCm`.
+| `FlowerItem.stemLengthCm` | `flower_items.height_cm` | Stem — filter «Высота цветка» |
+| `Product.bouquetHeightCm` | `products.height_cm` | Bouquet — ruler / «Высота букета» |
 
 ### Category placement
 

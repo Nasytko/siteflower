@@ -7,7 +7,7 @@ function baseProduct(
     id: 'p1',
     name: 'Букет',
     slug: 'buket',
-    heightCm: 45,
+    bouquetHeightCm: 45,
     flowerType: { id: 'legacy-type', slug: 'roza', name: 'Роза', visibility: 'VISIBLE' },
     flowerVariety: null,
     flowerOrigin: { id: 'legacy-origin', slug: 'ekvador', name: 'Эквадор', visibility: 'VISIBLE' },
@@ -23,7 +23,7 @@ describe('productDisplayFlowerAttrs composition-first', () => {
         {
           flowerItem: {
             id: 'item-1',
-            heightCm: 60,
+            stemLengthCm: 60,
             flowerType: { id: 't2', slug: 'hrizantema', name: 'Хризантема', visibility: 'VISIBLE' },
             flowerVariety: { id: 'v2', slug: 'bigudi', name: 'Бигуди', visibility: 'VISIBLE' },
             flowerOrigin: { id: 'o2', slug: 'ferma', name: 'Фермерская', visibility: 'VISIBLE' },

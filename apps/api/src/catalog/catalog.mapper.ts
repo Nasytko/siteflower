@@ -61,6 +61,7 @@ export const PRODUCT_INCLUDE = {
       flowerItem: {
         include: {
           flowerType: { select: { id: true, slug: true, name: true } },
+          flowerForm: { select: { id: true, slug: true, name: true } },
           flowerVariety: { select: { id: true, slug: true, name: true } },
           flowerOrigin: { select: { id: true, slug: true, name: true } },
         },
@@ -290,7 +291,7 @@ export function primaryFlowerItem(product: ProductWithRelations) {
 /**
  * Display attrs for cards/PDP taxonomy chips.
  * - Type/variety/origin: composition FlowerItem wins when present (never show stale Product.flower*).
- * - heightCm here is bouquet/card height only (Product.heightCm); stem lives on FlowerItem.
+ * - heightCm here is bouquet/card height only (product.bouquetHeightCm); stem lives on FlowerItem.
  */
 export function productDisplayFlowerAttrs(product: ProductWithRelations): {
   heightCm: number | null;
@@ -304,8 +305,8 @@ export function productDisplayFlowerAttrs(product: ProductWithRelations): {
   const item = primaryFlowerItem(product);
   if (item) {
     return {
-      heightCm: product.heightCm ?? null,
-      stemHeightCm: item.heightCm ?? null,
+      heightCm: product.bouquetHeightCm ?? null,
+      stemHeightCm: item.stemLengthCm ?? null,
       originName: item.flowerOrigin?.name ?? null,
       varietyName: item.flowerVariety?.name ?? null,
       flowerType: item.flowerType ? toTaxonomyRef(item.flowerType) : null,
@@ -314,7 +315,7 @@ export function productDisplayFlowerAttrs(product: ProductWithRelations): {
     };
   }
   return {
-    heightCm: product.heightCm ?? null,
+    heightCm: product.bouquetHeightCm ?? null,
     stemHeightCm: null,
     originName: product.flowerOrigin?.name ?? null,
     varietyName: product.flowerVariety?.name ?? null,
@@ -394,7 +395,7 @@ export function toProductAdminDto(
     description: product.description,
     lifecycle: product.lifecycle,
     availability: product.availability,
-    heightCm: product.heightCm ?? null,
+    heightCm: product.bouquetHeightCm ?? null,
     bouquetSize: product.bouquetSize ? toTaxonomyRef(product.bouquetSize) : null,
     bouquetSizeId: product.bouquetSizeId,
     catalogCategoryId: product.catalogCategoryId,
@@ -487,7 +488,7 @@ export function toProductPublicDto(
     shortDescription: product.shortDescription,
     description: product.description,
     availability: product.availability,
-    heightCm: product.heightCm ?? null,
+    heightCm: product.bouquetHeightCm ?? null,
     bouquetSize: product.bouquetSize ? toTaxonomyRef(product.bouquetSize) : null,
     catalogCategory: product.catalogCategory ? toTaxonomyRef(product.catalogCategory) : null,
     flowerType: displayFlower.flowerType,
@@ -561,7 +562,7 @@ export function toProductListItemDto(
     lifecycle: product.lifecycle,
     availability: product.availability,
     version: product.version,
-    heightCm: product.heightCm ?? null,
+    heightCm: product.bouquetHeightCm ?? null,
     bouquetSize: product.bouquetSize ? toTaxonomyRef(product.bouquetSize) : null,
     catalogCategory: product.catalogCategory ? toTaxonomyRef(product.catalogCategory) : null,
     flowerType: displayFlower.flowerType,

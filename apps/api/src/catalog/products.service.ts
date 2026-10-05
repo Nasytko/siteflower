@@ -262,7 +262,7 @@ export class ProductsService {
           description: input.description ? trimmedOrNull(input.description) : null,
           lifecycle: 'DRAFT',
           ...(input.availability ? { availability: input.availability } : {}),
-          ...(input.heightCm === undefined ? {} : { heightCm: input.heightCm }),
+          ...(input.heightCm === undefined ? {} : { bouquetHeightCm: input.heightCm }),
           ...(input.bouquetSizeId
             ? { bouquetSize: { connect: { id: input.bouquetSizeId } } }
             : {}),
@@ -336,7 +336,7 @@ export class ProductsService {
           slug,
           shortDescription: source.shortDescription,
           description: source.description,
-          heightCm: source.heightCm,
+          bouquetHeightCm: source.bouquetHeightCm,
           lifecycle: 'DRAFT',
           availability: source.availability,
           currency: source.currency,
@@ -487,7 +487,7 @@ export class ProductsService {
           ? {}
           : { description: trimmedOrNull(input.description) }),
         ...(input.availability === undefined ? {} : { availability: input.availability }),
-        ...(input.heightCm === undefined ? {} : { heightCm: input.heightCm }),
+        ...(input.heightCm === undefined ? {} : { bouquetHeightCm: input.heightCm }),
         ...(input.bouquetSizeId === undefined ? {} : { bouquetSizeId: input.bouquetSizeId }),
         ...(input.currency === undefined ? {} : { currency: input.currency }),
         ...(input.seoTitle === undefined ? {} : { seoTitle: trimmedOrNull(input.seoTitle) }),
@@ -587,7 +587,7 @@ export class ProductsService {
         shortDescription: trimmedOrNull(input.shortDescription ?? null),
         description: trimmedOrNull(input.description ?? null),
         availability: input.availability,
-        heightCm: input.heightCm === undefined ? product.heightCm : input.heightCm,
+        bouquetHeightCm: input.heightCm === undefined ? product.bouquetHeightCm : input.heightCm,
         seoTitle: trimmedOrNull(input.seoTitle ?? null),
         seoDescription: trimmedOrNull(input.seoDescription ?? null),
         noIndex: input.noIndex,

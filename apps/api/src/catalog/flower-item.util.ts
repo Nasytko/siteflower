@@ -11,9 +11,10 @@ import {
 export type FlowerItemRow = {
   id: string;
   flowerTypeId: string;
+  flowerFormId: string | null;
   flowerVarietyId: string | null;
   flowerOriginId: string | null;
-  heightCm: number | null;
+  stemLengthCm: number | null;
   identityKey: string;
   slug: string;
   name: string;
@@ -21,6 +22,7 @@ export type FlowerItemRow = {
   visibility: TaxonomyVisibility;
   version: number;
   flowerType: { id: string; slug: string; name: string };
+  flowerForm: { id: string; slug: string; name: string } | null;
   flowerVariety: { id: string; slug: string; name: string } | null;
   flowerOrigin: { id: string; slug: string; name: string } | null;
   _count?: { components: number };
@@ -34,14 +36,16 @@ export function toFlowerItemDto(row: FlowerItemRow): FlowerItemDto {
   return {
     id: row.id,
     flowerTypeId: row.flowerTypeId,
+    flowerFormId: row.flowerFormId,
     flowerVarietyId: row.flowerVarietyId,
     flowerOriginId: row.flowerOriginId,
-    heightCm: row.heightCm,
+    stemLengthCm: row.stemLengthCm,
     slug: row.slug,
     name: row.name,
     sortOrder: row.sortOrder,
     visibility: row.visibility,
     flowerType: toRef(row.flowerType),
+    flowerForm: row.flowerForm ? toRef(row.flowerForm) : null,
     flowerVariety: row.flowerVariety ? toRef(row.flowerVariety) : null,
     flowerOrigin: row.flowerOrigin ? toRef(row.flowerOrigin) : null,
   };
@@ -58,10 +62,12 @@ export function toFlowerItemAdminDto(row: FlowerItemRow): FlowerItemAdminDto {
 
 export function buildFlowerItemFields(input: {
   flowerTypeId: string;
+  flowerFormId?: string | null;
   flowerVarietyId?: string | null;
   flowerOriginId?: string | null;
-  heightCm?: number | null;
+  stemLengthCm?: number | null;
   typeName: string;
+  formName?: string | null;
   varietyName?: string | null;
   originName?: string | null;
   name?: string;
@@ -69,21 +75,29 @@ export function buildFlowerItemFields(input: {
 }) {
   const identityKey = flowerItemIdentityKey({
     flowerTypeId: input.flowerTypeId,
+    flowerFormId: input.flowerFormId,
     flowerVarietyId: input.flowerVarietyId,
     flowerOriginId: input.flowerOriginId,
-    heightCm: input.heightCm,
+    stemLengthCm: input.stemLengthCm,
   });
   const name =
     input.name?.trim() ||
     flowerItemDisplayName({
       typeName: input.typeName,
+      formName: input.formName,
       varietyName: input.varietyName,
       originName: input.originName,
-      heightCm: input.heightCm,
+      stemLengthCm: input.stemLengthCm,
     });
   const slugBase =
     input.slug?.trim() ||
-    [input.typeName, input.varietyName, input.originName, input.heightCm != null ? `${input.heightCm}cm` : null]
+    [
+      input.typeName,
+      input.formName,
+      input.varietyName,
+      input.originName,
+      input.stemLengthCm != null ? `${input.stemLengthCm}cm` : null,
+    ]
       .filter(Boolean)
       .join(' ');
   const slug = normalizeSlug(slugBase);
@@ -92,6 +106,7 @@ export function buildFlowerItemFields(input: {
 
 export const FLOWER_ITEM_INCLUDE = {
   flowerType: { select: { id: true, slug: true, name: true } },
+  flowerForm: { select: { id: true, slug: true, name: true } },
   flowerVariety: { select: { id: true, slug: true, name: true } },
   flowerOrigin: { select: { id: true, slug: true, name: true } },
 } as const;

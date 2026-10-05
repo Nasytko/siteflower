@@ -12,8 +12,8 @@ export default async function AdminFlowerStructurePage() {
   return (
     <main id="main-content" className="space-y-6">
       <AdminPageHeader
-        title="Справочник цветов"
-        lead="Вид → сорт → позиция (происхождение и высота). Количество задаётся в составе товара."
+        title="Цветы"
+        lead="Конкретные позиции для состава: вид, форма, сорт, происхождение и высота стебля. Количество задаётся в составе товара."
       />
       <FlowerStructureManager
         initialTypes={flowerTypes}

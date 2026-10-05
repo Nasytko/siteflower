@@ -148,6 +148,11 @@ class CreateFlowerItemDto {
   @IsOptional()
   @ValidateIf((_, value) => value !== null)
   @IsUUID()
+  flowerFormId?: string | null;
+
+  @IsOptional()
+  @ValidateIf((_, value) => value !== null)
+  @IsUUID()
   flowerVarietyId?: string | null;
 
   @IsOptional()
@@ -155,6 +160,15 @@ class CreateFlowerItemDto {
   @IsUUID()
   flowerOriginId?: string | null;
 
+  @IsOptional()
+  @ValidateIf((_, value) => value !== null)
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(300)
+  stemLengthCm?: number | null;
+
+  /** @deprecated Prefer stemLengthCm */
   @IsOptional()
   @ValidateIf((_, value) => value !== null)
   @Type(() => Number)
@@ -196,6 +210,11 @@ class UpdateFlowerItemDto extends ExpectedVersionDto {
   @IsOptional()
   @ValidateIf((_, value) => value !== null)
   @IsUUID()
+  flowerFormId?: string | null;
+
+  @IsOptional()
+  @ValidateIf((_, value) => value !== null)
+  @IsUUID()
   flowerVarietyId?: string | null;
 
   @IsOptional()
@@ -203,6 +222,15 @@ class UpdateFlowerItemDto extends ExpectedVersionDto {
   @IsUUID()
   flowerOriginId?: string | null;
 
+  @IsOptional()
+  @ValidateIf((_, value) => value !== null)
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(300)
+  stemLengthCm?: number | null;
+
+  /** @deprecated Prefer stemLengthCm */
   @IsOptional()
   @ValidateIf((_, value) => value !== null)
   @Type(() => Number)
@@ -244,6 +272,29 @@ export class AdminFlowerRefsController {
   @RequirePermissions('CATALOG_READ')
   listOrigins() {
     return this.flowerRefs.listOriginsAdmin();
+  }
+
+  @Get('forms')
+  @RequirePermissions('CATALOG_READ')
+  listForms(
+    @Query('flowerTypeId') flowerTypeId?: string,
+    @Query('includeHidden') includeHidden?: string,
+  ) {
+    return this.flowerRefs.listFormsAdmin(
+      flowerTypeId,
+      includeHidden === '1' || includeHidden === 'true',
+    );
+  }
+
+  @Post('forms')
+  @RequirePermissions('CATALOG_CREATE')
+  createForm(
+    @Body() body: CreateFlowerVarietyDto,
+    @CurrentAdmin() admin: AuthenticatedAdmin,
+    @Req() req: Request,
+  ) {
+    // Reuse variety DTO shape: flowerTypeId + name (+ optional slug/sortOrder).
+    return this.flowerRefs.createForm(body, actorFrom(admin, req));
   }
 
   @Get('items')

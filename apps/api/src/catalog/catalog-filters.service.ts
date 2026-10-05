@@ -399,7 +399,7 @@ export class CatalogFiltersService {
                 productWhere,
                 {
                   components: {
-                    some: { flowerItem: { heightCm: bounds } },
+                    some: { flowerItem: { stemLengthCm: bounds } },
                   },
                 },
               ],
@@ -418,7 +418,7 @@ export class CatalogFiltersService {
           if (!bounds) continue;
           const count = await this.prisma.client.product.count({
             where: {
-              AND: [productWhere, { heightCm: bounds }],
+              AND: [productWhere, { bouquetHeightCm: bounds }],
             },
           });
           if (count > 0) {

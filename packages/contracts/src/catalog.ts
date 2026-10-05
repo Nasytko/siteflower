@@ -351,21 +351,38 @@ export type FlowerOriginAdminDto = FlowerOriginDto & {
   itemsCount?: number;
 };
 
+export type FlowerFormDto = {
+  id: string;
+  flowerTypeId: string;
+  slug: string;
+  name: string;
+  sortOrder: number;
+  visibility: TaxonomyVisibility;
+};
+
+export type FlowerFormAdminDto = FlowerFormDto & {
+  version: number;
+  itemsCount: number;
+};
+
 /**
- * Concrete reusable stem/SKU: Type + optional Variety + Origin + height.
+ * Concrete reusable stem/SKU: Type + optional Form + Variety + Origin + stem length.
  * Quantity is NEVER on FlowerItem — only on ProductComponent.
  */
 export type FlowerItemDto = {
   id: string;
   flowerTypeId: string;
+  flowerFormId: string | null;
   flowerVarietyId: string | null;
   flowerOriginId: string | null;
-  heightCm: number | null;
+  /** Stem length in cm (FlowerItem). Not bouquet height. */
+  stemLengthCm: number | null;
   slug: string;
   name: string;
   sortOrder: number;
   visibility: TaxonomyVisibility;
   flowerType: TaxonomyRefDto;
+  flowerForm: TaxonomyRefDto | null;
   flowerVariety: TaxonomyRefDto | null;
   flowerOrigin: TaxonomyRefDto | null;
 };
@@ -391,31 +408,42 @@ export type CatalogDeleteBlockerDto = {
 /** Stable uniqueness key for FlowerItem (null parts → `_`). */
 export function flowerItemIdentityKey(input: {
   flowerTypeId: string;
+  flowerFormId?: string | null;
   flowerVarietyId?: string | null;
   flowerOriginId?: string | null;
+  stemLengthCm?: number | null;
+  /** @deprecated Use stemLengthCm */
   heightCm?: number | null;
 }): string {
+  const stem = input.stemLengthCm ?? input.heightCm;
   return [
     input.flowerTypeId,
+    input.flowerFormId ?? '_',
     input.flowerVarietyId ?? '_',
     input.flowerOriginId ?? '_',
-    input.heightCm == null ? '_' : String(input.heightCm),
+    stem == null ? '_' : String(stem),
   ].join('|');
 }
 
 /**
- * Canonical FlowerItem label from dictionary fields.
- * Format: "{Type} {Variety} {height} см {Origin}" — e.g. "Роза Мондиаль 60 см Эквадор".
+ * Canonical FlowerItem label — single SoT for admin + storefront.
+ * Format: "{Type} {Variety} {stem} см {Origin}" — form omitted from default retail label
+ * (form is a manager/filter attribute; name stays short for shoppers).
+ * e.g. "Роза Мондиаль 60 см Эквадор"
  */
 export function flowerItemDisplayName(input: {
   typeName: string;
+  formName?: string | null;
   varietyName?: string | null;
   originName?: string | null;
+  stemLengthCm?: number | null;
+  /** @deprecated Use stemLengthCm */
   heightCm?: number | null;
 }): string {
+  const stem = input.stemLengthCm ?? input.heightCm;
   const parts: string[] = [input.typeName.trim()];
   if (input.varietyName?.trim()) parts.push(input.varietyName.trim());
-  if (input.heightCm != null) parts.push(`${input.heightCm} см`);
+  if (stem != null) parts.push(`${stem} см`);
   if (input.originName?.trim()) parts.push(input.originName.trim());
   return parts.filter(Boolean).join(' ');
 }

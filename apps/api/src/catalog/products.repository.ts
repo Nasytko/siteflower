@@ -700,7 +700,7 @@ export function buildProductWhere(
     };
     // Stem height only — do not OR with Product.heightCm (bouquet/card).
     and.push({
-      components: { some: { flowerItem: { heightCm: heightFilter } } },
+      components: { some: { flowerItem: { stemLengthCm: heightFilter } } },
     });
   }
 
@@ -714,7 +714,7 @@ export function buildProductWhere(
         ? { lte: filters.bouquetHeightCm.lte }
         : {}),
     };
-    and.push({ heightCm: bouquetHeightFilter });
+    and.push({ bouquetHeightCm: bouquetHeightFilter });
   }
 
   if (filters.familyId) {

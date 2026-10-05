@@ -61,17 +61,17 @@ const NAV_GROUPS: NavGroup[] = [
       { href: '/admin/catalog/categories', label: 'Категории', permission: 'CATALOG_READ' },
       {
         href: '/admin/catalog/flower-structure',
-        label: 'Виды цветов',
+        label: 'Цветы',
         permission: 'CATALOG_READ',
       },
       {
         href: '/admin/catalog/composition-setup',
-        label: 'Настройка состава',
+        label: 'Миграция состава',
         permission: 'CATALOG_READ',
       },
       {
         href: '/admin/catalog/flowers',
-        label: 'Справочники',
+        label: 'Справочники (legacy)',
         permission: 'CATALOG_READ',
         isActive: isDictionaryPath,
       },

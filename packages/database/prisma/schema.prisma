@@ -428,6 +428,7 @@ model FlowerType {
   createdAt  DateTime           @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt  DateTime           @updatedAt @map("updated_at") @db.Timestamptz(3)
 
+  forms     FlowerForm[]
   varieties FlowerVariety[]
   items     FlowerItem[]
   /// @deprecated Prefer composition → FlowerItem.flowerTypeId for discovery.
@@ -435,6 +436,28 @@ model FlowerType {
 
   @@index([visibility, sortOrder])
   @@map("flower_types")
+}
+
+/// Contextual form under a FlowerType (Роза → Классическая / Кустовая / Пионовидная).
+/// Not a global enum — each FlowerType has its own forms.
+model FlowerForm {
+  id           String             @id @default(uuid()) @db.Uuid
+  flowerTypeId String             @map("flower_type_id") @db.Uuid
+  slug         String             @db.VarChar(120)
+  name         String             @db.VarChar(120)
+  sortOrder    Int                @default(0) @map("sort_order")
+  visibility   TaxonomyVisibility @default(VISIBLE)
+  version      Int                @default(1)
+  createdAt    DateTime           @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt    DateTime           @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  flowerType FlowerType   @relation(fields: [flowerTypeId], references: [id], onDelete: Cascade)
+  items      FlowerItem[]
+
+  @@unique([flowerTypeId, slug])
+  @@index([flowerTypeId, sortOrder])
+  @@index([visibility, sortOrder])
+  @@map("flower_forms")
 }
 
 /// Cultivar / variety (Мондиаль, Жизель) under a FlowerType — dictionary level 2.
@@ -478,35 +501,39 @@ model FlowerOrigin {
   @@map("flower_origins")
 }
 
-/// Concrete reusable stem/SKU line: Type + optional Variety + Origin + height.
+/// Concrete reusable stem/SKU line: Type + optional Form + Variety + Origin + stem length.
 /// Quantity never lives here — only on ProductComponent.
 /// Future ERP mapping should target this entity (separate mapping table preferred).
 model FlowerItem {
-  id             String             @id @default(uuid()) @db.Uuid
-  flowerTypeId   String             @map("flower_type_id") @db.Uuid
-  flowerVarietyId String?           @map("flower_variety_id") @db.Uuid
-  flowerOriginId String?            @map("flower_origin_id") @db.Uuid
-  heightCm       Int?               @map("height_cm")
-  /// Stable uniqueness key: typeId|varietyId|_ |originId|_ |height|_
-  identityKey    String             @unique @map("identity_key") @db.VarChar(200)
-  slug           String             @unique @db.VarChar(160)
-  /// Human label, e.g. "Роза Мондиаль · Эквадор · 60 см"
-  name           String             @db.VarChar(200)
-  sortOrder      Int                @default(0) @map("sort_order")
-  visibility     TaxonomyVisibility @default(VISIBLE)
-  version        Int                @default(1)
-  createdAt      DateTime           @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt      DateTime           @updatedAt @map("updated_at") @db.Timestamptz(3)
+  id              String             @id @default(uuid()) @db.Uuid
+  flowerTypeId    String             @map("flower_type_id") @db.Uuid
+  flowerFormId    String?            @map("flower_form_id") @db.Uuid
+  flowerVarietyId String?            @map("flower_variety_id") @db.Uuid
+  flowerOriginId  String?            @map("flower_origin_id") @db.Uuid
+  /// Stem / flower height in cm (NOT bouquet height — that is Product.bouquetHeightCm).
+  stemLengthCm    Int?               @map("height_cm")
+  /// Stable uniqueness: type|form|_|variety|_|origin|_|stem|_
+  identityKey     String             @unique @map("identity_key") @db.VarChar(200)
+  slug            String             @unique @db.VarChar(160)
+  /// Canonical label, e.g. "Роза Мондиаль 60 см Эквадор"
+  name            String             @db.VarChar(200)
+  sortOrder       Int                @default(0) @map("sort_order")
+  visibility      TaxonomyVisibility @default(VISIBLE)
+  version         Int                @default(1)
+  createdAt       DateTime           @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt       DateTime           @updatedAt @map("updated_at") @db.Timestamptz(3)
 
   flowerType    FlowerType     @relation(fields: [flowerTypeId], references: [id], onDelete: Restrict)
+  flowerForm    FlowerForm?    @relation(fields: [flowerFormId], references: [id], onDelete: Restrict)
   flowerVariety FlowerVariety? @relation(fields: [flowerVarietyId], references: [id], onDelete: Restrict)
   flowerOrigin  FlowerOrigin?  @relation(fields: [flowerOriginId], references: [id], onDelete: Restrict)
   components    ProductComponent[]
 
   @@index([flowerTypeId, sortOrder])
+  @@index([flowerFormId])
   @@index([flowerVarietyId])
   @@index([flowerOriginId])
-  @@index([heightCm])
+  @@index([stemLengthCm])
   @@index([visibility, sortOrder])
   @@map("flower_items")
 }
@@ -548,8 +575,8 @@ model Product {
   name             String                  @db.VarChar(200)
   shortDescription String?                 @map("short_description") @db.VarChar(500)
   description      String?                 @db.Text
-  /// Bouquet/card height for ruler & legacy height bands. Stem height lives on FlowerItem.
-  heightCm         Int?                    @map("height_cm")
+  /// Bouquet/card height for ruler. Stem length lives on FlowerItem.stemLengthCm.
+  bouquetHeightCm  Int?                    @map("height_cm")
   bouquetSizeId    String?                 @map("bouquet_size_id") @db.Uuid
   catalogCategoryId String?                @map("catalog_category_id") @db.Uuid
   /// @deprecated Prefer ProductComponent → FlowerItem. Kept for legacy filters/migration.
@@ -594,7 +621,7 @@ model Product {
   @@index([flowerTypeId, lifecycle])
   @@index([flowerVarietyId, lifecycle])
   @@index([flowerOriginId, lifecycle])
-  @@index([heightCm, lifecycle])
+  @@index([bouquetHeightCm, lifecycle])
   @@index([updatedAt(sort: Desc)])
   @@map("products")
 }

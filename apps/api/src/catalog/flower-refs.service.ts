@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import {
   normalizeSlug,
+  flowerItemIdentityKey,
   type FlowerItemAdminDto,
   type FlowerItemDto,
   type FlowerOriginAdminDto,
@@ -353,12 +354,13 @@ export class FlowerRefsService {
 
       const items = await tx.flowerItem.findMany({ where: { flowerVarietyId: id } });
       for (const item of items) {
-        const nextKey = [
-          input.targetFlowerTypeId,
-          item.flowerVarietyId ?? '_',
-          item.flowerOriginId ?? '_',
-          item.heightCm == null ? '_' : String(item.heightCm),
-        ].join('|');
+        const nextKey = flowerItemIdentityKey({
+          flowerTypeId: input.targetFlowerTypeId,
+          flowerFormId: item.flowerFormId,
+          flowerVarietyId: item.flowerVarietyId,
+          flowerOriginId: item.flowerOriginId,
+          stemLengthCm: item.stemLengthCm,
+        });
         const clash = await tx.flowerItem.findFirst({
           where: { identityKey: nextKey, NOT: { id: item.id } },
         });
@@ -374,12 +376,13 @@ export class FlowerRefsService {
       }
 
       for (const item of items) {
-        const nextKey = [
-          input.targetFlowerTypeId,
-          item.flowerVarietyId ?? '_',
-          item.flowerOriginId ?? '_',
-          item.heightCm == null ? '_' : String(item.heightCm),
-        ].join('|');
+        const nextKey = flowerItemIdentityKey({
+          flowerTypeId: input.targetFlowerTypeId,
+          flowerFormId: item.flowerFormId,
+          flowerVarietyId: item.flowerVarietyId,
+          flowerOriginId: item.flowerOriginId,
+          stemLengthCm: item.stemLengthCm,
+        });
         await tx.flowerItem.update({
           where: { id: item.id },
           data: {
@@ -755,6 +758,96 @@ export class FlowerRefsService {
     }
   }
 
+  async assertFormMatchesType(
+    flowerTypeId: string | null | undefined,
+    flowerFormId: string | null | undefined,
+  ): Promise<void> {
+    if (!flowerFormId) return;
+    const form = await this.prisma.client.flowerForm.findUnique({
+      where: { id: flowerFormId },
+    });
+    if (!form) throw new BadRequestException('Flower form not found');
+    if (!flowerTypeId || form.flowerTypeId !== flowerTypeId) {
+      throw new BadRequestException('Форма не принадлежит выбранному виду цветка');
+    }
+  }
+
+  async listFormsAdmin(flowerTypeId?: string, includeHidden = false) {
+    const rows = await this.prisma.client.flowerForm.findMany({
+      where: {
+        ...(flowerTypeId ? { flowerTypeId } : {}),
+        ...(includeHidden ? {} : { visibility: 'VISIBLE' }),
+      },
+      orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }],
+      include: { _count: { select: { items: true } } },
+    });
+    return rows.map((row) => ({
+      id: row.id,
+      flowerTypeId: row.flowerTypeId,
+      slug: row.slug,
+      name: row.name,
+      sortOrder: row.sortOrder,
+      visibility: row.visibility,
+      version: row.version,
+      itemsCount: row._count.items,
+    }));
+  }
+
+  async createForm(
+    input: { flowerTypeId: string; name: string; slug?: string; sortOrder?: number },
+    actor?: ActorContext,
+  ) {
+    const type = await this.prisma.client.flowerType.findUnique({
+      where: { id: input.flowerTypeId },
+    });
+    if (!type) throw new BadRequestException('Flower type not found');
+    const name = input.name.trim();
+    if (!name) throw new BadRequestException('Укажите название формы');
+    const slug = normalizeSlug(input.slug?.trim() || name);
+    if (!slug) throw new BadRequestException('Slug could not be derived');
+    const duplicate = await this.prisma.client.flowerForm.findFirst({
+      where: {
+        flowerTypeId: input.flowerTypeId,
+        OR: [{ slug }, { name: { equals: name, mode: 'insensitive' } }],
+      },
+    });
+    if (duplicate) {
+      throw new ConflictException(`Форма «${duplicate.name}» уже существует для этого вида`);
+    }
+    const created = await this.prisma.client.flowerForm.create({
+      data: {
+        flowerTypeId: input.flowerTypeId,
+        name,
+        slug,
+        sortOrder: input.sortOrder ?? 0,
+      },
+      include: { _count: { select: { items: true } } },
+    });
+    if (actor) {
+      await this.audit.record({
+        actorAdminUserId: actor.actorId,
+        action: 'TAXONOMY_CREATED',
+        entityType: 'FlowerForm',
+        entityId: created.id,
+        metadata: { name: created.name, flowerTypeId: created.flowerTypeId },
+        requestId: actor.requestId,
+        ipHash: actor.ipHash,
+        userAgent: actor.userAgent,
+      });
+    }
+    await this.pingStorefront();
+    return {
+      id: created.id,
+      flowerTypeId: created.flowerTypeId,
+      slug: created.slug,
+      name: created.name,
+      sortOrder: created.sortOrder,
+      visibility: created.visibility,
+      version: created.version,
+      itemsCount: created._count.items,
+    };
+  }
+
   async listItemsAdmin(options?: {
     flowerTypeId?: string;
     flowerVarietyId?: string;
@@ -787,8 +880,11 @@ export class FlowerRefsService {
   async createItem(
     input: {
       flowerTypeId: string;
+      flowerFormId?: string | null;
       flowerVarietyId?: string | null;
       flowerOriginId?: string | null;
+      stemLengthCm?: number | null;
+      /** @deprecated Use stemLengthCm */
       heightCm?: number | null;
       name?: string;
       slug?: string;
@@ -797,10 +893,19 @@ export class FlowerRefsService {
     actor?: ActorContext,
   ): Promise<FlowerItemAdminDto> {
     await this.assertVarietyMatchesType(input.flowerTypeId, input.flowerVarietyId);
+    await this.assertFormMatchesType(input.flowerTypeId, input.flowerFormId);
     const type = await this.prisma.client.flowerType.findUnique({
       where: { id: input.flowerTypeId },
     });
     if (!type) throw new BadRequestException('Flower type not found');
+    let formName: string | null = null;
+    if (input.flowerFormId) {
+      const form = await this.prisma.client.flowerForm.findUnique({
+        where: { id: input.flowerFormId },
+      });
+      if (!form) throw new BadRequestException('Flower form not found');
+      formName = form.name;
+    }
     let varietyName: string | null = null;
     if (input.flowerVarietyId) {
       const variety = await this.prisma.client.flowerVariety.findUnique({
@@ -817,16 +922,19 @@ export class FlowerRefsService {
       if (!origin) throw new BadRequestException('Flower origin not found');
       originName = origin.name;
     }
-    if (input.heightCm != null && (input.heightCm < 1 || input.heightCm > 300)) {
-      throw new BadRequestException('heightCm must be between 1 and 300');
+    const stem = input.stemLengthCm ?? input.heightCm ?? null;
+    if (stem != null && (stem < 1 || stem > 300)) {
+      throw new BadRequestException('stemLengthCm must be between 1 and 300');
     }
 
     const fields = buildFlowerItemFields({
       flowerTypeId: input.flowerTypeId,
+      flowerFormId: input.flowerFormId,
       flowerVarietyId: input.flowerVarietyId,
       flowerOriginId: input.flowerOriginId,
-      heightCm: input.heightCm,
+      stemLengthCm: stem,
       typeName: type.name,
+      formName,
       varietyName,
       originName,
       name: input.name,
@@ -839,9 +947,10 @@ export class FlowerRefsService {
         const created = await tx.flowerItem.create({
           data: {
             flowerTypeId: input.flowerTypeId,
+            flowerFormId: input.flowerFormId ?? null,
             flowerVarietyId: input.flowerVarietyId ?? null,
             flowerOriginId: input.flowerOriginId ?? null,
-            heightCm: input.heightCm ?? null,
+            stemLengthCm: stem,
             identityKey: fields.identityKey,
             slug: fields.slug,
             name: fields.name,
@@ -875,8 +984,11 @@ export class FlowerRefsService {
       });
       await this.pingStorefront();
       return toFlowerItemAdminDto(row as FlowerItemRow);
-    } catch {
-      throw new ConflictException('Flower item already exists or slug is taken');
+    } catch (err) {
+      if (err instanceof ConflictException || err instanceof BadRequestException) throw err;
+      throw new ConflictException(
+        `Такой цветок уже существует: ${fields.name}`,
+      );
     }
   }
 
@@ -890,6 +1002,8 @@ export class FlowerRefsService {
       visibility?: TaxonomyVisibility;
       flowerVarietyId?: string | null;
       flowerOriginId?: string | null;
+      flowerFormId?: string | null;
+      stemLengthCm?: number | null;
       heightCm?: number | null;
     },
     actor?: ActorContext,
@@ -903,14 +1017,21 @@ export class FlowerRefsService {
       throw new ConflictException('Flower item was modified elsewhere');
     }
 
+    const nextFormId =
+      input.flowerFormId === undefined ? existing.flowerFormId : input.flowerFormId;
     const nextVarietyId =
       input.flowerVarietyId === undefined ? existing.flowerVarietyId : input.flowerVarietyId;
     const nextOriginId =
       input.flowerOriginId === undefined ? existing.flowerOriginId : input.flowerOriginId;
     const nextHeight =
-      input.heightCm === undefined ? existing.heightCm : input.heightCm;
+      input.stemLengthCm !== undefined
+        ? input.stemLengthCm
+        : input.heightCm === undefined
+          ? existing.stemLengthCm
+          : input.heightCm;
 
     await this.assertVarietyMatchesType(existing.flowerTypeId, nextVarietyId);
+    await this.assertFormMatchesType(existing.flowerTypeId, nextFormId);
     if (nextVarietyId) {
       const variety = await this.prisma.client.flowerVariety.findUnique({
         where: { id: nextVarietyId },
@@ -924,9 +1045,14 @@ export class FlowerRefsService {
       if (!origin) throw new BadRequestException('Flower origin not found');
     }
     if (nextHeight != null && (nextHeight < 1 || nextHeight > 300)) {
-      throw new BadRequestException('heightCm must be between 1 and 300');
+      throw new BadRequestException('stemLengthCm must be between 1 and 300');
     }
 
+    const formName =
+      nextFormId == null
+        ? null
+        : (await this.prisma.client.flowerForm.findUnique({ where: { id: nextFormId } }))?.name ??
+          null;
     const varietyName =
       nextVarietyId == null
         ? null
@@ -941,10 +1067,12 @@ export class FlowerRefsService {
 
     const fields = buildFlowerItemFields({
       flowerTypeId: existing.flowerTypeId,
+      flowerFormId: nextFormId,
       flowerVarietyId: nextVarietyId,
       flowerOriginId: nextOriginId,
-      heightCm: nextHeight,
+      stemLengthCm: nextHeight,
       typeName: existing.flowerType.name,
+      formName,
       varietyName,
       originName,
       name: input.name ?? existing.name,
@@ -957,9 +1085,10 @@ export class FlowerRefsService {
         const bumped = await tx.flowerItem.updateMany({
           where: { id, version: input.expectedVersion },
           data: {
+            flowerFormId: nextFormId,
             flowerVarietyId: nextVarietyId,
             flowerOriginId: nextOriginId,
-            heightCm: nextHeight,
+            stemLengthCm: nextHeight,
             identityKey: fields.identityKey,
             slug: fields.slug,
             name: input.name !== undefined ? input.name.trim() : fields.name,
