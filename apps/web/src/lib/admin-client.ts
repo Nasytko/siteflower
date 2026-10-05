@@ -29,6 +29,9 @@ export class AdminRequestError extends Error {
   readonly fieldErrors: AdminFieldError[];
   readonly retryable: boolean;
   readonly issues: PublishValidationIssue[];
+  /** Present on duplicate flower conflicts — open existing item. */
+  readonly existingId: string | undefined;
+  readonly existingName: string | undefined;
 
   constructor(
     message: string,
@@ -40,6 +43,8 @@ export class AdminRequestError extends Error {
       issues?: PublishValidationIssue[];
       fieldErrors?: AdminFieldError[];
       retryable?: boolean;
+      existingId?: string;
+      existingName?: string;
     } = {},
   ) {
     super(message);
@@ -54,6 +59,8 @@ export class AdminRequestError extends Error {
         .filter((issue): issue is PublishValidationIssue & { field: string } => Boolean(issue.field))
         .map((issue) => ({ field: issue.field, message: issue.message, code: issue.code }));
     this.retryable = options.retryable ?? (this.kind === 'server' || this.kind === 'network');
+    this.existingId = options.existingId;
+    this.existingName = options.existingName;
   }
 }
 
@@ -143,6 +150,14 @@ export function buildAdminRequestError(
   const code = readCode(body) ?? issues[0]?.code;
   const requestId = readRequestId(body, response);
   const bodyMessage = readBodyMessage(body);
+  const existingId =
+    body && typeof body === 'object' && typeof (body as { existingId?: unknown }).existingId === 'string'
+      ? (body as { existingId: string }).existingId
+      : undefined;
+  const existingName =
+    body && typeof body === 'object' && typeof (body as { existingName?: unknown }).existingName === 'string'
+      ? (body as { existingName: string }).existingName
+      : undefined;
 
   let message = defaultMessageForKind(kind, status);
   if (kind === 'conflict') {
@@ -165,6 +180,8 @@ export function buildAdminRequestError(
     code,
     requestId,
     issues,
+    existingId,
+    existingName,
     retryable: kind === 'server' || kind === 'network' || kind === 'rate_limit',
   });
 }

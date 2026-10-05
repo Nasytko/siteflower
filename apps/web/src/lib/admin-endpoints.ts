@@ -35,9 +35,9 @@ export type TaxonomyKindMeta = {
 export const TAXONOMY_KIND_META: Record<TaxonomyKind, TaxonomyKindMeta> = {
   flowers: {
     kind: 'flowers',
-    title: 'Цветы',
-    lead: 'Справочник цветов. Фильтр «Цветок» на витрине собирается из состава букетов.',
-    itemLabel: 'цветок',
+    title: 'Состав (legacy Flower)',
+    lead: 'Устаревший справочник /cvety. Новые составы — через Каталог → Цветы.',
+    itemLabel: 'позицию',
     hasSwatch: false,
     hasDescription: true,
     hasSeo: true,

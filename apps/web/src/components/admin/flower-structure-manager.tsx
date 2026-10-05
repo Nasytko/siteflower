@@ -1,12 +1,15 @@
 'use client';
 
-import { FormEvent, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import type {
-  FlowerItemAdminDto,
-  FlowerOriginAdminDto,
-  FlowerTypeAdminDto,
-  FlowerVarietyAdminDto,
+import {
+  flowerItemDisplayName,
+  type FlowerFormAdminDto,
+  type FlowerItemAdminDto,
+  type FlowerOriginAdminDto,
+  type FlowerTypeAdminDto,
+  type FlowerVarietyAdminDto,
 } from '@bouquet-one/contracts';
 import {
   adminDelete,
@@ -23,9 +26,28 @@ type Props = {
   initialTypes: FlowerTypeAdminDto[];
   initialVarieties: FlowerVarietyAdminDto[];
   initialOrigins: FlowerOriginAdminDto[];
+  initialForms: FlowerFormAdminDto[];
   initialItems: FlowerItemAdminDto[];
   canCreate: boolean;
   canUpdate: boolean;
+};
+
+type Draft = {
+  flowerTypeId: string;
+  flowerFormId: string;
+  flowerVarietyId: string;
+  flowerOriginId: string;
+  stemLengthCm: string;
+};
+
+type InlineKind = 'type' | 'form' | 'variety' | 'origin';
+
+const EMPTY_DRAFT: Draft = {
+  flowerTypeId: '',
+  flowerFormId: '',
+  flowerVarietyId: '',
+  flowerOriginId: '',
+  stemLengthCm: '',
 };
 
 function countLabel(n: number): string {
@@ -37,10 +59,41 @@ function countLabel(n: number): string {
   return `${n} товаров`;
 }
 
+function previewName(
+  draft: Draft,
+  types: FlowerTypeAdminDto[],
+  forms: FlowerFormAdminDto[],
+  varieties: FlowerVarietyAdminDto[],
+  origins: FlowerOriginAdminDto[],
+): string {
+  const typeName = types.find((t) => t.id === draft.flowerTypeId)?.name ?? '';
+  if (!typeName) return '';
+  const stemRaw = draft.stemLengthCm.trim();
+  const stem = stemRaw ? Number(stemRaw) : null;
+  return flowerItemDisplayName({
+    typeName,
+    formName: forms.find((f) => f.id === draft.flowerFormId)?.name ?? null,
+    varietyName: varieties.find((v) => v.id === draft.flowerVarietyId)?.name ?? null,
+    originName: origins.find((o) => o.id === draft.flowerOriginId)?.name ?? null,
+    stemLengthCm: Number.isFinite(stem) ? stem : null,
+  });
+}
+
+function draftFromItem(item: FlowerItemAdminDto): Draft {
+  return {
+    flowerTypeId: item.flowerTypeId,
+    flowerFormId: item.flowerFormId ?? '',
+    flowerVarietyId: item.flowerVarietyId ?? '',
+    flowerOriginId: item.flowerOriginId ?? '',
+    stemLengthCm: item.stemLengthCm == null ? '' : String(item.stemLengthCm),
+  };
+}
+
 export function FlowerStructureManager({
   initialTypes,
   initialVarieties,
   initialOrigins,
+  initialForms,
   initialItems,
   canCreate,
   canUpdate,
@@ -49,9 +102,26 @@ export function FlowerStructureManager({
   const [types, setTypes] = useState(initialTypes);
   const [varieties, setVarieties] = useState(initialVarieties);
   const [origins, setOrigins] = useState(initialOrigins);
+  const [forms, setForms] = useState(initialForms);
   const [items, setItems] = useState(initialItems);
+
   const [search, setSearch] = useState('');
-  const [collapsedTypes, setCollapsedTypes] = useState<Set<string>>(() => new Set());
+  const [filterTypeId, setFilterTypeId] = useState('');
+  const [filterFormId, setFilterFormId] = useState('');
+  const [filterVarietyId, setFilterVarietyId] = useState('');
+  const [filterOriginId, setFilterOriginId] = useState('');
+  const [filterStatus, setFilterStatus] = useState<'ALL' | 'VISIBLE' | 'HIDDEN'>('ALL');
+
+  const [mode, setMode] = useState<'list' | 'create' | 'edit'>('list');
+  const [editing, setEditing] = useState<FlowerItemAdminDto | null>(null);
+  const [draft, setDraft] = useState<Draft>(EMPTY_DRAFT);
+  const [usedIn, setUsedIn] = useState<FlowerItemAdminDto['usedIn']>([]);
+  const [showUsedIn, setShowUsedIn] = useState(false);
+
+  const [inlineKind, setInlineKind] = useState<InlineKind | null>(null);
+  const [inlineName, setInlineName] = useState('');
+
+  const [duplicateExistingId, setDuplicateExistingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [requestId, setRequestId] = useState<string | null>(null);
   const [phase, setPhase] = useState<FormSavePhase>('idle');
@@ -60,42 +130,74 @@ export function FlowerStructureManager({
 
   const q = search.trim().toLowerCase();
 
-  const tree = useMemo(() => {
-    return types
-      .map((type) => {
-        const typeVarieties = varieties
-          .filter((v) => v.flowerTypeId === type.id)
-          .map((variety) => ({
-            variety,
-            items: items.filter((item) => item.flowerVarietyId === variety.id),
-          }));
-        const orphanItems = items.filter(
-          (item) => item.flowerTypeId === type.id && !item.flowerVarietyId,
-        );
-        return { type, typeVarieties, orphanItems };
-      })
-      .filter((node) => {
-        if (!q) return true;
-        if (node.type.name.toLowerCase().includes(q)) return true;
-        if (node.orphanItems.some((item) => item.name.toLowerCase().includes(q))) return true;
-        return node.typeVarieties.some(
-          (row) =>
-            row.variety.name.toLowerCase().includes(q) ||
-            row.items.some((item) => item.name.toLowerCase().includes(q)),
-        );
-      });
-  }, [types, varieties, items, q]);
+  const filterForms = useMemo(
+    () =>
+      filterTypeId ? forms.filter((f) => f.flowerTypeId === filterTypeId) : forms,
+    [forms, filterTypeId],
+  );
+  const filterVarieties = useMemo(
+    () =>
+      filterTypeId ? varieties.filter((v) => v.flowerTypeId === filterTypeId) : varieties,
+    [varieties, filterTypeId],
+  );
+
+  const draftForms = useMemo(
+    () =>
+      draft.flowerTypeId
+        ? forms.filter((f) => f.flowerTypeId === draft.flowerTypeId && f.visibility === 'VISIBLE')
+        : [],
+    [forms, draft.flowerTypeId],
+  );
+  const draftVarieties = useMemo(
+    () =>
+      draft.flowerTypeId
+        ? varieties.filter(
+            (v) => v.flowerTypeId === draft.flowerTypeId && v.visibility === 'VISIBLE',
+          )
+        : [],
+    [varieties, draft.flowerTypeId],
+  );
+
+  const canonicalPreview = useMemo(
+    () => previewName(draft, types, forms, varieties, origins),
+    [draft, types, forms, varieties, origins],
+  );
+
+  const filteredItems = useMemo(() => {
+    return items.filter((item) => {
+      if (filterTypeId && item.flowerTypeId !== filterTypeId) return false;
+      if (filterFormId && item.flowerFormId !== filterFormId) return false;
+      if (filterVarietyId && item.flowerVarietyId !== filterVarietyId) return false;
+      if (filterOriginId && item.flowerOriginId !== filterOriginId) return false;
+      if (filterStatus !== 'ALL' && item.visibility !== filterStatus) return false;
+      if (!q) return true;
+      const hay = [
+        item.name,
+        item.flowerType.name,
+        item.flowerForm?.name,
+        item.flowerVariety?.name,
+        item.flowerOrigin?.name,
+        item.stemLengthCm != null ? String(item.stemLengthCm) : '',
+      ]
+        .filter(Boolean)
+        .join(' ')
+        .toLowerCase();
+      return hay.includes(q);
+    });
+  }, [items, filterTypeId, filterFormId, filterVarietyId, filterOriginId, filterStatus, q]);
 
   async function reload() {
-    const [nextTypes, nextVarieties, nextOrigins, nextItems] = await Promise.all([
+    const [nextTypes, nextVarieties, nextOrigins, nextForms, nextItems] = await Promise.all([
       adminGet<FlowerTypeAdminDto[]>(adminEndpoints.flowerTypes),
       adminGet<FlowerVarietyAdminDto[]>(adminEndpoints.flowerVarieties),
       adminGet<FlowerOriginAdminDto[]>(adminEndpoints.flowerOrigins),
+      adminGet<FlowerFormAdminDto[]>(`${adminEndpoints.flowerForms}?includeHidden=1`),
       adminGet<FlowerItemAdminDto[]>(`${adminEndpoints.flowerItems}?includeHidden=1`),
     ]);
     setTypes(nextTypes);
     setVarieties(nextVarieties);
     setOrigins(nextOrigins);
+    setForms(nextForms);
     setItems(nextItems);
   }
 
@@ -104,6 +206,7 @@ export function FlowerStructureManager({
     setError(null);
     setRequestId(null);
     setNotice(null);
+    setDuplicateExistingId(null);
     setPhase('saving');
     try {
       await action();
@@ -115,22 +218,502 @@ export function FlowerStructureManager({
       setPhase(err instanceof AdminRequestError ? phaseFromAdminError(err) : 'server');
       setRequestId(err instanceof AdminRequestError ? err.requestId ?? null : null);
       setError(errorMessage(err));
+      if (err instanceof AdminRequestError && err.code === 'FLOWER_ITEM_DUPLICATE' && err.existingId) {
+        setDuplicateExistingId(err.existingId);
+      }
     } finally {
       setPending(false);
     }
   }
 
-  function toggleType(id: string) {
-    setCollapsedTypes((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
+  function openCreate() {
+    setMode('create');
+    setEditing(null);
+    setDraft(EMPTY_DRAFT);
+    setUsedIn([]);
+    setShowUsedIn(false);
+    setInlineKind(null);
+    setInlineName('');
+    setDuplicateExistingId(null);
+    setError(null);
+  }
+
+  async function openEdit(item: FlowerItemAdminDto) {
+    setMode('edit');
+    setEditing(item);
+    setDraft(draftFromItem(item));
+    setInlineKind(null);
+    setInlineName('');
+    setDuplicateExistingId(null);
+    setError(null);
+    setShowUsedIn(false);
+    try {
+      const full = await adminGet<FlowerItemAdminDto>(adminEndpoints.flowerItem(item.id));
+      setEditing(full);
+      setDraft(draftFromItem(full));
+      setUsedIn(full.usedIn ?? []);
+    } catch {
+      setUsedIn([]);
+    }
+  }
+
+  function closeEditor() {
+    setMode('list');
+    setEditing(null);
+    setDraft(EMPTY_DRAFT);
+    setUsedIn([]);
+    setShowUsedIn(false);
+    setInlineKind(null);
+  }
+
+  function setTypeAndResetChildren(flowerTypeId: string) {
+    setDraft((prev) => ({
+      ...prev,
+      flowerTypeId,
+      flowerFormId: '',
+      flowerVarietyId: '',
+    }));
+  }
+
+  async function submitFlower() {
+    if (!draft.flowerTypeId) {
+      setError('Выберите вид цветка');
+      setPhase('server');
+      return;
+    }
+    const stemRaw = draft.stemLengthCm.trim();
+    const stemLengthCm = stemRaw ? Number(stemRaw) : null;
+    if (stemRaw && (!Number.isFinite(stemLengthCm) || stemLengthCm! < 1 || stemLengthCm! > 300)) {
+      setError('Высота стебля должна быть от 1 до 300 см');
+      setPhase('server');
+      return;
+    }
+
+    const payload = {
+      flowerTypeId: draft.flowerTypeId,
+      flowerFormId: draft.flowerFormId || null,
+      flowerVarietyId: draft.flowerVarietyId || null,
+      flowerOriginId: draft.flowerOriginId || null,
+      stemLengthCm,
+    };
+
+    if (mode === 'create') {
+      await run(async () => {
+        await adminPost(adminEndpoints.flowerItems, payload);
+        closeEditor();
+      }, `Создан: ${canonicalPreview}`);
+      return;
+    }
+
+    if (!editing) return;
+    await run(async () => {
+      const updated = await adminPatch<FlowerItemAdminDto>(adminEndpoints.flowerItem(editing.id), {
+        expectedVersion: editing.version,
+        ...payload,
+      });
+      setEditing(updated);
+      setDraft(draftFromItem(updated));
+    }, `Сохранено: ${canonicalPreview}`);
+  }
+
+  async function createInline() {
+    const name = inlineName.trim();
+    if (!name || !inlineKind) return;
+
+    await run(async () => {
+      if (inlineKind === 'type') {
+        const created = await adminPost<FlowerTypeAdminDto>(adminEndpoints.flowerTypes, {
+          name,
+          sortOrder: (types.at(-1)?.sortOrder ?? 0) + 10,
+        });
+        setDraft((prev) => ({
+          ...prev,
+          flowerTypeId: created.id,
+          flowerFormId: '',
+          flowerVarietyId: '',
+        }));
+      } else if (inlineKind === 'form') {
+        if (!draft.flowerTypeId) throw new Error('Сначала выберите вид');
+        const created = await adminPost<FlowerFormAdminDto>(adminEndpoints.flowerForms, {
+          flowerTypeId: draft.flowerTypeId,
+          name,
+          sortOrder: (forms.at(-1)?.sortOrder ?? 0) + 10,
+        });
+        setDraft((prev) => ({ ...prev, flowerFormId: created.id }));
+      } else if (inlineKind === 'variety') {
+        if (!draft.flowerTypeId) throw new Error('Сначала выберите вид');
+        const created = await adminPost<FlowerVarietyAdminDto>(adminEndpoints.flowerVarieties, {
+          flowerTypeId: draft.flowerTypeId,
+          name,
+          sortOrder: (varieties.at(-1)?.sortOrder ?? 0) + 10,
+        });
+        setDraft((prev) => ({ ...prev, flowerVarietyId: created.id }));
+      } else if (inlineKind === 'origin') {
+        const created = await adminPost<FlowerOriginAdminDto>(adminEndpoints.flowerOrigins, {
+          name,
+          sortOrder: (origins.at(-1)?.sortOrder ?? 0) + 10,
+        });
+        setDraft((prev) => ({ ...prev, flowerOriginId: created.id }));
+      }
+      setInlineKind(null);
+      setInlineName('');
+    }, `Добавлено: ${name}`);
+  }
+
+  // Keep filter form/variety coherent when type filter changes.
+  useEffect(() => {
+    if (filterFormId && !filterForms.some((f) => f.id === filterFormId)) {
+      setFilterFormId('');
+    }
+    if (filterVarietyId && !filterVarieties.some((v) => v.id === filterVarietyId)) {
+      setFilterVarietyId('');
+    }
+  }, [filterFormId, filterForms, filterVarietyId, filterVarieties]);
+
+  if (mode === 'create' || mode === 'edit') {
+    return (
+      <div className="space-y-6">
+        <FormSaveStatus
+          phase={phase}
+          savedLabel={notice}
+          errorMessage={error}
+          requestId={requestId}
+          onRefresh={() => void reload()}
+          onDismiss={() => {
+            setError(null);
+            setDuplicateExistingId(null);
+            setPhase(notice ? 'saved' : 'idle');
+          }}
+        />
+
+        {duplicateExistingId ? (
+          <p className="text-sm">
+            <button
+              type="button"
+              className="admin-btn-ghost underline"
+              onClick={() => {
+                const existing = items.find((i) => i.id === duplicateExistingId);
+                if (existing) void openEdit(existing);
+              }}
+            >
+              Открыть существующий цветок
+            </button>
+          </p>
+        ) : null}
+
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <h2 className="admin-section__title">
+            {mode === 'create' ? 'Добавить цветок' : canonicalPreview || editing?.name || 'Цветок'}
+          </h2>
+          <button type="button" className="admin-btn-ghost" onClick={closeEditor} disabled={pending}>
+            ← К списку
+          </button>
+        </div>
+
+        <div className="admin-panel grid max-w-xl gap-4 p-4">
+          <label className="admin-field">
+            <span>Вид</span>
+            <select
+              className="admin-select"
+              value={draft.flowerTypeId}
+              disabled={pending}
+              onChange={(e) => setTypeAndResetChildren(e.target.value)}
+            >
+              <option value="">Выберите вид</option>
+              {types
+                .filter((t) => t.visibility === 'VISIBLE' || t.id === draft.flowerTypeId)
+                .map((t) => (
+                  <option key={t.id} value={t.id}>
+                    {t.name}
+                  </option>
+                ))}
+            </select>
+            {canCreate ? (
+              <button
+                type="button"
+                className="admin-btn-ghost mt-1 text-xs"
+                onClick={() => {
+                  setInlineKind('type');
+                  setInlineName('');
+                }}
+              >
+                + Добавить вид
+              </button>
+            ) : null}
+          </label>
+
+          <label className="admin-field">
+            <span>Форма / тип</span>
+            <select
+              className="admin-select"
+              value={draft.flowerFormId}
+              disabled={pending || !draft.flowerTypeId}
+              onChange={(e) => setDraft((prev) => ({ ...prev, flowerFormId: e.target.value }))}
+            >
+              <option value="">Не указана</option>
+              {draftForms.map((f) => (
+                <option key={f.id} value={f.id}>
+                  {f.name}
+                </option>
+              ))}
+            </select>
+            {canCreate && draft.flowerTypeId ? (
+              <button
+                type="button"
+                className="admin-btn-ghost mt-1 text-xs"
+                onClick={() => {
+                  setInlineKind('form');
+                  setInlineName('');
+                }}
+              >
+                + Добавить форму
+              </button>
+            ) : null}
+          </label>
+
+          <label className="admin-field">
+            <span>Сорт</span>
+            <select
+              className="admin-select"
+              value={draft.flowerVarietyId}
+              disabled={pending || !draft.flowerTypeId}
+              onChange={(e) => setDraft((prev) => ({ ...prev, flowerVarietyId: e.target.value }))}
+            >
+              <option value="">Не указан</option>
+              {draftVarieties.map((v) => (
+                <option key={v.id} value={v.id}>
+                  {v.name}
+                </option>
+              ))}
+            </select>
+            {canCreate && draft.flowerTypeId ? (
+              <button
+                type="button"
+                className="admin-btn-ghost mt-1 text-xs"
+                onClick={() => {
+                  setInlineKind('variety');
+                  setInlineName('');
+                }}
+              >
+                + Добавить сорт
+              </button>
+            ) : null}
+          </label>
+
+          <label className="admin-field">
+            <span>Происхождение</span>
+            <select
+              className="admin-select"
+              value={draft.flowerOriginId}
+              disabled={pending}
+              onChange={(e) => setDraft((prev) => ({ ...prev, flowerOriginId: e.target.value }))}
+            >
+              <option value="">Не указано</option>
+              {origins
+                .filter((o) => o.visibility === 'VISIBLE' || o.id === draft.flowerOriginId)
+                .map((o) => (
+                  <option key={o.id} value={o.id}>
+                    {o.name}
+                  </option>
+                ))}
+            </select>
+            {canCreate ? (
+              <button
+                type="button"
+                className="admin-btn-ghost mt-1 text-xs"
+                onClick={() => {
+                  setInlineKind('origin');
+                  setInlineName('');
+                }}
+              >
+                + Добавить происхождение
+              </button>
+            ) : null}
+          </label>
+
+          <label className="admin-field">
+            <span>Высота стебля</span>
+            <div className="flex items-center gap-2">
+              <input
+                className="admin-input w-28"
+                type="number"
+                min={1}
+                max={300}
+                value={draft.stemLengthCm}
+                disabled={pending}
+                placeholder="не обяз."
+                onChange={(e) => setDraft((prev) => ({ ...prev, stemLengthCm: e.target.value }))}
+              />
+              <span className="text-sm text-[var(--admin-muted)]">см</span>
+            </div>
+          </label>
+
+          {inlineKind ? (
+            <div className="admin-panel space-y-2 border border-[var(--admin-border)] p-3">
+              <p className="text-sm font-medium">
+                {inlineKind === 'type'
+                  ? 'Новый вид'
+                  : inlineKind === 'form'
+                    ? 'Новая форма'
+                    : inlineKind === 'variety'
+                      ? 'Новый сорт'
+                      : 'Новое происхождение'}
+              </p>
+              <input
+                className="admin-input"
+                value={inlineName}
+                autoFocus
+                placeholder="Название"
+                disabled={pending}
+                onChange={(e) => setInlineName(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    void createInline();
+                  }
+                }}
+              />
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  className="admin-btn"
+                  disabled={pending || !inlineName.trim()}
+                  onClick={() => void createInline()}
+                >
+                  Создать
+                </button>
+                <button
+                  type="button"
+                  className="admin-btn-ghost"
+                  disabled={pending}
+                  onClick={() => {
+                    setInlineKind(null);
+                    setInlineName('');
+                  }}
+                >
+                  Отмена
+                </button>
+              </div>
+            </div>
+          ) : null}
+
+          <div className="rounded-md bg-[var(--admin-surface-muted,transparent)] p-3">
+            <p className="text-xs text-[var(--admin-muted)]">Название</p>
+            <p className="text-base font-semibold">
+              {canonicalPreview || 'Выберите вид, чтобы увидеть название'}
+            </p>
+            <p className="mt-1 text-xs text-[var(--admin-muted)]">
+              Собирается автоматически. Форма в название не входит (только фильтр/классификация).
+            </p>
+          </div>
+
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              className="admin-btn"
+              disabled={pending || !draft.flowerTypeId || (!canCreate && mode === 'create')}
+              onClick={() => void submitFlower()}
+            >
+              {mode === 'create' ? 'Создать цветок' : 'Сохранить'}
+            </button>
+            <button type="button" className="admin-btn-ghost" disabled={pending} onClick={closeEditor}>
+              Отмена
+            </button>
+          </div>
+        </div>
+
+        {mode === 'edit' && editing ? (
+          <div className="admin-panel max-w-xl space-y-3 p-4">
+            <div className="flex flex-wrap items-center gap-3 text-sm">
+              <span>
+                Используется в:{' '}
+                <strong>{countLabel(editing.componentsCount)}</strong>
+              </span>
+              {editing.componentsCount > 0 ? (
+                <button
+                  type="button"
+                  className="admin-btn-ghost text-xs"
+                  onClick={() => setShowUsedIn((v) => !v)}
+                >
+                  {showUsedIn ? 'Скрыть список' : 'Показать товары'}
+                </button>
+              ) : null}
+              {editing.visibility === 'HIDDEN' ? (
+                <span className="admin-chip">Архив</span>
+              ) : null}
+            </div>
+
+            {showUsedIn && usedIn && usedIn.length > 0 ? (
+              <ul className="space-y-1 text-sm">
+                {usedIn.map((row) => (
+                  <li key={row.productId}>
+                    <Link
+                      href={`/admin/catalog/products/${row.productId}`}
+                      className="text-[var(--admin-brand)] underline-offset-2 hover:underline"
+                    >
+                      {row.productName}
+                    </Link>
+                    {row.quantity != null ? (
+                      <span className="text-[var(--admin-muted)]"> × {row.quantity}</span>
+                    ) : null}
+                  </li>
+                ))}
+              </ul>
+            ) : null}
+
+            {canUpdate ? (
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  className="admin-btn-ghost"
+                  disabled={pending}
+                  onClick={() =>
+                    void run(async () => {
+                      const updated = await adminPatch<FlowerItemAdminDto>(
+                        adminEndpoints.flowerItem(editing.id),
+                        {
+                          expectedVersion: editing.version,
+                          visibility: editing.visibility === 'VISIBLE' ? 'HIDDEN' : 'VISIBLE',
+                        },
+                      );
+                      setEditing(updated);
+                    }, editing.visibility === 'VISIBLE' ? 'В архиве' : 'Восстановлен')
+                  }
+                >
+                  {editing.visibility === 'VISIBLE' ? 'Архивировать' : 'Восстановить'}
+                </button>
+                {editing.componentsCount === 0 ? (
+                  <button
+                    type="button"
+                    className="admin-btn-ghost text-[var(--admin-danger)]"
+                    disabled={pending}
+                    onClick={() =>
+                      void run(async () => {
+                        await adminDelete(adminEndpoints.flowerItem(editing.id), {
+                          expectedVersion: editing.version,
+                        });
+                        closeEditor();
+                      }, 'Цветок удалён')
+                    }
+                  >
+                    Удалить
+                  </button>
+                ) : (
+                  <p className="text-xs text-[var(--admin-muted)]">
+                    Нельзя удалить: используется в {countLabel(editing.componentsCount)}. Можно
+                    архивировать.
+                  </p>
+                )}
+              </div>
+            ) : null}
+          </div>
+        ) : null}
+      </div>
+    );
   }
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-6">
       <FormSaveStatus
         phase={phase}
         savedLabel={notice}
@@ -143,356 +726,161 @@ export function FlowerStructureManager({
         }}
       />
 
-      <label className="admin-field max-w-sm">
-        <span>Поиск</span>
-        <input
-          className="admin-input"
-          value={search}
-          placeholder="Вид, сорт или позиция"
-          onChange={(event) => setSearch(event.target.value)}
-        />
-      </label>
-
-      <section className="space-y-3">
-        <h2 className="admin-section__title">Справочник цветов</h2>
-        <p className="admin-section__lead">
-          Вид → сорт → конкретная позиция (происхождение и высота). Количество задаётся в составе
-          товара.
-        </p>
-
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <label className="admin-field min-w-[16rem] flex-1">
+          <span>Поиск</span>
+          <input
+            className="admin-input"
+            value={search}
+            placeholder="Название, вид, сорт, происхождение…"
+            onChange={(e) => setSearch(e.target.value)}
+          />
+        </label>
         {canCreate ? (
-          <div className="admin-toolbar flex flex-wrap gap-4">
-            <form
-              className="flex flex-wrap items-end gap-2"
-              onSubmit={(event: FormEvent<HTMLFormElement>) => {
-                event.preventDefault();
-                const form = event.currentTarget;
-                const name = String(new FormData(form).get('name') ?? '').trim();
-                if (!name) return;
-                void run(async () => {
-                  await adminPost(adminEndpoints.flowerTypes, {
-                    name,
-                    sortOrder: (types.at(-1)?.sortOrder ?? 0) + 10,
-                  });
-                  form.reset();
-                }, `Вид «${name}» добавлен`);
-              }}
-            >
-              <label className="admin-field">
-                <span>Новый вид</span>
-                <input name="name" required className="admin-input w-40" placeholder="Роза" />
-              </label>
-              <button type="submit" className="admin-btn" disabled={pending}>
-                Добавить вид
-              </button>
-            </form>
-
-            <form
-              className="flex flex-wrap items-end gap-2"
-              onSubmit={(event: FormEvent<HTMLFormElement>) => {
-                event.preventDefault();
-                const form = event.currentTarget;
-                const data = new FormData(form);
-                const flowerTypeId = String(data.get('flowerTypeId') ?? '');
-                const name = String(data.get('name') ?? '').trim();
-                if (!flowerTypeId || !name) return;
-                void run(async () => {
-                  await adminPost(adminEndpoints.flowerVarieties, {
-                    flowerTypeId,
-                    name,
-                    sortOrder: (varieties.at(-1)?.sortOrder ?? 0) + 10,
-                  });
-                  form.reset();
-                }, `Сорт «${name}» добавлен`);
-              }}
-            >
-              <label className="admin-field">
-                <span>Сорт для вида</span>
-                <select name="flowerTypeId" required className="admin-select w-40" defaultValue="">
-                  <option value="" disabled>
-                    Вид
-                  </option>
-                  {types.map((type) => (
-                    <option key={type.id} value={type.id}>
-                      {type.name}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <input name="name" required className="admin-input w-40" placeholder="Мондиаль" />
-              <button type="submit" className="admin-btn" disabled={pending || types.length === 0}>
-                Добавить сорт
-              </button>
-            </form>
-
-            <form
-              className="flex flex-wrap items-end gap-2"
-              onSubmit={(event: FormEvent<HTMLFormElement>) => {
-                event.preventDefault();
-                const form = event.currentTarget;
-                const data = new FormData(form);
-                const flowerTypeId = String(data.get('flowerTypeId') ?? '');
-                const flowerVarietyId = String(data.get('flowerVarietyId') ?? '') || null;
-                const flowerOriginId = String(data.get('flowerOriginId') ?? '') || null;
-                const heightRaw = String(data.get('heightCm') ?? '').trim();
-                const heightCm = heightRaw ? Number(heightRaw) : null;
-                if (!flowerTypeId) return;
-                void run(async () => {
-                  await adminPost(adminEndpoints.flowerItems, {
-                    flowerTypeId,
-                    flowerVarietyId,
-                    flowerOriginId,
-                    heightCm,
-                    sortOrder: (items.at(-1)?.sortOrder ?? 0) + 10,
-                  });
-                  form.reset();
-                }, 'Позиция добавлена');
-              }}
-            >
-              <label className="admin-field">
-                <span>Новая позиция</span>
-                <select name="flowerTypeId" required className="admin-select w-36" defaultValue="">
-                  <option value="" disabled>
-                    Вид
-                  </option>
-                  {types.map((type) => (
-                    <option key={type.id} value={type.id}>
-                      {type.name}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <select name="flowerVarietyId" className="admin-select w-36" defaultValue="">
-                <option value="">Без сорта</option>
-                {varieties.map((variety) => (
-                  <option key={variety.id} value={variety.id}>
-                    {variety.name}
-                  </option>
-                ))}
-              </select>
-              <select name="flowerOriginId" className="admin-select w-36" defaultValue="">
-                <option value="">Без происхождения</option>
-                {origins.map((origin) => (
-                  <option key={origin.id} value={origin.id}>
-                    {origin.name}
-                  </option>
-                ))}
-              </select>
-              <input
-                name="heightCm"
-                type="number"
-                min={1}
-                max={300}
-                className="admin-input w-24"
-                placeholder="см"
-              />
-              <button type="submit" className="admin-btn" disabled={pending || types.length === 0}>
-                Добавить позицию
-              </button>
-            </form>
-          </div>
+          <button type="button" className="admin-btn" onClick={openCreate}>
+            + Добавить цветок
+          </button>
         ) : null}
+      </div>
 
-        <div className="admin-panel space-y-2 p-3">
-          {tree.length === 0 ? (
-            <p className="admin-empty">Справочник пуст</p>
-          ) : (
-            tree.map(({ type, typeVarieties, orphanItems }) => {
-              const collapsed = collapsedTypes.has(type.id);
-              return (
-                <div key={type.id} className="border-b border-[var(--admin-border)] pb-3 last:border-0">
-                  <div className="flex flex-wrap items-center gap-2">
+      <div className="flex flex-wrap gap-3">
+        <label className="admin-field">
+          <span>Вид</span>
+          <select
+            className="admin-select w-40"
+            value={filterTypeId}
+            onChange={(e) => setFilterTypeId(e.target.value)}
+          >
+            <option value="">Все</option>
+            {types.map((t) => (
+              <option key={t.id} value={t.id}>
+                {t.name}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="admin-field">
+          <span>Форма</span>
+          <select
+            className="admin-select w-40"
+            value={filterFormId}
+            onChange={(e) => setFilterFormId(e.target.value)}
+          >
+            <option value="">Все</option>
+            {filterForms.map((f) => (
+              <option key={f.id} value={f.id}>
+                {f.name}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="admin-field">
+          <span>Сорт</span>
+          <select
+            className="admin-select w-40"
+            value={filterVarietyId}
+            onChange={(e) => setFilterVarietyId(e.target.value)}
+          >
+            <option value="">Все</option>
+            {filterVarieties.map((v) => (
+              <option key={v.id} value={v.id}>
+                {v.name}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="admin-field">
+          <span>Происхождение</span>
+          <select
+            className="admin-select w-40"
+            value={filterOriginId}
+            onChange={(e) => setFilterOriginId(e.target.value)}
+          >
+            <option value="">Все</option>
+            {origins.map((o) => (
+              <option key={o.id} value={o.id}>
+                {o.name}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="admin-field">
+          <span>Статус</span>
+          <select
+            className="admin-select w-36"
+            value={filterStatus}
+            onChange={(e) => setFilterStatus(e.target.value as 'ALL' | 'VISIBLE' | 'HIDDEN')}
+          >
+            <option value="ALL">Все</option>
+            <option value="VISIBLE">Активен</option>
+            <option value="HIDDEN">Архив</option>
+          </select>
+        </label>
+      </div>
+
+      <div className="admin-panel overflow-x-auto">
+        <table className="admin-table min-w-[880px]">
+          <thead>
+            <tr>
+              <th>Цветок</th>
+              <th>Вид</th>
+              <th>Форма</th>
+              <th>Сорт</th>
+              <th>Происхождение</th>
+              <th>Высота</th>
+              <th>Товаров</th>
+              <th>Статус</th>
+            </tr>
+          </thead>
+          <tbody>
+            {filteredItems.length === 0 ? (
+              <tr>
+                <td colSpan={8}>
+                  <p className="admin-empty">
+                    {items.length === 0
+                      ? 'Пока нет цветов. Нажмите «+ Добавить цветок».'
+                      : 'Ничего не найдено по фильтрам.'}
+                  </p>
+                </td>
+              </tr>
+            ) : (
+              filteredItems.map((item) => (
+                <tr key={item.id}>
+                  <td>
                     <button
                       type="button"
-                      className="admin-btn-ghost px-1 py-0"
-                      onClick={() => toggleType(type.id)}
+                      className="text-left font-medium text-[var(--admin-brand)] underline-offset-2 hover:underline"
+                      onClick={() => void openEdit(item)}
                     >
-                      {collapsed ? '▸' : '▾'}
+                      {item.name}
                     </button>
-                    <span className="font-semibold">{type.name}</span>
-                    <span className="text-xs text-[var(--admin-muted)]">
-                      {type.varietiesCount ?? typeVarieties.length} сортов ·{' '}
-                      {type.itemsCount ?? items.filter((i) => i.flowerTypeId === type.id).length}{' '}
-                      позиций · {countLabel(type.productsCount)}
-                    </span>
-                    {type.visibility === 'HIDDEN' ? (
-                      <span className="admin-chip">Скрыт</span>
-                    ) : null}
-                    {canUpdate ? (
-                      <button
-                        type="button"
-                        className="admin-btn-ghost text-xs"
-                        onClick={() =>
-                          void run(async () => {
-                            await adminPatch(adminEndpoints.flowerType(type.id), {
-                              expectedVersion: type.version,
-                              visibility: type.visibility === 'VISIBLE' ? 'HIDDEN' : 'VISIBLE',
-                            });
-                          }, type.visibility === 'VISIBLE' ? 'Вид скрыт' : 'Вид активен')
-                        }
-                      >
-                        {type.visibility === 'VISIBLE' ? 'Скрыть' : 'Показать'}
-                      </button>
-                    ) : null}
-                  </div>
-                  {!collapsed ? (
-                    <div className="mt-2 space-y-2 pl-6">
-                      {typeVarieties.map(({ variety, items: varietyItems }) => (
-                        <div key={variety.id}>
-                          <div className="flex flex-wrap items-center gap-2 text-sm">
-                            <span className="font-medium">{variety.name}</span>
-                            <span className="text-xs text-[var(--admin-muted)]">
-                              {varietyItems.length} поз. · {countLabel(variety.productsCount)}
-                            </span>
-                          </div>
-                          <ul className="mt-1 space-y-1 pl-4">
-                            {varietyItems.map((item) => (
-                              <FlowerItemRow
-                                key={item.id}
-                                item={item}
-                                canUpdate={canUpdate}
-                                pending={pending}
-                                onArchive={() =>
-                                  void run(async () => {
-                                    await adminPatch(adminEndpoints.flowerItem(item.id), {
-                                      expectedVersion: item.version,
-                                      visibility:
-                                        item.visibility === 'VISIBLE' ? 'HIDDEN' : 'VISIBLE',
-                                    });
-                                  }, item.visibility === 'VISIBLE' ? 'Позиция в архиве' : 'Позиция активна')
-                                }
-                                onDelete={() =>
-                                  void run(async () => {
-                                    await adminDelete(adminEndpoints.flowerItem(item.id), {
-                                      expectedVersion: item.version,
-                                    });
-                                  }, 'Позиция удалена')
-                                }
-                              />
-                            ))}
-                          </ul>
-                        </div>
-                      ))}
-                      {orphanItems.length > 0 ? (
-                        <div>
-                          <div className="text-sm text-[var(--admin-muted)]">Без сорта</div>
-                          <ul className="mt-1 space-y-1 pl-4">
-                            {orphanItems.map((item) => (
-                              <FlowerItemRow
-                                key={item.id}
-                                item={item}
-                                canUpdate={canUpdate}
-                                pending={pending}
-                                onArchive={() =>
-                                  void run(async () => {
-                                    await adminPatch(adminEndpoints.flowerItem(item.id), {
-                                      expectedVersion: item.version,
-                                      visibility:
-                                        item.visibility === 'VISIBLE' ? 'HIDDEN' : 'VISIBLE',
-                                    });
-                                  }, item.visibility === 'VISIBLE' ? 'Позиция в архиве' : 'Позиция активна')
-                                }
-                                onDelete={() =>
-                                  void run(async () => {
-                                    await adminDelete(adminEndpoints.flowerItem(item.id), {
-                                      expectedVersion: item.version,
-                                    });
-                                  }, 'Позиция удалена')
-                                }
-                              />
-                            ))}
-                          </ul>
-                        </div>
-                      ) : null}
-                    </div>
-                  ) : null}
-                </div>
-              );
-            })
-          )}
-        </div>
-      </section>
+                  </td>
+                  <td className="text-sm">{item.flowerType.name}</td>
+                  <td className="text-sm">{item.flowerForm?.name ?? '—'}</td>
+                  <td className="text-sm">{item.flowerVariety?.name ?? '—'}</td>
+                  <td className="text-sm">{item.flowerOrigin?.name ?? '—'}</td>
+                  <td className="text-sm tabular-nums">
+                    {item.stemLengthCm != null ? `${item.stemLengthCm} см` : '—'}
+                  </td>
+                  <td className="text-sm tabular-nums">{item.componentsCount}</td>
+                  <td className="text-sm">
+                    {item.visibility === 'HIDDEN' ? (
+                      <span className="admin-chip">Архив</span>
+                    ) : (
+                      'Активен'
+                    )}
+                  </td>
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
 
-      <section className="space-y-3">
-        <h2 className="admin-section__title">Происхождение</h2>
-        {canCreate ? (
-          <form
-            className="admin-toolbar"
-            onSubmit={(event: FormEvent<HTMLFormElement>) => {
-              event.preventDefault();
-              const form = event.currentTarget;
-              const name = String(new FormData(form).get('name') ?? '').trim();
-              if (!name) return;
-              void run(async () => {
-                await adminPost(adminEndpoints.flowerOrigins, {
-                  name,
-                  sortOrder: (origins.at(-1)?.sortOrder ?? 0) + 10,
-                });
-                form.reset();
-              }, `Происхождение «${name}» добавлено`);
-            }}
-          >
-            <label className="admin-field">
-              <span>Новое происхождение</span>
-              <input name="name" required className="admin-input w-52" placeholder="Эквадор" />
-            </label>
-            <button type="submit" className="admin-btn" disabled={pending}>
-              Добавить
-            </button>
-          </form>
-        ) : null}
-        <ul className="admin-panel space-y-1 p-3">
-          {origins.map((origin) => (
-            <li key={origin.id} className="flex flex-wrap items-center gap-2 text-sm">
-              <span className="font-medium">{origin.name}</span>
-              <span className="text-xs text-[var(--admin-muted)]">
-                {origin.itemsCount ?? 0} поз. · {countLabel(origin.productsCount)}
-              </span>
-            </li>
-          ))}
-        </ul>
-      </section>
+      <p className="text-xs text-[var(--admin-muted)]">
+        Показано {filteredItems.length} из {items.length}. Количество в составе задаётся в карточке
+        товара, не здесь.
+      </p>
     </div>
-  );
-}
-
-function FlowerItemRow({
-  item,
-  canUpdate,
-  pending,
-  onArchive,
-  onDelete,
-}: {
-  item: FlowerItemAdminDto;
-  canUpdate: boolean;
-  pending: boolean;
-  onArchive: () => void;
-  onDelete: () => void;
-}) {
-  return (
-    <li className="flex flex-wrap items-center gap-2 text-sm">
-      <span className={item.visibility === 'HIDDEN' ? 'opacity-60' : undefined}>{item.name}</span>
-      <span className="text-xs text-[var(--admin-muted)]">
-        в составе {item.componentsCount} тов.
-      </span>
-      {item.visibility === 'HIDDEN' ? <span className="admin-chip">Архив</span> : null}
-      {canUpdate ? (
-        <>
-          <button type="button" className="admin-btn-ghost text-xs" disabled={pending} onClick={onArchive}>
-            {item.visibility === 'VISIBLE' ? 'В архив' : 'Восстановить'}
-          </button>
-          {item.componentsCount === 0 ? (
-            <button
-              type="button"
-              className="admin-btn-ghost text-xs text-[var(--admin-danger)]"
-              disabled={pending}
-              onClick={onDelete}
-            >
-              Удалить
-            </button>
-          ) : null}
-        </>
-      ) : null}
-    </li>
   );
 }

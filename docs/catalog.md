@@ -74,16 +74,23 @@ Do **not** confuse with legacy composition `Flower` taxonomy (`/cvety` SEO facet
 
 | Entity | Example | Role |
 | --- | --- | --- |
-| **FlowerType** | Роза | Вид |
-| **FlowerForm** | Классическая | Форма **внутри** вида (не глобальный enum) |
-| **FlowerVariety** | Мондиаль | Сорт под видом |
-| **FlowerOrigin** | Эквадор | Происхождение |
-| **FlowerItem** | Роза Мондиаль 60 см Эквадор | Конкретная позиция (`stemLengthCm`) |
+| **FlowerType** | Роза | Вид (required) |
+| **FlowerForm** | Классическая | Форма **внутри** вида (optional; not a global enum) |
+| **FlowerVariety** | Мондиаль | Сорт под видом (optional) |
+| **FlowerOrigin** | Эквадор | Происхождение (optional) |
+| **FlowerItem** | Роза Мондиаль 60 см Эквадор | Конкретная reusable позиция (`stemLengthCm` optional) |
 | **Product.bouquetHeightCm** | 45 | Высота готового букета (PDP ruler) |
 
-Canonical name: `flowerItemDisplayName` only (no duplicated string builders).
+**Manager UX:** Каталог → **Цветы** — flat list of FlowerItems. Inline create for Type/Form/Variety/Origin. Managers never need the technical entity names.
 
-Admin: **Каталог → Цветы**. Composition: ProductComponent → FlowerItem + quantity.
+Canonical name: `flowerItemDisplayName` only. **Form is omitted** from the retail label (manager/filter attribute, not commercial naming):
+
+- Роза + Классическая + Мондиаль + 60 + Эквадор → `Роза Мондиаль 60 см Эквадор`
+- Гербера + 50 + Голландия → `Гербера 50 см Голландия`
+
+Composition: ProductComponent → FlowerItem + quantity (quantity never on FlowerItem).
+
+Legacy `Product.flowerType/Variety/Origin` is hidden from Product Editor; cleared on save once composition uses FlowerItem. Legacy `Flower` + `/cvety` remains SEO compatibility only.
 
 ### Heights — never mix
 
@@ -91,6 +98,16 @@ Admin: **Каталог → Цветы**. Composition: ProductComponent → Flow
 | --- | --- | --- |
 | `FlowerItem.stemLengthCm` | `flower_items.height_cm` | Stem — filter «Высота цветка» |
 | `Product.bouquetHeightCm` | `products.height_cm` | Bouquet — ruler / «Высота букета» |
+
+### Example
+
+```
+Роза → Классическая → Мондиаль → Эквадор → 60 см
+→ FlowerItem «Роза Мондиаль 60 см Эквадор»
+
+Букет из 9 хризантем Бигуди
+→ ProductComponent → Хризантема Бигуди 50 см Эквадор × 9
+```
 
 ### Category placement
 

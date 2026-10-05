@@ -62,7 +62,6 @@ import {
   phaseFromAdminError,
   type FormSavePhase,
 } from '@/components/admin/form-status';
-import { suggestedCommercialProductName } from '@/lib/admin-catalog-picker-labels';
 
 export type PickerOption = { id: string; name: string };
 
@@ -236,8 +235,6 @@ export function ProductEditor({
   const [flowerTypeId, setFlowerTypeId] = useState(product.flowerTypeId ?? '');
   const [flowerVarietyId, setFlowerVarietyId] = useState(product.flowerVarietyId ?? '');
   const [flowerOriginId, setFlowerOriginId] = useState(product.flowerOriginId ?? '');
-  /** After FlowerItem composition is set, optionally clear deprecated product flower FKs. */
-  const [clearLegacyFlowerAttrs, setClearLegacyFlowerAttrs] = useState(false);
   const [familyId, setFamilyId] = useState(product.family?.id ?? '');
   const [familyMemberSortOrder, setFamilyMemberSortOrder] = useState<number | undefined>(() =>
     familyMemberSortOrderFor(product),
@@ -341,34 +338,49 @@ export function ProductEditor({
 
   const activeVariants = variants.filter((variant) => variant.status === 'ACTIVE');
 
-  const filteredVarieties = useMemo(
-    () =>
-      options.flowerVarieties.filter(
-        (variety) => !flowerTypeId || variety.flowerTypeId === flowerTypeId,
-      ),
-    [options.flowerVarieties, flowerTypeId],
-  );
-
   const commercialNamePreview = useMemo(() => {
-    const typeName = options.flowerTypes.find((row) => row.id === flowerTypeId)?.name ?? null;
-    const varietyName =
-      options.flowerVarieties.find((row) => row.id === flowerVarietyId)?.name ?? null;
-    const originName = options.flowerOrigins.find((row) => row.id === flowerOriginId)?.name ?? null;
-    return suggestedCommercialProductName({
-      typeName,
-      varietyName,
-      heightCm: basic.heightCm,
-      originName,
-    });
-  }, [
-    options.flowerTypes,
-    options.flowerVarieties,
-    options.flowerOrigins,
-    flowerTypeId,
-    flowerVarietyId,
-    flowerOriginId,
-    basic.heightCm,
-  ]);
+    return suggestProductNameFromComposition(
+      components.map((row) => ({
+        displayName: row.displayName,
+        quantity: row.quantity.trim() ? Number(row.quantity) : null,
+      })),
+    );
+  }, [components]);
+
+  const [compositionSearch, setCompositionSearch] = useState('');
+  const [compositionAddQty, setCompositionAddQty] = useState('1');
+  const [compositionPickerOpen, setCompositionPickerOpen] = useState(false);
+
+  const compositionSearchResults = useMemo(() => {
+    const q = compositionSearch.trim().toLowerCase();
+    const assigned = new Set(components.map((c) => c.flowerItemId).filter(Boolean));
+    return options.flowerItems
+      .filter((item) => item.visibility !== 'HIDDEN')
+      .filter((item) => !assigned.has(item.id))
+      .filter((item) => !q || item.name.toLowerCase().includes(q))
+      .slice(0, 12);
+  }, [compositionSearch, components, options.flowerItems]);
+
+  function addFlowerItemToComposition(itemId: string) {
+    const item = options.flowerItems.find((row) => row.id === itemId);
+    if (!item) return;
+    const qty = compositionAddQty.trim() || '1';
+    setComponents((prev) => [
+      ...prev,
+      {
+        key: nextKey('component'),
+        displayName: item.name,
+        quantity: qty,
+        unit: 'STEM',
+        flowerItemId: item.id,
+        flowerId: '',
+      },
+    ]);
+    setCompositionSearch('');
+    setCompositionAddQty('1');
+    setCompositionPickerOpen(false);
+    touch();
+  }
 
   const familyMembers = useMemo(() => {
     if (!server.family?.members.length) return [];
@@ -593,9 +605,10 @@ export function ProductEditor({
         },
         groupIds,
         catalogCategoryId: catalogCategoryId || null,
-        flowerTypeId: clearLegacyFlowerAttrs ? null : flowerTypeId || null,
-        flowerVarietyId: clearLegacyFlowerAttrs ? null : flowerVarietyId || null,
-        flowerOriginId: clearLegacyFlowerAttrs ? null : flowerOriginId || null,
+        // Legacy Product.flower* is no longer edited here. Clear when composition uses FlowerItem.
+        flowerTypeId: components.some((c) => c.flowerItemId) ? null : flowerTypeId || null,
+        flowerVarietyId: components.some((c) => c.flowerItemId) ? null : flowerVarietyId || null,
+        flowerOriginId: components.some((c) => c.flowerItemId) ? null : flowerOriginId || null,
         familyId: familyId || null,
         ...(familyId
           ? {
@@ -1103,93 +1116,27 @@ export function ProductEditor({
               </select>
             </label>
 
-            <p className="text-xs text-[var(--admin-muted)]">
-              Поля вида/сорта/происхождения ниже — устаревшие (legacy). Основной источник истины —
-              блок «Состав» со справочником позиций.
-            </p>
-            <div className="grid gap-4 sm:grid-cols-2">
-              <label className="admin-field">
-                <span>Вид цветка (legacy)</span>
-                <select
-                  className="admin-select"
-                  value={flowerTypeId}
-                  disabled={!canUpdate}
-                  onChange={(event) => {
-                    const nextTypeId = event.target.value;
-                    setFlowerTypeId(nextTypeId);
-                    setFlowerVarietyId((prev) => {
-                      if (!prev) return prev;
-                      const variety = options.flowerVarieties.find((row) => row.id === prev);
-                      if (variety && variety.flowerTypeId !== nextTypeId) return '';
-                      return prev;
-                    });
-                    touch();
-                  }}
-                >
-                  <option value="">Не указан</option>
-                  {options.flowerTypes.map((option) => (
-                    <option key={option.id} value={option.id}>
-                      {option.name}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label className="admin-field">
-                <span>Сорт (legacy)</span>
-                <select
-                  className="admin-select"
-                  value={flowerVarietyId}
-                  disabled={!canUpdate || !flowerTypeId}
-                  onChange={(event) => {
-                    setFlowerVarietyId(event.target.value);
-                    touch();
-                  }}
-                >
-                  <option value="">Не указан</option>
-                  {filteredVarieties.map((option) => (
-                    <option key={option.id} value={option.id}>
-                      {option.name}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label className="admin-field">
-                <span>Происхождение (legacy)</span>
-                <select
-                  className="admin-select"
-                  value={flowerOriginId}
-                  disabled={!canUpdate}
-                  onChange={(event) => {
-                    setFlowerOriginId(event.target.value);
-                    touch();
-                  }}
-                >
-                  <option value="">Не указано</option>
-                  {options.flowerOrigins.map((option) => (
-                    <option key={option.id} value={option.id}>
-                      {option.name}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label className="admin-field">
-                <span>Высота букета, см</span>
-                <input
-                  className="admin-input w-40"
-                  type="number"
-                  min={15}
-                  max={250}
-                  value={basic.heightCm}
-                  disabled={!canUpdate}
-                  placeholder="не указана"
-                  title="Высота готового букета на карточке (не высота стебля в справочнике)"
-                  onChange={(event) => {
-                    setBasic((prev) => ({ ...prev, heightCm: event.target.value }));
-                    touch();
-                  }}
-                />
-              </label>
-            </div>
+            <label className="admin-field">
+              <span>Высота букета, см</span>
+              <input
+                className="admin-input w-40"
+                type="number"
+                min={15}
+                max={250}
+                value={basic.heightCm}
+                disabled={!canUpdate}
+                placeholder="не указана"
+                title="Высота готового букета на карточке (не высота стебля цветка)"
+                onChange={(event) => {
+                  setBasic((prev) => ({ ...prev, heightCm: event.target.value }));
+                  touch();
+                }}
+              />
+              <span className="admin-field__hint">
+                Высота готового букета для линейки на карточке. Высота стебля задаётся у цветка в
+                составе.
+              </span>
+            </label>
 
             {commercialNamePreview.length > 0 ? (
               <div className="admin-panel space-y-2 p-3">
@@ -1679,8 +1626,8 @@ export function ProductEditor({
         <section className="admin-section">
           <h2 className="admin-section__title">Состав</h2>
           <p className="admin-section__lead">
-            Выберите конкретный цветок из справочника и укажите количество. Один и тот же цветок
-            можно использовать в разных товарах.
+            Добавьте конкретные цветы из справочника и укажите количество. Один и тот же цветок можно
+            использовать в разных товарах.
           </p>
           {(() => {
             const status = resolveCompositionSetupStatus({
@@ -1695,10 +1642,10 @@ export function ProductEditor({
             if (status === 'legacy_pending') {
               return (
                 <div className="admin-panel border border-[var(--admin-warning,#b45309)]/40 p-3 text-sm">
-                  Используется устаревшая информация о цветке на карточке товара. Настройте состав
-                  через справочник позиций (FlowerItem) ниже.{' '}
+                  У товара остались старые поля цветка без состава. Добавьте цветы ниже — при
+                  сохранении устаревшие поля очистятся.{' '}
                   <a href="/admin/catalog/composition-setup" className="underline underline-offset-2">
-                    Открыть список «Требуют настройки состава»
+                    Открыть миграцию состава
                   </a>
                 </div>
               );
@@ -1706,27 +1653,27 @@ export function ProductEditor({
             if (status === 'empty') {
               return (
                 <div className="admin-panel border border-[var(--admin-border)] p-3 text-sm text-[var(--admin-muted)]">
-                  Состав товара не настроен. Добавьте хотя бы одну позицию из справочника цветов.
+                  Состав не настроен. Добавьте хотя бы один цветок.
                 </div>
               );
             }
             return null;
           })()}
+
           <div className="admin-panel overflow-x-auto">
-            <table className="admin-table min-w-[720px]">
+            <table className="admin-table min-w-[640px]">
               <thead>
                 <tr>
                   <th>Цветок</th>
                   <th className="w-28">Количество</th>
                   <th className="w-40">Единица</th>
-                  <th className="w-48">Подпись на витрине</th>
                   <th className="w-24" />
                 </tr>
               </thead>
               <tbody>
                 {components.length === 0 ? (
                   <tr>
-                    <td colSpan={5}>
+                    <td colSpan={4}>
                       <p className="admin-empty">Состав не заполнен</p>
                     </td>
                   </tr>
@@ -1734,35 +1681,16 @@ export function ProductEditor({
                   components.map((component, index) => (
                     <tr key={component.key}>
                       <td>
-                        <select
-                          className="admin-select"
-                          value={component.flowerItemId}
-                          disabled={!canUpdate}
-                          onChange={(event) => {
-                            const value = event.target.value;
-                            const item = options.flowerItems.find((row) => row.id === value);
-                            setComponents((prev) =>
-                              prev.map((row, i) =>
-                                i === index
-                                  ? {
-                                      ...row,
-                                      flowerItemId: value,
-                                      displayName: item?.name || row.displayName,
-                                    }
-                                  : row,
-                              ),
-                            );
-                            touch();
-                          }}
-                        >
-                          <option value="">Выберите цветок</option>
-                          {options.flowerItems.map((item) => (
-                            <option key={item.id} value={item.id}>
-                              {item.name}
-                              {item.visibility === 'HIDDEN' ? ' (архив)' : ''}
-                            </option>
-                          ))}
-                        </select>
+                        <div className="font-medium">
+                          {component.displayName ||
+                            options.flowerItems.find((i) => i.id === component.flowerItemId)?.name ||
+                            '—'}
+                        </div>
+                        {!component.flowerItemId ? (
+                          <p className="text-xs text-[var(--admin-danger)]">
+                            Выберите цветок из справочника
+                          </p>
+                        ) : null}
                       </td>
                       <td>
                         <input
@@ -1803,23 +1731,6 @@ export function ProductEditor({
                         </select>
                       </td>
                       <td>
-                        <input
-                          className="admin-input"
-                          value={component.displayName}
-                          disabled={!canUpdate}
-                          placeholder="Как показать покупателю"
-                          onChange={(event) => {
-                            const value = event.target.value;
-                            setComponents((prev) =>
-                              prev.map((item, i) =>
-                                i === index ? { ...item, displayName: value } : item,
-                              ),
-                            );
-                            touch();
-                          }}
-                        />
-                      </td>
-                      <td>
                         <button
                           type="button"
                           className="admin-btn-ghost"
@@ -1838,59 +1749,95 @@ export function ProductEditor({
               </tbody>
             </table>
           </div>
+
           {canUpdate ? (
-            <div className="flex flex-wrap gap-2">
-              <button
-                type="button"
-                className="admin-btn-ghost"
-                onClick={() => {
-                  setComponents((prev) => [
-                    ...prev,
-                    {
-                      key: nextKey('component'),
-                      displayName: '',
-                      quantity: '',
-                      unit: 'STEM',
-                      flowerItemId: '',
-                      flowerId: '',
-                    },
-                  ]);
-                  touch();
-                }}
-              >
-                + Добавить цветок
-              </button>
-              <button
-                type="button"
-                className="admin-btn-ghost"
-                onClick={() => {
-                  const suggested = suggestProductNameFromComposition(
-                    components.map((row) => ({
-                      displayName: row.displayName,
-                      quantity: row.quantity.trim() ? Number(row.quantity) : null,
-                    })),
-                  );
-                  if (!suggested) return;
-                  setBasic((prev) => ({ ...prev, name: suggested }));
-                  touch();
-                }}
-              >
-                Предложить название
-              </button>
-              {components.some((row) => row.flowerItemId) &&
-              (flowerTypeId || flowerVarietyId || flowerOriginId) ? (
-                <label className="flex items-center gap-2 text-sm text-[var(--admin-muted)]">
-                  <input
-                    type="checkbox"
-                    checked={clearLegacyFlowerAttrs}
-                    onChange={(event) => {
-                      setClearLegacyFlowerAttrs(event.target.checked);
+            <div className="space-y-3">
+              {compositionPickerOpen ? (
+                <div className="admin-panel max-w-lg space-y-3 p-3">
+                  <label className="admin-field">
+                    <span>Найти цветок</span>
+                    <input
+                      className="admin-input"
+                      value={compositionSearch}
+                      autoFocus
+                      placeholder="Бигуди, Мондиаль, Эквадор…"
+                      onChange={(event) => setCompositionSearch(event.target.value)}
+                    />
+                  </label>
+                  <label className="admin-field">
+                    <span>Количество</span>
+                    <input
+                      className="admin-input w-24"
+                      type="number"
+                      min={1}
+                      value={compositionAddQty}
+                      onChange={(event) => setCompositionAddQty(event.target.value)}
+                    />
+                  </label>
+                  <ul className="max-h-48 space-y-1 overflow-y-auto text-sm">
+                    {compositionSearchResults.length === 0 ? (
+                      <li className="text-[var(--admin-muted)]">
+                        Ничего не найдено.{' '}
+                        <a
+                          href="/admin/catalog/flower-structure"
+                          className="underline underline-offset-2"
+                        >
+                          Создать цветок
+                        </a>
+                      </li>
+                    ) : (
+                      compositionSearchResults.map((item) => (
+                        <li key={item.id}>
+                          <button
+                            type="button"
+                            className="w-full rounded px-2 py-1.5 text-left hover:bg-[var(--admin-surface-muted,rgba(0,0,0,0.04))]"
+                            onClick={() => addFlowerItemToComposition(item.id)}
+                          >
+                            {item.name}
+                          </button>
+                        </li>
+                      ))
+                    )}
+                  </ul>
+                  <button
+                    type="button"
+                    className="admin-btn-ghost"
+                    onClick={() => {
+                      setCompositionPickerOpen(false);
+                      setCompositionSearch('');
+                    }}
+                  >
+                    Отмена
+                  </button>
+                </div>
+              ) : (
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    className="admin-btn"
+                    onClick={() => setCompositionPickerOpen(true)}
+                  >
+                    + Добавить цветок
+                  </button>
+                  <button
+                    type="button"
+                    className="admin-btn-ghost"
+                    onClick={() => {
+                      const suggested = suggestProductNameFromComposition(
+                        components.map((row) => ({
+                          displayName: row.displayName,
+                          quantity: row.quantity.trim() ? Number(row.quantity) : null,
+                        })),
+                      );
+                      if (!suggested) return;
+                      setBasic((prev) => ({ ...prev, name: suggested }));
                       touch();
                     }}
-                  />
-                  При сохранении очистить устаревшие вид/сорт/происхождение на карточке
-                </label>
-              ) : null}
+                  >
+                    Предложить название
+                  </button>
+                </div>
+              )}
             </div>
           ) : null}
         </section>

@@ -197,6 +197,10 @@ class CreateFlowerItemDto {
 
 class UpdateFlowerItemDto extends ExpectedVersionDto {
   @IsOptional()
+  @IsUUID()
+  flowerTypeId?: string;
+
+  @IsOptional()
   @IsString()
   @MinLength(1)
   @MaxLength(200)
@@ -301,14 +305,31 @@ export class AdminFlowerRefsController {
   @RequirePermissions('CATALOG_READ')
   listItems(
     @Query('flowerTypeId') flowerTypeId?: string,
+    @Query('flowerFormId') flowerFormId?: string,
     @Query('flowerVarietyId') flowerVarietyId?: string,
+    @Query('flowerOriginId') flowerOriginId?: string,
     @Query('includeHidden') includeHidden?: string,
+    @Query('visibility') visibility?: 'VISIBLE' | 'HIDDEN',
+    @Query('q') q?: string,
+    @Query('limit') limit?: string,
   ) {
+    const parsedLimit = limit ? Number(limit) : undefined;
     return this.flowerRefs.listItemsAdmin({
       flowerTypeId,
+      flowerFormId,
       flowerVarietyId,
+      flowerOriginId,
       includeHidden: includeHidden === '1' || includeHidden === 'true',
+      visibility: visibility === 'VISIBLE' || visibility === 'HIDDEN' ? visibility : undefined,
+      q,
+      limit: Number.isFinite(parsedLimit) ? parsedLimit : undefined,
     });
+  }
+
+  @Get('items/:id')
+  @RequirePermissions('CATALOG_READ')
+  getItem(@Param('id', ParseUUIDPipe) id: string) {
+    return this.flowerRefs.getItemAdmin(id);
   }
 
   @Post('items')

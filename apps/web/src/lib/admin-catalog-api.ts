@@ -98,31 +98,44 @@ export type CatalogStructurePickers = {
   flowerTypes: FlowerTypeAdminDto[];
   flowerVarieties: FlowerVarietyAdminDto[];
   flowerOrigins: FlowerOriginAdminDto[];
+  flowerForms: import('@bouquet-one/contracts').FlowerFormAdminDto[];
   flowerItems: import('@bouquet-one/contracts').FlowerItemAdminDto[];
   families: Array<{ id: string; name: string; version: number; membersCount: number }>;
 };
 
 export async function fetchCatalogStructurePickers(): Promise<CatalogStructurePickers> {
-  const [categories, categoryTree, flowerTypes, flowerVarieties, flowerOrigins, flowerItems, families] =
-    await Promise.all([
-      safeList<CatalogCategoryAdminDto>(adminEndpoints.catalogCategories),
-      safeList<CatalogCategoryTreeNodeDto>(adminEndpoints.catalogCategoriesTree),
-      safeList<FlowerTypeAdminDto>(adminEndpoints.flowerTypes),
-      safeList<FlowerVarietyAdminDto>(adminEndpoints.flowerVarieties),
-      safeList<FlowerOriginAdminDto>(adminEndpoints.flowerOrigins),
-      safeList<import('@bouquet-one/contracts').FlowerItemAdminDto>(
-        `${adminEndpoints.flowerItems}?includeHidden=1`,
-      ),
-      safeList<{ id: string; name: string; version: number; membersCount: number }>(
-        adminEndpoints.productFamilies,
-      ),
-    ]);
+  const [
+    categories,
+    categoryTree,
+    flowerTypes,
+    flowerVarieties,
+    flowerOrigins,
+    flowerForms,
+    flowerItems,
+    families,
+  ] = await Promise.all([
+    safeList<CatalogCategoryAdminDto>(adminEndpoints.catalogCategories),
+    safeList<CatalogCategoryTreeNodeDto>(adminEndpoints.catalogCategoriesTree),
+    safeList<FlowerTypeAdminDto>(adminEndpoints.flowerTypes),
+    safeList<FlowerVarietyAdminDto>(adminEndpoints.flowerVarieties),
+    safeList<FlowerOriginAdminDto>(adminEndpoints.flowerOrigins),
+    safeList<import('@bouquet-one/contracts').FlowerFormAdminDto>(
+      `${adminEndpoints.flowerForms}?includeHidden=1`,
+    ),
+    safeList<import('@bouquet-one/contracts').FlowerItemAdminDto>(
+      `${adminEndpoints.flowerItems}?includeHidden=1`,
+    ),
+    safeList<{ id: string; name: string; version: number; membersCount: number }>(
+      adminEndpoints.productFamilies,
+    ),
+  ]);
   return {
     categories,
     categoryTree,
     flowerTypes,
     flowerVarieties,
     flowerOrigins,
+    flowerForms,
     flowerItems,
     families,
   };

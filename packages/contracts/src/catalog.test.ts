@@ -50,7 +50,7 @@ test('flowerItemIdentityKey and display name', () => {
       flowerOriginId: 'o',
       heightCm: 50,
     }),
-    't|_|o|50',
+    't|_|_|o|50',
   );
   assert.equal(
     flowerItemDisplayName({
@@ -60,6 +60,33 @@ test('flowerItemIdentityKey and display name', () => {
       heightCm: 60,
     }),
     'Роза Мондиаль 60 см Эквадор',
+  );
+  assert.equal(
+    flowerItemDisplayName({
+      typeName: 'Роза',
+      formName: 'Классическая',
+      varietyName: 'Мондиаль',
+      originName: 'Эквадор',
+      stemLengthCm: 60,
+    }),
+    'Роза Мондиаль 60 см Эквадор',
+    'form is omitted from retail canonical name',
+  );
+  assert.equal(
+    flowerItemDisplayName({
+      typeName: 'Гербера',
+      varietyName: null,
+      originName: 'Голландия',
+      stemLengthCm: 50,
+    }),
+    'Гербера 50 см Голландия',
+  );
+  assert.equal(
+    flowerItemDisplayName({
+      typeName: 'Тюльпан',
+      stemLengthCm: 50,
+    }),
+    'Тюльпан 50 см',
   );
 });
 

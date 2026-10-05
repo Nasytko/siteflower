@@ -18,6 +18,9 @@ type ErrorBody = {
   message: string | string[];
   issues?: unknown;
   code?: string;
+  /** Optional entity id for duplicate/conflict UX (e.g. open existing flower). */
+  existingId?: string;
+  existingName?: string;
   requestId?: string;
   path: string;
   timestamp: string;
@@ -47,6 +50,8 @@ export class GlobalExceptionFilter implements ExceptionFilter {
     let errorName = HttpStatus[status] ?? 'Error';
     let issues: unknown;
     let code: string | undefined;
+    let existingId: string | undefined;
+    let existingName: string | undefined;
 
     if (exception instanceof HttpException) {
       status = exception.getStatus();
@@ -66,6 +71,12 @@ export class GlobalExceptionFilter implements ExceptionFilter {
         }
         if (typeof payload.code === 'string') {
           code = payload.code;
+        }
+        if (typeof payload.existingId === 'string') {
+          existingId = payload.existingId;
+        }
+        if (typeof payload.existingName === 'string') {
+          existingName = payload.existingName;
         }
       }
       // Nest converts Multer LIMIT_FILE_SIZE → PayloadTooLargeException("File too large")
@@ -112,6 +123,8 @@ export class GlobalExceptionFilter implements ExceptionFilter {
       message,
       ...(issues !== undefined ? { issues } : {}),
       ...(code !== undefined ? { code } : {}),
+      ...(existingId !== undefined ? { existingId } : {}),
+      ...(existingName !== undefined ? { existingName } : {}),
       requestId,
       path: safePath,
       timestamp: new Date().toISOString(),

@@ -58,36 +58,30 @@ const NAV_GROUPS: NavGroup[] = [
     label: 'Каталог',
     items: [
       { href: '/admin/catalog/products', label: 'Товары', permission: 'CATALOG_READ' },
-      { href: '/admin/catalog/categories', label: 'Категории', permission: 'CATALOG_READ' },
       {
         href: '/admin/catalog/flower-structure',
         label: 'Цветы',
         permission: 'CATALOG_READ',
       },
+      { href: '/admin/catalog/categories', label: 'Категории', permission: 'CATALOG_READ' },
+      {
+        href: '/admin/storefront/navigation',
+        label: 'Главное меню',
+        permission: 'SETTINGS_READ',
+      },
+      { href: '/admin/promotions', label: 'Акции', permission: 'CATALOG_READ' },
+      { href: '/admin/bestsellers', label: 'Бестселлеры', permission: 'CATALOG_READ' },
       {
         href: '/admin/catalog/composition-setup',
         label: 'Миграция состава',
         permission: 'CATALOG_READ',
       },
-      {
-        href: '/admin/catalog/flowers',
-        label: 'Справочники (legacy)',
-        permission: 'CATALOG_READ',
-        isActive: isDictionaryPath,
-      },
-      { href: '/admin/promotions', label: 'Акции', permission: 'CATALOG_READ' },
-      { href: '/admin/bestsellers', label: 'Бестселлеры', permission: 'CATALOG_READ' },
     ],
   },
   {
     id: 'store',
     label: 'Магазин',
     items: [
-      {
-        href: '/admin/storefront/navigation',
-        label: 'Главное меню',
-        permission: 'SETTINGS_READ',
-      },
       { href: '/admin/storefront/instagram', label: 'Instagram', permission: 'CONTENT_READ' },
       {
         href: '/admin/storefront/settings',
@@ -103,6 +97,12 @@ const NAV_GROUPS: NavGroup[] = [
     label: 'Система',
     tier: 'system',
     items: [
+      {
+        href: '/admin/catalog/flowers',
+        label: 'Справочники (legacy)',
+        permission: 'CATALOG_READ',
+        isActive: isDictionaryPath,
+      },
       { href: '/admin/users', label: 'Пользователи', permission: 'USERS_READ' },
       { href: '/admin/audit', label: 'Журнал действий', permission: 'AUDIT_READ' },
       {

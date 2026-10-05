@@ -118,13 +118,17 @@ export function CompositionSetupManager({ initial, flowerItems, canUpdate }: Pro
       />
 
       <p className="text-sm text-[var(--admin-muted)]">
-        Товары с устаревшими полями цветка (вид/сорт/происхождение на карточке), у которых ещё нет
-        состава через справочник позиций. Высоту и происхождение не угадываем — выберите готовую
-        позицию FlowerItem.
+        Товары со старыми полями цветка на карточке, у которых ещё нет состава. Высоту и происхождение
+        не угадываем — выберите готовую позицию из «Цветы».
       </p>
 
       {items.length === 0 ? (
-        <p className="admin-empty">Все найденные товары уже имеют состав на FlowerItem.</p>
+        <div className="admin-panel space-y-2 p-4">
+          <p className="font-medium">Все товары настроены</p>
+          <p className="text-sm text-[var(--admin-muted)]">
+            Очередь миграции пуста. Можно продолжать работу в «Товары» и «Цветы».
+          </p>
+        </div>
       ) : (
         <div className="admin-panel overflow-x-auto">
           <table className="admin-table min-w-[880px]">

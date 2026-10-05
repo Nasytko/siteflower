@@ -22,8 +22,8 @@ export default async function AdminCompositionSetupPage() {
   return (
     <main id="main-content" className="space-y-6">
       <AdminPageHeader
-        title="Требуют настройки состава"
-        lead="Перевод старых товаров на FlowerItem вручную. Без автоматического угадывания высоты и происхождения."
+        title="Миграция состава"
+        lead="Разовый инструмент: перевести товары со старых полей цветка на состав из справочника «Цветы». Не часть ежедневной работы."
       />
       <CompositionSetupManager
         initial={data}

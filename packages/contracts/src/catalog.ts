@@ -392,6 +392,21 @@ export type FlowerItemAdminDto = FlowerItemDto & {
   /** Products that reference this item via ProductComponent. */
   componentsCount: number;
   identityKey: string;
+  /** Populated on get-by-id: products using this flower in composition. */
+  usedIn?: Array<{
+    productId: string;
+    productName: string;
+    productSlug: string;
+    quantity: number | null;
+  }>;
+};
+
+/** Conflict payload when creating a duplicate FlowerItem. */
+export type FlowerItemDuplicateConflictDto = {
+  code: 'FLOWER_ITEM_DUPLICATE';
+  message: string;
+  existingId: string;
+  existingName: string;
 };
 
 /** Why a destructive catalog-structure delete is blocked. */

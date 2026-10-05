@@ -850,22 +850,80 @@ export class FlowerRefsService {
 
   async listItemsAdmin(options?: {
     flowerTypeId?: string;
+    flowerFormId?: string;
     flowerVarietyId?: string;
+    flowerOriginId?: string;
     includeHidden?: boolean;
+    /** VISIBLE | HIDDEN | omit for all when includeHidden */
+    visibility?: TaxonomyVisibility;
+    q?: string;
+    limit?: number;
   }): Promise<FlowerItemAdminDto[]> {
+    const q = options?.q?.trim();
+    const limit = options?.limit && options.limit > 0 ? Math.min(options.limit, 200) : undefined;
+    const visibilityWhere =
+      options?.visibility
+        ? { visibility: options.visibility }
+        : options?.includeHidden
+          ? {}
+          : { visibility: 'VISIBLE' as const };
+
     const rows = await this.prisma.client.flowerItem.findMany({
       where: {
         ...(options?.flowerTypeId ? { flowerTypeId: options.flowerTypeId } : {}),
+        ...(options?.flowerFormId ? { flowerFormId: options.flowerFormId } : {}),
         ...(options?.flowerVarietyId ? { flowerVarietyId: options.flowerVarietyId } : {}),
-        ...(options?.includeHidden ? {} : { visibility: 'VISIBLE' }),
+        ...(options?.flowerOriginId ? { flowerOriginId: options.flowerOriginId } : {}),
+        ...visibilityWhere,
+        ...(q
+          ? {
+              OR: [
+                { name: { contains: q, mode: 'insensitive' } },
+                { flowerType: { name: { contains: q, mode: 'insensitive' } } },
+                { flowerForm: { name: { contains: q, mode: 'insensitive' } } },
+                { flowerVariety: { name: { contains: q, mode: 'insensitive' } } },
+                { flowerOrigin: { name: { contains: q, mode: 'insensitive' } } },
+              ],
+            }
+          : {}),
       },
       orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }],
+      ...(limit ? { take: limit } : {}),
       include: {
         ...FLOWER_ITEM_INCLUDE,
         _count: { select: { components: true } },
       },
     });
     return rows.map((row) => toFlowerItemAdminDto(row as FlowerItemRow));
+  }
+
+  async getItemAdmin(id: string): Promise<FlowerItemAdminDto> {
+    const row = await this.prisma.client.flowerItem.findUnique({
+      where: { id },
+      include: {
+        ...FLOWER_ITEM_INCLUDE,
+        _count: { select: { components: true } },
+        components: {
+          take: 40,
+          orderBy: { createdAt: 'desc' },
+          select: {
+            quantity: true,
+            product: { select: { id: true, name: true, slug: true } },
+          },
+        },
+      },
+    });
+    if (!row) throw new NotFoundException('Flower item not found');
+    const dto = toFlowerItemAdminDto(row as FlowerItemRow);
+    return {
+      ...dto,
+      usedIn: row.components.map((c) => ({
+        productId: c.product.id,
+        productName: c.product.name,
+        productSlug: c.product.slug,
+        quantity: c.quantity,
+      })),
+    };
   }
 
   async listItemsPublic(): Promise<FlowerItemDto[]> {
@@ -942,6 +1000,21 @@ export class FlowerRefsService {
     });
     if (!fields.slug) throw new BadRequestException('Slug could not be derived');
 
+    const existingByKey = await this.prisma.client.flowerItem.findFirst({
+      where: { identityKey: fields.identityKey },
+      select: { id: true, name: true },
+    });
+    if (existingByKey) {
+      throw new ConflictException({
+        statusCode: 409,
+        error: 'Conflict',
+        message: `Такой цветок уже существует: ${existingByKey.name}`,
+        code: 'FLOWER_ITEM_DUPLICATE',
+        existingId: existingByKey.id,
+        existingName: existingByKey.name,
+      });
+    }
+
     try {
       const row = await this.prisma.client.$transaction(async (tx) => {
         const created = await tx.flowerItem.create({
@@ -986,9 +1059,21 @@ export class FlowerRefsService {
       return toFlowerItemAdminDto(row as FlowerItemRow);
     } catch (err) {
       if (err instanceof ConflictException || err instanceof BadRequestException) throw err;
-      throw new ConflictException(
-        `Такой цветок уже существует: ${fields.name}`,
-      );
+      const raced = await this.prisma.client.flowerItem.findFirst({
+        where: { identityKey: fields.identityKey },
+        select: { id: true, name: true },
+      });
+      if (raced) {
+        throw new ConflictException({
+          statusCode: 409,
+          error: 'Conflict',
+          message: `Такой цветок уже существует: ${raced.name}`,
+          code: 'FLOWER_ITEM_DUPLICATE',
+          existingId: raced.id,
+          existingName: raced.name,
+        });
+      }
+      throw new ConflictException(`Такой цветок уже существует: ${fields.name}`);
     }
   }
 
@@ -1000,6 +1085,7 @@ export class FlowerRefsService {
       slug?: string;
       sortOrder?: number;
       visibility?: TaxonomyVisibility;
+      flowerTypeId?: string;
       flowerVarietyId?: string | null;
       flowerOriginId?: string | null;
       flowerFormId?: string | null;
@@ -1017,6 +1103,7 @@ export class FlowerRefsService {
       throw new ConflictException('Flower item was modified elsewhere');
     }
 
+    const nextTypeId = input.flowerTypeId ?? existing.flowerTypeId;
     const nextFormId =
       input.flowerFormId === undefined ? existing.flowerFormId : input.flowerFormId;
     const nextVarietyId =
@@ -1030,8 +1117,14 @@ export class FlowerRefsService {
           ? existing.stemLengthCm
           : input.heightCm;
 
-    await this.assertVarietyMatchesType(existing.flowerTypeId, nextVarietyId);
-    await this.assertFormMatchesType(existing.flowerTypeId, nextFormId);
+    const type =
+      nextTypeId === existing.flowerTypeId
+        ? existing.flowerType
+        : await this.prisma.client.flowerType.findUnique({ where: { id: nextTypeId } });
+    if (!type) throw new BadRequestException('Flower type not found');
+
+    await this.assertVarietyMatchesType(nextTypeId, nextVarietyId);
+    await this.assertFormMatchesType(nextTypeId, nextFormId);
     if (nextVarietyId) {
       const variety = await this.prisma.client.flowerVariety.findUnique({
         where: { id: nextVarietyId },
@@ -1066,32 +1159,48 @@ export class FlowerRefsService {
             ?.name ?? null;
 
     const fields = buildFlowerItemFields({
-      flowerTypeId: existing.flowerTypeId,
+      flowerTypeId: nextTypeId,
       flowerFormId: nextFormId,
       flowerVarietyId: nextVarietyId,
       flowerOriginId: nextOriginId,
       stemLengthCm: nextHeight,
-      typeName: existing.flowerType.name,
+      typeName: type.name,
       formName,
       varietyName,
       originName,
-      name: input.name ?? existing.name,
-      slug: input.slug ?? existing.slug,
+      name: input.name,
+      slug: input.slug,
     });
     if (!fields.slug) throw new BadRequestException('Slug could not be derived');
+
+    const conflicting = await this.prisma.client.flowerItem.findFirst({
+      where: { identityKey: fields.identityKey, NOT: { id } },
+      select: { id: true, name: true },
+    });
+    if (conflicting) {
+      throw new ConflictException({
+        statusCode: 409,
+        error: 'Conflict',
+        message: `Такой цветок уже существует: ${conflicting.name}`,
+        code: 'FLOWER_ITEM_DUPLICATE',
+        existingId: conflicting.id,
+        existingName: conflicting.name,
+      });
+    }
 
     try {
       const row = await this.prisma.client.$transaction(async (tx) => {
         const bumped = await tx.flowerItem.updateMany({
           where: { id, version: input.expectedVersion },
           data: {
+            flowerTypeId: nextTypeId,
             flowerFormId: nextFormId,
             flowerVarietyId: nextVarietyId,
             flowerOriginId: nextOriginId,
             stemLengthCm: nextHeight,
             identityKey: fields.identityKey,
             slug: fields.slug,
-            name: input.name !== undefined ? input.name.trim() : fields.name,
+            name: fields.name,
             ...(input.sortOrder !== undefined ? { sortOrder: input.sortOrder } : {}),
             ...(input.visibility !== undefined ? { visibility: input.visibility } : {}),
             version: { increment: 1 },
@@ -1158,7 +1267,7 @@ export class FlowerRefsService {
       }
       if (row._count.components > 0) {
         throw new BadRequestException({
-          message: 'Flower item is used in product composition',
+          message: `Нельзя удалить: цветок используется в ${row._count.components} товарах. Архивируйте его.`,
           error: 'CatalogDeleteBlocked',
           code: 'HAS_COMPONENTS',
           componentsCount: row._count.components,
