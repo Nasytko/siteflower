@@ -79,13 +79,21 @@ export function StorefrontHeader({ city, brandName, phone, workingHours, navItem
         }`}
       >
         {/* Utility bar — service links, not CatalogCategory menu */}
-        <div className="hidden border-b border-border/70 bg-[color-mix(in_oklab,var(--surface)_88%,var(--background))] lg:block">
+        <div className="hidden border-b border-border/70 bg-[color-mix(in_oklab,var(--color-surface-muted)_70%,var(--color-background))] lg:block">
           <div className="sf-container-wide flex h-8 items-center justify-between gap-4 text-[0.7rem] text-muted">
             <span className="truncate">
-              {city}
+              📍 {city}
               {workingHours ? ` · ${workingHours}` : ''}
             </span>
             <nav className="flex items-center gap-4" aria-label="Служебные ссылки">
+              {phone ? (
+                <a
+                  href={`tel:${phone.replace(/\s+/g, '')}`}
+                  className="font-medium text-ink hover:text-brand"
+                >
+                  {phone}
+                </a>
+              ) : null}
               <Link href="/o-nas" className="hover:text-brand">
                 О нас
               </Link>
@@ -147,7 +155,7 @@ export function StorefrontHeader({ city, brandName, phone, workingHours, navItem
                     <p className="mt-1 text-xs text-muted">{workingHours}</p>
                   ) : null}
                   <Link
-                    href="/o-nas"
+                    href="/kontakty"
                     className="mt-2 inline-block text-xs font-semibold text-brand hover:underline"
                     onClick={() => setPlaceOpen(false)}
                   >
@@ -206,10 +214,11 @@ export function StorefrontHeader({ city, brandName, phone, workingHours, navItem
           </div>
           <nav className="sf-container flex flex-col gap-1 pb-16 pt-2" aria-label="Мобильное меню">
             {navItems.map((item) => {
-              const hasChildren = (item.children?.length ?? 0) > 0;
+              const hasBranch =
+                (item.children?.length ?? 0) > 0 || (item.groups?.length ?? 0) > 0;
               const branchOpen = openMobileBranch === item.id;
               return (
-                <div key={item.id} className="border-b border-border py-1">
+                <div key={item.id} className="border-b border-border/80 py-1">
                   <div className="flex items-center gap-1">
                     <Link
                       href={item.href}
@@ -220,12 +229,12 @@ export function StorefrontHeader({ city, brandName, phone, workingHours, navItem
                     >
                       {item.label}
                     </Link>
-                    {hasChildren ? (
+                    {hasBranch ? (
                       <button
                         type="button"
                         className="inline-flex h-10 w-10 items-center justify-center text-muted"
                         aria-expanded={branchOpen}
-                        aria-label={branchOpen ? 'Свернуть' : 'Развернуть'}
+                        aria-label={branchOpen ? 'Назад' : `Открыть «${item.label}»`}
                         onClick={() =>
                           setOpenMobileBranch((current) => (current === item.id ? null : item.id))
                         }
@@ -234,30 +243,84 @@ export function StorefrontHeader({ city, brandName, phone, workingHours, navItem
                       </button>
                     ) : null}
                   </div>
-                  {hasChildren && branchOpen
-                    ? item.children?.map((child) => (
+                  {hasBranch && branchOpen ? (
+                    <div className="space-y-3 pb-3 pl-3 pr-2">
+                      {item.groups?.map((group) => (
+                        <div key={group.id}>
+                          <p className="mb-1 text-[0.7rem] font-semibold uppercase tracking-[0.06em] text-muted">
+                            {group.label}
+                          </p>
+                          <ul className="space-y-0.5">
+                            {group.children.map((child) => (
+                              <li key={`${group.id}-${child.href}`}>
+                                <Link
+                                  href={child.href}
+                                  className="sf-nav-link block py-2 text-sm text-foreground hover:text-brand"
+                                  onClick={() => setMenuOpen(false)}
+                                >
+                                  {child.label}
+                                </Link>
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      ))}
+                      {item.children?.map((child) => (
                         <Link
                           key={`${item.id}-${child.href}`}
                           href={child.href}
-                          className="sf-nav-link block py-2 pl-6 pr-2 text-sm text-muted hover:text-brand"
+                          className="sf-nav-link block py-2 text-sm text-muted hover:text-brand"
                           onClick={() => setMenuOpen(false)}
                         >
                           {child.label}
                         </Link>
-                      ))
-                    : null}
+                      ))}
+                      <Link
+                        href={item.href}
+                        className="inline-block pt-1 text-sm font-medium text-brand"
+                        onClick={() => setMenuOpen(false)}
+                      >
+                        Смотреть все →
+                      </Link>
+                    </div>
+                  ) : null}
                 </div>
               );
             })}
-            {telHref ? (
-              <a href={telHref} className="mt-4 px-2 py-3 text-base font-medium">
-                {phone}
-              </a>
-            ) : null}
-            <p className="px-2 py-2 text-sm text-muted">
-              {city}
-              {workingHours ? ` · ${workingHours}` : ''}
-            </p>
+
+            <div className="mt-6 space-y-1 border-t border-border pt-4">
+              <Link
+                href="/o-nas"
+                className="block px-2 py-2.5 text-sm text-muted hover:text-brand"
+                onClick={() => setMenuOpen(false)}
+              >
+                О нас
+              </Link>
+              <Link
+                href="/dostavka"
+                className="block px-2 py-2.5 text-sm text-muted hover:text-brand"
+                onClick={() => setMenuOpen(false)}
+              >
+                Доставка и оплата
+              </Link>
+              <Link
+                href="/kontakty"
+                className="block px-2 py-2.5 text-sm text-muted hover:text-brand"
+                onClick={() => setMenuOpen(false)}
+              >
+                Контакты
+              </Link>
+            </div>
+
+            <div className="mt-6 space-y-2 px-2 text-sm text-muted">
+              {telHref ? (
+                <a href={telHref} className="block font-medium text-ink">
+                  ☎ {phone}
+                </a>
+              ) : null}
+              <p>📍 {city}</p>
+              {workingHours ? <p>🕐 {workingHours}</p> : null}
+            </div>
           </nav>
         </div>
       ) : null}
@@ -270,7 +333,7 @@ export function StorefrontHeader({ city, brandName, phone, workingHours, navItem
 function BrandLink({ brandName, compact }: { brandName: string; compact: boolean }) {
   return (
     <span className="inline-flex items-center" aria-label={brandName}>
-      <BrandLogo compact={compact} alt={brandName} priority />
+      <BrandLogo compact={compact} alt={brandName} />
     </span>
   );
 }

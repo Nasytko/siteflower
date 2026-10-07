@@ -40,7 +40,8 @@ class CreateNavItemDto {
 
   @IsOptional()
   @ValidateIf((_, value) => value !== null)
-  @IsUUID()
+  @IsString()
+  @MaxLength(80)
   targetId?: string | null;
 
   @IsOptional()
@@ -53,6 +54,12 @@ class CreateNavItemDto {
   @ValidateIf((_, value) => value !== null)
   @IsUUID()
   parentId?: string | null;
+
+  @IsOptional()
+  @ValidateIf((_, value) => value !== null)
+  @IsString()
+  @MaxLength(40)
+  iconKey?: string | null;
 
   @IsOptional()
   @IsBoolean()
@@ -80,7 +87,8 @@ class UpdateNavItemDto extends ExpectedVersionDto {
 
   @IsOptional()
   @ValidateIf((_, value) => value !== null)
-  @IsUUID()
+  @IsString()
+  @MaxLength(80)
   targetId?: string | null;
 
   @IsOptional()
@@ -93,6 +101,12 @@ class UpdateNavItemDto extends ExpectedVersionDto {
   @ValidateIf((_, value) => value !== null)
   @IsUUID()
   parentId?: string | null;
+
+  @IsOptional()
+  @ValidateIf((_, value) => value !== null)
+  @IsString()
+  @MaxLength(40)
+  iconKey?: string | null;
 
   @IsOptional()
   @IsBoolean()

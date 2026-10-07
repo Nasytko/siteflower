@@ -66,7 +66,7 @@ const NAV_GROUPS: NavGroup[] = [
       { href: '/admin/catalog/categories', label: 'Категории', permission: 'CATALOG_READ' },
       {
         href: '/admin/storefront/navigation',
-        label: 'Главное меню',
+        label: 'Навигация',
         permission: 'SETTINGS_READ',
       },
       { href: '/admin/promotions', label: 'Акции', permission: 'CATALOG_READ' },

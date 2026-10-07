@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import {
   categoryPublicHref,
+  isNavigationIconKey,
   isNavigationPageKey,
   isNavigationTargetType,
   MAIN_NAVIGATION_MENU_KEY,
@@ -34,6 +35,7 @@ type ItemRow = {
   targetType: NavigationTargetType;
   targetId: string | null;
   customHref: string | null;
+  iconKey: string | null;
   sortOrder: number;
   enabled: boolean;
   openInNewTab: boolean;
@@ -69,13 +71,15 @@ export class NavigationMenuService {
     // Hide unavailable targets (e.g. HIDDEN category). Keep admin rows intact.
     const available = resolved.filter((row) => !row.unavailable);
     const availableIds = new Set(available.map((row) => row.id));
-    // Children of unavailable parents surface as roots (menu ≠ category tree).
+    // Children of unavailable parents surface as roots (menu ≠ category tree),
+    // except links under an available GROUP stay nested.
     const roots = available.filter(
       (row) => !row.parentId || !availableIds.has(row.parentId),
     );
+    const tree = this.toPublicTree(roots, available);
     return {
       key: menu.key,
-      items: this.toPublicTree(roots, available),
+      items: this.pruneEmptyGroups(tree),
     };
   }
 
@@ -140,6 +144,21 @@ export class NavigationMenuService {
         ];
       case 'CUSTOM_URL':
         return [];
+      case 'GROUP':
+        return [];
+      case 'PRODUCT': {
+        const rows = await this.prisma.client.product.findMany({
+          where: { lifecycle: { in: ['PUBLISHED', 'DRAFT'] } },
+          orderBy: [{ updatedAt: 'desc' }],
+          take: 200,
+          select: { id: true, name: true, slug: true, lifecycle: true },
+        });
+        return rows.map((row) => ({
+          id: row.id,
+          label: row.lifecycle === 'PUBLISHED' ? row.name : `${row.name} (черновик)`,
+          href: `/bukety/${encodeURIComponent(row.slug)}`,
+        }));
+      }
       default:
         return [];
     }
@@ -152,6 +171,7 @@ export class NavigationMenuService {
       targetId?: string | null;
       customHref?: string | null;
       parentId?: string | null;
+      iconKey?: string | null;
       enabled?: boolean;
       openInNewTab?: boolean;
       accent?: boolean;
@@ -174,6 +194,7 @@ export class NavigationMenuService {
           targetType: prepared.targetType,
           targetId: prepared.targetId,
           customHref: prepared.customHref,
+          iconKey: prepared.iconKey,
           sortOrder: (maxOrder._max.sortOrder ?? 0) + 10,
           enabled: input.enabled ?? true,
           openInNewTab: input.openInNewTab ?? false,
@@ -212,6 +233,7 @@ export class NavigationMenuService {
       targetId?: string | null;
       customHref?: string | null;
       parentId?: string | null;
+      iconKey?: string | null;
       enabled?: boolean;
       openInNewTab?: boolean;
       accent?: boolean;
@@ -235,6 +257,7 @@ export class NavigationMenuService {
         targetId: nextTargetId,
         customHref: input.customHref === undefined ? existing.customHref : input.customHref,
         parentId: input.parentId === undefined ? existing.parentId : input.parentId,
+        iconKey: input.iconKey === undefined ? existing.iconKey : input.iconKey,
       },
       // Keep existing HIDDEN-category links editable (label/enabled) without re-assigning.
       { allowExistingHiddenCategory: targetUnchanged },
@@ -258,6 +281,7 @@ export class NavigationMenuService {
         targetId: prepared.targetId,
         customHref: prepared.customHref,
         parentId: prepared.parentId,
+        iconKey: prepared.iconKey,
         ...(input.enabled !== undefined ? { enabled: input.enabled } : {}),
         ...(input.openInNewTab !== undefined ? { openInNewTab: input.openInNewTab } : {}),
         ...(input.accent !== undefined ? { accent: input.accent } : {}),
@@ -397,6 +421,7 @@ export class NavigationMenuService {
       targetId?: string | null;
       customHref?: string | null;
       parentId?: string | null;
+      iconKey?: string | null;
     },
     options?: { allowExistingHiddenCategory?: boolean },
   ): Promise<{
@@ -405,11 +430,21 @@ export class NavigationMenuService {
     targetId: string | null;
     customHref: string | null;
     parentId: string | null;
+    iconKey: string | null;
   }> {
     const label = input.label.trim();
     if (!label) throw new BadRequestException('Укажите название пункта меню');
     if (!isNavigationTargetType(input.targetType)) {
       throw new BadRequestException('Неизвестный тип ссылки');
+    }
+
+    let iconKey: string | null = null;
+    if (input.iconKey != null && String(input.iconKey).trim()) {
+      const key = String(input.iconKey).trim();
+      if (!isNavigationIconKey(key)) {
+        throw new BadRequestException('Неизвестная иконка');
+      }
+      iconKey = key;
     }
 
     const parentId = input.parentId ?? null;
@@ -419,11 +454,32 @@ export class NavigationMenuService {
       });
       if (!parent) throw new BadRequestException('Родительский пункт меню не найден');
       if (parent.parentId) {
-        throw new BadRequestException('Поддерживается только один уровень вложенности меню');
+        // Depth 2: parent is already nested — must be a GROUP, child cannot be GROUP.
+        if (parent.targetType !== 'GROUP') {
+          throw new BadRequestException(
+            'Вложенные пункты можно добавлять только в группу dropdown',
+          );
+        }
+        if (input.targetType === 'GROUP') {
+          throw new BadRequestException('Группу нельзя вложить в другую группу');
+        }
+      } else if (input.targetType === 'GROUP' && parent.targetType === 'GROUP') {
+        throw new BadRequestException('Группу нельзя вложить в другую группу');
       }
+    } else if (input.targetType === 'GROUP') {
+      throw new BadRequestException('Группа должна быть внутри пункта основного меню');
     }
 
     switch (input.targetType) {
+      case 'GROUP':
+        return {
+          label,
+          targetType: 'GROUP',
+          targetId: null,
+          customHref: null,
+          parentId,
+          iconKey,
+        };
       case 'CATEGORY': {
         if (!input.targetId) throw new BadRequestException('Выберите категорию');
         const category = await this.prisma.client.catalogCategory.findUnique({
@@ -441,6 +497,26 @@ export class NavigationMenuService {
           targetId: category.id,
           customHref: null,
           parentId,
+          iconKey,
+        };
+      }
+      case 'PRODUCT': {
+        if (!input.targetId) throw new BadRequestException('Выберите товар');
+        const product = await this.prisma.client.product.findUnique({
+          where: { id: input.targetId },
+          select: { id: true, slug: true, lifecycle: true },
+        });
+        if (!product) throw new BadRequestException('Товар не найден');
+        if (product.lifecycle === 'ARCHIVED' && !options?.allowExistingHiddenCategory) {
+          throw new BadRequestException('Архивный товар нельзя назначить в меню');
+        }
+        return {
+          label,
+          targetType: 'PRODUCT',
+          targetId: product.id,
+          customHref: null,
+          parentId,
+          iconKey,
         };
       }
       case 'PROMOTIONS':
@@ -450,6 +526,7 @@ export class NavigationMenuService {
           targetId: null,
           customHref: null,
           parentId,
+          iconKey,
         };
       case 'BESTSELLERS': {
         if (!input.targetId || input.targetId === 'bestsellers') {
@@ -459,6 +536,7 @@ export class NavigationMenuService {
             targetId: null,
             customHref: null,
             parentId,
+            iconKey,
           };
         }
         const group = await this.prisma.client.bestsellerGroup.findUnique({
@@ -471,6 +549,7 @@ export class NavigationMenuService {
           targetId: group.id,
           customHref: null,
           parentId,
+          iconKey,
         };
       }
       case 'PAGE': {
@@ -484,6 +563,7 @@ export class NavigationMenuService {
           targetId: null,
           customHref: key,
           parentId,
+          iconKey,
         };
       }
       case 'CUSTOM_URL': {
@@ -506,6 +586,7 @@ export class NavigationMenuService {
           targetId: null,
           customHref: href,
           parentId,
+          iconKey,
         };
       }
       default:
@@ -529,8 +610,11 @@ export class NavigationMenuService {
     const groupIds = items
       .filter((row) => row.targetType === 'BESTSELLERS' && row.targetId)
       .map((row) => row.targetId!);
+    const productIds = items
+      .filter((row) => row.targetType === 'PRODUCT' && row.targetId)
+      .map((row) => row.targetId!);
 
-    const [categories, groups] = await Promise.all([
+    const [categories, groups, products] = await Promise.all([
       categoryIds.length
         ? this.prisma.client.catalogCategory.findMany({
             where: { id: { in: categoryIds } },
@@ -543,11 +627,27 @@ export class NavigationMenuService {
             select: { id: true, name: true, slug: true },
           })
         : Promise.resolve([]),
+      productIds.length
+        ? this.prisma.client.product.findMany({
+            where: { id: { in: productIds } },
+            select: { id: true, name: true, slug: true, lifecycle: true },
+          })
+        : Promise.resolve([]),
     ]);
     const categoryById = new Map(categories.map((row) => [row.id, row]));
     const groupById = new Map(groups.map((row) => [row.id, row]));
+    const productById = new Map(products.map((row) => [row.id, row]));
 
     return items.map((row) => {
+      if (row.targetType === 'GROUP') {
+        return {
+          ...row,
+          href: '',
+          targetLabel: 'Группа',
+          unavailable: false,
+          unavailableReason: null,
+        };
+      }
       if (row.targetType === 'CATEGORY' && row.targetId) {
         const category = categoryById.get(row.targetId);
         const status = navigationCategoryTargetAvailability(category);
@@ -557,6 +657,28 @@ export class NavigationMenuService {
           targetLabel: status.targetLabel,
           unavailable: !status.available,
           unavailableReason: status.reason,
+        };
+      }
+      if (row.targetType === 'PRODUCT' && row.targetId) {
+        const product = productById.get(row.targetId);
+        if (!product || product.lifecycle === 'ARCHIVED') {
+          return {
+            ...row,
+            href: '#',
+            targetLabel: 'Товар · (недоступен)',
+            unavailable: true,
+            unavailableReason: 'Товар удалён или в архиве — пункт не показывается на витрине',
+          };
+        }
+        return {
+          ...row,
+          href: `/bukety/${encodeURIComponent(product.slug)}`,
+          targetLabel: `Товар · ${product.name}`,
+          unavailable: product.lifecycle !== 'PUBLISHED',
+          unavailableReason:
+            product.lifecycle !== 'PUBLISHED'
+              ? 'Товар не опубликован — пункт не показывается на витрине'
+              : null,
         };
       }
       if (row.targetType === 'PROMOTIONS') {
@@ -616,6 +738,17 @@ export class NavigationMenuService {
     });
   }
 
+  private pruneEmptyGroups(
+    items: NavigationMenuItemPublicDto[],
+  ): NavigationMenuItemPublicDto[] {
+    return items
+      .map((item) => {
+        const children = this.pruneEmptyGroups(item.children);
+        return { ...item, children };
+      })
+      .filter((item) => item.targetType !== 'GROUP' || item.children.length > 0);
+  }
+
   private toPublicTree(
     roots: Array<ItemRow & { href: string; unavailable: boolean }>,
     all: Array<ItemRow & { href: string; unavailable: boolean }>,
@@ -626,6 +759,8 @@ export class NavigationMenuService {
       href: row.href,
       accent: row.accent,
       openInNewTab: row.openInNewTab,
+      iconKey: row.iconKey,
+      targetType: row.targetType,
       children: this.toPublicTree(
         all.filter((child) => child.parentId === row.id),
         all,
@@ -658,6 +793,7 @@ export class NavigationMenuService {
       targetType: row.targetType,
       targetId: row.targetId,
       customHref: row.customHref,
+      iconKey: row.iconKey,
       href: row.href,
       sortOrder: row.sortOrder,
       enabled: row.enabled,

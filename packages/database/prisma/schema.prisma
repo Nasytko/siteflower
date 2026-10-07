@@ -188,6 +188,10 @@ enum NavigationTargetType {
   BESTSELLERS
   PAGE
   CUSTOM_URL
+  /// Label-only column header in a dropdown (no href).
+  GROUP
+  /// Product PDP — targetId = Product.id.
+  PRODUCT
 }
 
 enum MediaFormat {
@@ -890,10 +894,12 @@ model NavigationMenuItem {
   parentId     String?              @map("parent_id") @db.Uuid
   label        String               @db.VarChar(120)
   targetType   NavigationTargetType @map("target_type")
-  /// CatalogCategory / BestsellerGroup id when target is an entity.
+  /// CatalogCategory / BestsellerGroup / Product id when target is an entity.
   targetId     String?              @map("target_id") @db.Uuid
   /// Static page key (dostavka, o-nas, kontakty, povod) or custom path/URL.
   customHref   String?              @map("custom_href") @db.VarChar(500)
+  /// Named SVG icon key for dropdown group headers (bouquet, leaf, heart, …).
+  iconKey      String?              @map("icon_key") @db.VarChar(40)
   sortOrder    Int                  @default(0) @map("sort_order")
   enabled      Boolean              @default(true)
   openInNewTab Boolean              @default(false) @map("open_in_new_tab")

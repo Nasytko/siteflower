@@ -50,6 +50,8 @@ test('nav from NavigationMenu keeps Акции without CatalogCategory', () => {
       href: '/katalog/rozy',
       accent: false,
       openInNewTab: false,
+      iconKey: null,
+      targetType: 'CATEGORY',
       children: [],
     },
     {
@@ -58,6 +60,8 @@ test('nav from NavigationMenu keeps Акции without CatalogCategory', () => {
       href: '/akcii',
       accent: true,
       openInNewTab: false,
+      iconKey: null,
+      targetType: 'PROMOTIONS',
       children: [],
     },
   ];
@@ -65,6 +69,59 @@ test('nav from NavigationMenu keeps Акции without CatalogCategory', () => {
   assert.equal(items.length, 2);
   assert.equal(items[1]?.href, '/akcii');
   assert.equal(items[1]?.accent, true);
+});
+
+test('nav maps GROUP columns under a root item', () => {
+  const menu: NavigationMenuItemPublicDto[] = [
+    {
+      id: 'root',
+      label: 'Букеты',
+      href: '/bukety',
+      accent: false,
+      openInNewTab: false,
+      iconKey: null,
+      targetType: 'PAGE',
+      children: [
+        {
+          id: 'g1',
+          label: 'По стилю',
+          href: '',
+          accent: false,
+          openInNewTab: false,
+          iconKey: 'leaf',
+          targetType: 'GROUP',
+          children: [
+            {
+              id: 'c1',
+              label: 'Классика',
+              href: '/bukety?line=klassika',
+              accent: false,
+              openInNewTab: false,
+              iconKey: null,
+              targetType: 'CUSTOM_URL',
+              children: [],
+            },
+          ],
+        },
+        {
+          id: 'direct',
+          label: 'Все букеты',
+          href: '/bukety',
+          accent: false,
+          openInNewTab: false,
+          iconKey: null,
+          targetType: 'PAGE',
+          children: [],
+        },
+      ],
+    },
+  ];
+  const items = navItemsFromNavigationMenu(menu);
+  assert.equal(items[0]?.groups?.length, 1);
+  assert.equal(items[0]?.groups?.[0]?.label, 'По стилю');
+  assert.equal(items[0]?.groups?.[0]?.iconKey, 'leaf');
+  assert.equal(items[0]?.groups?.[0]?.children[0]?.href, '/bukety?line=klassika');
+  assert.equal(items[0]?.children, undefined);
 });
 
 test('nav hides HIDDEN children and keeps legacy bukety href', () => {

@@ -12,8 +12,8 @@ export default async function StorefrontNavigationPage() {
   return (
     <main id="main-content" className="space-y-6">
       <AdminPageHeader
-        title="Главное меню"
-        lead="Управляйте навигацией магазина отдельно от категорий каталога. Пункт «Акции» не требует категории."
+        title="Навигация"
+        lead="Редактор главного меню витрины: пункты, колонки, иконки и ссылки. Служебные страницы (О нас, Доставка) живут в верхней строке сайта."
       />
       <NavigationMenuManager
         initial={menu}

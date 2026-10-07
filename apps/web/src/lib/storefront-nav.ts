@@ -3,30 +3,50 @@ import {
   type CatalogCategoryTreeNodeDto,
   type NavigationMenuItemPublicDto,
 } from '@bouquet-one/contracts';
-import type { PrimaryNavItem } from '@/components/storefront/primary-nav';
+import type { PrimaryNavGroup, PrimaryNavItem } from '@/components/storefront/primary-nav';
 
 export function categoryNavHref(slug: string): string {
   return categoryPublicHref(slug);
+}
+
+function mapLinkChildren(items: NavigationMenuItemPublicDto[]) {
+  return items
+    .filter((child) => child.targetType !== 'GROUP' && child.href)
+    .map((child) => ({
+      id: child.id,
+      label: child.label,
+      href: child.href,
+    }));
+}
+
+function mapGroups(items: NavigationMenuItemPublicDto[]): PrimaryNavGroup[] {
+  return items
+    .filter((child) => child.targetType === 'GROUP')
+    .map((group) => ({
+      id: group.id,
+      label: group.label,
+      iconKey: group.iconKey,
+      children: mapLinkChildren(group.children),
+    }))
+    .filter((group) => group.children.length > 0);
 }
 
 /** Map public NavigationMenu items → header PrimaryNavItem shape. */
 export function navItemsFromNavigationMenu(
   items: NavigationMenuItemPublicDto[],
 ): PrimaryNavItem[] {
-  return items.map((item) => ({
-    id: item.id,
-    label: item.label,
-    href: item.href,
-    accent: item.accent || undefined,
-    ...(item.children.length > 0
-      ? {
-          children: item.children.map((child) => ({
-            label: child.label,
-            href: child.href,
-          })),
-        }
-      : {}),
-  }));
+  return items.map((item) => {
+    const groups = mapGroups(item.children);
+    const flatChildren = mapLinkChildren(item.children);
+    return {
+      id: item.id,
+      label: item.label,
+      href: item.href || '#',
+      accent: item.accent || undefined,
+      ...(groups.length > 0 ? { groups } : {}),
+      ...(groups.length === 0 && flatChildren.length > 0 ? { children: flatChildren } : {}),
+    };
+  });
 }
 
 /**
@@ -67,4 +87,3 @@ export function findCategoryInTree(
   }
   return walk(nodes, []);
 }
-

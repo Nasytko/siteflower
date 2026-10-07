@@ -50,7 +50,7 @@ export function buildRootMetadata(): Metadata {
       canonical: '/',
     },
     icons: {
-      icon: '/brand/logo.png',
+      icon: [{ url: '/favicon.svg', type: 'image/svg+xml' }, { url: '/brand/logo.png' }],
       apple: '/brand/logo.png',
     },
   };

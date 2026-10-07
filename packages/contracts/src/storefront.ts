@@ -256,8 +256,28 @@ export const NAVIGATION_TARGET_TYPES = [
   'BESTSELLERS',
   'PAGE',
   'CUSTOM_URL',
+  'GROUP',
+  'PRODUCT',
 ] as const;
 export type NavigationTargetType = (typeof NAVIGATION_TARGET_TYPES)[number];
+
+/** Named SVG icons available for navigation group headers. */
+export const NAVIGATION_ICON_KEYS = [
+  'bouquet',
+  'flower',
+  'leaf',
+  'heart',
+  'gift',
+  'sale',
+  'size',
+  'color',
+  'arrow',
+] as const;
+export type NavigationIconKey = (typeof NAVIGATION_ICON_KEYS)[number];
+
+export function isNavigationIconKey(value: string): value is NavigationIconKey {
+  return (NAVIGATION_ICON_KEYS as readonly string[]).includes(value);
+}
 
 export const NAVIGATION_PAGE_KEYS = [
   'bukety',
@@ -275,9 +295,12 @@ export const MAIN_NAVIGATION_MENU_KEY = 'main';
 export type NavigationMenuItemPublicDto = {
   id: string;
   label: string;
+  /** Empty for GROUP headers. */
   href: string;
   accent: boolean;
   openInNewTab: boolean;
+  iconKey: string | null;
+  targetType: NavigationTargetType;
   children: NavigationMenuItemPublicDto[];
 };
 
@@ -293,7 +316,8 @@ export type NavigationMenuItemAdminDto = {
   targetType: NavigationTargetType;
   targetId: string | null;
   customHref: string | null;
-  /** Resolved preview href for admin UI (may be `#` when unavailable). */
+  iconKey: string | null;
+  /** Resolved preview href for admin UI (may be `#` when unavailable / GROUP). */
   href: string;
   sortOrder: number;
   enabled: boolean;

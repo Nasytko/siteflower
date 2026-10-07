@@ -341,47 +341,33 @@ select:focus-visible,
   }
 }
 
-.sf-utility-bar {
-  background: var(--color-brand);
-  color: rgb(255 255 255 / 0.9);
-  font-size: 0.75rem;
-}
-
-.sf-utility-bar a {
-  color: inherit;
-}
-
-.sf-utility-bar a:hover {
-  color: #fff;
-}
-
 /* Sticky header: single tree, 2 rows → 1 on scroll (no spacer). */
-/* Official brand lockup */
+/* Brand lockup: SVG mark + wordmark */
 .sf-brand-logo {
-  display: block;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  line-height: 1;
+}
+
+.sf-brand-logo img {
   width: auto;
-  height: 2.75rem;
-  border-radius: 0.2rem;
+  height: 2.25rem;
   transition: height 0.35s cubic-bezier(0.22, 1, 0.36, 1);
 }
 
-.sf-brand-logo--compact {
-  height: 2.15rem;
+.sf-brand-logo--compact img {
+  height: 1.85rem;
 }
 
 @media (min-width: 640px) {
-  .sf-brand-logo {
-    height: 3.1rem;
+  .sf-brand-logo img {
+    height: 2.5rem;
   }
 
-  .sf-brand-logo--compact {
-    height: 2.35rem;
+  .sf-brand-logo--compact img {
+    height: 2rem;
   }
-}
-
-.sf-brand-logo--on-brand {
-  height: 3.4rem;
-  box-shadow: 0 0 0 1px color-mix(in oklab, white 12%, transparent);
 }
 
 .sf-site-header {
