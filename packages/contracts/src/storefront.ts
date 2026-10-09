@@ -279,6 +279,14 @@ export function isNavigationIconKey(value: string): value is NavigationIconKey {
   return (NAVIGATION_ICON_KEYS as readonly string[]).includes(value);
 }
 
+/** Dropdown presentation for a root NavigationMenuItem. */
+export const NAVIGATION_PANEL_LAYOUTS = ['COLUMNS', 'TILES'] as const;
+export type NavigationPanelLayout = (typeof NAVIGATION_PANEL_LAYOUTS)[number];
+
+export function isNavigationPanelLayout(value: string): value is NavigationPanelLayout {
+  return (NAVIGATION_PANEL_LAYOUTS as readonly string[]).includes(value);
+}
+
 export const NAVIGATION_PAGE_KEYS = [
   'bukety',
   'cvety',
@@ -300,6 +308,10 @@ export type NavigationMenuItemPublicDto = {
   accent: boolean;
   openInNewTab: boolean;
   iconKey: string | null;
+  /** Meaningful on root items — COLUMNS (text groups) or TILES (photo grid). */
+  panelLayout: NavigationPanelLayout;
+  /** Resolved public image URL for TILES (or null). */
+  imageUrl: string | null;
   targetType: NavigationTargetType;
   children: NavigationMenuItemPublicDto[];
 };
@@ -317,6 +329,10 @@ export type NavigationMenuItemAdminDto = {
   targetId: string | null;
   customHref: string | null;
   iconKey: string | null;
+  panelLayout: NavigationPanelLayout;
+  mediaAssetId: string | null;
+  /** Resolved preview image URL (explicit media or PRODUCT primary fallback). */
+  imageUrl: string | null;
   /** Resolved preview href for admin UI (may be `#` when unavailable / GROUP). */
   href: string;
   sortOrder: number;

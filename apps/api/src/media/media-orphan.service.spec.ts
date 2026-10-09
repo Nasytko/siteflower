@@ -44,6 +44,12 @@ describe('MediaOrphanService purge transaction ordering', () => {
           return 0;
         },
       },
+      navigationMenuItem: {
+        count: async () => {
+          events.push('nav.ref.count');
+          return 0;
+        },
+      },
       mediaAsset: {
         update: async () => undefined,
         delete: async () => {
@@ -94,6 +100,7 @@ describe('MediaOrphanService purge transaction ordering', () => {
       'tx.begin',
       'FOR UPDATE',
       'ref.count',
+      'nav.ref.count',
       `storage.delete:${masterKey}`,
       `storage.delete:${derivKey}`,
       'db.mediaDerivative.deleteMany',
@@ -119,6 +126,7 @@ describe('MediaOrphanService purge transaction ordering', () => {
     const tx = {
       $queryRaw: async () => [{ id: assetId, orphaned_at: new Date('2020-01-01T00:00:00.000Z') }],
       productMedia: { count: async () => 1 },
+      navigationMenuItem: { count: async () => 0 },
       mediaAsset: {
         update: async () => {
           events.push('clear.orphanedAt');

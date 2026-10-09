@@ -4,9 +4,11 @@ import { FormEvent, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   NAVIGATION_ICON_KEYS,
+  NAVIGATION_PANEL_LAYOUTS,
   NAVIGATION_TARGET_TYPES,
   type NavigationMenuAdminDto,
   type NavigationMenuItemAdminDto,
+  type NavigationPanelLayout,
   type NavigationTargetOptionDto,
   type NavigationTargetType,
   type PaginatedResponse,
@@ -16,13 +18,15 @@ import {
   adminGet,
   adminPatch,
   adminPost,
+  adminUpload,
   AdminRequestError,
   errorMessage,
 } from '@/lib/admin-client';
 import { adminEndpoints, withQuery } from '@/lib/admin-endpoints';
 import { unwrapAdminList } from '@/lib/admin-list';
+import { navItemsFromAdminMenu } from '@/lib/storefront-nav';
 import { FormSaveStatus, phaseFromAdminError, type FormSavePhase } from '@/components/admin/form-status';
-import { PrimaryNav, type PrimaryNavItem } from '@/components/storefront/primary-nav';
+import { PrimaryNav } from '@/components/storefront/primary-nav';
 import { NavigationGlyph } from '@/components/storefront/navigation-icons';
 
 type Props = {
@@ -39,6 +43,7 @@ type Draft = {
   customHref: string;
   parentId: string;
   iconKey: string;
+  panelLayout: NavigationPanelLayout;
   enabled: boolean;
   accent: boolean;
 };
@@ -68,18 +73,6 @@ const ICON_LABELS: Record<(typeof NAVIGATION_ICON_KEYS)[number], string> = {
   color: 'Цвет',
   arrow: 'Стрелка',
 };
-
-function flattenItems(items: NavigationMenuItemAdminDto[]): NavigationMenuItemAdminDto[] {
-  const out: NavigationMenuItemAdminDto[] = [];
-  for (const item of items) {
-    out.push(item);
-    for (const child of item.children) {
-      out.push(child);
-      out.push(...child.children);
-    }
-  }
-  return out;
-}
 
 function findItem(
   items: NavigationMenuItemAdminDto[],
@@ -123,53 +116,6 @@ function parentOptions(menu: NavigationMenuAdminDto, excludeId?: string) {
   return options;
 }
 
-function previewNavFromAdmin(items: NavigationMenuItemAdminDto[]): PrimaryNavItem[] {
-  return items
-    .filter((item) => item.enabled && !item.unavailable)
-    .map((item) => {
-      const groupChildren = item.children.filter(
-        (child) => child.enabled && !child.unavailable && child.targetType === 'GROUP',
-      );
-      const groups = groupChildren
-        .map((group) => ({
-          id: group.id,
-          label: group.label,
-          iconKey: group.iconKey,
-          children: group.children
-            .filter(
-              (link) =>
-                link.enabled &&
-                !link.unavailable &&
-                link.targetType !== 'GROUP' &&
-                Boolean(link.href) &&
-                link.href !== '#',
-            )
-            .map((link) => ({ id: link.id, label: link.label, href: link.href })),
-        }))
-        .filter((group) => group.children.length > 0);
-
-      const flatChildren = item.children
-        .filter(
-          (child) =>
-            child.enabled &&
-            !child.unavailable &&
-            child.targetType !== 'GROUP' &&
-            Boolean(child.href) &&
-            child.href !== '#',
-        )
-        .map((child) => ({ id: child.id, label: child.label, href: child.href }));
-
-      return {
-        id: item.id,
-        label: item.label,
-        href: item.targetType === 'GROUP' ? '#' : item.href || '#',
-        accent: item.accent || undefined,
-        ...(groups.length > 0 ? { groups } : {}),
-        ...(groups.length === 0 && flatChildren.length > 0 ? { children: flatChildren } : {}),
-      };
-    });
-}
-
 export function NavigationMenuManager({ initial, canUpdate }: Props) {
   const router = useRouter();
   const [menu, setMenu] = useState(initial);
@@ -184,9 +130,8 @@ export function NavigationMenuManager({ initial, canUpdate }: Props) {
   const [taxonomyOptions, setTaxonomyOptions] = useState<TaxonomyOption[]>([]);
   const [productQuery, setProductQuery] = useState('');
 
-  const flat = useMemo(() => flattenItems(menu.items), [menu.items]);
   const parents = useMemo(() => parentOptions(menu, draft?.id), [menu, draft?.id]);
-  const previewItems = useMemo(() => previewNavFromAdmin(menu.items), [menu.items]);
+  const previewItems = useMemo(() => navItemsFromAdminMenu(menu.items), [menu.items]);
 
   const reload = async () => {
     const next = await adminGet<NavigationMenuAdminDto>(adminEndpoints.navigationMain);
@@ -238,7 +183,13 @@ export function NavigationMenuManager({ initial, canUpdate }: Props) {
     const parent = parentId ? findItem(menu.items, parentId) : null;
     const defaultType: NavigationTargetType =
       preset?.targetType ??
-      (parent?.targetType === 'GROUP' ? 'CATEGORY' : parentId ? 'GROUP' : 'CATEGORY');
+      (parent?.panelLayout === 'TILES'
+        ? 'CATEGORY'
+        : parent?.targetType === 'GROUP'
+          ? 'CATEGORY'
+          : parentId
+            ? 'GROUP'
+            : 'CATEGORY');
     const draftState: Draft = {
       label: '',
       targetType: defaultType,
@@ -246,6 +197,7 @@ export function NavigationMenuManager({ initial, canUpdate }: Props) {
       customHref: '',
       parentId,
       iconKey: '',
+      panelLayout: 'COLUMNS',
       enabled: true,
       accent: false,
       ...preset,
@@ -272,6 +224,7 @@ export function NavigationMenuManager({ initial, canUpdate }: Props) {
       customHref: item.customHref ?? '',
       parentId: item.parentId ?? '',
       iconKey: item.iconKey ?? '',
+      panelLayout: item.panelLayout ?? 'COLUMNS',
       enabled: item.enabled,
       accent: item.accent,
     });
@@ -302,6 +255,7 @@ export function NavigationMenuManager({ initial, canUpdate }: Props) {
             : null,
       parentId: draft.parentId || null,
       iconKey: draft.iconKey || null,
+      ...(draft.parentId ? {} : { panelLayout: draft.panelLayout }),
       enabled: draft.enabled,
       accent: draft.accent,
     };
@@ -327,14 +281,36 @@ export function NavigationMenuManager({ initial, canUpdate }: Props) {
     }
     const parent = findItem(menu.items, parentId);
     if (!parent) return NAVIGATION_TARGET_TYPES as unknown as NavigationTargetType[];
-    if (parent.targetType === 'GROUP') {
+    if (parent.panelLayout === 'TILES' || parent.targetType === 'GROUP') {
       return NAVIGATION_TARGET_TYPES.filter((type) => type !== 'GROUP') as NavigationTargetType[];
     }
-    // Under a root link: only GROUP or links (depth 1). GROUP is allowed; nested GROUP not.
+    // Under a COLUMNS root: GROUP or links (depth 1).
     if (itemDepth(menu, parent.id) === 0) {
       return [...NAVIGATION_TARGET_TYPES] as NavigationTargetType[];
     }
     return NAVIGATION_TARGET_TYPES.filter((type) => type !== 'GROUP') as NavigationTargetType[];
+  };
+
+  const uploadTileImage = async (item: NavigationMenuItemAdminDto, file: File) => {
+    await run(async () => {
+      const form = new FormData();
+      form.append('file', file);
+      const next = await adminUpload<NavigationMenuAdminDto>(
+        adminEndpoints.navigationItemMedia(item.id),
+        form,
+      );
+      setMenu(next);
+    }, 'Фото плитки сохранено');
+  };
+
+  const removeTileImage = async (item: NavigationMenuItemAdminDto) => {
+    await run(async () => {
+      const next = await adminDelete<NavigationMenuAdminDto>(
+        adminEndpoints.navigationItemMedia(item.id),
+        { expectedVersion: item.version },
+      );
+      setMenu(next);
+    }, 'Фото плитки удалено');
   };
 
   const filteredProducts = useMemo(() => {
@@ -345,9 +321,12 @@ export function NavigationMenuManager({ initial, canUpdate }: Props) {
   }, [draft?.targetType, productQuery, targets]);
 
   const renderRow = (item: NavigationMenuItemAdminDto, depth: number) => {
+    const parent = item.parentId ? findItem(menu.items, item.parentId) : null;
+    const underTiles = parent?.panelLayout === 'TILES';
     const canAddChild =
       depth === 0 || (depth === 1 && item.targetType === 'GROUP');
     const isGroup = item.targetType === 'GROUP';
+    const isTilesRoot = depth === 0 && item.panelLayout === 'TILES';
 
     return (
       <li
@@ -356,6 +335,19 @@ export function NavigationMenuManager({ initial, canUpdate }: Props) {
         style={{ marginLeft: depth * 14 }}
       >
         <div className="flex flex-wrap items-start gap-2">
+          {underTiles || item.imageUrl ? (
+            item.imageUrl ? (
+              <img
+                src={item.imageUrl}
+                alt=""
+                className="h-12 w-12 shrink-0 rounded-lg object-cover"
+              />
+            ) : underTiles ? (
+              <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg bg-[var(--admin-muted)]/10 text-[0.65rem] text-[var(--admin-muted)]">
+                фото
+              </span>
+            ) : null
+          ) : null}
           <div className="min-w-[12rem] flex-1">
             <div className="flex flex-wrap items-center gap-2 font-medium text-[var(--admin-ink)]">
               {item.iconKey ? <NavigationGlyph iconKey={item.iconKey} className="h-4 w-4" /> : null}
@@ -363,6 +355,11 @@ export function NavigationMenuManager({ initial, canUpdate }: Props) {
               {isGroup ? (
                 <span className="rounded bg-[var(--admin-muted)]/15 px-1.5 py-0.5 text-[0.65rem] font-semibold uppercase tracking-wide text-[var(--admin-muted)]">
                   колонка
+                </span>
+              ) : null}
+              {isTilesRoot ? (
+                <span className="rounded bg-[var(--admin-brand)]/10 px-1.5 py-0.5 text-[0.65rem] font-semibold uppercase tracking-wide text-[var(--admin-brand)]">
+                  сетка фото
                 </span>
               ) : null}
               {!item.enabled ? (
@@ -381,6 +378,34 @@ export function NavigationMenuManager({ initial, canUpdate }: Props) {
               <p className="mt-1 text-xs text-[var(--admin-danger,#b42318)]">
                 {item.unavailableReason ?? 'Цель недоступна на витрине'}
               </p>
+            ) : null}
+            {underTiles && canUpdate ? (
+              <div className="mt-2 flex flex-wrap items-center gap-2">
+                <label className="admin-btn-ghost cursor-pointer text-xs">
+                  {item.imageUrl ? 'Заменить фото' : 'Загрузить фото'}
+                  <input
+                    type="file"
+                    accept="image/jpeg,image/png,image/webp"
+                    className="sr-only"
+                    disabled={pending}
+                    onChange={(event) => {
+                      const file = event.target.files?.[0];
+                      event.target.value = '';
+                      if (file) void uploadTileImage(item, file);
+                    }}
+                  />
+                </label>
+                {item.mediaAssetId ? (
+                  <button
+                    type="button"
+                    className="admin-btn-ghost text-xs"
+                    disabled={pending}
+                    onClick={() => void removeTileImage(item)}
+                  >
+                    Убрать фото
+                  </button>
+                ) : null}
+              </div>
             ) : null}
           </div>
           {canUpdate ? (
@@ -430,11 +455,20 @@ export function NavigationMenuManager({ initial, canUpdate }: Props) {
                   className="admin-btn-ghost text-xs"
                   onClick={() =>
                     void openCreate(item.id, {
-                      targetType: depth === 0 ? 'GROUP' : 'CATEGORY',
+                      targetType:
+                        depth === 0
+                          ? item.panelLayout === 'TILES'
+                            ? 'CATEGORY'
+                            : 'GROUP'
+                          : 'CATEGORY',
                     })
                   }
                 >
-                  {depth === 0 ? '+ Колонка / ссылка' : '+ Ссылка'}
+                  {depth === 0
+                    ? item.panelLayout === 'TILES'
+                      ? '+ Плитка'
+                      : '+ Колонка / ссылка'
+                    : '+ Ссылка'}
                 </button>
               ) : null}
               <button
@@ -571,7 +605,6 @@ export function NavigationMenuManager({ initial, canUpdate }: Props) {
                     targetId: '',
                     customHref: '',
                     accent: targetType === 'PROMOTIONS' ? true : draft.accent,
-                    iconKey: targetType === 'GROUP' ? draft.iconKey : draft.iconKey,
                   });
                   setUrlBuilder('manual');
                   void loadTargets(targetType);
@@ -585,12 +618,90 @@ export function NavigationMenuManager({ initial, canUpdate }: Props) {
               </select>
             </label>
 
+            {!draft.parentId ? (
+              <label className="admin-field md:col-span-2">
+                <span>Вид подменю</span>
+                <select
+                  className="admin-input"
+                  value={draft.panelLayout}
+                  onChange={(event) =>
+                    setDraft({
+                      ...draft,
+                      panelLayout: event.target.value as NavigationPanelLayout,
+                    })
+                  }
+                >
+                  {NAVIGATION_PANEL_LAYOUTS.map((layout) => (
+                    <option key={layout} value={layout}>
+                      {layout === 'COLUMNS' ? 'Колонки текстом' : 'Сетка с фото'}
+                    </option>
+                  ))}
+                </select>
+                <span className="mt-1 block text-xs text-[var(--admin-muted)]">
+                  {draft.panelLayout === 'TILES'
+                    ? 'Подменю — сетка плиток с фото. Добавляйте только ссылки (не колонки).'
+                    : 'Подменю — текстовые колонки. Можно добавить группы «По стилю / По цвету».'}
+                </span>
+              </label>
+            ) : null}
+
             {draft.targetType === 'GROUP' ? (
               <p className="sf-small md:col-span-2 text-[var(--admin-muted)]">
                 Группа — заголовок колонки в выпадающем меню. Ссылка не нужна; добавьте ссылки
                 внутрь колонки.
               </p>
             ) : null}
+
+            {draft.id && draft.parentId
+              ? (() => {
+                  const parent = findItem(menu.items, draft.parentId);
+                  const current = findItem(menu.items, draft.id);
+                  if (parent?.panelLayout !== 'TILES' || !current) return null;
+                  return (
+                    <div className="md:col-span-2 space-y-2 rounded-lg border border-[var(--admin-border)] p-3">
+                      <p className="text-sm font-medium text-[var(--admin-ink)]">Фото плитки</p>
+                      {current.imageUrl ? (
+                        <img
+                          src={current.imageUrl}
+                          alt=""
+                          className="h-24 w-24 rounded-lg object-cover"
+                        />
+                      ) : (
+                        <p className="text-xs text-[var(--admin-muted)]">
+                          Нет фото — на витрине будет нейтральный фон (для товара подставится его
+                          главное фото).
+                        </p>
+                      )}
+                      <div className="flex flex-wrap gap-2">
+                        <label className="admin-btn-ghost cursor-pointer text-xs">
+                          {current.imageUrl ? 'Заменить' : 'Загрузить'}
+                          <input
+                            type="file"
+                            accept="image/jpeg,image/png,image/webp"
+                            className="sr-only"
+                            disabled={pending}
+                            onChange={(event) => {
+                              const file = event.target.files?.[0];
+                              event.target.value = '';
+                              if (file) void uploadTileImage(current, file);
+                            }}
+                          />
+                        </label>
+                        {current.mediaAssetId ? (
+                          <button
+                            type="button"
+                            className="admin-btn-ghost text-xs"
+                            disabled={pending}
+                            onClick={() => void removeTileImage(current)}
+                          >
+                            Убрать
+                          </button>
+                        ) : null}
+                      </div>
+                    </div>
+                  );
+                })()
+              : null}
 
             {draft.targetType === 'CUSTOM_URL' ? (
               <div className="space-y-3 md:col-span-2">
@@ -790,7 +901,6 @@ export function NavigationMenuManager({ initial, canUpdate }: Props) {
               Отмена
             </button>
           </div>
-          <p className="sr-only">{flat.length} пунктов</p>
         </form>
       ) : null}
     </div>

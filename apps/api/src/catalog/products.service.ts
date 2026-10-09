@@ -1152,12 +1152,15 @@ export class ProductsService {
           });
         }
       }
-      const refs = await tx.productMedia.count({
+      const productRefs = await tx.productMedia.count({
+        where: { mediaAssetId: media.mediaAssetId },
+      });
+      const navRefs = await tx.navigationMenuItem.count({
         where: { mediaAssetId: media.mediaAssetId },
       });
       await tx.mediaAsset.update({
         where: { id: media.mediaAssetId },
-        data: { orphanedAt: refs === 0 ? new Date() : null },
+        data: { orphanedAt: productRefs + navRefs === 0 ? new Date() : null },
       });
       await this.products.bumpVersion(id, tx);
       await this.recordAudit(tx, actor, 'PRODUCT_MEDIA_REMOVED', id, {

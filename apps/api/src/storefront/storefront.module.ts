@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { AuditModule } from '../audit/audit.module';
+import { MediaModule } from '../media/media.module';
 import { AdminInstagramController } from './admin-instagram.controller';
 import { AdminNavigationController } from './admin-navigation.controller';
 import { AdminStorefrontController } from './admin-storefront.controller';
@@ -10,7 +11,7 @@ import { PublicStorefrontController } from './public-storefront.controller';
 import { StorefrontSettingsService } from './storefront-settings.service';
 
 @Module({
-  imports: [AuditModule],
+  imports: [AuditModule, MediaModule],
   controllers: [
     AdminStorefrontController,
     AdminNavigationController,

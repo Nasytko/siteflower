@@ -168,6 +168,8 @@ export const adminEndpoints = {
   navigationItems: `${ADMIN}/storefront/navigation/main/items`,
   navigationItemReorder: (id: string) =>
     `${ADMIN}/storefront/navigation/main/items/${id}/reorder`,
+  navigationItemMedia: (id: string) =>
+    `${ADMIN}/storefront/navigation/main/items/${id}/media`,
   instagramPosts: `${ADMIN}/storefront/instagram/posts`,
   instagramPost: (id: string) => `${ADMIN}/storefront/instagram/posts/${id}`,
   instagramPostsOrder: `${ADMIN}/storefront/instagram/posts/order`,

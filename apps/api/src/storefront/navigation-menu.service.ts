@@ -8,6 +8,7 @@ import {
   categoryPublicHref,
   isNavigationIconKey,
   isNavigationPageKey,
+  isNavigationPanelLayout,
   isNavigationTargetType,
   MAIN_NAVIGATION_MENU_KEY,
   navigationCategoryTargetAvailability,
@@ -17,6 +18,7 @@ import {
   type NavigationMenuItemAdminDto,
   type NavigationMenuItemPublicDto,
   type NavigationMenuPublicDto,
+  type NavigationPanelLayout,
   type NavigationTargetOptionDto,
   type NavigationTargetType,
 } from '@bouquet-one/contracts';
@@ -25,6 +27,11 @@ import { hashIp } from '../auth/crypto.util';
 import type { ActorContext } from '../common/actor.util';
 import { AppConfigService } from '../config/app-config.service';
 import { PrismaService } from '../database/prisma.service';
+import {
+  LIST_IMAGE_TARGET_WIDTH,
+  pickDerivativeStorageUrl,
+} from '../media/media-url.util';
+import { MediaService } from '../media/media.service';
 import { StorefrontRevalidateService } from './storefront-revalidate.service';
 
 type ItemRow = {
@@ -36,11 +43,21 @@ type ItemRow = {
   targetId: string | null;
   customHref: string | null;
   iconKey: string | null;
+  panelLayout: NavigationPanelLayout;
+  mediaAssetId: string | null;
   sortOrder: number;
   enabled: boolean;
   openInNewTab: boolean;
   accent: boolean;
   version: number;
+};
+
+type ResolvedItem = ItemRow & {
+  href: string;
+  imageUrl: string | null;
+  targetLabel: string;
+  unavailable: boolean;
+  unavailableReason: string | null;
 };
 
 @Injectable()
@@ -50,6 +67,7 @@ export class NavigationMenuService {
     private readonly audit: AuditService,
     private readonly appConfig: AppConfigService,
     private readonly revalidate: StorefrontRevalidateService,
+    private readonly media: MediaService,
   ) {}
 
   private actorMeta(actor?: ActorContext) {
@@ -172,6 +190,7 @@ export class NavigationMenuService {
       customHref?: string | null;
       parentId?: string | null;
       iconKey?: string | null;
+      panelLayout?: string | null;
       enabled?: boolean;
       openInNewTab?: boolean;
       accent?: boolean;
@@ -195,6 +214,7 @@ export class NavigationMenuService {
           targetId: prepared.targetId,
           customHref: prepared.customHref,
           iconKey: prepared.iconKey,
+          panelLayout: prepared.panelLayout,
           sortOrder: (maxOrder._max.sortOrder ?? 0) + 10,
           enabled: input.enabled ?? true,
           openInNewTab: input.openInNewTab ?? false,
@@ -234,6 +254,7 @@ export class NavigationMenuService {
       customHref?: string | null;
       parentId?: string | null;
       iconKey?: string | null;
+      panelLayout?: string | null;
       enabled?: boolean;
       openInNewTab?: boolean;
       accent?: boolean;
@@ -258,9 +279,11 @@ export class NavigationMenuService {
         customHref: input.customHref === undefined ? existing.customHref : input.customHref,
         parentId: input.parentId === undefined ? existing.parentId : input.parentId,
         iconKey: input.iconKey === undefined ? existing.iconKey : input.iconKey,
+        panelLayout:
+          input.panelLayout === undefined ? existing.panelLayout : input.panelLayout,
       },
       // Keep existing HIDDEN-category links editable (label/enabled) without re-assigning.
-      { allowExistingHiddenCategory: targetUnchanged },
+      { allowExistingHiddenCategory: targetUnchanged, updatingId: id },
     );
 
     if (prepared.parentId === id) {
@@ -282,6 +305,7 @@ export class NavigationMenuService {
         customHref: prepared.customHref,
         parentId: prepared.parentId,
         iconKey: prepared.iconKey,
+        panelLayout: prepared.panelLayout,
         ...(input.enabled !== undefined ? { enabled: input.enabled } : {}),
         ...(input.openInNewTab !== undefined ? { openInNewTab: input.openInNewTab } : {}),
         ...(input.accent !== undefined ? { accent: input.accent } : {}),
@@ -325,6 +349,9 @@ export class NavigationMenuService {
 
     await this.prisma.client.$transaction(async (tx) => {
       await tx.navigationMenuItem.delete({ where: { id } });
+      if (existing.mediaAssetId) {
+        await this.maybeMarkMediaOrphaned(tx, existing.mediaAssetId);
+      }
       await tx.navigationMenu.update({
         where: { id: existing.menuId },
         data: { version: { increment: 1 } },
@@ -337,6 +364,106 @@ export class NavigationMenuService {
             entityType: 'NavigationMenuItem',
             entityId: id,
             metadata: { delete: true, label: existing.label },
+            ...this.actorMeta(actor),
+          },
+          tx,
+        );
+      }
+    });
+
+    await this.revalidate.ping({ tags: ['storefront', 'navigation'], paths: ['/'] });
+    return this.getAdminMainMenu();
+  }
+
+  async attachItemMedia(
+    id: string,
+    file: { buffer: Buffer; originalname?: string },
+    actor?: ActorContext,
+  ): Promise<NavigationMenuAdminDto> {
+    const existing = await this.prisma.client.navigationMenuItem.findUnique({ where: { id } });
+    if (!existing) throw new NotFoundException('Пункт меню не найден');
+
+    const asset = await this.media.uploadImage(file.buffer, file.originalname);
+    const previousMediaId = existing.mediaAssetId;
+
+    await this.prisma.client.$transaction(async (tx) => {
+      await tx.navigationMenuItem.update({
+        where: { id },
+        data: {
+          mediaAssetId: asset.id,
+          version: { increment: 1 },
+        },
+      });
+      await tx.mediaAsset.update({
+        where: { id: asset.id },
+        data: { orphanedAt: null },
+      });
+      if (previousMediaId && previousMediaId !== asset.id) {
+        await this.maybeMarkMediaOrphaned(tx, previousMediaId);
+      }
+      await tx.navigationMenu.update({
+        where: { id: existing.menuId },
+        data: { version: { increment: 1 } },
+      });
+      if (actor) {
+        await this.audit.record(
+          {
+            actorAdminUserId: actor.actorId,
+            action: 'STOREFRONT_SETTINGS_UPDATED',
+            entityType: 'NavigationMenuItem',
+            entityId: id,
+            metadata: { mediaAttached: true, mediaAssetId: asset.id },
+            ...this.actorMeta(actor),
+          },
+          tx,
+        );
+      }
+    });
+
+    await this.revalidate.ping({ tags: ['storefront', 'navigation'], paths: ['/'] });
+    return this.getAdminMainMenu();
+  }
+
+  async detachItemMedia(
+    id: string,
+    expectedVersion: number,
+    actor?: ActorContext,
+  ): Promise<NavigationMenuAdminDto> {
+    const existing = await this.prisma.client.navigationMenuItem.findUnique({ where: { id } });
+    if (!existing) throw new NotFoundException('Пункт меню не найден');
+    if (existing.version !== expectedVersion) {
+      throw new ConflictException('Пункт меню был изменён в другом окне');
+    }
+    if (!existing.mediaAssetId) {
+      return this.getAdminMainMenu();
+    }
+
+    const previousMediaId = existing.mediaAssetId;
+    const result = await this.prisma.client.navigationMenuItem.updateMany({
+      where: { id, version: expectedVersion },
+      data: {
+        mediaAssetId: null,
+        version: { increment: 1 },
+      },
+    });
+    if (result.count === 0) {
+      throw new ConflictException('Пункт меню был изменён в другом окне');
+    }
+
+    await this.prisma.client.$transaction(async (tx) => {
+      await this.maybeMarkMediaOrphaned(tx, previousMediaId);
+      await tx.navigationMenu.update({
+        where: { id: existing.menuId },
+        data: { version: { increment: 1 } },
+      });
+      if (actor) {
+        await this.audit.record(
+          {
+            actorAdminUserId: actor.actorId,
+            action: 'STOREFRONT_SETTINGS_UPDATED',
+            entityType: 'NavigationMenuItem',
+            entityId: id,
+            metadata: { mediaDetached: true, mediaAssetId: previousMediaId },
             ...this.actorMeta(actor),
           },
           tx,
@@ -422,8 +549,9 @@ export class NavigationMenuService {
       customHref?: string | null;
       parentId?: string | null;
       iconKey?: string | null;
+      panelLayout?: string | null;
     },
-    options?: { allowExistingHiddenCategory?: boolean },
+    options?: { allowExistingHiddenCategory?: boolean; updatingId?: string },
   ): Promise<{
     label: string;
     targetType: NavigationTargetType;
@@ -431,6 +559,7 @@ export class NavigationMenuService {
     customHref: string | null;
     parentId: string | null;
     iconKey: string | null;
+    panelLayout: NavigationPanelLayout;
   }> {
     const label = input.label.trim();
     if (!label) throw new BadRequestException('Укажите название пункта меню');
@@ -463,6 +592,12 @@ export class NavigationMenuService {
         if (input.targetType === 'GROUP') {
           throw new BadRequestException('Группу нельзя вложить в другую группу');
         }
+      } else if (parent.panelLayout === 'TILES') {
+        if (input.targetType === 'GROUP') {
+          throw new BadRequestException(
+            'В режиме «Сетка с фото» нельзя добавлять колонки — только ссылки-плитки',
+          );
+        }
       } else if (input.targetType === 'GROUP' && parent.targetType === 'GROUP') {
         throw new BadRequestException('Группу нельзя вложить в другую группу');
       }
@@ -470,15 +605,41 @@ export class NavigationMenuService {
       throw new BadRequestException('Группа должна быть внутри пункта основного меню');
     }
 
+    // panelLayout is meaningful on roots only; nested items stay COLUMNS.
+    let panelLayout: NavigationPanelLayout = 'COLUMNS';
+    if (!parentId) {
+      const raw = input.panelLayout ?? 'COLUMNS';
+      if (!isNavigationPanelLayout(String(raw))) {
+        throw new BadRequestException('Неизвестный вид подменю');
+      }
+      panelLayout = raw as NavigationPanelLayout;
+      if (panelLayout === 'TILES' && options?.updatingId) {
+        const groupChild = await this.prisma.client.navigationMenuItem.findFirst({
+          where: {
+            parentId: options.updatingId,
+            targetType: 'GROUP',
+          },
+          select: { id: true },
+        });
+        if (groupChild) {
+          throw new BadRequestException(
+            'Сначала уберите колонки (группы) из пункта — в режиме «Сетка с фото» допустимы только плитки-ссылки',
+          );
+        }
+      }
+    } else if (input.panelLayout && input.panelLayout !== 'COLUMNS') {
+      throw new BadRequestException('Вид подменю задаётся только для пунктов верхнего уровня');
+    }
+
+    const base = { label, parentId, iconKey, panelLayout };
+
     switch (input.targetType) {
       case 'GROUP':
         return {
-          label,
+          ...base,
           targetType: 'GROUP',
           targetId: null,
           customHref: null,
-          parentId,
-          iconKey,
         };
       case 'CATEGORY': {
         if (!input.targetId) throw new BadRequestException('Выберите категорию');
@@ -492,12 +653,10 @@ export class NavigationMenuService {
           );
         }
         return {
-          label,
+          ...base,
           targetType: 'CATEGORY',
           targetId: category.id,
           customHref: null,
-          parentId,
-          iconKey,
         };
       }
       case 'PRODUCT': {
@@ -511,32 +670,26 @@ export class NavigationMenuService {
           throw new BadRequestException('Архивный товар нельзя назначить в меню');
         }
         return {
-          label,
+          ...base,
           targetType: 'PRODUCT',
           targetId: product.id,
           customHref: null,
-          parentId,
-          iconKey,
         };
       }
       case 'PROMOTIONS':
         return {
-          label,
+          ...base,
           targetType: 'PROMOTIONS',
           targetId: null,
           customHref: null,
-          parentId,
-          iconKey,
         };
       case 'BESTSELLERS': {
         if (!input.targetId || input.targetId === 'bestsellers') {
           return {
-            label,
+            ...base,
             targetType: 'BESTSELLERS',
             targetId: null,
             customHref: null,
-            parentId,
-            iconKey,
           };
         }
         const group = await this.prisma.client.bestsellerGroup.findUnique({
@@ -544,12 +697,10 @@ export class NavigationMenuService {
         });
         if (!group) throw new BadRequestException('Подборка бестселлеров не найдена');
         return {
-          label,
+          ...base,
           targetType: 'BESTSELLERS',
           targetId: group.id,
           customHref: null,
-          parentId,
-          iconKey,
         };
       }
       case 'PAGE': {
@@ -558,12 +709,10 @@ export class NavigationMenuService {
           throw new BadRequestException('Выберите страницу');
         }
         return {
-          label,
+          ...base,
           targetType: 'PAGE',
           targetId: null,
           customHref: key,
-          parentId,
-          iconKey,
         };
       }
       case 'CUSTOM_URL': {
@@ -581,12 +730,10 @@ export class NavigationMenuService {
           throw new BadRequestException('Некорректная ссылка. Используйте путь /… или https://…');
         }
         return {
-          label,
+          ...base,
           targetType: 'CUSTOM_URL',
           targetId: null,
           customHref: href,
-          parentId,
-          iconKey,
         };
       }
       default:
@@ -594,16 +741,7 @@ export class NavigationMenuService {
     }
   }
 
-  private async resolveItems(items: ItemRow[]): Promise<
-    Array<
-      ItemRow & {
-        href: string;
-        targetLabel: string;
-        unavailable: boolean;
-        unavailableReason: string | null;
-      }
-    >
-  > {
+  private async resolveItems(items: ItemRow[]): Promise<ResolvedItem[]> {
     const categoryIds = items
       .filter((row) => row.targetType === 'CATEGORY' && row.targetId)
       .map((row) => row.targetId!);
@@ -613,8 +751,11 @@ export class NavigationMenuService {
     const productIds = items
       .filter((row) => row.targetType === 'PRODUCT' && row.targetId)
       .map((row) => row.targetId!);
+    const mediaIds = items
+      .filter((row) => row.mediaAssetId)
+      .map((row) => row.mediaAssetId!);
 
-    const [categories, groups, products] = await Promise.all([
+    const [categories, groups, products, mediaAssets, productPrimaries] = await Promise.all([
       categoryIds.length
         ? this.prisma.client.catalogCategory.findMany({
             where: { id: { in: categoryIds } },
@@ -633,16 +774,70 @@ export class NavigationMenuService {
             select: { id: true, name: true, slug: true, lifecycle: true },
           })
         : Promise.resolve([]),
+      mediaIds.length
+        ? this.prisma.client.mediaAsset.findMany({
+            where: { id: { in: mediaIds } },
+            select: {
+              id: true,
+              storageKey: true,
+              derivatives: { select: { width: true, format: true, storageKey: true } },
+            },
+          })
+        : Promise.resolve([]),
+      productIds.length
+        ? this.prisma.client.productMedia.findMany({
+            where: { productId: { in: productIds }, isPrimary: true },
+            select: {
+              productId: true,
+              mediaAsset: {
+                select: {
+                  storageKey: true,
+                  derivatives: { select: { width: true, format: true, storageKey: true } },
+                },
+              },
+            },
+          })
+        : Promise.resolve([]),
     ]);
     const categoryById = new Map(categories.map((row) => [row.id, row]));
     const groupById = new Map(groups.map((row) => [row.id, row]));
     const productById = new Map(products.map((row) => [row.id, row]));
+    const mediaUrlById = new Map(
+      mediaAssets.map((asset) => [
+        asset.id,
+        pickDerivativeStorageUrl(
+          asset.storageKey,
+          asset.derivatives,
+          (key) => this.media.getPublicUrl(key),
+          LIST_IMAGE_TARGET_WIDTH,
+        ),
+      ]),
+    );
+    const productImageById = new Map(
+      productPrimaries.map((row) => [
+        row.productId,
+        pickDerivativeStorageUrl(
+          row.mediaAsset.storageKey,
+          row.mediaAsset.derivatives,
+          (key) => this.media.getPublicUrl(key),
+          LIST_IMAGE_TARGET_WIDTH,
+        ),
+      ]),
+    );
 
     return items.map((row) => {
+      const explicitImage = row.mediaAssetId ? (mediaUrlById.get(row.mediaAssetId) ?? null) : null;
+      const productFallback =
+        row.targetType === 'PRODUCT' && row.targetId
+          ? (productImageById.get(row.targetId) ?? null)
+          : null;
+      const imageUrl = explicitImage ?? productFallback;
+
       if (row.targetType === 'GROUP') {
         return {
           ...row,
           href: '',
+          imageUrl,
           targetLabel: 'Группа',
           unavailable: false,
           unavailableReason: null,
@@ -654,6 +849,7 @@ export class NavigationMenuService {
         return {
           ...row,
           href: category ? categoryPublicHref(category.slug) : '#',
+          imageUrl,
           targetLabel: status.targetLabel,
           unavailable: !status.available,
           unavailableReason: status.reason,
@@ -665,6 +861,7 @@ export class NavigationMenuService {
           return {
             ...row,
             href: '#',
+            imageUrl,
             targetLabel: 'Товар · (недоступен)',
             unavailable: true,
             unavailableReason: 'Товар удалён или в архиве — пункт не показывается на витрине',
@@ -673,6 +870,7 @@ export class NavigationMenuService {
         return {
           ...row,
           href: `/bukety/${encodeURIComponent(product.slug)}`,
+          imageUrl,
           targetLabel: `Товар · ${product.name}`,
           unavailable: product.lifecycle !== 'PUBLISHED',
           unavailableReason:
@@ -685,6 +883,7 @@ export class NavigationMenuService {
         return {
           ...row,
           href: '/akcii',
+          imageUrl,
           targetLabel: 'Акции',
           unavailable: false,
           unavailableReason: null,
@@ -697,6 +896,7 @@ export class NavigationMenuService {
             return {
               ...row,
               href: '/bukety',
+              imageUrl,
               targetLabel: 'Бестселлеры · (удалена)',
               unavailable: true,
               unavailableReason: 'Подборка бестселлеров удалена — пункт не показывается на витрине',
@@ -705,6 +905,7 @@ export class NavigationMenuService {
           return {
             ...row,
             href: `/bukety?bestseller=${encodeURIComponent(group.slug)}`,
+            imageUrl,
             targetLabel: `Бестселлеры · ${group.name}`,
             unavailable: false,
             unavailableReason: null,
@@ -713,6 +914,7 @@ export class NavigationMenuService {
         return {
           ...row,
           href: '/bukety',
+          imageUrl,
           targetLabel: 'Бестселлеры',
           unavailable: false,
           unavailableReason: null,
@@ -723,6 +925,7 @@ export class NavigationMenuService {
         return {
           ...row,
           href,
+          imageUrl,
           targetLabel: `Страница · ${row.customHref}`,
           unavailable: href === '#',
           unavailableReason: href === '#' ? 'Страница недоступна' : null,
@@ -731,6 +934,7 @@ export class NavigationMenuService {
       return {
         ...row,
         href: row.customHref ?? '#',
+        imageUrl,
         targetLabel: `Ссылка · ${row.customHref ?? '—'}`,
         unavailable: false,
         unavailableReason: null,
@@ -749,10 +953,7 @@ export class NavigationMenuService {
       .filter((item) => item.targetType !== 'GROUP' || item.children.length > 0);
   }
 
-  private toPublicTree(
-    roots: Array<ItemRow & { href: string; unavailable: boolean }>,
-    all: Array<ItemRow & { href: string; unavailable: boolean }>,
-  ): NavigationMenuItemPublicDto[] {
+  private toPublicTree(roots: ResolvedItem[], all: ResolvedItem[]): NavigationMenuItemPublicDto[] {
     return roots.map((row) => ({
       id: row.id,
       label: row.label,
@@ -760,6 +961,8 @@ export class NavigationMenuService {
       accent: row.accent,
       openInNewTab: row.openInNewTab,
       iconKey: row.iconKey,
+      panelLayout: row.panelLayout,
+      imageUrl: row.imageUrl,
       targetType: row.targetType,
       children: this.toPublicTree(
         all.filter((child) => child.parentId === row.id),
@@ -768,24 +971,7 @@ export class NavigationMenuService {
     }));
   }
 
-  private toAdminTree(
-    roots: Array<
-      ItemRow & {
-        href: string;
-        targetLabel: string;
-        unavailable: boolean;
-        unavailableReason: string | null;
-      }
-    >,
-    all: Array<
-      ItemRow & {
-        href: string;
-        targetLabel: string;
-        unavailable: boolean;
-        unavailableReason: string | null;
-      }
-    >,
-  ): NavigationMenuItemAdminDto[] {
+  private toAdminTree(roots: ResolvedItem[], all: ResolvedItem[]): NavigationMenuItemAdminDto[] {
     return roots.map((row) => ({
       id: row.id,
       parentId: row.parentId,
@@ -794,6 +980,9 @@ export class NavigationMenuService {
       targetId: row.targetId,
       customHref: row.customHref,
       iconKey: row.iconKey,
+      panelLayout: row.panelLayout,
+      mediaAssetId: row.mediaAssetId,
+      imageUrl: row.imageUrl,
       href: row.href,
       sortOrder: row.sortOrder,
       enabled: row.enabled,
@@ -808,6 +997,29 @@ export class NavigationMenuService {
         all,
       ),
     }));
+  }
+
+  private async maybeMarkMediaOrphaned(
+    tx: {
+      productMedia: { count: (args: { where: { mediaAssetId: string } }) => Promise<number> };
+      navigationMenuItem: {
+        count: (args: { where: { mediaAssetId: string } }) => Promise<number>;
+      };
+      mediaAsset: {
+        update: (args: {
+          where: { id: string };
+          data: { orphanedAt: Date | null };
+        }) => Promise<unknown>;
+      };
+    },
+    mediaAssetId: string,
+  ): Promise<void> {
+    const productRefs = await tx.productMedia.count({ where: { mediaAssetId } });
+    const navRefs = await tx.navigationMenuItem.count({ where: { mediaAssetId } });
+    await tx.mediaAsset.update({
+      where: { id: mediaAssetId },
+      data: { orphanedAt: productRefs + navRefs === 0 ? new Date() : null },
+    });
   }
 
   private async collectDescendantIds(rootId: string): Promise<Set<string>> {

@@ -194,6 +194,14 @@ enum NavigationTargetType {
   PRODUCT
 }
 
+/// Dropdown presentation for a root NavigationMenuItem.
+enum NavigationPanelLayout {
+  /// Text columns / GROUPs (default).
+  COLUMNS
+  /// Photo tile grid (Dicentra-style).
+  TILES
+}
+
 enum MediaFormat {
   JPEG
   PNG
@@ -808,13 +816,14 @@ model MediaAsset {
   width        Int?
   height       Int?
   checksumSha256 String    @map("checksum_sha256") @db.Char(64)
-  /// Set when the asset has zero ProductMedia refs; cleared on re-attach.
+  /// Set when the asset has zero ProductMedia and NavigationMenuItem refs; cleared on re-attach.
   /// Physical cleanup uses this timestamp (not createdAt) + grace period.
   orphanedAt   DateTime?   @map("orphaned_at") @db.Timestamptz(3)
   createdAt    DateTime    @default(now()) @map("created_at") @db.Timestamptz(3)
 
-  derivatives MediaDerivative[]
-  productMedia ProductMedia[]
+  derivatives          MediaDerivative[]
+  productMedia         ProductMedia[]
+  navigationMenuItems  NavigationMenuItem[]
 
   @@index([orphanedAt])
   @@map("media_assets")
@@ -889,31 +898,37 @@ model NavigationMenu {
 
 /// Menu item: entity reference and/or custom URL. Hierarchy is independent of category tree.
 model NavigationMenuItem {
-  id           String               @id @default(uuid()) @db.Uuid
-  menuId       String               @map("menu_id") @db.Uuid
-  parentId     String?              @map("parent_id") @db.Uuid
-  label        String               @db.VarChar(120)
-  targetType   NavigationTargetType @map("target_type")
+  id           String                 @id @default(uuid()) @db.Uuid
+  menuId       String                 @map("menu_id") @db.Uuid
+  parentId     String?                @map("parent_id") @db.Uuid
+  label        String                 @db.VarChar(120)
+  targetType   NavigationTargetType   @map("target_type")
   /// CatalogCategory / BestsellerGroup / Product id when target is an entity.
-  targetId     String?              @map("target_id") @db.Uuid
+  targetId     String?                @map("target_id") @db.Uuid
   /// Static page key (dostavka, o-nas, kontakty, povod) or custom path/URL.
-  customHref   String?              @map("custom_href") @db.VarChar(500)
+  customHref   String?                @map("custom_href") @db.VarChar(500)
   /// Named SVG icon key for dropdown group headers (bouquet, leaf, heart, …).
-  iconKey      String?              @map("icon_key") @db.VarChar(40)
-  sortOrder    Int                  @default(0) @map("sort_order")
-  enabled      Boolean              @default(true)
-  openInNewTab Boolean              @default(false) @map("open_in_new_tab")
-  accent       Boolean              @default(false)
-  version      Int                  @default(1)
-  createdAt    DateTime             @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt    DateTime             @updatedAt @map("updated_at") @db.Timestamptz(3)
+  iconKey      String?                @map("icon_key") @db.VarChar(40)
+  /// Meaningful on root items only — COLUMNS (groups) or TILES (photo grid).
+  panelLayout  NavigationPanelLayout  @default(COLUMNS) @map("panel_layout")
+  /// Optional tile image (MediaAsset). Used mainly under TILES roots.
+  mediaAssetId String?                @map("media_asset_id") @db.Uuid
+  sortOrder    Int                    @default(0) @map("sort_order")
+  enabled      Boolean                @default(true)
+  openInNewTab Boolean                @default(false) @map("open_in_new_tab")
+  accent       Boolean                @default(false)
+  version      Int                    @default(1)
+  createdAt    DateTime               @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt    DateTime               @updatedAt @map("updated_at") @db.Timestamptz(3)
 
-  menu     NavigationMenu       @relation(fields: [menuId], references: [id], onDelete: Cascade)
-  parent   NavigationMenuItem?  @relation("NavigationMenuItemTree", fields: [parentId], references: [id], onDelete: Cascade)
-  children NavigationMenuItem[] @relation("NavigationMenuItemTree")
+  menu       NavigationMenu       @relation(fields: [menuId], references: [id], onDelete: Cascade)
+  parent     NavigationMenuItem?  @relation("NavigationMenuItemTree", fields: [parentId], references: [id], onDelete: Cascade)
+  children   NavigationMenuItem[] @relation("NavigationMenuItemTree")
+  mediaAsset MediaAsset?          @relation(fields: [mediaAssetId], references: [id], onDelete: Restrict)
 
   @@index([menuId, sortOrder])
   @@index([parentId, sortOrder])
+  @@index([mediaAssetId])
   @@map("navigation_menu_items")
 }
 

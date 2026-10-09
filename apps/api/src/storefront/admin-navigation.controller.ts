@@ -9,8 +9,12 @@ import {
   Post,
   Query,
   Req,
+  UploadedFile,
+  UseInterceptors,
 } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
 import { ApiTags } from '@nestjs/swagger';
+import { Throttle } from '@nestjs/throttler';
 import {
   IsBoolean,
   IsIn,
@@ -22,11 +26,17 @@ import {
   ValidateIf,
 } from 'class-validator';
 import type { Request } from 'express';
-import { NAVIGATION_TARGET_TYPES } from '@bouquet-one/contracts';
+import { memoryStorage } from 'multer';
+import {
+  NAVIGATION_PANEL_LAYOUTS,
+  NAVIGATION_TARGET_TYPES,
+} from '@bouquet-one/contracts';
 import { CurrentAdmin, type AuthenticatedAdmin } from '../auth/current-admin.decorator';
 import { RequirePermissions } from '../auth/decorators';
 import { actorFrom } from '../common/actor.util';
 import { ExpectedVersionDto } from '../catalog/products.dto';
+import { MEDIA_UPLOAD_MAX_INPUT_BYTES, MEDIA_UPLOAD_THROTTLE } from '../media/media.constants';
+import { MEDIA_ERROR_CODES, mediaHttpException } from '../media/media-errors';
 import { NavigationMenuService } from './navigation-menu.service';
 
 class CreateNavItemDto {
@@ -60,6 +70,10 @@ class CreateNavItemDto {
   @IsString()
   @MaxLength(40)
   iconKey?: string | null;
+
+  @IsOptional()
+  @IsIn(NAVIGATION_PANEL_LAYOUTS)
+  panelLayout?: (typeof NAVIGATION_PANEL_LAYOUTS)[number];
 
   @IsOptional()
   @IsBoolean()
@@ -107,6 +121,10 @@ class UpdateNavItemDto extends ExpectedVersionDto {
   @IsString()
   @MaxLength(40)
   iconKey?: string | null;
+
+  @IsOptional()
+  @IsIn(NAVIGATION_PANEL_LAYOUTS)
+  panelLayout?: (typeof NAVIGATION_PANEL_LAYOUTS)[number];
 
   @IsOptional()
   @IsBoolean()
@@ -185,5 +203,44 @@ export class AdminNavigationController {
     @Req() req: Request,
   ) {
     return this.navigation.reorderItem(id, body.direction, body.expectedVersion, actorFrom(admin, req));
+  }
+
+  @Post('main/items/:id/media')
+  @RequirePermissions('SETTINGS_UPDATE')
+  @Throttle({ default: { limit: MEDIA_UPLOAD_THROTTLE.limit, ttl: MEDIA_UPLOAD_THROTTLE.ttl } })
+  @UseInterceptors(
+    FileInterceptor('file', {
+      storage: memoryStorage(),
+      limits: {
+        fileSize: Number(process.env.MEDIA_MAX_BYTES ?? MEDIA_UPLOAD_MAX_INPUT_BYTES),
+        files: 1,
+      },
+    }),
+  )
+  attachMedia(
+    @Param('id', ParseUUIDPipe) id: string,
+    @UploadedFile() file: Express.Multer.File | undefined,
+    @CurrentAdmin() admin: AuthenticatedAdmin,
+    @Req() req: Request,
+  ) {
+    if (!file) {
+      throw mediaHttpException(MEDIA_ERROR_CODES.FILE_REQUIRED);
+    }
+    return this.navigation.attachItemMedia(
+      id,
+      { buffer: file.buffer, originalname: file.originalname },
+      actorFrom(admin, req),
+    );
+  }
+
+  @Delete('main/items/:id/media')
+  @RequirePermissions('SETTINGS_UPDATE')
+  detachMedia(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() body: ExpectedVersionDto,
+    @CurrentAdmin() admin: AuthenticatedAdmin,
+    @Req() req: Request,
+  ) {
+    return this.navigation.detachItemMedia(id, body.expectedVersion, actorFrom(admin, req));
   }
 }

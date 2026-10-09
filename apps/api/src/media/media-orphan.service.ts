@@ -34,15 +34,15 @@ const ORPHAN_PURGE_TX_TIMEOUT_MS = 120_000;
 const ORPHAN_PURGE_TX_MAX_WAIT_MS = 10_000;
 
 /**
- * Orphan = MediaAsset with zero ProductMedia (sole business reference today).
+ * Orphan = MediaAsset with zero ProductMedia and zero NavigationMenuItem refs.
  * Physical delete only after orphanedAt + grace period. Idempotent; missing objects OK.
  *
  * Deletion order (single DB transaction, row locked):
  *   FOR UPDATE → final ref/grace check → storage delete (master + derivatives) → DB delete
  *
  * Holding FOR UPDATE across storage deletes is intentional: PostgreSQL FK inserts into
- * product_media take KEY SHARE on media_assets, which conflicts with FOR UPDATE, so a
- * concurrent attach cannot commit ProductMedia while S3 objects are being removed.
+ * product_media / navigation_menu_items take KEY SHARE on media_assets, which conflicts
+ * with FOR UPDATE, so a concurrent attach cannot commit while S3 objects are removed.
  */
 @Injectable()
 export class MediaOrphanService {
@@ -66,13 +66,17 @@ export class MediaOrphanService {
         AND NOT EXISTS (
           SELECT 1 FROM product_media pm WHERE pm.media_asset_id = ma.id
         )
+        AND NOT EXISTS (
+          SELECT 1 FROM navigation_menu_items nmi WHERE nmi.media_asset_id = ma.id
+        )
     `;
     const cleared = await this.prisma.client.$executeRaw`
       UPDATE media_assets AS ma
       SET orphaned_at = NULL
       WHERE ma.orphaned_at IS NOT NULL
-        AND EXISTS (
-          SELECT 1 FROM product_media pm WHERE pm.media_asset_id = ma.id
+        AND (
+          EXISTS (SELECT 1 FROM product_media pm WHERE pm.media_asset_id = ma.id)
+          OR EXISTS (SELECT 1 FROM navigation_menu_items nmi WHERE nmi.media_asset_id = ma.id)
         )
     `;
     return { marked: Number(marked), cleared: Number(cleared) };
@@ -94,6 +98,7 @@ export class MediaOrphanService {
     const assets = await this.prisma.client.mediaAsset.findMany({
       where: {
         productMedia: { none: {} },
+        navigationMenuItems: { none: {} },
         orphanedAt: { not: null, lte: cutoff },
       },
       include: { derivatives: { select: { storageKey: true, byteSize: true } } },
@@ -178,8 +183,13 @@ export class MediaOrphanService {
           return;
         }
 
-        const refs = await tx.productMedia.count({ where: { mediaAssetId: candidate.id } });
-        if (refs > 0) {
+        const productRefs = await tx.productMedia.count({
+          where: { mediaAssetId: candidate.id },
+        });
+        const navRefs = await tx.navigationMenuItem.count({
+          where: { mediaAssetId: candidate.id },
+        });
+        if (productRefs + navRefs > 0) {
           await tx.mediaAsset.update({
             where: { id: candidate.id },
             data: { orphanedAt: null },

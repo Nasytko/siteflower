@@ -86,11 +86,8 @@ export function StorefrontHeader({ city, brandName, phone, workingHours, navItem
               {workingHours ? ` · ${workingHours}` : ''}
             </span>
             <nav className="flex items-center gap-4" aria-label="Служебные ссылки">
-              {phone ? (
-                <a
-                  href={`tel:${phone.replace(/\s+/g, '')}`}
-                  className="font-medium text-ink hover:text-brand"
-                >
+              {telHref ? (
+                <a href={telHref} className="font-medium text-ink hover:text-brand">
                   {phone}
                 </a>
               ) : null}
@@ -167,7 +164,7 @@ export function StorefrontHeader({ city, brandName, phone, workingHours, navItem
           </div>
 
           <Link href="/" className="justify-self-center text-center hover:opacity-90">
-            <BrandLink brandName={brandName} compact={compact} />
+            <BrandLogo compact={compact} alt={brandName} />
           </Link>
 
           {/* Compact desktop: nav sits in the single row */}
@@ -269,9 +266,24 @@ export function StorefrontHeader({ city, brandName, phone, workingHours, navItem
                         <Link
                           key={`${item.id}-${child.href}`}
                           href={child.href}
-                          className="sf-nav-link block py-2 text-sm text-muted hover:text-brand"
+                          className={`sf-nav-link flex items-center gap-3 py-2 text-sm hover:text-brand ${
+                            item.panelLayout === 'TILES' ? 'text-foreground' : 'text-muted'
+                          }`}
                           onClick={() => setMenuOpen(false)}
                         >
+                          {item.panelLayout === 'TILES' ? (
+                            child.imageUrl ? (
+                              <img
+                                src={child.imageUrl}
+                                alt=""
+                                className="h-11 w-11 shrink-0 rounded-lg object-cover"
+                                loading="lazy"
+                                decoding="async"
+                              />
+                            ) : (
+                              <span className="h-11 w-11 shrink-0 rounded-lg bg-[var(--color-surface-muted)]" />
+                            )
+                          ) : null}
                           {child.label}
                         </Link>
                       ))}
@@ -327,14 +339,6 @@ export function StorefrontHeader({ city, brandName, phone, workingHours, navItem
 
       <SearchDialog open={searchOpen} onClose={() => setSearchOpen(false)} />
     </>
-  );
-}
-
-function BrandLink({ brandName, compact }: { brandName: string; compact: boolean }) {
-  return (
-    <span className="inline-flex items-center" aria-label={brandName}>
-      <BrandLogo compact={compact} alt={brandName} />
-    </span>
   );
 }
 

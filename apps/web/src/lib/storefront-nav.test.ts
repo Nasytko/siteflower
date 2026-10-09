@@ -1,7 +1,12 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import type { CatalogCategoryTreeNodeDto, NavigationMenuItemPublicDto } from '@bouquet-one/contracts';
-import { navItemsFromCategoryTree, navItemsFromNavigationMenu } from './storefront-nav';
+import {
+  navItemsFromAdminMenu,
+  navItemsFromCategoryTree,
+  navItemsFromNavigationMenu,
+} from './storefront-nav';
+import type { NavigationMenuItemAdminDto } from '@bouquet-one/contracts';
 
 const tree: CatalogCategoryTreeNodeDto[] = [
   {
@@ -51,6 +56,8 @@ test('nav from NavigationMenu keeps Акции without CatalogCategory', () => {
       accent: false,
       openInNewTab: false,
       iconKey: null,
+      panelLayout: 'COLUMNS',
+      imageUrl: null,
       targetType: 'CATEGORY',
       children: [],
     },
@@ -61,6 +68,8 @@ test('nav from NavigationMenu keeps Акции without CatalogCategory', () => {
       accent: true,
       openInNewTab: false,
       iconKey: null,
+      panelLayout: 'COLUMNS',
+      imageUrl: null,
       targetType: 'PROMOTIONS',
       children: [],
     },
@@ -80,6 +89,8 @@ test('nav maps GROUP columns under a root item', () => {
       accent: false,
       openInNewTab: false,
       iconKey: null,
+      panelLayout: 'COLUMNS',
+      imageUrl: null,
       targetType: 'PAGE',
       children: [
         {
@@ -89,6 +100,8 @@ test('nav maps GROUP columns under a root item', () => {
           accent: false,
           openInNewTab: false,
           iconKey: 'leaf',
+          panelLayout: 'COLUMNS',
+          imageUrl: null,
           targetType: 'GROUP',
           children: [
             {
@@ -98,6 +111,8 @@ test('nav maps GROUP columns under a root item', () => {
               accent: false,
               openInNewTab: false,
               iconKey: null,
+              panelLayout: 'COLUMNS',
+              imageUrl: null,
               targetType: 'CUSTOM_URL',
               children: [],
             },
@@ -110,6 +125,8 @@ test('nav maps GROUP columns under a root item', () => {
           accent: false,
           openInNewTab: false,
           iconKey: null,
+          panelLayout: 'COLUMNS',
+          imageUrl: null,
           targetType: 'PAGE',
           children: [],
         },
@@ -117,11 +134,101 @@ test('nav maps GROUP columns under a root item', () => {
     },
   ];
   const items = navItemsFromNavigationMenu(menu);
+  assert.equal(items[0]?.panelLayout, 'COLUMNS');
   assert.equal(items[0]?.groups?.length, 1);
   assert.equal(items[0]?.groups?.[0]?.label, 'По стилю');
   assert.equal(items[0]?.groups?.[0]?.iconKey, 'leaf');
   assert.equal(items[0]?.groups?.[0]?.children[0]?.href, '/bukety?line=klassika');
   assert.equal(items[0]?.children, undefined);
+});
+
+test('admin preview mapper hides disabled/unavailable items', () => {
+  const menu: NavigationMenuItemAdminDto[] = [
+    {
+      id: 'root',
+      parentId: null,
+      label: 'Букеты',
+      targetType: 'PAGE',
+      targetId: null,
+      customHref: 'bukety',
+      iconKey: null,
+      panelLayout: 'COLUMNS',
+      mediaAssetId: null,
+      imageUrl: null,
+      href: '/bukety',
+      sortOrder: 1,
+      enabled: true,
+      openInNewTab: false,
+      accent: false,
+      version: 1,
+      targetLabel: 'Страница',
+      unavailable: false,
+      unavailableReason: null,
+      children: [
+        {
+          id: 'off',
+          parentId: 'root',
+          label: 'Скрытый',
+          targetType: 'CUSTOM_URL',
+          targetId: null,
+          customHref: '/hidden',
+          iconKey: null,
+          panelLayout: 'COLUMNS',
+          mediaAssetId: null,
+          imageUrl: null,
+          href: '/hidden',
+          sortOrder: 1,
+          enabled: false,
+          openInNewTab: false,
+          accent: false,
+          version: 1,
+          targetLabel: 'Ссылка',
+          unavailable: false,
+          unavailableReason: null,
+          children: [],
+        },
+      ],
+    },
+  ];
+  const items = navItemsFromAdminMenu(menu);
+  assert.equal(items.length, 1);
+  assert.equal(items[0]?.children, undefined);
+  assert.equal(items[0]?.groups, undefined);
+});
+
+test('nav maps TILES root to flat children with imageUrl', () => {
+  const menu: NavigationMenuItemPublicDto[] = [
+    {
+      id: 'root',
+      label: 'Розы',
+      href: '/bukety',
+      accent: false,
+      openInNewTab: false,
+      iconKey: null,
+      panelLayout: 'TILES',
+      imageUrl: null,
+      targetType: 'PAGE',
+      children: [
+        {
+          id: 't1',
+          label: 'Красная',
+          href: '/bukety?color=krasnaya',
+          accent: false,
+          openInNewTab: false,
+          iconKey: null,
+          panelLayout: 'COLUMNS',
+          imageUrl: 'https://cdn.example/rose.jpg',
+          targetType: 'CUSTOM_URL',
+          children: [],
+        },
+      ],
+    },
+  ];
+  const items = navItemsFromNavigationMenu(menu);
+  assert.equal(items[0]?.panelLayout, 'TILES');
+  assert.equal(items[0]?.groups, undefined);
+  assert.equal(items[0]?.children?.length, 1);
+  assert.equal(items[0]?.children?.[0]?.imageUrl, 'https://cdn.example/rose.jpg');
 });
 
 test('nav hides HIDDEN children and keeps legacy bukety href', () => {
