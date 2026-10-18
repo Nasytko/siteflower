@@ -24,6 +24,9 @@ import {
   deriveCompositionManagerSummary,
   deriveCompositionKind,
   formatCompositionSummaryLine,
+  isCanonicalListingHub,
+  productKindsForListingKind,
+  resolveCategoryListingScope,
   resolveStoredCompositionKind,
   suggestVisualPaletteColorIds,
   deriveProductEditorReadiness,
@@ -115,6 +118,85 @@ test('resolveStoredCompositionKind: STEM/gift never store mono', () => {
   assert.equal(resolveStoredCompositionKind('STEM', 'MONO'), 'UNKNOWN');
   assert.equal(resolveStoredCompositionKind('GIFT', 'MIXED'), 'UNKNOWN');
   assert.equal(resolveStoredCompositionKind('PLANT', 'MONO'), 'UNKNOWN');
+});
+
+test('productKindsForListingKind and canonical hubs', () => {
+  assert.deepEqual(productKindsForListingKind('BOUQUETS'), ['BOUQUET']);
+  assert.deepEqual(productKindsForListingKind('FLOWERS'), ['STEM']);
+  assert.equal(isCanonicalListingHub({ slug: 'bukety', listingKind: 'BOUQUETS' }), true);
+  assert.equal(isCanonicalListingHub({ slug: 'rozy', listingKind: 'FLOWERS' }), false);
+  assert.equal(isCanonicalListingHub({ slug: 'otkrytki', listingKind: 'GIFTS' }), false);
+});
+
+test('resolveCategoryListingScope: hubs are productKind-only (no stale category OR)', () => {
+  assert.deepEqual(
+    resolveCategoryListingScope({ slug: 'bukety', parentId: null, listingKind: 'BOUQUETS' }),
+    {
+      useCategoryTree: false,
+      productKinds: ['BOUQUET'],
+      matchCategoryOrProductKind: false,
+    },
+  );
+  assert.deepEqual(
+    resolveCategoryListingScope({ slug: 'tsvety', parentId: null, listingKind: 'FLOWERS' }),
+    {
+      useCategoryTree: false,
+      productKinds: ['STEM'],
+      matchCategoryOrProductKind: false,
+    },
+  );
+  assert.deepEqual(
+    resolveCategoryListingScope({ slug: 'podarki', parentId: null, listingKind: 'GIFTS' }),
+    {
+      useCategoryTree: false,
+      productKinds: ['GIFT'],
+      matchCategoryOrProductKind: false,
+    },
+  );
+});
+
+test('resolveCategoryListingScope: flower leaf and monobukety use composition, not category', () => {
+  assert.deepEqual(
+    resolveCategoryListingScope({ slug: 'rozy', parentId: 'tsvety-id', listingKind: 'FLOWERS' }),
+    {
+      useCategoryTree: false,
+      productKinds: ['STEM'],
+      scopeFlowerTypeSlugs: ['rozy'],
+    },
+  );
+  assert.deepEqual(
+    resolveCategoryListingScope({
+      slug: 'monobukety',
+      parentId: 'bukety-id',
+      listingKind: 'BOUQUETS',
+    }),
+    {
+      useCategoryTree: false,
+      productKinds: ['BOUQUET', 'COMPOSITION'],
+      scopeCompositionKinds: ['MONO'],
+    },
+  );
+});
+
+test('resolveCategoryListingScope: otkrytki/svechi stay category-tree merchandising', () => {
+  assert.deepEqual(
+    resolveCategoryListingScope({ slug: 'otkrytki', parentId: null, listingKind: 'GIFTS' }),
+    { useCategoryTree: true },
+  );
+  assert.deepEqual(
+    resolveCategoryListingScope({ slug: 'svechi', parentId: null, listingKind: 'GIFTS' }),
+    { useCategoryTree: true },
+  );
+});
+
+test('deriveCompositionKind: two rose varieties stay mono', () => {
+  assert.equal(
+    deriveCompositionKind([
+      { role: 'PRIMARY', typeId: 'rose', typeName: 'Роза' },
+      { role: 'PRIMARY', typeId: 'rose', typeName: 'Роза' },
+    ]),
+    'MONO',
+  );
 });
 
 test('formatCompositionSummaryLine hides mono label for STEM', () => {

@@ -19,6 +19,7 @@ import {
   type PromotionType,
   DEFAULT_PRODUCT_VARIANT_NAME,
 } from '@bouquet-one/contracts';
+import type { CategoryPickerOption } from '@/lib/admin-catalog-picker-labels';
 import {
   adminDelete,
   adminGet,
@@ -78,7 +79,7 @@ type Props = {
     occasions: PickerOption[];
     recipients: PickerOption[];
     colors: Array<PickerOption & { swatch?: string | null }>;
-    categories: PickerOption[];
+    categories: CategoryPickerOption[];
     families: Array<{ id: string; name: string }>;
   };
   bestsellerGroups: PickerOption[];
@@ -340,6 +341,8 @@ export function ProductEditor({
       if (!ok) return;
       setComponents([]);
     }
+    // Drop merchandising/gift subtype on kind change — server re-assigns hub on save.
+    setCatalogCategoryId('');
     setProductKindState(next);
     if (!productKindNeedsComposition(next) && section === 'composition') {
       setSection('main');
@@ -1359,6 +1362,10 @@ export function ProductEditor({
           touch={touch}
           toggleId={toggleId}
           nextVariantKey={() => nextEditorKey('variant')}
+          catalogCategoryId={catalogCategoryId}
+          setCatalogCategoryId={setCatalogCategoryId}
+          categories={options.categories}
+          productKind={productKind}
         />
       ) : null}
 

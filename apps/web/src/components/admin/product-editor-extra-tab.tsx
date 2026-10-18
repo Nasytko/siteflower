@@ -5,16 +5,19 @@ import {
   PROMOTION_TYPES,
   defaultProductSeoDescription,
   defaultProductSeoTitle,
+  productKindNeedsGiftSubtype,
   seoStatusEmoji,
   seoStatusLabel,
   type ProductAdminDto,
   type ProductFamilyMemberDto,
+  type ProductKind,
   type PromotionType,
   type SeoHealthStatus,
   type VariantStatus,
 } from '@bouquet-one/contracts';
 import { FieldError } from '@/components/admin/form-status';
 import type { PickerOption, VariantDraft } from '@/components/admin/product-editor-shared';
+import type { CategoryPickerOption } from '@/lib/admin-catalog-picker-labels';
 import {
   formatAdminDateTime,
   lifecycleLabel,
@@ -112,6 +115,10 @@ type Props = {
   touch: () => void;
   toggleId: (list: string[], id: string) => string[];
   nextVariantKey: () => string;
+  catalogCategoryId: string;
+  setCatalogCategoryId: (value: string) => void;
+  categories: CategoryPickerOption[];
+  productKind: ProductKind;
 };
 
 export function ProductEditorExtraTab(props: Props) {
@@ -163,9 +170,14 @@ export function ProductEditorExtraTab(props: Props) {
     touch,
     toggleId,
     nextVariantKey,
+    catalogCategoryId,
+    setCatalogCategoryId,
+    categories,
+    productKind,
   } = props;
 
   const multiSize = variants.length > 1;
+  const showMerchandisingCategory = !productKindNeedsGiftSubtype(productKind);
 
   function addSizeRow() {
     setVariants((prev) => {
@@ -214,6 +226,37 @@ export function ProductEditorExtraTab(props: Props) {
           Размеры, высота, линейка, SEO, акции и расписание публикации.
         </p>
       </div>
+
+      {showMerchandisingCategory ? (
+        <details className="admin-subsection max-w-2xl">
+          <summary className="cursor-pointer text-sm font-medium text-[var(--admin-ink)]">
+            Ручная витринная категория (редко нужно)
+          </summary>
+          <p className="mt-2 text-sm text-[var(--admin-muted)]">
+            Раздел каталога выбирается по типу товара автоматически. Здесь можно закрепить товар в
+            редкой витринной ветке. Для «Розы» и «Монобукетов» достаточно состава.
+          </p>
+          <label className="admin-field mt-3" data-section="category">
+            <span>Категория</span>
+            <select
+              className="admin-select"
+              value={catalogCategoryId}
+              disabled={!canUpdate}
+              onChange={(event) => {
+                setCatalogCategoryId(event.target.value);
+                touch();
+              }}
+            >
+              <option value="">Авто (по типу товара)</option>
+              {categories.map((option) => (
+                <option key={option.id} value={option.id}>
+                  {option.name}
+                </option>
+              ))}
+            </select>
+          </label>
+        </details>
+      ) : null}
 
       <div className="admin-subsection space-y-3" data-section="variants">
         <h3 className="admin-subsection__title">

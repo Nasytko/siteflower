@@ -43,6 +43,7 @@ const RULE_KEYS = [
   'colorIds',
   'colorSlugs',
   'compositionKinds',
+  'productKinds',
   'occasionIds',
   'occasionSlugs',
   'minPriceMinor',
@@ -50,6 +51,14 @@ const RULE_KEYS = [
 ] as const;
 
 const COMPOSITION_KINDS = new Set(['MONO', 'MIXED', 'UNKNOWN']);
+const PRODUCT_KINDS = new Set([
+  'BOUQUET',
+  'COMPOSITION',
+  'STEM',
+  'PLANT',
+  'GIFT',
+  'OTHER',
+]);
 
 export type SeoLandingUpsertInput = {
   slug?: string;
@@ -594,6 +603,15 @@ function sanitizeRules(input: Record<string, unknown>): Prisma.InputJsonValue {
       continue;
     }
 
+    if (key === 'productKinds') {
+      const list = asStringArray(value);
+      if (!list || list.some((item) => !PRODUCT_KINDS.has(item))) {
+        throw new BadRequestException('productKinds содержит недопустимое значение');
+      }
+      if (list.length > 0) out[key] = list;
+      continue;
+    }
+
     const list = asStringArray(value);
     if (list && list.length > 0) out[key] = list;
   }
@@ -636,6 +654,16 @@ export function rulesToFilters(rules: Prisma.JsonValue): ProductListFilters {
   if (kinds) {
     filters.compositionKinds = kinds.filter((k): k is 'MONO' | 'MIXED' | 'UNKNOWN' =>
       COMPOSITION_KINDS.has(k),
+    );
+  }
+
+  const productKinds = asStringArray(record.productKinds);
+  if (productKinds) {
+    filters.productKinds = productKinds.filter(
+      (
+        k,
+      ): k is 'BOUQUET' | 'COMPOSITION' | 'STEM' | 'PLANT' | 'GIFT' | 'OTHER' =>
+        PRODUCT_KINDS.has(k),
     );
   }
 

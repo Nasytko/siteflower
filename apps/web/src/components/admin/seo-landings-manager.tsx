@@ -6,15 +6,18 @@ import type {
   ColorAdminDto,
   FlowerTypeAdminDto,
   PaginatedResponse,
+  ProductKind,
   ProductListItemDto,
   SeoLandingPageDto,
   SeoLandingStatus,
   TaxonomyAdminDto,
 } from '@bouquet-one/contracts';
+import { PRIMARY_PRODUCT_KINDS } from '@bouquet-one/contracts';
 import { Button } from '@bouquet-one/ui';
 import { adminDelete, adminGet, adminPatch, adminPost, errorMessage } from '@/lib/admin-client';
 import { adminEndpoints, withQuery } from '@/lib/admin-endpoints';
 import { isMajorInputValid, majorInputToMinor, minorToMajorInput } from '@/lib/admin-money';
+import { productKindLabel } from '@/lib/admin-labels';
 
 type Props = {
   initial: SeoLandingPageDto[];
@@ -29,6 +32,7 @@ type RulesDraft = {
   colorId: string;
   occasionId: string;
   compositionKind: '' | 'MONO' | 'MIXED' | 'UNKNOWN';
+  productKind: '' | ProductKind;
   minMajor: string;
   maxMajor: string;
 };
@@ -60,6 +64,7 @@ function emptyRules(): RulesDraft {
     colorId: '',
     occasionId: '',
     compositionKind: '',
+    productKind: '',
     minMajor: '',
     maxMajor: '',
   };
@@ -71,12 +76,17 @@ function rulesFromLanding(landing: SeoLandingPageDto): RulesDraft {
   const colorIds = Array.isArray(rules.colorIds) ? rules.colorIds : [];
   const occasionIds = Array.isArray(rules.occasionIds) ? rules.occasionIds : [];
   const kinds = Array.isArray(rules.compositionKinds) ? rules.compositionKinds : [];
+  const productKinds = Array.isArray(rules.productKinds) ? rules.productKinds : [];
+  const firstKind = typeof productKinds[0] === 'string' ? productKinds[0] : '';
   return {
     flowerTypeId: typeof flowerTypeIds[0] === 'string' ? flowerTypeIds[0] : '',
     colorId: typeof colorIds[0] === 'string' ? colorIds[0] : '',
     occasionId: typeof occasionIds[0] === 'string' ? occasionIds[0] : '',
     compositionKind:
       kinds[0] === 'MONO' || kinds[0] === 'MIXED' || kinds[0] === 'UNKNOWN' ? kinds[0] : '',
+    productKind: (PRIMARY_PRODUCT_KINDS as readonly string[]).includes(firstKind)
+      ? (firstKind as ProductKind)
+      : '',
     minMajor: minorToMajorInput(
       typeof rules.minPriceMinor === 'string' ? rules.minPriceMinor : null,
     ),
@@ -140,6 +150,7 @@ function buildRulesPayload(rules: RulesDraft): Record<string, unknown> {
   if (rules.colorId) payload.colorIds = [rules.colorId];
   if (rules.occasionId) payload.occasionIds = [rules.occasionId];
   if (rules.compositionKind) payload.compositionKinds = [rules.compositionKind];
+  if (rules.productKind) payload.productKinds = [rules.productKind];
   const minMinor = majorInputToMinor(rules.minMajor);
   const maxMinor = majorInputToMinor(rules.maxMajor);
   if (minMinor) payload.minPriceMinor = minMinor;
@@ -467,6 +478,29 @@ export function SeoLandingsManager({
                   <option value="MONO">Моно</option>
                   <option value="MIXED">Микс</option>
                   <option value="UNKNOWN">Не указан</option>
+                </select>
+              </label>
+              <label className="admin-field">
+                <span className="admin-label">Тип товара</span>
+                <select
+                  className="admin-input"
+                  value={draft.rules.productKind}
+                  onChange={(event) =>
+                    setDraft({
+                      ...draft,
+                      rules: {
+                        ...draft.rules,
+                        productKind: event.target.value as RulesDraft['productKind'],
+                      },
+                    })
+                  }
+                >
+                  <option value="">Любой</option>
+                  {PRIMARY_PRODUCT_KINDS.map((kind) => (
+                    <option key={kind} value={kind}>
+                      {productKindLabel(kind)}
+                    </option>
+                  ))}
                 </select>
               </label>
               <label className="admin-field">

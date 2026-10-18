@@ -97,6 +97,116 @@ export function suggestedListingKindForProductKind(
   }
 }
 
+/** Primary commercial kinds shown in the product editor (PLANT/OTHER stay available as «Другое»). */
+export const PRIMARY_PRODUCT_KINDS = [
+  'BOUQUET',
+  'COMPOSITION',
+  'STEM',
+  'GIFT',
+] as const satisfies ReadonlyArray<ProductKind>;
+
+/** Gift subtype (открытки, свечи, …) is the only merchandising pick managers still make. */
+export function productKindNeedsGiftSubtype(kind: ProductKind | null | undefined): boolean {
+  return kind === 'GIFT';
+}
+
+/** ProductKinds that belong on a CatalogCategory listingKind hub. */
+export function productKindsForListingKind(
+  listingKind: CatalogListingKind | null | undefined,
+): ProductKind[] {
+  switch (listingKind) {
+    case 'BOUQUETS':
+      return ['BOUQUET'];
+    case 'COMPOSITIONS':
+      return ['COMPOSITION'];
+    case 'FLOWERS':
+      return ['STEM'];
+    case 'GIFTS':
+      return ['GIFT'];
+    default:
+      return [];
+  }
+}
+
+/**
+ * Canonical root category slugs for commercial hubs (seed + PLP).
+ * Leaf categories (розы, игрушки) are merchandising/SEO — not a second product type.
+ */
+export const CANONICAL_LISTING_HUB_SLUGS: Record<CatalogListingKind, string | null> = {
+  BOUQUETS: 'bukety',
+  COMPOSITIONS: 'kompozicii',
+  FLOWERS: 'tsvety',
+  GIFTS: 'podarki',
+  OTHER: null,
+};
+
+export function isCanonicalListingHub(category: {
+  slug: string;
+  listingKind: CatalogListingKind | null | undefined;
+}): boolean {
+  if (!category.listingKind) return false;
+  return CANONICAL_LISTING_HUB_SLUGS[category.listingKind] === category.slug;
+}
+
+/** Known merchandising leaf → compositionKind (monobukety). */
+export const COMPOSITION_KIND_CATEGORY_SLUGS: Record<string, CompositionKind> = {
+  monobukety: 'MONO',
+};
+
+/**
+ * How a public /katalog/[slug] page should select products.
+ * Canonical hubs: ProductKind only (stale catalogCategoryId must not pollute).
+ * Flower leaves / monobukety: composition rules, not category assignment.
+ * Other leaves (gift subtypes, merchandising): category tree only.
+ */
+export type CategoryListingScope = {
+  /** Include products whose catalogCategoryId is in the expanded category tree. */
+  useCategoryTree: boolean;
+  productKinds?: ProductKind[];
+  /**
+   * When true with both tree and productKinds: OR them.
+   * Prefer false — hubs must not OR stale categories.
+   */
+  matchCategoryOrProductKind?: boolean;
+  scopeFlowerTypeSlugs?: string[];
+  scopeCompositionKinds?: CompositionKind[];
+};
+
+export function resolveCategoryListingScope(category: {
+  slug: string;
+  parentId: string | null;
+  listingKind: CatalogListingKind | null | undefined;
+}): CategoryListingScope {
+  if (isCanonicalListingHub(category)) {
+    const kinds = productKindsForListingKind(category.listingKind);
+    return {
+      useCategoryTree: false,
+      productKinds: kinds.length > 0 ? kinds : undefined,
+      matchCategoryOrProductKind: false,
+    };
+  }
+
+  if (category.listingKind === 'FLOWERS' && category.parentId) {
+    return {
+      useCategoryTree: false,
+      productKinds: ['STEM'],
+      scopeFlowerTypeSlugs: [category.slug],
+    };
+  }
+
+  const compositionKind = COMPOSITION_KIND_CATEGORY_SLUGS[category.slug];
+  if (compositionKind) {
+    return {
+      useCategoryTree: false,
+      productKinds: ['BOUQUET', 'COMPOSITION'],
+      scopeCompositionKinds: [compositionKind],
+    };
+  }
+
+  // Gift subtypes (otkrytki, svechi, igrushki) and other merchandising leaves.
+  return { useCategoryTree: true };
+}
+
 /** Compact storefront/admin summary line when classification is reliable. */
 export function formatCompositionSummaryLine(input: {
   kind: CompositionKind;
@@ -864,7 +974,6 @@ export function deriveProductEditorReadiness(input: {
   const needsComposition = productKindNeedsComposition(input.productKind ?? 'BOUQUET');
   const nameOk = input.name.trim().length > 0;
   const slugOk = (input.slug ?? '').trim().length >= 2;
-  const categoryOk = Boolean(input.catalogCategoryId);
   const activeVariants = input.variants.filter((v) => v.status === 'ACTIVE');
   const priceOk =
     activeVariants.length > 0 &&
@@ -873,6 +982,7 @@ export function deriveProductEditorReadiness(input: {
   const shortOk = Boolean(input.shortDescription?.trim());
   const longOk = Boolean(input.description?.trim());
   const compositionOk = !needsComposition || input.compositionHasFlowerItem;
+  // Category is no longer a commercial type — ProductKind is SSoT. Gift subtype is optional.
 
   const items: ProductEditorReadinessItem[] = [
     { id: 'name', label: 'Название', ok: nameOk, requiredForPublish: true },
@@ -881,7 +991,6 @@ export function deriveProductEditorReadiness(input: {
     { id: 'description', label: 'Полное описание', ok: longOk, requiredForPublish: false },
     { id: 'price', label: 'Цена', ok: priceOk, requiredForPublish: true },
     { id: 'photo', label: 'Основное фото', ok: photoOk, requiredForPublish: true },
-    { id: 'category', label: 'Категория', ok: categoryOk, requiredForPublish: false },
     {
       id: 'composition',
       label: needsComposition ? 'Состав' : 'Состав (не нужен)',

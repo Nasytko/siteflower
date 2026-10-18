@@ -33,6 +33,16 @@ export type ProductListFilters = {
   bestsellerGroupIds?: string[];
   /** CatalogCategory ids (already expanded to include descendants). */
   catalogCategoryIds?: string[];
+  /**
+   * ProductKind filter. When combined with catalogCategoryIds and
+   * `matchCategoryOrProductKind`, matches category tree OR kind (hub PLPs).
+   */
+  productKinds?: Array<'BOUQUET' | 'COMPOSITION' | 'STEM' | 'PLANT' | 'GIFT' | 'OTHER'>;
+  /**
+   * Hub PLP mode: product in category tree OR productKind in productKinds.
+   * Leaf merchandising categories leave this false and use category ids only.
+   */
+  matchCategoryOrProductKind?: boolean;
   flowerTypeIds?: string[];
   flowerTypeSlugs?: string[];
   flowerVarietyIds?: string[];
@@ -572,8 +582,23 @@ export function buildProductWhere(
   }
 
   const catalogCategoryIds = nonEmpty(filters.catalogCategoryIds);
-  if (catalogCategoryIds) {
-    and.push({ catalogCategoryId: { in: catalogCategoryIds } });
+  const productKinds = nonEmpty(filters.productKinds as string[] | undefined) as
+    | Array<'BOUQUET' | 'COMPOSITION' | 'STEM' | 'PLANT' | 'GIFT' | 'OTHER'>
+    | undefined;
+  if (catalogCategoryIds && productKinds && filters.matchCategoryOrProductKind) {
+    and.push({
+      OR: [
+        { catalogCategoryId: { in: catalogCategoryIds } },
+        { productKind: { in: productKinds } },
+      ],
+    });
+  } else {
+    if (catalogCategoryIds) {
+      and.push({ catalogCategoryId: { in: catalogCategoryIds } });
+    }
+    if (productKinds) {
+      and.push({ productKind: { in: productKinds } });
+    }
   }
 
   // Composition facets: same-component AND (type ∧ variety ∧ origin ∧ color ∧ stem).

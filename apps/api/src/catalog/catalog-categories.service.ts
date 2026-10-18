@@ -5,6 +5,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import {
+  CANONICAL_LISTING_HUB_SLUGS,
   isCatalogListingKind,
   normalizeSlug,
   type CatalogCategoryAdminDto,
@@ -201,6 +202,24 @@ export class CatalogCategoriesService {
       seoDescription: row.seoDescription,
       noIndex: row.noIndex,
     };
+  }
+
+  /**
+   * Canonical commercial hub root for a listingKind (bukety / tsvety / …).
+   * Used to auto-assign category from ProductKind without manager picking it.
+   */
+  async findCanonicalHubId(
+    listingKind: CatalogListingKind,
+    tx?: Prisma.TransactionClient,
+  ): Promise<string | null> {
+    const slug = CANONICAL_LISTING_HUB_SLUGS[listingKind];
+    if (!slug) return null;
+    const client = tx ?? this.prisma.client;
+    const row = await client.catalogCategory.findFirst({
+      where: { slug, listingKind, visibility: 'VISIBLE' },
+      select: { id: true },
+    });
+    return row?.id ?? null;
   }
 
   async expandCategoryIds(

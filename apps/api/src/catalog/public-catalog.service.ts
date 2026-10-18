@@ -3,9 +3,12 @@ import {
   gateListingFiltersByEnabledKeys,
   heightBandWhere,
   isHeightBandId,
+  resolveCategoryListingScope,
   type BestsellerGroupPublicDto,
   type BudgetRangePublicDto,
+  type CompositionKind,
   type PaginatedResponse,
+  type ProductKind,
   type ProductListItemDto,
   type ProductResolveDto,
   type SitemapEntryDto,
@@ -68,16 +71,31 @@ export class PublicCatalogService {
 
   private async resolveCatalogFilters(query: PublicProductListQueryDto) {
     let catalogCategoryIds: string[] | undefined;
+    let productKinds: ProductKind[] | undefined;
+    let matchCategoryOrProductKind = false;
+    /** Category-scope composition (e.g. monobukety) — not Filter Pool gated. */
+    let scopeCompositionKinds: CompositionKind[] | undefined;
+    /** Category-scope flower type (e.g. /katalog/rozy) — not Filter Pool gated. */
+    let scopeFlowerTypeSlugs: string[] | undefined;
+
     if (query.catalogCategoryId) {
+      // Direct id (admin/internal): keep tree scope only — no ProductKind OR.
       catalogCategoryIds = await this.categories.expandCategoryIds(query.catalogCategoryId, {
         visibleOnly: true,
       });
     } else if (query.categorySlug) {
       try {
         const category = await this.categories.getBySlug(query.categorySlug);
-        catalogCategoryIds = await this.categories.expandCategoryIds(category.id, {
-          visibleOnly: true,
-        });
+        const scope = resolveCategoryListingScope(category);
+        productKinds = scope.productKinds;
+        matchCategoryOrProductKind = Boolean(scope.matchCategoryOrProductKind);
+        scopeCompositionKinds = scope.scopeCompositionKinds;
+        scopeFlowerTypeSlugs = scope.scopeFlowerTypeSlugs;
+        if (scope.useCategoryTree) {
+          catalogCategoryIds = await this.categories.expandCategoryIds(category.id, {
+            visibleOnly: true,
+          });
+        }
       } catch {
         catalogCategoryIds = ['00000000-0000-0000-0000-000000000000'];
       }
@@ -88,6 +106,10 @@ export class PublicCatalogService {
         : undefined;
     return {
       catalogCategoryIds,
+      productKinds,
+      matchCategoryOrProductKind,
+      scopeCompositionKinds,
+      scopeFlowerTypeSlugs,
       flowerTypeIds: query.flowerTypeId,
       flowerTypeSlugs: query.flowerTypeSlug,
       flowerVarietyIds: query.flowerVarietyId,
@@ -145,6 +167,15 @@ export class PublicCatalogService {
       }
     }
 
+    const mergedFlowerTypeSlugs = [
+      ...new Set([
+        ...(gatedFacet.flowerTypeSlugs ?? []),
+        ...(catalogFilters.scopeFlowerTypeSlugs ?? []),
+      ]),
+    ];
+    const mergedCompositionKinds =
+      gatedFacet.compositionKinds ?? catalogFilters.scopeCompositionKinds;
+
     const { items, total } = await this.products.list({
       filters: {
         publishedAt: now,
@@ -153,8 +184,12 @@ export class PublicCatalogService {
         flowerSlugs: query.flowerSlugs,
         budgetRanges,
         catalogCategoryIds: catalogFilters.catalogCategoryIds,
+        productKinds: catalogFilters.productKinds,
+        matchCategoryOrProductKind: catalogFilters.matchCategoryOrProductKind,
         familyId: catalogFilters.familyId,
         ...gatedFacet,
+        flowerTypeSlugs: mergedFlowerTypeSlugs.length > 0 ? mergedFlowerTypeSlugs : undefined,
+        compositionKinds: mergedCompositionKinds,
       },
       skip: (page - 1) * pageSize,
       take: pageSize,

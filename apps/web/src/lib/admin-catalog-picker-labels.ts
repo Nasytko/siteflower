@@ -1,9 +1,17 @@
-import type { CatalogCategoryAdminDto } from '@bouquet-one/contracts';
+import type { CatalogCategoryAdminDto, CatalogListingKind } from '@bouquet-one/contracts';
+
+export type CategoryPickerOption = {
+  id: string;
+  name: string;
+  parentId: string | null;
+  listingKind: CatalogListingKind | null;
+  slug: string;
+};
 
 /** Flat category options with «Parent → Child» labels for admin selects. */
 export function categoryPickerOptions(
   categories: CatalogCategoryAdminDto[],
-): Array<{ id: string; name: string }> {
+): CategoryPickerOption[] {
   const byId = new Map(categories.map((row) => [row.id, row]));
 
   function pathLabel(id: string): string {
@@ -21,10 +29,22 @@ export function categoryPickerOptions(
   return categories
     .map((row) => ({
       id: row.id,
+      parentId: row.parentId,
+      listingKind: row.listingKind,
+      slug: row.slug,
       name:
         row.visibility === 'HIDDEN' ? `${pathLabel(row.id)} (скрыта)` : pathLabel(row.id),
     }))
     .sort((a, b) => a.name.localeCompare(b.name, 'ru'));
+}
+
+/** Gift subtypes: categories with listingKind GIFTS except the canonical hub root. */
+export function giftSubtypeOptions(
+  categories: CategoryPickerOption[],
+): CategoryPickerOption[] {
+  return categories.filter(
+    (row) => row.listingKind === 'GIFTS' && row.slug !== 'podarki',
+  );
 }
 
 export function suggestedCommercialProductName(input: {

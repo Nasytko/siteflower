@@ -3,8 +3,10 @@
 import {
   COMMERCIAL_AVAILABILITIES,
   DEFAULT_PRODUCT_VARIANT_NAME,
+  PRIMARY_PRODUCT_KINDS,
   PRODUCT_KINDS,
   normalizeSlug,
+  productKindNeedsGiftSubtype,
   suggestProductNameFromComposition,
   type CommercialAvailability,
   type ProductAdminDto,
@@ -12,6 +14,8 @@ import {
 } from '@bouquet-one/contracts';
 import { TaxonomyQuickPick } from '@/components/admin/taxonomy-quick-pick';
 import type { ComponentDraft, PickerOption, VariantDraft } from '@/components/admin/product-editor-shared';
+import type { CategoryPickerOption } from '@/lib/admin-catalog-picker-labels';
+import { giftSubtypeOptions } from '@/lib/admin-catalog-picker-labels';
 import { availabilityLabel, lifecycleLabel, productKindLabel } from '@/lib/admin-labels';
 import { availabilityChipClass, lifecycleChipClass } from '@/lib/admin-status';
 
@@ -53,7 +57,7 @@ type Props = {
   setVariants: React.Dispatch<React.SetStateAction<VariantDraft[]>>;
   catalogCategoryId: string;
   setCatalogCategoryId: (value: string) => void;
-  categories: PickerOption[];
+  categories: CategoryPickerOption[];
   discovery: {
     occasionIds: string[];
     recipientIds: string[];
@@ -148,26 +152,37 @@ export function ProductEditorMainTab(props: Props) {
       <div>
         <h2 className="admin-section__title">Основное</h2>
         <p className="admin-section__lead">
-          Тип товара, название, цена, описание и подбор. Состав и расширенные настройки — в соседних
-          вкладках.
+          Что продаём, название, цена и описание. Раздел каталога определяется типом автоматически —
+          категорию «Розы» выбирать не нужно.
         </p>
       </div>
 
       <div className="grid max-w-2xl gap-4">
         <label className="admin-field" data-section="productKind">
-          <span>Тип товара</span>
+          <span>Что продаём?</span>
           <select
             className="admin-select"
             value={productKind}
             disabled={!canUpdate}
             onChange={(event) => setProductKind(event.target.value as ProductKind)}
           >
-            {PRODUCT_KINDS.map((value) => (
+            {PRIMARY_PRODUCT_KINDS.map((value) => (
               <option key={value} value={value}>
                 {productKindLabel(value)}
               </option>
             ))}
+            {(PRODUCT_KINDS as readonly ProductKind[])
+              .filter((value) => !(PRIMARY_PRODUCT_KINDS as readonly string[]).includes(value))
+              .map((value) => (
+                <option key={value} value={value}>
+                  {productKindLabel(value)}
+                </option>
+              ))}
           </select>
+          <span className="admin-field__hint">
+            Букет / композиция / поштучно / подарок. Характеристики состава и разделы «Розы»,
+            «Монобукеты» считаются сами.
+          </span>
         </label>
 
         <label className="admin-field" data-section="name">
@@ -210,25 +225,31 @@ export function ProductEditorMainTab(props: Props) {
           ) : null}
         </label>
 
-        <label className="admin-field" data-section="category">
-          <span>Категория</span>
-          <select
-            className="admin-select"
-            value={catalogCategoryId}
-            disabled={!canUpdate}
-            onChange={(event) => {
-              setCatalogCategoryId(event.target.value);
-              touch();
-            }}
-          >
-            <option value="">Не указана</option>
-            {categories.map((option) => (
-              <option key={option.id} value={option.id}>
-                {option.name}
-              </option>
-            ))}
-          </select>
-        </label>
+        {productKindNeedsGiftSubtype(productKind) ? (
+          <label className="admin-field" data-section="category">
+            <span>Подтип подарка</span>
+            <select
+              className="admin-select"
+              value={
+                giftSubtypeOptions(categories).some((option) => option.id === catalogCategoryId)
+                  ? catalogCategoryId
+                  : ''
+              }
+              disabled={!canUpdate}
+              onChange={(event) => {
+                setCatalogCategoryId(event.target.value);
+                touch();
+              }}
+            >
+              <option value="">Без подтипа (Подарки)</option>
+              {giftSubtypeOptions(categories).map((option) => (
+                <option key={option.id} value={option.id}>
+                  {option.name}
+                </option>
+              ))}
+            </select>
+          </label>
+        ) : null}
 
         <div className="admin-subsection space-y-3" data-section="price">
           <h3 className="admin-subsection__title">

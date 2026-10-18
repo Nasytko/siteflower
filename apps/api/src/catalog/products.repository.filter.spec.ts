@@ -47,6 +47,35 @@ describe('buildProductWhere composition facets', () => {
     );
   });
 
+  it('hub PLP filters by productKind only (no category OR)', () => {
+    const where = buildProductWhere({
+      productKinds: ['BOUQUET'],
+      matchCategoryOrProductKind: false,
+    });
+    const and = (where.AND ?? []) as Array<Record<string, unknown>>;
+    expect(and).toEqual(expect.arrayContaining([{ productKind: { in: ['BOUQUET'] } }]));
+    expect(and.some((clause) => 'OR' in clause)).toBe(false);
+  });
+
+  it('legacy OR mode still available for rare merchandising scopes', () => {
+    const where = buildProductWhere({
+      catalogCategoryIds: ['cat-x'],
+      productKinds: ['STEM'],
+      matchCategoryOrProductKind: true,
+    });
+    const and = (where.AND ?? []) as Array<Record<string, unknown>>;
+    expect(and).toEqual(
+      expect.arrayContaining([
+        {
+          OR: [
+            { catalogCategoryId: { in: ['cat-x'] } },
+            { productKind: { in: ['STEM'] } },
+          ],
+        },
+      ]),
+    );
+  });
+
   it('requires EXACT precision for quantity-by-type', () => {
     const where = buildProductWhere({
       minFlowerTypeQuantity: 11,

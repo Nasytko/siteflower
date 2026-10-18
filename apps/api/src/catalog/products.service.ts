@@ -11,7 +11,9 @@ import {
   isHeightBandId,
   normalizeSlug,
   productKindNeedsComposition,
+  productKindNeedsGiftSubtype,
   resolveStoredCompositionKind,
+  suggestedListingKindForProductKind,
   type CompositionPrecision,
   type PaginatedResponse,
   type ProductAdminDto,
@@ -577,6 +579,14 @@ export class ProductsService {
     });
 
     await this.prisma.client.$transaction(async (tx) => {
+      const resolvedCategoryId = await this.resolveEditorCatalogCategoryId(
+        tx,
+        nextKind,
+        input.catalogCategoryId === undefined
+          ? product.catalogCategoryId
+          : input.catalogCategoryId,
+      );
+
       const data: Prisma.ProductUncheckedUpdateManyInput = {
         name: input.name.trim(),
         slug: nextSlug,
@@ -608,16 +618,8 @@ export class ProductsService {
             : input.unpublishAt
               ? new Date(input.unpublishAt)
               : null,
-        catalogCategoryId:
-          input.catalogCategoryId === undefined ? undefined : input.catalogCategoryId,
+        catalogCategoryId: resolvedCategoryId,
       };
-
-      if (input.catalogCategoryId) {
-        const category = await tx.catalogCategory.findUnique({
-          where: { id: input.catalogCategoryId },
-        });
-        if (!category) throw new BadRequestException('Catalog category not found');
-      }
       await this.assertReferencesExist(tx, 'occasion', input.occasionIds);
       await this.assertReferencesExist(tx, 'recipient', input.recipientIds);
       await this.assertReferencesExist(tx, 'color', input.colorIds);
@@ -1197,6 +1199,42 @@ export class ProductsService {
     );
 
     return { rows: normalized, compositionKind, compositionPrecision: precision };
+  }
+
+  /**
+   * ProductKind is SSoT for commercial type. catalogCategoryId is compatibility glue:
+   * - Gifts: keep subtype under GIFTS tree when provided; else canonical hub.
+   * - Other kinds: keep merchandising leaf only if listingKind matches; else hub.
+   * Public hub PLPs ignore category and filter by productKind alone.
+   */
+  private async resolveEditorCatalogCategoryId(
+    tx: Prisma.TransactionClient,
+    productKind: ProductKind,
+    requestedId: string | null | undefined,
+  ): Promise<string | null> {
+    const suggested = suggestedListingKindForProductKind(productKind);
+    const hubId = await this.categories.findCanonicalHubId(suggested, tx);
+
+    if (!requestedId) {
+      return hubId;
+    }
+
+    const category = await tx.catalogCategory.findUnique({ where: { id: requestedId } });
+    if (!category) throw new BadRequestException('Catalog category not found');
+
+    if (productKindNeedsGiftSubtype(productKind)) {
+      // Accept gift subtypes and gift hubs; reject floral categories.
+      if (category.listingKind === 'GIFTS') {
+        return category.id;
+      }
+      return hubId;
+    }
+
+    // Merchandising leaf / hub only when listingKind still matches the product kind.
+    if (category.listingKind === suggested) {
+      return category.id;
+    }
+    return hubId;
   }
 
   private async assertReferencesExist(
