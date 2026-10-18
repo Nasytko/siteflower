@@ -191,6 +191,37 @@ class PreviewQueryDto {
   pageSize?: number = 24;
 }
 
+class PreviewRulesDto {
+  @IsOptional()
+  @IsObject()
+  rules?: Record<string, unknown>;
+
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(50)
+  @IsUUID(undefined, { each: true })
+  pinnedProductIds?: string[];
+
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(200)
+  @IsUUID(undefined, { each: true })
+  excludedProductIds?: string[];
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  page?: number = 1;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(48)
+  pageSize?: number = 24;
+}
+
 @ApiTags('admin-seo-landings')
 @Controller('admin/seo/landings')
 export class AdminSeoLandingsController {
@@ -200,6 +231,19 @@ export class AdminSeoLandingsController {
   @RequirePermissions('SEO_READ')
   list() {
     return this.landings.listAdmin();
+  }
+
+  @Post('preview-rules')
+  @RequirePermissions('SEO_READ')
+  previewRules(@Body() body: PreviewRulesDto) {
+    return this.landings.previewRules(
+      {
+        rules: body.rules,
+        pinnedProductIds: body.pinnedProductIds,
+        excludedProductIds: body.excludedProductIds,
+      },
+      { page: body.page, pageSize: body.pageSize },
+    );
   }
 
   @Post()

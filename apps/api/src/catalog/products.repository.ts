@@ -1,6 +1,10 @@
 import { Injectable } from '@nestjs/common';
 import type { CommercialAvailability, Prisma, ProductLifecycle } from '@bouquet-one/database';
-import { budgetRangeMatchesPrice, type ProductSort } from '@bouquet-one/contracts';
+import {
+  budgetRangeMatchesPrice,
+  isDominantFlowerType,
+  type ProductSort,
+} from '@bouquet-one/contracts';
 import { PrismaService } from '../database/prisma.service';
 import { PRODUCT_INCLUDE, type ProductWithRelations } from './catalog.mapper';
 import {
@@ -65,6 +69,11 @@ export type ProductListFilters = {
   /** Min qty on a PRIMARY line for flowerTypeQuantitySlug (EXACT products only). */
   minFlowerTypeQuantity?: number;
   flowerTypeQuantitySlug?: string;
+  /**
+   * Predominant PRIMARY flower type (strict max quantity, comparable units, EXACT).
+   * SQL prefilters candidates; refined in memory via `isDominantFlowerType`.
+   */
+  dominantFlowerTypeSlug?: string;
   /** Product ids to exclude (SEO landing excludes). */
   excludeProductIds?: string[];
   /** When set, restricts to effectively published products at that instant. */
@@ -292,25 +301,50 @@ export class ProductsRepository {
     const where = buildProductWhere(params.filters, now);
     const sort = params.sort ?? 'recommended';
     const budgetRanges = params.filters.budgetRanges ?? [];
+    const dominantSlug = params.filters.dominantFlowerTypeSlug?.trim() || undefined;
     const needsRefinement =
       sort === 'price_asc' ||
       sort === 'price_desc' ||
       budgetRanges.length > 0 ||
-      params.filters.promotionalOnly === true;
+      params.filters.promotionalOnly === true ||
+      Boolean(dominantSlug);
 
     if (needsRefinement) {
-      // Composition / taxonomy filters stay in Prisma WHERE. Effective price, budget, and
-      // precise promo effectiveness need JS (Prisma cannot order by discounted price).
+      // Composition / taxonomy filters stay in Prisma WHERE. Effective price, budget,
+      // promo effectiveness, and dominant flower type need JS refinement.
       // Load ALL matching candidates in stable pages — never truncate.
       const candidates: CandidateRow[] = [];
       for (;;) {
         const batch = (await this.db().product.findMany({
           where,
-          select: CANDIDATE_SELECT,
+          select: dominantSlug
+            ? {
+                ...CANDIDATE_SELECT,
+                compositionPrecision: true,
+                components: {
+                  select: {
+                    role: true,
+                    quantity: true,
+                    unit: true,
+                    flowerItem: { select: { flowerType: { select: { slug: true } } } },
+                  },
+                },
+              }
+            : CANDIDATE_SELECT,
           orderBy: { id: 'asc' },
           skip: candidates.length,
           take: IN_MEMORY_CANDIDATE_PAGE,
-        })) as CandidateRow[];
+        })) as Array<
+          CandidateRow & {
+            compositionPrecision?: string;
+            components?: Array<{
+              role: string;
+              quantity: number | null;
+              unit: string;
+              flowerItem: { flowerType: { slug: string } | null } | null;
+            }>;
+          }
+        >;
         candidates.push(...batch);
         if (batch.length < IN_MEMORY_CANDIDATE_PAGE) break;
       }
@@ -321,6 +355,31 @@ export class ProductsRepository {
         }
         if (budgetRanges.length > 0 && !matchesBudget(candidate, budgetRanges, now)) {
           return false;
+        }
+        if (dominantSlug) {
+          const withComp = candidate as CandidateRow & {
+            compositionPrecision?: string;
+            components?: Array<{
+              role: string;
+              quantity: number | null;
+              unit: string;
+              flowerItem: { flowerType: { slug: string } | null } | null;
+            }>;
+          };
+          if (withComp.compositionPrecision !== 'EXACT') return false;
+          if (
+            !isDominantFlowerType(
+              (withComp.components ?? []).map((row) => ({
+                role: row.role as 'PRIMARY' | 'GREENERY' | 'FILLER' | 'OTHER',
+                quantity: row.quantity,
+                unit: row.unit,
+                flowerTypeSlug: row.flowerItem?.flowerType?.slug ?? null,
+              })),
+              dominantSlug,
+            )
+          ) {
+            return false;
+          }
         }
         return true;
       });
@@ -663,6 +722,21 @@ export function buildProductWhere(
           role: 'PRIMARY',
           quantity: { gte: filters.minFlowerTypeQuantity },
           flowerItem: { flowerType: { slug: filters.flowerTypeQuantitySlug } },
+        },
+      },
+    });
+  }
+
+  const dominantSlug = filters.dominantFlowerTypeSlug?.trim();
+  if (dominantSlug) {
+    // SQL prefilter: EXACT + contains the type as PRIMARY. Strict majority refined in memory.
+    and.push({
+      compositionPrecision: 'EXACT',
+      components: {
+        some: {
+          role: 'PRIMARY',
+          quantity: { gte: 1 },
+          flowerItem: { flowerType: { slug: dominantSlug } },
         },
       },
     });

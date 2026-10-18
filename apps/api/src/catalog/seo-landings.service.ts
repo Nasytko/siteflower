@@ -36,18 +36,30 @@ const LANDING_INCLUDE = {
 
 type LandingRow = Prisma.SeoLandingPageGetPayload<{ include: typeof LANDING_INCLUDE }>;
 
-/** JSON rules keys accepted from Admin (subset of ProductListFilters). */
+/**
+ * JSON rules keys accepted from Admin — subset of ProductListFilters
+ * shared with the public catalog (same-component AND semantics).
+ */
 const RULE_KEYS = [
   'flowerTypeIds',
   'flowerTypeSlugs',
+  'flowerVarietyIds',
+  'flowerVarietySlugs',
   'colorIds',
   'colorSlugs',
+  'componentColorIds',
+  'componentColorSlugs',
   'compositionKinds',
   'productKinds',
   'occasionIds',
   'occasionSlugs',
+  'recipientIds',
+  'recipientSlugs',
   'minPriceMinor',
   'maxPriceMinor',
+  'minFlowerTypeQuantity',
+  'flowerTypeQuantitySlug',
+  'dominantFlowerTypeSlug',
 ] as const;
 
 const COMPOSITION_KINDS = new Set(['MONO', 'MIXED', 'UNKNOWN']);
@@ -59,6 +71,13 @@ const PRODUCT_KINDS = new Set([
   'GIFT',
   'OTHER',
 ]);
+const SCALAR_STRING_KEYS = new Set([
+  'minPriceMinor',
+  'maxPriceMinor',
+  'flowerTypeQuantitySlug',
+  'dominantFlowerTypeSlug',
+]);
+const SCALAR_INT_KEYS = new Set(['minFlowerTypeQuantity']);
 
 export type SeoLandingUpsertInput = {
   slug?: string;
@@ -433,6 +452,27 @@ export class SeoLandingsService {
     return this.listProducts(landing, { ...query, publishedOnly: true });
   }
 
+  /** Live preview for unsaved constructor rules (Admin). */
+  async previewRules(
+    input: {
+      rules?: Record<string, unknown>;
+      pinnedProductIds?: string[];
+      excludedProductIds?: string[];
+    },
+    query: { page?: number; pageSize?: number },
+  ): Promise<PaginatedResponse<ProductListItemDto>> {
+    const rules = sanitizeRules(input.rules ?? {});
+    const pinned = uniqueIds(input.pinnedProductIds ?? []);
+    const excluded = uniqueIds(input.excludedProductIds ?? []);
+    assertNoOverlap(pinned, excluded);
+    const synthetic = {
+      rules,
+      pinnedProducts: pinned.map((productId, sortOrder) => ({ productId, sortOrder })),
+      excludedProducts: excluded.map((productId) => ({ productId })),
+    } as LandingRow;
+    return this.listProducts(synthetic, { ...query, publishedOnly: true });
+  }
+
   async getPublicBySlug(slug: string): Promise<
     SeoLandingPagePublicDto & {
       redirectedFrom: string | null;
@@ -585,12 +625,31 @@ function sanitizeRules(input: Record<string, unknown>): Prisma.InputJsonValue {
     const value = input[key];
     if (value === undefined || value === null || value === '') continue;
 
-    if (key === 'minPriceMinor' || key === 'maxPriceMinor') {
+    if (SCALAR_STRING_KEYS.has(key)) {
       const text = String(value).trim();
-      if (!/^\d+$/.test(text)) {
+      if (!text) continue;
+      if (
+        (key === 'minPriceMinor' || key === 'maxPriceMinor') &&
+        !/^\d+$/.test(text)
+      ) {
         throw new BadRequestException(`${key} must be integer minor units as a string`);
       }
+      if (
+        (key === 'flowerTypeQuantitySlug' || key === 'dominantFlowerTypeSlug') &&
+        text.length > 120
+      ) {
+        throw new BadRequestException(`${key} слишком длинный`);
+      }
       out[key] = text;
+      continue;
+    }
+
+    if (SCALAR_INT_KEYS.has(key)) {
+      const n = typeof value === 'number' ? value : Number(String(value).trim());
+      if (!Number.isInteger(n) || n < 1) {
+        throw new BadRequestException(`${key} must be a positive integer`);
+      }
+      out[key] = n;
       continue;
     }
 
@@ -615,6 +674,13 @@ function sanitizeRules(input: Record<string, unknown>): Prisma.InputJsonValue {
     const list = asStringArray(value);
     if (list && list.length > 0) out[key] = list;
   }
+
+  if (out.minFlowerTypeQuantity != null && !out.flowerTypeQuantitySlug) {
+    throw new BadRequestException(
+      'Для минимального количества укажите вид цветка (flowerTypeQuantitySlug)',
+    );
+  }
+
   return out as Prisma.InputJsonValue;
 }
 
@@ -641,14 +707,26 @@ export function rulesToFilters(rules: Prisma.JsonValue): ProductListFilters {
   if (flowerTypeIds) filters.flowerTypeIds = flowerTypeIds;
   const flowerTypeSlugs = asStringArray(record.flowerTypeSlugs);
   if (flowerTypeSlugs) filters.flowerTypeSlugs = flowerTypeSlugs;
+  const flowerVarietyIds = asStringArray(record.flowerVarietyIds);
+  if (flowerVarietyIds) filters.flowerVarietyIds = flowerVarietyIds;
+  const flowerVarietySlugs = asStringArray(record.flowerVarietySlugs);
+  if (flowerVarietySlugs) filters.flowerVarietySlugs = flowerVarietySlugs;
   const colorIds = asStringArray(record.colorIds);
   if (colorIds) filters.colorIds = colorIds;
   const colorSlugs = asStringArray(record.colorSlugs);
   if (colorSlugs) filters.colorSlugs = colorSlugs;
+  const componentColorIds = asStringArray(record.componentColorIds);
+  if (componentColorIds) filters.componentColorIds = componentColorIds;
+  const componentColorSlugs = asStringArray(record.componentColorSlugs);
+  if (componentColorSlugs) filters.componentColorSlugs = componentColorSlugs;
   const occasionIds = asStringArray(record.occasionIds);
   if (occasionIds) filters.occasionIds = occasionIds;
   const occasionSlugs = asStringArray(record.occasionSlugs);
   if (occasionSlugs) filters.occasionSlugs = occasionSlugs;
+  const recipientIds = asStringArray(record.recipientIds);
+  if (recipientIds) filters.recipientIds = recipientIds;
+  const recipientSlugs = asStringArray(record.recipientSlugs);
+  if (recipientSlugs) filters.recipientSlugs = recipientSlugs;
 
   const kinds = asStringArray(record.compositionKinds);
   if (kinds) {
@@ -672,6 +750,24 @@ export function rulesToFilters(rules: Prisma.JsonValue): ProductListFilters {
   }
   if (typeof record.maxPriceMinor === 'string' && /^\d+$/.test(record.maxPriceMinor)) {
     filters.maxPriceMinor = record.maxPriceMinor;
+  }
+
+  if (
+    typeof record.minFlowerTypeQuantity === 'number' &&
+    Number.isInteger(record.minFlowerTypeQuantity) &&
+    record.minFlowerTypeQuantity >= 1 &&
+    typeof record.flowerTypeQuantitySlug === 'string' &&
+    record.flowerTypeQuantitySlug.trim()
+  ) {
+    filters.minFlowerTypeQuantity = record.minFlowerTypeQuantity;
+    filters.flowerTypeQuantitySlug = record.flowerTypeQuantitySlug.trim();
+  }
+
+  if (
+    typeof record.dominantFlowerTypeSlug === 'string' &&
+    record.dominantFlowerTypeSlug.trim()
+  ) {
+    filters.dominantFlowerTypeSlug = record.dominantFlowerTypeSlug.trim();
   }
 
   return filters;

@@ -56,6 +56,8 @@ export class SeoHealthService {
       sitemapFlowerTypes,
       sitemapOccasions,
       sitemapRecipients,
+      seoLandings,
+      sitemapLandings,
     ] = await Promise.all([
       this.prisma.client.product.findMany({
         select: {
@@ -146,6 +148,25 @@ export class SeoHealthService {
         where: { visibility: 'VISIBLE', noIndex: false },
         select: { slug: true },
       }),
+      this.prisma.client.seoLandingPage.findMany({
+        select: {
+          id: true,
+          slug: true,
+          title: true,
+          h1: true,
+          status: true,
+          noIndex: true,
+          seoTitle: true,
+          seoDescription: true,
+          rules: true,
+          _count: { select: { pinnedProducts: true } },
+        },
+        orderBy: [{ sortOrder: 'asc' }, { title: 'asc' }],
+      }),
+      this.prisma.client.seoLandingPage.findMany({
+        where: { status: 'PUBLISHED', noIndex: false },
+        select: { slug: true },
+      }),
     ]);
 
     const sitemapPaths = new Set<string>([
@@ -155,6 +176,7 @@ export class SeoHealthService {
       ...sitemapFlowerTypes.map((f) => `/cvety/${f.slug}`),
       ...sitemapOccasions.map((o) => `/povod/${o.slug}`),
       ...sitemapRecipients.map((r) => `/komu/${r.slug}`),
+      ...sitemapLandings.map((l) => `/p/${l.slug}`),
     ]);
 
     const items: SeoEntityHealth[] = [];
@@ -250,6 +272,101 @@ export class SeoHealthService {
     pushTaxonomy(occasions, 'occasion', (slug) => `/povod/${slug}`, 'occasions', true);
     pushTaxonomy(recipients, 'recipient', (slug) => `/komu/${slug}`, 'recipients', true);
     pushTaxonomy(colors, 'color', () => null, 'colors', false);
+
+    for (const landing of seoLandings) {
+      const path = `/p/${landing.slug}`;
+      const rules =
+        landing.rules && typeof landing.rules === 'object' && !Array.isArray(landing.rules)
+          ? (landing.rules as Record<string, unknown>)
+          : {};
+      const ruleKeys = Object.keys(rules);
+      const checks: SeoEntityHealth['checks'] = [];
+      const published = landing.status === 'PUBLISHED';
+      const indexable = published && !landing.noIndex;
+
+      if (published && ruleKeys.length === 0 && landing._count.pinnedProducts === 0) {
+        checks.push({
+          code: 'SEO_LANDING_EMPTY_RULES',
+          severity: 'CRITICAL',
+          title: 'Пустые правила',
+          message: 'Опубликованная подборка без правил и закреплений подберёт весь каталог или будет пустой.',
+          entityType: 'seo_landing',
+          entityId: landing.id,
+          href: `/admin/seo/landings`,
+        });
+      }
+      if (published && !landing.seoTitle?.trim()) {
+        checks.push({
+          code: 'SEO_LANDING_TITLE_MISSING',
+          severity: 'WARNING',
+          title: 'Нет SEO title',
+          message: 'Используется обычный title страницы.',
+          entityType: 'seo_landing',
+          entityId: landing.id,
+          href: `/admin/seo/landings`,
+        });
+      }
+      if (published && !landing.seoDescription?.trim()) {
+        checks.push({
+          code: 'SEO_LANDING_DESC_MISSING',
+          severity: 'WARNING',
+          title: 'Нет meta description',
+          message: 'Рекомендуется уникальное описание подборки.',
+          entityType: 'seo_landing',
+          entityId: landing.id,
+          href: `/admin/seo/landings`,
+        });
+      }
+      if (indexable && !sitemapPaths.has(path)) {
+        checks.push({
+          code: 'SEO_LANDING_SITEMAP_MISSING',
+          severity: 'CRITICAL',
+          title: 'Нет в sitemap',
+          message: `Ожидался URL ${path} в sitemap.`,
+          entityType: 'seo_landing',
+          entityId: landing.id,
+          href: `/admin/seo/landings`,
+        });
+      }
+      if (checks.length === 0) {
+        checks.push({
+          code: 'SEO_LANDING_OK',
+          severity: 'PASS',
+          title: 'SEO-подборка',
+          message: published ? 'Подборка опубликована.' : `Статус: ${landing.status}.`,
+          entityType: 'seo_landing',
+          entityId: landing.id,
+          href: `/admin/seo/landings`,
+        });
+      }
+
+      const worst = checks.reduce(
+        (acc, check) => {
+          const rank = { CRITICAL: 0, WARNING: 1, INFO: 2, PASS: 3 } as const;
+          return rank[check.severity] < rank[acc] ? check.severity : acc;
+        },
+        'PASS' as 'CRITICAL' | 'WARNING' | 'INFO' | 'PASS',
+      );
+      const status =
+        worst === 'CRITICAL' ? 'attention' : worst === 'WARNING' ? 'improve' : 'good';
+
+      items.push({
+        entityType: 'seo_landing',
+        entityId: landing.id,
+        name: landing.title,
+        path,
+        href: `/admin/seo/landings`,
+        status,
+        indexable,
+        indexabilityLabel: indexable
+          ? 'Индексируется'
+          : published
+            ? 'Опубликована с noIndex'
+            : 'Не опубликована',
+        checks,
+        primaryIssue: checks.find((c) => c.severity !== 'PASS')?.title ?? null,
+      });
+    }
 
     // Static marketing pages (metadata is hardcoded in the storefront foundation).
     for (const page of STATIC_PAGES) {

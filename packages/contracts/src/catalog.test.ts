@@ -25,6 +25,7 @@ import {
   deriveCompositionKind,
   formatCompositionSummaryLine,
   isCanonicalListingHub,
+  isDominantFlowerType,
   productKindsForListingKind,
   resolveCategoryListingScope,
   resolveStoredCompositionKind,
@@ -196,6 +197,29 @@ test('deriveCompositionKind: two rose varieties stay mono', () => {
       { role: 'PRIMARY', typeId: 'rose', typeName: 'Роза' },
     ]),
     'MONO',
+  );
+});
+
+test('isDominantFlowerType: chrysanthemum majority vs mixed units', () => {
+  assert.equal(
+    isDominantFlowerType(
+      [
+        { role: 'PRIMARY', quantity: 9, unit: 'STEM', flowerTypeSlug: 'hrizantema' },
+        { role: 'PRIMARY', quantity: 2, unit: 'STEM', flowerTypeSlug: 'roza' },
+      ],
+      'hrizantema',
+    ),
+    true,
+  );
+  assert.equal(
+    isDominantFlowerType(
+      [
+        { role: 'PRIMARY', quantity: 5, unit: 'STEM', flowerTypeSlug: 'hrizantema' },
+        { role: 'PRIMARY', quantity: 1, unit: 'BUNCH', flowerTypeSlug: 'roza' },
+      ],
+      'hrizantema',
+    ),
+    false,
   );
 });
 

@@ -765,6 +765,53 @@ function inferCompositionVarietyName(row: {
 }
 
 /**
+ * Predominant PRIMARY flower type by quantity.
+ * Requires EXACT-usable lines: every PRIMARY has quantity ≥ 1, flower type slug,
+ * and the same unit (incomparable units → false — no guessing).
+ * Target wins only with a unique maximum quantity (strict majority / sole max).
+ */
+export function isDominantFlowerType(
+  rows: Array<{
+    role?: ComponentRole | null;
+    quantity?: number | null;
+    unit?: ComponentUnit | string | null;
+    flowerTypeSlug?: string | null;
+  }>,
+  targetSlug: string,
+): boolean {
+  const target = targetSlug.trim().toLowerCase();
+  if (!target) return false;
+  const primary = rows.filter((row) => (row.role ?? 'PRIMARY') === 'PRIMARY');
+  if (primary.length === 0) return false;
+  if (
+    primary.some(
+      (row) =>
+        row.quantity == null ||
+        row.quantity < 1 ||
+        !row.flowerTypeSlug?.trim() ||
+        !row.unit ||
+        row.unit === 'UNSPECIFIED',
+    )
+  ) {
+    return false;
+  }
+  const units = new Set(primary.map((row) => String(row.unit)));
+  if (units.size !== 1) return false;
+
+  const bySlug = new Map<string, number>();
+  for (const row of primary) {
+    const slug = row.flowerTypeSlug!.trim().toLowerCase();
+    bySlug.set(slug, (bySlug.get(slug) ?? 0) + row.quantity!);
+  }
+  const targetQty = bySlug.get(target) ?? 0;
+  if (targetQty <= 0) return false;
+  for (const [slug, qty] of bySlug) {
+    if (slug !== target && qty >= targetQty) return false;
+  }
+  return true;
+}
+
+/**
  * Derive mono/mixed from PRIMARY composition lines only.
  * GREENERY / FILLER / OTHER never break mono.
  * Empty or only non-primary → UNKNOWN.

@@ -10,11 +10,12 @@ export const dynamic = 'force-dynamic';
 
 export default async function AdminSeoLandingsPage() {
   const me = await requireAdminPermission('SEO_READ');
-  const [landings, flowerTypes, colors, occasions] = await Promise.all([
+  const [landings, flowerTypes, colors, occasions, recipients] = await Promise.all([
     adminFetch<SeoLandingPageDto[]>(adminEndpoints.seoLandings),
     adminFetch<FlowerTypeAdminDto[]>(adminEndpoints.flowerTypes),
     fetchTaxonomy('colors'),
     fetchTaxonomy('occasions'),
+    fetchTaxonomy('recipients'),
   ]);
 
   return (
@@ -22,8 +23,8 @@ export default async function AdminSeoLandingsPage() {
       <header>
         <h1 className="admin-page-title">SEO-подборки</h1>
         <p className="admin-page-lead">
-          Индексируемые посадочные страницы /p/… с правилами подбора товаров. Отдельно от категорий
-          каталога и фильтров в URL.
+          Посадочные /p/… под поисковые запросы. Товары подбираются по составу автоматически —
+          менеджер не отмечает каждую подборку вручную.
         </p>
       </header>
       <SeoLandingsManager
@@ -31,6 +32,7 @@ export default async function AdminSeoLandingsPage() {
         flowerTypes={flowerTypes}
         colors={colors}
         occasions={occasions}
+        recipients={recipients}
         canUpdate={roleHasPermission(me.user.role, 'SEO_UPDATE')}
       />
     </main>

@@ -15,7 +15,7 @@ import type {
 import { PRIMARY_PRODUCT_KINDS } from '@bouquet-one/contracts';
 import { Button } from '@bouquet-one/ui';
 import { adminDelete, adminGet, adminPatch, adminPost, errorMessage } from '@/lib/admin-client';
-import { adminEndpoints, withQuery } from '@/lib/admin-endpoints';
+import { adminEndpoints } from '@/lib/admin-endpoints';
 import { isMajorInputValid, majorInputToMinor, minorToMajorInput } from '@/lib/admin-money';
 import { productKindLabel } from '@/lib/admin-labels';
 
@@ -24,15 +24,25 @@ type Props = {
   flowerTypes: FlowerTypeAdminDto[];
   colors: ColorAdminDto[];
   occasions: TaxonomyAdminDto[];
+  recipients: TaxonomyAdminDto[];
   canUpdate: boolean;
 };
 
+/** How the flower type participates in matching. */
+type FlowerMatchMode = 'contains' | 'mono' | 'dominant';
+
 type RulesDraft = {
   flowerTypeId: string;
+  flowerMatchMode: FlowerMatchMode;
+  /** Composition-line color (same component AND with flower type). */
+  componentColorId: string;
+  /** Product visual palette color. */
   colorId: string;
   occasionId: string;
+  recipientId: string;
   compositionKind: '' | 'MONO' | 'MIXED' | 'UNKNOWN';
   productKind: '' | ProductKind;
+  minQty: string;
   minMajor: string;
   maxMajor: string;
 };
@@ -61,32 +71,59 @@ const STATUS_LABEL: Record<SeoLandingStatus, string> = {
 function emptyRules(): RulesDraft {
   return {
     flowerTypeId: '',
+    flowerMatchMode: 'contains',
+    componentColorId: '',
     colorId: '',
     occasionId: '',
+    recipientId: '',
     compositionKind: '',
-    productKind: '',
+    productKind: 'BOUQUET',
+    minQty: '',
     minMajor: '',
     maxMajor: '',
   };
 }
 
+function firstId(value: unknown): string {
+  if (Array.isArray(value) && typeof value[0] === 'string') return value[0];
+  return '';
+}
+
 function rulesFromLanding(landing: SeoLandingPageDto): RulesDraft {
   const rules = landing.rules ?? {};
-  const flowerTypeIds = Array.isArray(rules.flowerTypeIds) ? rules.flowerTypeIds : [];
-  const colorIds = Array.isArray(rules.colorIds) ? rules.colorIds : [];
-  const occasionIds = Array.isArray(rules.occasionIds) ? rules.occasionIds : [];
   const kinds = Array.isArray(rules.compositionKinds) ? rules.compositionKinds : [];
   const productKinds = Array.isArray(rules.productKinds) ? rules.productKinds : [];
   const firstKind = typeof productKinds[0] === 'string' ? productKinds[0] : '';
+  const dominant =
+    typeof rules.dominantFlowerTypeSlug === 'string' ? rules.dominantFlowerTypeSlug.trim() : '';
+  const flowerTypeId = firstId(rules.flowerTypeIds);
+  const flowerType = flowerTypeId; // resolved by id in UI
+  let flowerMatchMode: FlowerMatchMode = 'contains';
+  if (dominant) flowerMatchMode = 'dominant';
+  else if (kinds[0] === 'MONO' && flowerTypeId) flowerMatchMode = 'mono';
+
   return {
-    flowerTypeId: typeof flowerTypeIds[0] === 'string' ? flowerTypeIds[0] : '',
-    colorId: typeof colorIds[0] === 'string' ? colorIds[0] : '',
-    occasionId: typeof occasionIds[0] === 'string' ? occasionIds[0] : '',
+    flowerTypeId: flowerType,
+    flowerMatchMode,
+    componentColorId: firstId(rules.componentColorIds),
+    colorId: firstId(rules.colorIds),
+    occasionId: firstId(rules.occasionIds),
+    recipientId: firstId(rules.recipientIds),
     compositionKind:
-      kinds[0] === 'MONO' || kinds[0] === 'MIXED' || kinds[0] === 'UNKNOWN' ? kinds[0] : '',
+      flowerMatchMode === 'mono'
+        ? 'MONO'
+        : kinds[0] === 'MONO' || kinds[0] === 'MIXED' || kinds[0] === 'UNKNOWN'
+          ? kinds[0]
+          : '',
     productKind: (PRIMARY_PRODUCT_KINDS as readonly string[]).includes(firstKind)
       ? (firstKind as ProductKind)
-      : '',
+      : firstKind
+        ? (firstKind as ProductKind)
+        : '',
+    minQty:
+      typeof rules.minFlowerTypeQuantity === 'number'
+        ? String(rules.minFlowerTypeQuantity)
+        : '',
     minMajor: minorToMajorInput(
       typeof rules.minPriceMinor === 'string' ? rules.minPriceMinor : null,
     ),
@@ -141,16 +178,47 @@ function parseIdList(raw: string): string[] {
   ];
 }
 
-function buildRulesPayload(rules: RulesDraft): Record<string, unknown> {
+function buildRulesPayload(
+  rules: RulesDraft,
+  flowerTypes: FlowerTypeAdminDto[],
+): Record<string, unknown> {
   if (!isMajorInputValid(rules.minMajor) || !isMajorInputValid(rules.maxMajor)) {
     throw new Error('Цена указывается в BYN, например 150 или 150,50');
   }
   const payload: Record<string, unknown> = {};
-  if (rules.flowerTypeId) payload.flowerTypeIds = [rules.flowerTypeId];
+  const flowerType = flowerTypes.find((row) => row.id === rules.flowerTypeId);
+
+  if (rules.productKind) payload.productKinds = [rules.productKind];
+
+  if (rules.flowerTypeId) {
+    if (rules.flowerMatchMode === 'dominant' && flowerType?.slug) {
+      payload.dominantFlowerTypeSlug = flowerType.slug;
+    } else {
+      payload.flowerTypeIds = [rules.flowerTypeId];
+      if (rules.flowerMatchMode === 'mono') {
+        payload.compositionKinds = ['MONO'];
+      }
+    }
+  }
+
+  if (rules.flowerMatchMode !== 'mono' && rules.compositionKind) {
+    payload.compositionKinds = [rules.compositionKind];
+  }
+
+  if (rules.componentColorId) payload.componentColorIds = [rules.componentColorId];
   if (rules.colorId) payload.colorIds = [rules.colorId];
   if (rules.occasionId) payload.occasionIds = [rules.occasionId];
-  if (rules.compositionKind) payload.compositionKinds = [rules.compositionKind];
-  if (rules.productKind) payload.productKinds = [rules.productKind];
+  if (rules.recipientId) payload.recipientIds = [rules.recipientId];
+
+  const minQty = Number(rules.minQty.trim());
+  if (rules.minQty.trim() && Number.isInteger(minQty) && minQty >= 1) {
+    if (!flowerType?.slug) {
+      throw new Error('Для количества укажите вид цветка');
+    }
+    payload.minFlowerTypeQuantity = minQty;
+    payload.flowerTypeQuantitySlug = flowerType.slug;
+  }
+
   const minMinor = majorInputToMinor(rules.minMajor);
   const maxMinor = majorInputToMinor(rules.maxMajor);
   if (minMinor) payload.minPriceMinor = minMinor;
@@ -158,7 +226,7 @@ function buildRulesPayload(rules: RulesDraft): Record<string, unknown> {
   return payload;
 }
 
-function buildBody(draft: EditorDraft) {
+function buildBody(draft: EditorDraft, flowerTypes: FlowerTypeAdminDto[]) {
   const sortOrder = Number(draft.sortOrder);
   if (!Number.isFinite(sortOrder) || sortOrder < 0) {
     throw new Error('Порядок сортировки должен быть числом ≥ 0');
@@ -173,7 +241,7 @@ function buildBody(draft: EditorDraft) {
     noIndex: draft.noIndex,
     navVisible: draft.navVisible,
     sortOrder,
-    rules: buildRulesPayload(draft.rules),
+    rules: buildRulesPayload(draft.rules, flowerTypes),
     pinnedProductIds: parseIdList(draft.pinnedProductIds),
     excludedProductIds: parseIdList(draft.excludedProductIds),
   };
@@ -184,6 +252,7 @@ export function SeoLandingsManager({
   flowerTypes,
   colors,
   occasions,
+  recipients,
   canUpdate,
 }: Props) {
   const router = useRouter();
@@ -191,6 +260,8 @@ export function SeoLandingsManager({
   const [editingId, setEditingId] = useState<string | 'new' | null>(null);
   const [draft, setDraft] = useState<EditorDraft | null>(null);
   const [preview, setPreview] = useState<ProductListItemDto[]>([]);
+  const [previewTotal, setPreviewTotal] = useState(0);
+  const [previewQueried, setPreviewQueried] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
 
@@ -222,6 +293,8 @@ export function SeoLandingsManager({
     setEditingId('new');
     setDraft(emptyDraft());
     setPreview([]);
+    setPreviewTotal(0);
+    setPreviewQueried(false);
     setError(null);
   }
 
@@ -229,6 +302,8 @@ export function SeoLandingsManager({
     setEditingId(landing.id);
     setDraft(draftFromLanding(landing));
     setPreview([]);
+    setPreviewTotal(0);
+    setPreviewQueried(false);
     setError(null);
   }
 
@@ -236,6 +311,8 @@ export function SeoLandingsManager({
     setEditingId(null);
     setDraft(null);
     setPreview([]);
+    setPreviewTotal(0);
+    setPreviewQueried(false);
   }
 
   async function onSave(event: FormEvent) {
@@ -243,7 +320,7 @@ export function SeoLandingsManager({
     if (!canUpdate || !draft) return;
     let body;
     try {
-      body = buildBody(draft);
+      body = buildBody(draft, flowerTypes);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Проверьте поля формы');
       return;
@@ -302,17 +379,30 @@ export function SeoLandingsManager({
   }
 
   async function onPreview() {
-    if (!editing) return;
+    if (!draft) return;
     setPending(true);
     setError(null);
     try {
-      const payload = await adminGet<PaginatedResponse<ProductListItemDto>>(
-        withQuery(adminEndpoints.seoLandingPreviewProducts(editing.id), {
+      let rules: Record<string, unknown>;
+      try {
+        rules = buildRulesPayload(draft.rules, flowerTypes);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Проверьте правила');
+        return;
+      }
+      const payload = await adminPost<PaginatedResponse<ProductListItemDto>>(
+        adminEndpoints.seoLandingPreviewRules,
+        {
+          rules,
+          pinnedProductIds: parseIdList(draft.pinnedProductIds),
+          excludedProductIds: parseIdList(draft.excludedProductIds),
           page: 1,
           pageSize: 12,
-        }),
+        },
       );
       setPreview(payload.items);
+      setPreviewTotal(payload.total);
+      setPreviewQueried(true);
     } catch (err) {
       setError(errorMessage(err));
     } finally {
@@ -397,8 +487,35 @@ export function SeoLandingsManager({
           </div>
 
           <fieldset className="space-y-3 rounded-md border border-[var(--admin-border)] p-3">
-            <legend className="admin-label px-1">Правила подбора</legend>
+            <legend className="admin-label px-1">Правила подбора (без JSON)</legend>
+            <p className="text-sm text-[var(--admin-muted)]">
+              Товары подбираются по составу автоматически. Цвет компонента и вид цветка
+              сопоставляются в одной строке состава.
+            </p>
             <div className="grid gap-3 sm:grid-cols-2">
+              <label className="admin-field">
+                <span className="admin-label">Тип товара</span>
+                <select
+                  className="admin-input"
+                  value={draft.rules.productKind}
+                  onChange={(event) =>
+                    setDraft({
+                      ...draft,
+                      rules: {
+                        ...draft.rules,
+                        productKind: event.target.value as RulesDraft['productKind'],
+                      },
+                    })
+                  }
+                >
+                  <option value="">Любой</option>
+                  {PRIMARY_PRODUCT_KINDS.map((kind) => (
+                    <option key={kind} value={kind}>
+                      {productKindLabel(kind)}
+                    </option>
+                  ))}
+                </select>
+              </label>
               <label className="admin-field">
                 <span className="admin-label">Вид цветка</span>
                 <select
@@ -420,7 +537,50 @@ export function SeoLandingsManager({
                 </select>
               </label>
               <label className="admin-field">
-                <span className="admin-label">Цвет</span>
+                <span className="admin-label">Правило по цветку</span>
+                <select
+                  className="admin-input"
+                  value={draft.rules.flowerMatchMode}
+                  disabled={!draft.rules.flowerTypeId}
+                  onChange={(event) =>
+                    setDraft({
+                      ...draft,
+                      rules: {
+                        ...draft.rules,
+                        flowerMatchMode: event.target.value as FlowerMatchMode,
+                        compositionKind:
+                          event.target.value === 'mono' ? 'MONO' : draft.rules.compositionKind,
+                      },
+                    })
+                  }
+                >
+                  <option value="contains">Содержит цветок</option>
+                  <option value="mono">Монобукет из этого вида</option>
+                  <option value="dominant">Преобладающий основной вид</option>
+                </select>
+              </label>
+              <label className="admin-field">
+                <span className="admin-label">Цвет в составе</span>
+                <select
+                  className="admin-input"
+                  value={draft.rules.componentColorId}
+                  onChange={(event) =>
+                    setDraft({
+                      ...draft,
+                      rules: { ...draft.rules, componentColorId: event.target.value },
+                    })
+                  }
+                >
+                  <option value="">Любой</option>
+                  {colors.map((color) => (
+                    <option key={color.id} value={color.id}>
+                      {color.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="admin-field">
+                <span className="admin-label">Цветовая гамма товара</span>
                 <select
                   className="admin-input"
                   value={draft.rules.colorId}
@@ -431,7 +591,7 @@ export function SeoLandingsManager({
                     })
                   }
                 >
-                  <option value="">Любой</option>
+                  <option value="">Любая</option>
                   {colors.map((color) => (
                     <option key={color.id} value={color.id}>
                       {color.name}
@@ -460,10 +620,31 @@ export function SeoLandingsManager({
                 </select>
               </label>
               <label className="admin-field">
-                <span className="admin-label">Состав</span>
+                <span className="admin-label">Получатель</span>
+                <select
+                  className="admin-input"
+                  value={draft.rules.recipientId}
+                  onChange={(event) =>
+                    setDraft({
+                      ...draft,
+                      rules: { ...draft.rules, recipientId: event.target.value },
+                    })
+                  }
+                >
+                  <option value="">Любой</option>
+                  {recipients.map((recipient) => (
+                    <option key={recipient.id} value={recipient.id}>
+                      {recipient.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="admin-field">
+                <span className="admin-label">Вид состава</span>
                 <select
                   className="admin-input"
                   value={draft.rules.compositionKind}
+                  disabled={draft.rules.flowerMatchMode === 'mono'}
                   onChange={(event) =>
                     setDraft({
                       ...draft,
@@ -475,33 +656,27 @@ export function SeoLandingsManager({
                   }
                 >
                   <option value="">Любой</option>
-                  <option value="MONO">Моно</option>
-                  <option value="MIXED">Микс</option>
+                  <option value="MONO">Монобукет</option>
+                  <option value="MIXED">Смешанный</option>
                   <option value="UNKNOWN">Не указан</option>
                 </select>
               </label>
               <label className="admin-field">
-                <span className="admin-label">Тип товара</span>
-                <select
+                <span className="admin-label">Мин. количество вида (шт.)</span>
+                <input
                   className="admin-input"
-                  value={draft.rules.productKind}
+                  value={draft.rules.minQty}
+                  placeholder="11"
                   onChange={(event) =>
                     setDraft({
                       ...draft,
-                      rules: {
-                        ...draft.rules,
-                        productKind: event.target.value as RulesDraft['productKind'],
-                      },
+                      rules: { ...draft.rules, minQty: event.target.value },
                     })
                   }
-                >
-                  <option value="">Любой</option>
-                  {PRIMARY_PRODUCT_KINDS.map((kind) => (
-                    <option key={kind} value={kind}>
-                      {productKindLabel(kind)}
-                    </option>
-                  ))}
-                </select>
+                />
+                <span className="admin-field__hint">
+                  Только точный состав; единица как в строке PRIMARY.
+                </span>
               </label>
               <label className="admin-field">
                 <span className="admin-label">Цена от, BYN</span>
@@ -570,7 +745,7 @@ export function SeoLandingsManager({
                 checked={draft.navVisible}
                 onChange={(event) => setDraft({ ...draft, navVisible: event.target.checked })}
               />
-              Показывать в навигации
+              Кандидат в меню (добавьте ссылку /p/… в Навигации вручную)
             </label>
           </div>
 
@@ -608,11 +783,9 @@ export function SeoLandingsManager({
                 В архив
               </Button>
             ) : null}
-            {editing ? (
-              <Button type="button" variant="outline" disabled={pending} onClick={() => void onPreview()}>
-                Превью товаров
-              </Button>
-            ) : null}
+            <Button type="button" variant="outline" disabled={pending} onClick={() => void onPreview()}>
+              Превью по правилам
+            </Button>
             {canUpdate && editing ? (
               <Button type="button" variant="outline" disabled={pending} onClick={() => void onDelete()}>
                 Удалить
@@ -620,9 +793,21 @@ export function SeoLandingsManager({
             ) : null}
           </div>
 
-          {preview.length > 0 ? (
+          {previewTotal >= 0 && (preview.length > 0 || previewTotal === 0) && previewQueried ? (
             <div className="space-y-2">
-              <h3 className="admin-label">Превью ({preview.length})</h3>
+              <h3 className="admin-label">
+                Найдено товаров: {previewTotal}
+                {previewTotal > 0 && previewTotal < 3
+                  ? ' — мало для публикации'
+                  : previewTotal === 0
+                    ? ' — страница будет пустой'
+                    : ''}
+              </h3>
+              {previewTotal === 0 ? (
+                <p className="text-sm text-amber-800">
+                  Нет подходящих товаров. Не публикуйте пустую индексируемую страницу.
+                </p>
+              ) : null}
               <ul className="space-y-1 text-sm">
                 {preview.map((product) => (
                   <li key={product.id}>

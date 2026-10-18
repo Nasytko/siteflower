@@ -5,12 +5,13 @@ import { Breadcrumbs } from '@/components/storefront/breadcrumbs';
 import { ProductGrid } from '@/components/storefront/product-grid';
 import { bouquetCountLabel } from '@/lib/catalog-search-params';
 import {
-  EMPTY_PRODUCT_PAGE,
   getSeoLanding,
   listSeoLandingProducts,
   PublicApiError,
 } from '@/lib/public-api';
+import { buildJsonLd, serializeJsonLd } from '@/lib/seo/json-ld';
 import { buildPageMetadata } from '@/lib/seo/metadata';
+import { absoluteUrl } from '@/lib/seo/site-url';
 
 type Params = Promise<{ slug: string }>;
 type SearchParams = Promise<Record<string, string | string[] | undefined>>;
@@ -71,20 +72,69 @@ export default async function SeoLandingPage({
     permanentRedirect(`/p/${landing.canonicalSlug}`);
   }
 
-  const products = await listSeoLandingProducts(landing.slug, {
-    page,
-    pageSize: 24,
-  }).catch(() => EMPTY_PRODUCT_PAGE);
+  // Do not mask API failures as an empty assortment — rethrow so Next error UI shows.
+  let products;
+  try {
+    products = await listSeoLandingProducts(landing.slug, {
+      page,
+      pageSize: 24,
+    });
+  } catch (error) {
+    if (error instanceof PublicApiError && error.status === 404) {
+      notFound();
+    }
+    throw error;
+  }
 
   const totalPages =
     products.pageSize > 0 ? Math.max(1, Math.ceil(products.total / products.pageSize)) : 1;
 
+  const canonicalPath = `/p/${landing.canonicalSlug ?? landing.slug}`;
+  const breadcrumbLd = buildJsonLd({
+    '@type': 'BreadcrumbList',
+    itemListElement: [
+      { '@type': 'ListItem', position: 1, name: 'Главная', item: absoluteUrl('/') },
+      {
+        '@type': 'ListItem',
+        position: 2,
+        name: landing.h1,
+        item: absoluteUrl(canonicalPath),
+      },
+    ],
+  });
+  const itemListLd =
+    products.items.length > 0
+      ? buildJsonLd({
+          '@type': 'ItemList',
+          name: landing.h1,
+          numberOfItems: products.total,
+          itemListElement: products.items.slice(0, 24).map((product, index) => ({
+            '@type': 'ListItem',
+            position: (page - 1) * products.pageSize + index + 1,
+            url: absoluteUrl(`/bukety/${product.slug}`),
+            name: product.name,
+          })),
+        })
+      : null;
+
   return (
     <main id="main-content" className="sf-container-wide py-5 sm:py-7">
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: serializeJsonLd(breadcrumbLd) }}
+      />
+      {itemListLd ? (
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{ __html: serializeJsonLd(itemListLd) }}
+        />
+      ) : null}
+
       <Breadcrumbs
         className="mb-3"
         items={[
           { name: 'Главная', href: '/' },
+          { name: 'Букеты', href: '/bukety' },
           { name: landing.h1 },
         ]}
       />
@@ -132,6 +182,27 @@ export default async function SeoLandingPage({
           ) : null}
         </nav>
       ) : null}
+
+      <nav className="mt-10 border-t border-border pt-6" aria-label="Смежные разделы">
+        <p className="sf-small mb-3 text-muted">Смотрите также</p>
+        <ul className="flex flex-wrap gap-x-5 gap-y-2 text-sm">
+          <li>
+            <Link href="/bukety" className="sf-link">
+              Все букеты
+            </Link>
+          </li>
+          <li>
+            <Link href="/katalog/tsvety" className="sf-link">
+              Цветы поштучно
+            </Link>
+          </li>
+          <li>
+            <Link href="/povod" className="sf-link">
+              По поводу
+            </Link>
+          </li>
+        </ul>
+      </nav>
     </main>
   );
 }
