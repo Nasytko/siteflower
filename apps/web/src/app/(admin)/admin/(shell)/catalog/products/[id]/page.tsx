@@ -8,6 +8,7 @@ import {
   fetchProductTaxonomies,
 } from '@/lib/admin-catalog-api';
 import { categoryPickerOptions } from '@/lib/admin-catalog-picker-labels';
+import { formatAdminDateTime } from '@/lib/admin-labels';
 import { requireAdminPermission } from '@/lib/admin-page-auth';
 import { ProductEditor } from '@/components/admin/product-editor';
 
@@ -43,6 +44,19 @@ export default async function AdminProductEditPage({ params, searchParams }: Pro
         <p className="admin-page-lead text-sm text-[var(--admin-muted)]">
           /bukety/{product.slug}
         </p>
+        <div className="admin-meta">
+          <span className="admin-meta__item">
+            Создан: <strong>{formatAdminDateTime(product.createdAt)}</strong>
+          </span>
+          <span className="admin-meta__item">
+            Изменён: <strong>{formatAdminDateTime(product.updatedAt)}</strong>
+          </span>
+          {product.publishedAt ? (
+            <span className="admin-meta__item">
+              Опубликован: <strong>{formatAdminDateTime(product.publishedAt)}</strong>
+            </span>
+          ) : null}
+        </div>
       </header>
       <ProductEditor
         product={product}

@@ -1128,15 +1128,20 @@ select:focus-visible,
 /* ——— Admin shell ——— */
 
 [data-area='admin'] {
-  --admin-bg: #f5f3ef;
+  --admin-bg: #ebe6df;
   --admin-surface: #ffffff;
-  --admin-ink: var(--color-ink);
-  --admin-muted: var(--color-muted);
-  --admin-border: var(--color-border);
-  --admin-border-strong: color-mix(in oklab, var(--admin-ink) 22%, var(--admin-border));
+  --admin-surface-muted: #f7f4ef;
+  --admin-ink: #1a1a18;
+  --admin-muted: #5c574f;
+  --admin-border: #d4cdc2;
+  --admin-border-strong: #b8afa2;
   --admin-brand: var(--color-brand);
   --admin-brand-soft: var(--color-brand-soft);
-  --admin-radius: 0.85rem;
+  --admin-brand-hover: color-mix(in oklab, var(--admin-brand) 88%, #000);
+  --admin-radius: 0.75rem;
+  --admin-shadow: 0 1px 2px rgb(26 26 24 / 0.06), 0 2px 8px rgb(26 26 24 / 0.04);
+  --admin-shadow-sm: 0 1px 2px rgb(26 26 24 / 0.05);
+  --admin-focus-ring: 0 0 0 3px color-mix(in oklab, var(--admin-brand) 28%, transparent);
 }
 
 .admin-shell {
@@ -1154,8 +1159,9 @@ select:focus-visible,
 .admin-aside {
   display: flex;
   flex-direction: column;
-  border-bottom: 1px solid var(--admin-border);
+  border-bottom: 1px solid var(--admin-border-strong);
   background: var(--admin-surface);
+  box-shadow: var(--admin-shadow-sm);
 }
 
 @media (min-width: 1024px) {
@@ -1164,7 +1170,7 @@ select:focus-visible,
     top: 0;
     height: 100vh;
     border-bottom: 0;
-    border-right: 1px solid var(--admin-border);
+    border-right: 1px solid var(--admin-border-strong);
   }
 }
 
@@ -1331,13 +1337,14 @@ select:focus-visible,
 .admin-tabs__link {
   display: block;
   border-radius: 0.55rem;
-  border: 1px solid var(--admin-border);
-  padding: 0.4rem 0.75rem;
+  border: 1.5px solid var(--admin-border-strong);
+  padding: 0.45rem 0.8rem;
   font-size: 0.8125rem;
-  font-weight: 500;
+  font-weight: 600;
   color: var(--admin-ink);
   text-decoration: none;
   background: var(--admin-surface, #fff);
+  box-shadow: var(--admin-shadow-sm);
   transition:
     background-color 0.2s ease,
     color 0.2s ease,
@@ -1392,10 +1399,11 @@ select:focus-visible,
 }
 
 .admin-card {
-  border: 1px solid var(--admin-border);
+  border: 1px solid var(--admin-border-strong);
   background: var(--admin-surface);
   border-radius: var(--admin-radius);
   padding: 1.15rem 1.25rem;
+  box-shadow: var(--admin-shadow-sm);
 }
 
 .admin-card__label {
@@ -1411,15 +1419,17 @@ select:focus-visible,
   align-items: center;
   justify-content: space-between;
   gap: 0.75rem;
-  border: 1px solid var(--admin-border);
+  border: 1.5px solid var(--admin-border-strong);
   background: var(--admin-surface);
   border-radius: var(--admin-radius);
   padding: 0.95rem 1.1rem;
   text-decoration: none;
   color: var(--admin-ink);
+  box-shadow: var(--admin-shadow-sm);
   transition:
     border-color 0.2s ease,
-    background-color 0.2s ease;
+    background-color 0.2s ease,
+    box-shadow 0.2s ease;
 }
 
 .admin-quick-link:hover {
@@ -1462,9 +1472,10 @@ select:focus-visible,
   align-items: flex-end;
   gap: 0.75rem;
   padding: 1rem 1.15rem;
-  border: 1px solid var(--admin-border);
+  border: 1px solid var(--admin-border-strong);
   background: var(--admin-surface);
   border-radius: var(--admin-radius);
+  box-shadow: var(--admin-shadow-sm);
 }
 
 .admin-field {
@@ -1484,7 +1495,7 @@ select:focus-visible,
   display: block;
   width: 100%;
   min-width: 10rem;
-  border: 1px solid var(--admin-border);
+  border: 1px solid var(--admin-border-strong);
   background: #fff;
   border-radius: 0.55rem;
   padding: 0.55rem 0.75rem;
@@ -1495,18 +1506,37 @@ select:focus-visible,
     box-shadow 0.2s ease;
 }
 
+.admin-select {
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 16 16' fill='none'%3E%3Cpath d='M4 6l4 4 4-4' stroke='%235c574f' stroke-width='1.75' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 0.7rem center;
+  background-size: 1rem;
+  padding-right: 2.25rem;
+  cursor: pointer;
+}
+
+.admin-select:hover:not(:disabled) {
+  border-color: color-mix(in oklab, var(--admin-brand) 45%, var(--admin-border-strong));
+}
+
+.admin-input:hover:not(:disabled):not(:focus) {
+  border-color: color-mix(in oklab, var(--admin-brand) 35%, var(--admin-border-strong));
+}
+
 .admin-input:focus,
 .admin-select:focus {
   outline: none;
   border-color: var(--admin-brand);
-  box-shadow: 0 0 0 3px rgb(30 70 54 / 0.12);
+  box-shadow: var(--admin-focus-ring);
 }
 
 .admin-panel {
-  border: 1px solid var(--admin-border);
+  border: 1px solid var(--admin-border-strong);
   background: var(--admin-surface);
   border-radius: var(--admin-radius);
   overflow: hidden;
+  box-shadow: var(--admin-shadow-sm);
 }
 
 .admin-table {
@@ -1626,10 +1656,12 @@ select:focus-visible,
   justify-content: space-between;
   gap: 1rem;
   margin: 0 -0.25rem;
-  padding: 0.75rem 0.25rem;
-  border-bottom: 1px solid var(--admin-border);
-  background: color-mix(in oklab, var(--admin-bg) 92%, transparent);
-  backdrop-filter: blur(6px);
+  padding: 0.85rem 1rem;
+  border: 1px solid var(--admin-border-strong);
+  border-radius: var(--admin-radius);
+  background: color-mix(in oklab, var(--admin-surface) 92%, var(--admin-bg));
+  backdrop-filter: blur(8px);
+  box-shadow: var(--admin-shadow-sm);
 }
 
 .admin-editor-header__actions {
@@ -1690,16 +1722,18 @@ select:focus-visible,
 .admin-seg {
   display: inline-flex;
   flex-wrap: wrap;
-  gap: 0.35rem;
-  padding: 0.25rem;
+  gap: 0.3rem;
+  padding: 0.3rem;
+  border: 1px solid var(--admin-border-strong);
   border-radius: 0.7rem;
-  background: var(--color-surface-muted);
+  background: var(--admin-surface-muted);
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.65);
 }
 
 .admin-seg__btn {
   border: 0;
   border-radius: 0.5rem;
-  padding: 0.45rem 0.85rem;
+  padding: 0.5rem 0.9rem;
   font-size: 0.8125rem;
   font-weight: 600;
   background: transparent;
@@ -1707,17 +1741,19 @@ select:focus-visible,
   cursor: pointer;
   transition:
     background-color 0.2s ease,
-    color 0.2s ease;
+    color 0.2s ease,
+    box-shadow 0.2s ease;
 }
 
 .admin-seg__btn:hover {
   color: var(--admin-ink);
-  background: rgb(255 255 255 / 0.7);
+  background: rgb(255 255 255 / 0.85);
 }
 
 .admin-seg__btn--active {
   background: #fff;
   color: var(--admin-brand);
+  box-shadow: var(--admin-shadow-sm);
 }
 
 .admin-list {
@@ -1915,57 +1951,94 @@ select:focus-visible,
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  border: 1px solid transparent;
+  gap: 0.35rem;
+  border: 1px solid var(--admin-brand);
   background: var(--admin-brand);
   border-radius: 0.55rem;
-  padding: 0.5rem 1rem;
+  padding: 0.55rem 1.1rem;
   font-size: 0.875rem;
   font-weight: 600;
   color: #fff;
   text-decoration: none;
   cursor: pointer;
-  transition: opacity 0.15s ease, background-color 0.15s ease;
+  box-shadow: 0 1px 2px rgb(0 0 0 / 0.12);
+  transition:
+    background-color 0.15s ease,
+    border-color 0.15s ease,
+    box-shadow 0.15s ease,
+    transform 0.1s ease;
 }
 
 .admin-btn:hover {
-  opacity: 0.94;
+  background: var(--admin-brand-hover);
+  border-color: var(--admin-brand-hover);
   color: #fff;
+  box-shadow: 0 2px 6px rgb(0 0 0 / 0.14);
+}
+
+.admin-btn:active {
+  transform: translateY(1px);
 }
 
 .admin-btn:disabled {
   opacity: 0.45;
   cursor: not-allowed;
+  box-shadow: none;
+  transform: none;
 }
 
 .admin-btn-ghost {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  border: 1px solid var(--admin-border);
+  gap: 0.35rem;
+  border: 1.5px solid var(--admin-border-strong);
   background: #fff;
   border-radius: 0.55rem;
-  padding: 0.45rem 0.85rem;
+  padding: 0.5rem 0.95rem;
   font-size: 0.8125rem;
   font-weight: 600;
   color: var(--admin-ink);
   text-decoration: none;
   cursor: pointer;
+  box-shadow: var(--admin-shadow-sm);
   transition:
     border-color 0.2s ease,
     background-color 0.2s ease,
-    color 0.2s ease;
+    color 0.2s ease,
+    box-shadow 0.2s ease;
 }
 
 .admin-btn-ghost:hover {
   border-color: var(--admin-brand);
   background: var(--admin-brand-soft);
   color: var(--admin-brand);
+  box-shadow: var(--admin-shadow);
 }
 
 .admin-btn-ghost:disabled,
 .admin-icon-btn:disabled {
   opacity: 0.45;
   cursor: not-allowed;
+  box-shadow: none;
+}
+
+.admin-btn-danger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1.5px solid color-mix(in oklab, var(--color-danger) 55%, var(--admin-border));
+  background: #fff;
+  border-radius: 0.55rem;
+  padding: 0.5rem 0.95rem;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--color-danger);
+  cursor: pointer;
+}
+
+.admin-btn-danger:hover {
+  background: color-mix(in oklab, var(--color-danger) 8%, #fff);
 }
 
 .admin-notice {
@@ -1987,13 +2060,14 @@ select:focus-visible,
   justify-content: center;
   width: 1.85rem;
   height: 1.85rem;
-  border: 1px solid var(--admin-border);
+  border: 1.5px solid var(--admin-border-strong);
   background: #fff;
   border-radius: 0.5rem;
   color: var(--admin-ink);
   font-size: 0.875rem;
   line-height: 1;
   cursor: pointer;
+  box-shadow: var(--admin-shadow-sm);
 }
 
 .admin-icon-btn:hover:not(:disabled) {
@@ -2042,14 +2116,15 @@ select:focus-visible,
 }
 
 .admin-subsection {
-  border: 1px solid var(--admin-border);
+  border: 1px solid var(--admin-border-strong);
   background: var(--admin-surface);
   border-radius: var(--admin-radius);
   padding: 1.15rem;
+  box-shadow: var(--admin-shadow-sm);
 }
 
 .admin-subsection + .admin-subsection {
-  margin-top: 0.25rem;
+  margin-top: 0.5rem;
 }
 
 .admin-subsection__title {
@@ -2060,33 +2135,140 @@ select:focus-visible,
 }
 
 .admin-fieldset {
-  border: 1px solid var(--admin-border);
-  background: var(--admin-surface);
+  border: 1.5px solid var(--admin-border-strong);
+  background: var(--admin-surface-muted);
   border-radius: var(--admin-radius);
-  padding: 0.9rem 1rem;
+  padding: 1rem 1.1rem 1.1rem;
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.7);
 }
 
 .admin-fieldset > legend {
-  padding: 0 0.35rem;
+  padding: 0 0.4rem;
   font-size: 0.8125rem;
-  font-weight: 600;
-  color: var(--admin-muted);
+  font-weight: 700;
+  color: var(--admin-ink);
+  background: var(--admin-surface-muted);
 }
 
 .admin-checks {
   display: flex;
   flex-direction: column;
-  gap: 0.4rem;
+  gap: 0.45rem;
   max-height: 14rem;
   overflow-y: auto;
+  padding: 0.15rem 0.1rem;
 }
 
 .admin-check {
   display: inline-flex;
   align-items: center;
-  gap: 0.5rem;
+  gap: 0.6rem;
   font-size: 0.875rem;
   color: var(--admin-ink);
+  cursor: pointer;
+  user-select: none;
+  border-radius: 0.45rem;
+  padding: 0.35rem 0.45rem;
+  margin: 0 -0.45rem;
+  transition: background-color 0.15s ease;
+}
+
+.admin-check:hover {
+  background: color-mix(in oklab, var(--admin-brand-soft) 70%, #fff);
+}
+
+.admin-check:has(input:disabled) {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.admin-check input[type='checkbox'],
+.admin-check input[type='radio'] {
+  appearance: none;
+  flex-shrink: 0;
+  width: 1.125rem;
+  height: 1.125rem;
+  margin: 0;
+  border: 1.5px solid var(--admin-border-strong);
+  background: #fff;
+  border-radius: 0.3rem;
+  cursor: pointer;
+  transition:
+    border-color 0.15s ease,
+    background-color 0.15s ease,
+    box-shadow 0.15s ease;
+  background-position: center;
+  background-repeat: no-repeat;
+  background-size: 0.75rem;
+}
+
+.admin-check input[type='radio'] {
+  border-radius: 999px;
+}
+
+.admin-check input[type='checkbox']:hover:not(:disabled),
+.admin-check input[type='radio']:hover:not(:disabled) {
+  border-color: var(--admin-brand);
+}
+
+.admin-check input[type='checkbox']:focus-visible,
+.admin-check input[type='radio']:focus-visible {
+  outline: none;
+  box-shadow: var(--admin-focus-ring);
+}
+
+.admin-check input[type='checkbox']:checked,
+.admin-check input[type='radio']:checked {
+  border-color: var(--admin-brand);
+  background-color: var(--admin-brand);
+}
+
+.admin-check input[type='checkbox']:checked {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12' fill='none'%3E%3Cpath d='M2.5 6.2L4.8 8.5 9.5 3.5' stroke='white' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+}
+
+.admin-check input[type='radio']:checked {
+  background-image: radial-gradient(circle, #fff 0 35%, transparent 36%);
+}
+
+/* Default checkboxes/radios in admin (tables, toolbars). .admin-check rules above win by specificity. */
+[data-area='admin'] input[type='checkbox'],
+[data-area='admin'] input[type='radio'] {
+  appearance: none;
+  width: 1.05rem;
+  height: 1.05rem;
+  margin: 0;
+  vertical-align: middle;
+  border: 1.5px solid var(--admin-border-strong);
+  background-color: #fff;
+  border-radius: 0.28rem;
+  cursor: pointer;
+  background-position: center;
+  background-repeat: no-repeat;
+  background-size: 0.7rem;
+  flex-shrink: 0;
+}
+
+[data-area='admin'] input[type='radio'] {
+  border-radius: 999px;
+}
+
+[data-area='admin'] input[type='checkbox']:checked {
+  border-color: var(--admin-brand);
+  background-color: var(--admin-brand);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12' fill='none'%3E%3Cpath d='M2.5 6.2L4.8 8.5 9.5 3.5' stroke='white' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+}
+
+[data-area='admin'] input[type='radio']:checked {
+  border-color: var(--admin-brand);
+  background-color: var(--admin-brand);
+  background-image: radial-gradient(circle, #fff 0 35%, transparent 36%);
+}
+
+[data-area='admin'] input[type='checkbox']:focus-visible,
+[data-area='admin'] input[type='radio']:focus-visible {
+  outline: none;
+  box-shadow: var(--admin-focus-ring);
 }
 
 .admin-field--row {
@@ -2125,6 +2307,85 @@ select:focus-visible,
 .admin-help {
   font-size: 0.8125rem;
   color: var(--admin-muted);
+}
+
+.admin-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem 1.1rem;
+  margin-top: 0.55rem;
+  font-size: 0.75rem;
+  color: var(--admin-muted);
+}
+
+.admin-meta__item {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.3rem;
+}
+
+.admin-meta__item strong {
+  font-weight: 600;
+  color: color-mix(in oklab, var(--admin-ink) 72%, var(--admin-muted));
+}
+
+.admin-tip {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.05rem;
+  height: 1.05rem;
+  margin-left: 0.3rem;
+  border: 1.5px solid var(--admin-border-strong);
+  border-radius: 999px;
+  background: #fff;
+  color: var(--admin-muted);
+  font-size: 0.65rem;
+  font-weight: 700;
+  line-height: 1;
+  cursor: help;
+  vertical-align: middle;
+}
+
+.admin-tip:hover,
+.admin-tip:focus-visible {
+  border-color: var(--admin-brand);
+  color: var(--admin-brand);
+  outline: none;
+}
+
+.admin-tip[data-tip]::after {
+  content: attr(data-tip);
+  position: absolute;
+  left: 50%;
+  bottom: calc(100% + 0.45rem);
+  z-index: 40;
+  width: max-content;
+  max-width: 16rem;
+  padding: 0.45rem 0.6rem;
+  border: 1px solid var(--admin-border-strong);
+  border-radius: 0.45rem;
+  background: var(--admin-ink);
+  color: #fff;
+  font-size: 0.75rem;
+  font-weight: 500;
+  line-height: 1.35;
+  text-align: left;
+  white-space: normal;
+  opacity: 0;
+  pointer-events: none;
+  transform: translateX(-50%) translateY(2px);
+  transition:
+    opacity 0.15s ease,
+    transform 0.15s ease;
+  box-shadow: var(--admin-shadow);
+}
+
+.admin-tip[data-tip]:hover::after,
+.admin-tip[data-tip]:focus-visible::after {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
 }
 
 .admin-link {

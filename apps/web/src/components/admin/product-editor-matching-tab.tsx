@@ -59,21 +59,49 @@ export function ProductEditorMatchingTab(props: Props) {
   return (
     <section className="admin-section space-y-6">
       <div>
-        <h2 className="admin-section__title">Подбор</h2>
+        <h2 className="admin-section__title">
+          Подбор
+          <span
+            className="admin-tip"
+            tabIndex={0}
+            data-tip="Эти метки помогают покупателю найти букет в фильтрах и на посадочных страницах. Они не заменяют состав."
+            aria-label="Подсказка"
+          >
+            ?
+          </span>
+        </h2>
         <p className="admin-section__lead">
           Как покупатель найдёт товар: палитра, повод и получатель. Вид состава — из вкладки
           «Состав».
         </p>
       </div>
 
-      <p className="text-sm">
+      <p className="admin-card !py-3 text-sm">
         <span className="text-[var(--admin-muted)]">Вид состава: </span>
         <strong>{compositionKindLabel(kind)}</strong>
+        <span
+          className="admin-tip"
+          tabIndex={0}
+          data-tip="Считается автоматически по основным цветам в составе. Зелень и декор монобукет не ломают."
+          aria-label="Подсказка о виде состава"
+        >
+          ?
+        </span>
       </p>
 
       {colors.length > 0 ? (
         <fieldset className="admin-fieldset">
-          <legend>Визуальная палитра</legend>
+          <legend>
+            Визуальная палитра
+            <span
+              className="admin-tip"
+              tabIndex={0}
+              data-tip="Общая гамма букета на витрине. Цвет отдельного цветка задаётся во вкладке «Состав»."
+              aria-label="Подсказка о палитре"
+            >
+              ?
+            </span>
+          </legend>
           <p className="admin-field__hint mb-2">
             Цвета букета на витрине. Можно подтвердить предложение из состава.
           </p>
