@@ -8,11 +8,8 @@ import {
   defaultProductSeoDescription,
   defaultProductSeoTitle,
   derivePriceRange,
-  resolveCompositionSetupStatus,
   type BestsellerGroupAdminDto,
   type BestsellerGroupPublicDto,
-  type BouquetSizeAdminDto,
-  type BouquetSizePublicDto,
   type BudgetRangeDto,
   type BudgetRangePublicDto,
   type ColorAdminDto,
@@ -47,17 +44,12 @@ import {
 export type MediaUrlResolver = (storageKey: string) => string;
 
 export const PRODUCT_INCLUDE = {
-  bouquetSize: true,
   catalogCategory: true,
-  flowerType: true,
-  flowerVariety: true,
-  flowerOrigin: true,
   familyMember: { include: { family: { select: { id: true, name: true, version: true } } } },
   variants: { orderBy: { sortOrder: 'asc' } },
   components: {
     orderBy: { sortOrder: 'asc' },
     include: {
-      flower: true,
       flowerItem: {
         include: {
           flowerType: { select: { id: true, slug: true, name: true } },
@@ -75,14 +67,13 @@ export const PRODUCT_INCLUDE = {
   occasions: { include: { occasion: true } },
   recipients: { include: { recipient: true } },
   colors: { include: { color: true } },
-  productLines: { include: { productLine: true } },
   promotion: { include: { variantPrices: true } },
   bestsellerLinks: { select: { groupId: true, sortOrder: true } },
 } satisfies Prisma.ProductInclude;
 
 export type ProductWithRelations = Prisma.ProductGetPayload<{ include: typeof PRODUCT_INCLUDE }>;
 
-/** Shared shape of the SEO-bearing taxonomy tables (flowers, occasions, recipients, colors). */
+/** Shared shape of the SEO-bearing taxonomy tables (occasions, recipients, colors). */
 export type TaxonomyRecord = {
   id: string;
   slug: string;
@@ -97,12 +88,6 @@ export type TaxonomyRecord = {
   createdAt: Date;
   updatedAt: Date;
 };
-
-/** BouquetSize / ProductLine have no SEO columns — filter facets, not landing pages. */
-export type BouquetSizeRecord = Omit<
-  TaxonomyRecord,
-  'seoTitle' | 'seoDescription' | 'noIndex'
->;
 
 export function toTaxonomyRef(row: { id: string; slug: string; name: string }): TaxonomyRefDto {
   return { id: row.id, slug: row.slug, name: row.name };
@@ -127,29 +112,6 @@ export function toTaxonomyAdminDto(row: TaxonomyRecord): TaxonomyAdminDto {
 
 export function toColorAdminDto(row: TaxonomyRecord & { swatch: string | null }): ColorAdminDto {
   return { ...toTaxonomyAdminDto(row), swatch: row.swatch };
-}
-
-export function toBouquetSizeAdminDto(row: BouquetSizeRecord): BouquetSizeAdminDto {
-  return {
-    id: row.id,
-    slug: row.slug,
-    name: row.name,
-    description: row.description,
-    sortOrder: row.sortOrder,
-    visibility: row.visibility,
-    version: row.version,
-    createdAt: row.createdAt.toISOString(),
-    updatedAt: row.updatedAt.toISOString(),
-  };
-}
-
-export function toBouquetSizePublicDto(row: {
-  id: string;
-  slug: string;
-  name: string;
-  description: string | null;
-}): BouquetSizePublicDto {
-  return { id: row.id, slug: row.slug, name: row.name, description: row.description };
 }
 
 export function toBudgetRangeAdminDto(row: {
@@ -268,19 +230,7 @@ function primaryMedia(product: ProductWithRelations) {
   return product.media.find((item) => item.isPrimary) ?? product.media[0] ?? null;
 }
 
-/** Legacy /cvety Flower facet from composition (optional flowerId). */
-export function derivedFlowers(product: ProductWithRelations): TaxonomyRefDto[] {
-  const seen = new Set<string>();
-  const flowers: TaxonomyRefDto[] = [];
-  for (const component of product.components) {
-    if (!component.flower || seen.has(component.flower.id)) continue;
-    seen.add(component.flower.id);
-    flowers.push(toTaxonomyRef(component.flower));
-  }
-  return flowers;
-}
-
-/** First FlowerItem in composition order — preferred source for type/variety/origin display. */
+/** First FlowerItem in composition order — source for type/variety/origin display. */
 export function primaryFlowerItem(product: ProductWithRelations) {
   for (const component of product.components) {
     if (component.flowerItem) return component.flowerItem;
@@ -289,39 +239,24 @@ export function primaryFlowerItem(product: ProductWithRelations) {
 }
 
 /**
- * Display attrs for cards/PDP taxonomy chips.
- * - Type/variety/origin: composition FlowerItem wins when present (never show stale Product.flower*).
- * - heightCm here is bouquet/card height only (product.bouquetHeightCm); stem lives on FlowerItem.
+ * Display attrs for cards/PDP.
+ * - Type/variety/origin and stem height come from composition FlowerItem only.
+ * - heightCm here is bouquet/card height (product.bouquetHeightCm).
  */
 export function productDisplayFlowerAttrs(product: ProductWithRelations): {
   heightCm: number | null;
   stemHeightCm: number | null;
   originName: string | null;
   varietyName: string | null;
-  flowerType: TaxonomyRefDto | null;
-  flowerVariety: TaxonomyRefDto | null;
   flowerOrigin: TaxonomyRefDto | null;
 } {
   const item = primaryFlowerItem(product);
-  if (item) {
-    return {
-      heightCm: product.bouquetHeightCm ?? null,
-      stemHeightCm: item.stemLengthCm ?? null,
-      originName: item.flowerOrigin?.name ?? null,
-      varietyName: item.flowerVariety?.name ?? null,
-      flowerType: item.flowerType ? toTaxonomyRef(item.flowerType) : null,
-      flowerVariety: item.flowerVariety ? toTaxonomyRef(item.flowerVariety) : null,
-      flowerOrigin: item.flowerOrigin ? toTaxonomyRef(item.flowerOrigin) : null,
-    };
-  }
   return {
     heightCm: product.bouquetHeightCm ?? null,
-    stemHeightCm: null,
-    originName: product.flowerOrigin?.name ?? null,
-    varietyName: product.flowerVariety?.name ?? null,
-    flowerType: product.flowerType ? toTaxonomyRef(product.flowerType) : null,
-    flowerVariety: product.flowerVariety ? toTaxonomyRef(product.flowerVariety) : null,
-    flowerOrigin: product.flowerOrigin ? toTaxonomyRef(product.flowerOrigin) : null,
+    stemHeightCm: item?.stemLengthCm ?? null,
+    originName: item?.flowerOrigin?.name ?? null,
+    varietyName: item?.flowerVariety?.name ?? null,
+    flowerOrigin: item?.flowerOrigin ? toTaxonomyRef(item.flowerOrigin) : null,
   };
 }
 
@@ -396,16 +331,8 @@ export function toProductAdminDto(
     lifecycle: product.lifecycle,
     availability: product.availability,
     heightCm: product.bouquetHeightCm ?? null,
-    bouquetSize: product.bouquetSize ? toTaxonomyRef(product.bouquetSize) : null,
-    bouquetSizeId: product.bouquetSizeId,
     catalogCategoryId: product.catalogCategoryId,
     catalogCategory: product.catalogCategory ? toTaxonomyRef(product.catalogCategory) : null,
-    flowerTypeId: product.flowerTypeId,
-    flowerType: product.flowerType ? toTaxonomyRef(product.flowerType) : null,
-    flowerVarietyId: product.flowerVarietyId,
-    flowerVariety: product.flowerVariety ? toTaxonomyRef(product.flowerVariety) : null,
-    flowerOriginId: product.flowerOriginId,
-    flowerOrigin: product.flowerOrigin ? toTaxonomyRef(product.flowerOrigin) : null,
     family:
       family ??
       (product.familyMember
@@ -434,8 +361,6 @@ export function toProductAdminDto(
       flowerItem: component.flowerItem
         ? toFlowerItemDto(component.flowerItem as FlowerItemRow)
         : null,
-      flowerId: component.flowerId,
-      flower: component.flower ? toTaxonomyRef(component.flower) : null,
       displayName: component.displayName,
       quantity: component.quantity,
       unit: component.unit,
@@ -445,14 +370,6 @@ export function toProductAdminDto(
     occasions: product.occasions.map((link) => toTaxonomyRef(link.occasion)),
     recipients: product.recipients.map((link) => toTaxonomyRef(link.recipient)),
     colors: product.colors.map((link) => toTaxonomyRef(link.color)),
-    productLines: product.productLines.map((link) => toTaxonomyRef(link.productLine)),
-    flowers: derivedFlowers(product),
-    compositionSetupStatus: resolveCompositionSetupStatus({
-      flowerTypeId: product.flowerTypeId,
-      flowerVarietyId: product.flowerVarietyId,
-      flowerOriginId: product.flowerOriginId,
-      components: product.components,
-    }),
     bestsellerGroupIds: product.bestsellerLinks.map((link) => link.groupId),
     createdAt: product.createdAt.toISOString(),
     updatedAt: product.updatedAt.toISOString(),
@@ -489,11 +406,7 @@ export function toProductPublicDto(
     description: product.description,
     availability: product.availability,
     heightCm: product.bouquetHeightCm ?? null,
-    bouquetSize: product.bouquetSize ? toTaxonomyRef(product.bouquetSize) : null,
     catalogCategory: product.catalogCategory ? toTaxonomyRef(product.catalogCategory) : null,
-    flowerType: displayFlower.flowerType,
-    flowerVariety: displayFlower.flowerVariety,
-    flowerOrigin: displayFlower.flowerOrigin,
     family: resolvedFamily
       ? {
           ...resolvedFamily,
@@ -526,7 +439,7 @@ export function toProductPublicDto(
       displayName: component.displayName,
       quantity: component.quantity,
       unit: component.unit,
-      flowerSlug: component.flower?.slug ?? component.flowerItem?.flowerType?.slug ?? null,
+      flowerSlug: component.flowerItem?.flowerType?.slug ?? null,
     })),
     media: product.media.map((media) => {
       const dto = toProductMediaDto(media, urlFor);
@@ -543,8 +456,6 @@ export function toProductPublicDto(
     occasions: product.occasions.map((link) => toTaxonomyRef(link.occasion)),
     recipients: product.recipients.map((link) => toTaxonomyRef(link.recipient)),
     colors: product.colors.map((link) => toTaxonomyRef(link.color)),
-    productLines: product.productLines.map((link) => toTaxonomyRef(link.productLine)),
-    flowers: derivedFlowers(product),
   };
 }
 
@@ -563,11 +474,7 @@ export function toProductListItemDto(
     availability: product.availability,
     version: product.version,
     heightCm: product.bouquetHeightCm ?? null,
-    bouquetSize: product.bouquetSize ? toTaxonomyRef(product.bouquetSize) : null,
     catalogCategory: product.catalogCategory ? toTaxonomyRef(product.catalogCategory) : null,
-    flowerType: displayFlower.flowerType,
-    flowerVariety: displayFlower.flowerVariety,
-    flowerOrigin: displayFlower.flowerOrigin,
     family: product.familyMember
       ? { id: product.familyMember.family.id, name: product.familyMember.family.name }
       : null,
@@ -597,9 +504,7 @@ export function toProductListItemDto(
           LIST_IMAGE_TARGET_WIDTH,
         )
       : null,
-    flowers: derivedFlowers(product),
     colors: product.colors.map((link) => toTaxonomyRef(link.color)),
-    productLines: product.productLines.map((link) => toTaxonomyRef(link.productLine)),
     updatedAt: product.updatedAt.toISOString(),
     bestsellerGroupIds: product.bestsellerLinks.map((link) => link.groupId),
   };

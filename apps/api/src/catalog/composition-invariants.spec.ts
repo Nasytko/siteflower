@@ -1,21 +1,12 @@
 import { assertComponentFlowerRefXor, heightBandWhere } from '@bouquet-one/contracts';
 
 describe('composition + stem-height invariants', () => {
-  it('enforces FlowerItem XOR legacy Flower on components', () => {
-    expect(assertComponentFlowerRefXor({ flowerItemId: 'item-1', flowerId: null })).toEqual({
+  it('requires FlowerItem on components', () => {
+    expect(assertComponentFlowerRefXor({ flowerItemId: 'item-1' })).toEqual({
       flowerItemId: 'item-1',
-      flowerId: null,
     });
-    expect(assertComponentFlowerRefXor({ flowerItemId: null, flowerId: 'flower-1' })).toEqual({
-      flowerItemId: null,
-      flowerId: 'flower-1',
-    });
-    expect(() => assertComponentFlowerRefXor({ flowerItemId: null, flowerId: null })).toThrow(
-      'COMPONENT_NO_REF',
-    );
-    expect(() => assertComponentFlowerRefXor({ flowerItemId: 'a', flowerId: 'b' })).toThrow(
-      'COMPONENT_BOTH_REFS',
-    );
+    expect(() => assertComponentFlowerRefXor({ flowerItemId: null })).toThrow('COMPONENT_NO_REF');
+    expect(() => assertComponentFlowerRefXor({ flowerItemId: '  ' })).toThrow('COMPONENT_NO_REF');
   });
 
   it('keeps stem-height bands non-overlapping at boundaries', () => {

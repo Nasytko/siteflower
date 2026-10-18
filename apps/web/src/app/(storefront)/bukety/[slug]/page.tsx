@@ -124,7 +124,6 @@ export default async function ProductPage({ params }: { params: Params }) {
                 media={product.media}
                 productName={product.name}
                 heightCm={product.heightCm}
-                bouquetSizeName={product.bouquetSize?.name ?? null}
                 promotionPercent={product.promotion?.percentOff ?? null}
               />
             </div>

@@ -12,8 +12,8 @@ import {
   useTransition,
 } from 'react';
 import type {
-  BouquetSizePublicDto,
   BudgetRangePublicDto,
+  FlowerTypeDto,
   TaxonomyRefDto,
 } from '@bouquet-one/contracts';
 import { trackEvent } from '@/lib/analytics';
@@ -33,8 +33,8 @@ export type CatalogFilterOptions = {
   occasions: TaxonomyRefDto[];
   recipients: TaxonomyRefDto[];
   colors: TaxonomyRefDto[];
-  flowers: TaxonomyRefDto[];
-  sizes: BouquetSizePublicDto[];
+  /** FlowerType options for the «Цветок» facet. */
+  flowers: Array<Pick<FlowerTypeDto, 'slug' | 'name'> | TaxonomyRefDto>;
 };
 
 type Option = { value: string; label: string };
@@ -75,11 +75,6 @@ function buildControls(options: CatalogFilterOptions): Control[] {
       id: 'flower',
       label: 'Цветок',
       groups: [{ dimension: 'flowers', options: asOptions(options.flowers) }],
-    },
-    {
-      id: 'size',
-      label: 'Размер букета',
-      groups: [{ dimension: 'sizes', options: asOptions(options.sizes) }],
     },
   ];
 
@@ -489,7 +484,7 @@ function FilterSheet({
                 type="button"
                 className="sf-cta-ghost flex-1"
                 onClick={() => {
-                  setDraft({ ...draft, budgets: [], occasions: [], recipients: [], colors: [], flowers: [], sizes: [] });
+                  setDraft({ ...draft, budgets: [], occasions: [], recipients: [], colors: [], flowers: [] });
                 }}
               >
                 Сбросить
@@ -618,7 +613,6 @@ export function buildActiveFilterChips(
   push('recipients', asOptions(options.recipients));
   push('colors', asOptions(options.colors));
   push('flowers', asOptions(options.flowers));
-  push('sizes', asOptions(options.sizes));
 
   if (state.search) {
     chips.push({

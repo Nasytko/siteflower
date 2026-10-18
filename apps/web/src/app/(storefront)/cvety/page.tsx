@@ -1,6 +1,6 @@
 import type { Metadata } from 'next';
 import { TaxonomyHub } from '@/components/storefront/taxonomy-hub';
-import { listFlowers } from '@/lib/public-api';
+import { listFlowerTypes } from '@/lib/public-api';
 import { buildPageMetadata } from '@/lib/seo/metadata';
 
 export async function generateMetadata(): Promise<Metadata> {
@@ -12,14 +12,18 @@ export async function generateMetadata(): Promise<Metadata> {
 }
 
 export default async function FlowersHubPage() {
-  const flowers = await listFlowers().catch(() => []);
+  const flowerTypes = await listFlowerTypes().catch(() => []);
 
   return (
     <TaxonomyHub
       title="Цветы"
       description="Выберите цветок — покажем букеты, в составе которых он есть."
       pathPrefix="/cvety"
-      items={flowers}
+      items={flowerTypes.map((item) => ({
+        id: item.id,
+        slug: item.slug,
+        name: item.name,
+      }))}
       emptyMessage="Подборки по цветам скоро появятся."
     />
   );

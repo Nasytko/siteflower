@@ -7,7 +7,7 @@ import {
   getStorefrontSettings,
   listBestsellerGroups,
   listBudgetRanges,
-  listFlowers,
+  listFlowerTypes,
   listOccasions,
   listPromotionalProducts,
   listRecipients,
@@ -62,7 +62,7 @@ export default async function StorefrontHomePage() {
       getBestsellerGroup('podarki').catch(() => null),
       listBudgetRanges().catch(() => []),
       listRecipients().catch(() => []),
-      listFlowers().catch(() => []),
+      listFlowerTypes().catch(() => []),
       listOccasions().catch(() => []),
       getInstagramFeed().catch(() => null),
     ]);

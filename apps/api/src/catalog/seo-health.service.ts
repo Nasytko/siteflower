@@ -48,12 +48,12 @@ export class SeoHealthService {
 
     const [
       products,
-      flowers,
+      flowerTypes,
       occasions,
       recipients,
       colors,
       sitemapProducts,
-      sitemapFlowers,
+      sitemapFlowerTypes,
       sitemapOccasions,
       sitemapRecipients,
     ] = await Promise.all([
@@ -82,16 +82,12 @@ export class SeoHealthService {
         },
         orderBy: { updatedAt: 'desc' },
       }),
-      this.prisma.client.flower.findMany({
+      this.prisma.client.flowerType.findMany({
         select: {
           id: true,
           name: true,
           slug: true,
           visibility: true,
-          description: true,
-          noIndex: true,
-          seoTitle: true,
-          seoDescription: true,
         },
         orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }],
       }),
@@ -138,8 +134,8 @@ export class SeoHealthService {
         where: { ...effectivelyPublishedWhere(now), noIndex: false },
         select: { slug: true },
       }),
-      this.prisma.client.flower.findMany({
-        where: { visibility: 'VISIBLE', noIndex: false },
+      this.prisma.client.flowerType.findMany({
+        where: { visibility: 'VISIBLE' },
         select: { slug: true },
       }),
       this.prisma.client.occasion.findMany({
@@ -156,7 +152,7 @@ export class SeoHealthService {
       '/bukety',
       '/akcii',
       ...sitemapProducts.map((p) => `/bukety/${p.slug}`),
-      ...sitemapFlowers.map((f) => `/cvety/${f.slug}`),
+      ...sitemapFlowerTypes.map((f) => `/cvety/${f.slug}`),
       ...sitemapOccasions.map((o) => `/povod/${o.slug}`),
       ...sitemapRecipients.map((r) => `/komu/${r.slug}`),
     ]);
@@ -237,7 +233,20 @@ export class SeoHealthService {
       }
     };
 
-    pushTaxonomy(flowers, 'flower', (slug) => `/cvety/${slug}`, 'flowers', true);
+    // FlowerType has no SEO columns — still surface /cvety landings for indexability.
+    pushTaxonomy(
+      flowerTypes.map((row) => ({
+        ...row,
+        description: null,
+        noIndex: false,
+        seoTitle: null,
+        seoDescription: null,
+      })),
+      'flower',
+      (slug) => `/cvety/${slug}`,
+      'flower-refs',
+      true,
+    );
     pushTaxonomy(occasions, 'occasion', (slug) => `/povod/${slug}`, 'occasions', true);
     pushTaxonomy(recipients, 'recipient', (slug) => `/komu/${slug}`, 'recipients', true);
     pushTaxonomy(colors, 'color', () => null, 'colors', false);
@@ -272,13 +281,13 @@ export class SeoHealthService {
 
     const publishedEntityCount =
       products.filter((p) => isEffectivelyPublished(p, now)).length +
-      flowers.filter((f) => f.visibility === 'VISIBLE').length +
+      flowerTypes.filter((f) => f.visibility === 'VISIBLE').length +
       occasions.filter((o) => o.visibility === 'VISIBLE').length +
       recipients.filter((r) => r.visibility === 'VISIBLE').length;
 
     const indexableEntityCount =
       sitemapProducts.length +
-      sitemapFlowers.length +
+      sitemapFlowerTypes.length +
       sitemapOccasions.length +
       sitemapRecipients.length;
 

@@ -57,9 +57,9 @@ describe('Catalog taxonomy lifecycle (integration)', () => {
     await pool.query('DELETE FROM product_occasions');
     await pool.query('DELETE FROM product_recipients');
     await pool.query('DELETE FROM product_colors');
-    await pool.query('DELETE FROM product_product_lines');
     await pool.query('DELETE FROM product_media');
     await pool.query('DELETE FROM products');
+    await pool.query('DELETE FROM flower_items');
     await pool.query('DELETE FROM flower_varieties');
     await pool.query('DELETE FROM flower_types');
     await pool.query('DELETE FROM flower_origins');
@@ -350,7 +350,7 @@ describe('Catalog taxonomy lifecycle (integration)', () => {
     expect(stillThere.body.some((row: { id: string }) => row.id === orphan.body.id)).toBe(true);
   });
 
-  it('flower type/variety/origin: usage counts, blocked delete, reassignment', async () => {
+  it('flower type/variety/origin: item usage blocks delete; empty origin can be removed', async () => {
     const http = await login();
     const suffix = Date.now();
 
@@ -384,103 +384,80 @@ describe('Catalog taxonomy lifecycle (integration)', () => {
       .send({ name: `Фермерская ${suffix}`, sortOrder: 20 })
       .expect(201);
 
-    const product = await createDraftProduct(http, `Flower Prod ${suffix}`);
-    await http
-      .patch(`/api/v1/admin/catalog/products/${product.id}`)
+    const item = await http
+      .post('/api/v1/admin/catalog/flower-refs/items')
       .set('Origin', origin)
       .send({
-        expectedVersion: product.version,
         flowerTypeId: typeA.body.id,
         flowerVarietyId: variety.body.id,
         flowerOriginId: originA.body.id,
+        heightCm: 60,
+      })
+      .expect(201);
+
+    const product = await createDraftProduct(http, `Flower Prod ${suffix}`);
+    await http
+      .put(`/api/v1/admin/catalog/products/${product.id}/components`)
+      .set('Origin', origin)
+      .send({
+        expectedVersion: product.version,
+        components: [
+          {
+            flowerItemId: item.body.id,
+            displayName: item.body.name,
+            quantity: 7,
+            unit: 'STEM',
+            sortOrder: 0,
+          },
+        ],
       })
       .expect(200);
 
     const types = await http.get('/api/v1/admin/catalog/flower-refs/types').expect(200);
     const typeRow = types.body.find((row: { id: string }) => row.id === typeA.body.id);
-    expect(typeRow.productsCount).toBe(1);
     expect(typeRow.varietiesCount).toBe(1);
+    expect(typeRow.itemsCount).toBe(1);
 
-    // Type with varieties blocked.
     await http
       .delete(`/api/v1/admin/catalog/flower-refs/types/${typeA.body.id}`)
       .set('Origin', origin)
       .send({ expectedVersion: typeA.body.version })
       .expect(400);
 
-    // Variety used → blocked empty delete.
     await http
       .delete(`/api/v1/admin/catalog/flower-refs/varieties/${variety.body.id}`)
       .set('Origin', origin)
       .send({ expectedVersion: variety.body.version })
       .expect(400);
 
-    // Reassign variety to a new empty variety under same type, then delete.
-    const variety2 = await http
-      .post('/api/v1/admin/catalog/flower-refs/varieties')
-      .set('Origin', origin)
-      .send({ flowerTypeId: typeA.body.id, name: `Жизель ${suffix}`, sortOrder: 20 })
-      .expect(201);
-
     await http
-      .post(`/api/v1/admin/catalog/flower-refs/varieties/${variety.body.id}/reassign-and-delete`)
+      .delete(`/api/v1/admin/catalog/flower-refs/origins/${originA.body.id}`)
       .set('Origin', origin)
-      .send({ expectedVersion: variety.body.version, targetVarietyId: variety2.body.id })
-      .expect(201);
+      .send({ expectedVersion: originA.body.version })
+      .expect(400);
 
-    // Origin reassignment.
+    const movedOrigin = await http
+      .patch(`/api/v1/admin/catalog/flower-refs/items/${item.body.id}`)
+      .set('Origin', origin)
+      .send({ expectedVersion: item.body.version, flowerOriginId: originB.body.id })
+      .expect(200);
+    expect(movedOrigin.body.flowerOriginId).toBe(originB.body.id);
+
     await http
       .post(`/api/v1/admin/catalog/flower-refs/origins/${originA.body.id}/reassign-and-delete`)
       .set('Origin', origin)
       .send({ expectedVersion: originA.body.version, targetOriginId: originB.body.id })
       .expect(201);
 
-    // Clear variety, then reassign type (clears variety).
-    const productFresh = await http
-      .get(`/api/v1/admin/catalog/products/${product.id}`)
-      .expect(200);
-    await http
-      .patch(`/api/v1/admin/catalog/products/${product.id}`)
-      .set('Origin', origin)
-      .send({ expectedVersion: productFresh.body.version, flowerVarietyId: null })
-      .expect(200);
-
-    // Delete remaining variety empty.
-    const varieties = await http.get('/api/v1/admin/catalog/flower-refs/varieties').expect(200);
-    const v2 = varieties.body.find((row: { id: string }) => row.id === variety2.body.id);
-    await http
-      .delete(`/api/v1/admin/catalog/flower-refs/varieties/${variety2.body.id}`)
-      .set('Origin', origin)
-      .send({ expectedVersion: v2.version })
-      .expect(200);
-
-    const typesFresh = await http.get('/api/v1/admin/catalog/flower-refs/types').expect(200);
-    const typeAFresh = typesFresh.body.find((row: { id: string }) => row.id === typeA.body.id);
-
-    await http
-      .post(`/api/v1/admin/catalog/flower-refs/types/${typeA.body.id}/reassign-and-delete`)
-      .set('Origin', origin)
-      .send({ expectedVersion: typeAFresh.version, targetFlowerTypeId: typeB.body.id })
-      .expect(201);
-
     const productAfter = await http
       .get(`/api/v1/admin/catalog/products/${product.id}`)
       .expect(200);
-    expect(productAfter.body.flowerTypeId).toBe(typeB.body.id);
-    expect(productAfter.body.flowerVarietyId).toBeNull();
-    expect(productAfter.body.flowerOriginId).toBe(originB.body.id);
+    expect(productAfter.body.components[0].flowerItemId).toBe(item.body.id);
 
-    // Unused typeB still has product — empty delete blocked.
     const typeBFresh = (
       await http.get('/api/v1/admin/catalog/flower-refs/types').expect(200)
     ).body.find((row: { id: string }) => row.id === typeB.body.id);
-    await http
-      .delete(`/api/v1/admin/catalog/flower-refs/types/${typeB.body.id}`)
-      .set('Origin', origin)
-      .send({ expectedVersion: typeBFresh.version })
-      .expect(400);
 
-    // OCC: stale version on update.
     await http
       .patch(`/api/v1/admin/catalog/flower-refs/types/${typeB.body.id}`)
       .set('Origin', origin)
@@ -569,11 +546,7 @@ describe('Catalog taxonomy lifecycle (integration)', () => {
         description: editor.body.description,
         availability: editor.body.availability,
         heightCm: null,
-        bouquetSizeId: null,
         catalogCategoryId: null,
-        flowerTypeId: null,
-        flowerVarietyId: null,
-        flowerOriginId: null,
         familyId: null,
         publishAt: null,
         unpublishAt: null,
@@ -593,7 +566,6 @@ describe('Catalog taxonomy lifecycle (integration)', () => {
         occasionIds: [],
         recipientIds: [],
         colorIds: [],
-        productLineIds: [],
         promotion: { enabled: false, type: 'PERCENT', percentOff: null, startsAt: null, endsAt: null },
         groupIds: [],
       })
@@ -632,62 +604,9 @@ describe('Catalog taxonomy lifecycle (integration)', () => {
 
     const still = await http.get(`/api/v1/admin/catalog/products/${product.id}`).expect(200);
     expect(still.body.components[0].flowerItemId).toBe(item.body.id);
-    expect(still.body.compositionSetupStatus).toBe('ready');
   });
 
-  it('lists needsCompositionMigration and setupCompositionFromItem clears legacy attrs', async () => {
-    const http = await login();
-    const suffix = Date.now();
-
-    const type = await http
-      .post('/api/v1/admin/catalog/flower-refs/types')
-      .set('Origin', origin)
-      .send({ name: `MigType ${suffix}`, slug: `mig-type-${suffix}` })
-      .expect(201);
-    const item = await http
-      .post('/api/v1/admin/catalog/flower-refs/items')
-      .set('Origin', origin)
-      .send({ flowerTypeId: type.body.id, heightCm: 60 })
-      .expect(201);
-
-    const product = await createDraftProduct(http, `Legacy Mig ${suffix}`);
-    const linked = await http
-      .patch(`/api/v1/admin/catalog/products/${product.id}`)
-      .set('Origin', origin)
-      .send({ expectedVersion: product.version, flowerTypeId: type.body.id })
-      .expect(200);
-    expect(linked.body.compositionSetupStatus).toBe('legacy_pending');
-
-    const pending = await http
-      .get('/api/v1/admin/catalog/products?needsCompositionMigration=true&pageSize=100')
-      .expect(200);
-    expect(pending.body.items.some((row: { id: string }) => row.id === product.id)).toBe(true);
-
-    const setup = await http
-      .post(`/api/v1/admin/catalog/products/${product.id}/composition-setup`)
-      .set('Origin', origin)
-      .send({
-        expectedVersion: linked.body.version,
-        flowerItemId: item.body.id,
-        quantity: 9,
-        unit: 'STEM',
-        clearLegacyFlowerAttrs: true,
-      })
-      .expect(201);
-    expect(setup.body.compositionSetupStatus).toBe('ready');
-    expect(setup.body.flowerTypeId).toBeNull();
-    expect(setup.body.components[0].flowerItemId).toBe(item.body.id);
-    expect(setup.body.components[0].quantity).toBe(9);
-
-    const pendingAfter = await http
-      .get('/api/v1/admin/catalog/products?needsCompositionMigration=true&pageSize=100')
-      .expect(200);
-    expect(pendingAfter.body.items.some((row: { id: string }) => row.id === product.id)).toBe(
-      false,
-    );
-  });
-
-  it('rejects ProductComponent XOR violations at DB and concurrent FlowerItem create races to one row', async () => {
+  it('rejects ProductComponent without flowerItemId at DB and concurrent FlowerItem create races to one row', async () => {
     const http = await login();
     const suffix = Date.now();
 
@@ -699,15 +618,15 @@ describe('Catalog taxonomy lifecycle (integration)', () => {
 
     const product = await createDraftProduct(http, `Xor Product ${suffix}`);
 
-    // DB CHECK: both null rejected.
+    // DB NOT NULL: missing flower_item_id rejected.
     await expect(
       pool.query(
         `INSERT INTO product_components (
-           id, product_id, flower_item_id, flower_id, display_name, quantity, unit, sort_order, created_at, updated_at
-         ) VALUES ($1, $2, NULL, NULL, 'bad', 1, 'STEM', 0, NOW(), NOW())`,
+           id, product_id, flower_item_id, display_name, quantity, unit, sort_order, created_at, updated_at
+         ) VALUES ($1, $2, NULL, 'bad', 1, 'STEM', 0, NOW(), NOW())`,
         [uuid(), product.id],
       ),
-    ).rejects.toThrow(/product_components_flower_ref_xor|check/i);
+    ).rejects.toThrow(/not-null|null value|violates not-null/i);
 
     // Concurrent identical creates → exactly one FlowerItem for identity.
     const payload = {

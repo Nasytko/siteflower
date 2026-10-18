@@ -10,14 +10,7 @@ import {
 
 const ADMIN = '/api/v1/admin';
 
-export const TAXONOMY_KINDS = [
-  'flowers',
-  'colors',
-  'bouquet-sizes',
-  'product-lines',
-  'occasions',
-  'recipients',
-] as const;
+export const TAXONOMY_KINDS = ['colors', 'occasions', 'recipients'] as const;
 export type TaxonomyKind = (typeof TAXONOMY_KINDS)[number];
 
 export type TaxonomyKindMeta = {
@@ -28,20 +21,11 @@ export type TaxonomyKindMeta = {
   itemLabel: string;
   hasSwatch: boolean;
   hasDescription: boolean;
-  /** Flowers/colors/occasions/recipients expose SEO overrides. */
+  /** Colors/occasions/recipients expose SEO overrides. */
   hasSeo: boolean;
 };
 
 export const TAXONOMY_KIND_META: Record<TaxonomyKind, TaxonomyKindMeta> = {
-  flowers: {
-    kind: 'flowers',
-    title: 'Состав (legacy Flower)',
-    lead: 'Устаревший справочник /cvety. Новые составы — через Каталог → Цветы.',
-    itemLabel: 'позицию',
-    hasSwatch: false,
-    hasDescription: true,
-    hasSeo: true,
-  },
   colors: {
     kind: 'colors',
     title: 'Цвета',
@@ -50,24 +34,6 @@ export const TAXONOMY_KIND_META: Record<TaxonomyKind, TaxonomyKindMeta> = {
     hasSwatch: true,
     hasDescription: true,
     hasSeo: true,
-  },
-  'bouquet-sizes': {
-    kind: 'bouquet-sizes',
-    title: 'Размеры',
-    lead: 'Размеры букета. У товара — один размер.',
-    itemLabel: 'размер',
-    hasSwatch: false,
-    hasDescription: true,
-    hasSeo: false,
-  },
-  'product-lines': {
-    kind: 'product-lines',
-    title: 'Линейки',
-    lead: 'Форматы и линейки: моно букеты, композиции в шляпной коробке и другие.',
-    itemLabel: 'линейку',
-    hasSwatch: false,
-    hasDescription: true,
-    hasSeo: false,
   },
   occasions: {
     kind: 'occasions',
@@ -98,7 +64,6 @@ export const adminEndpoints = {
   productsBulk: `${ADMIN}/catalog/products/bulk`,
   product: (id: string) => `${ADMIN}/catalog/products/${id}`,
   productDuplicate: (id: string) => `${ADMIN}/catalog/products/${id}/duplicate`,
-  productCompositionSetup: (id: string) => `${ADMIN}/catalog/products/${id}/composition-setup`,
   productEditor: (id: string) => `${ADMIN}/catalog/products/${id}/editor`,
   productPreview: (id: string) => `${ADMIN}/catalog/products/${id}/preview`,
   productVariants: (id: string) => `${ADMIN}/catalog/products/${id}/variants`,
@@ -191,6 +156,8 @@ export const adminEndpoints = {
   integrationErpEnabled: `${ADMIN}/integrations/erp/enabled`,
   mediaHealth: `${ADMIN}/media/health`,
   mediaHealthProbe: `${ADMIN}/media/health/probe`,
+  mediaAssets: `${ADMIN}/media/assets`,
+  mediaAssetPurge: (id: string) => `${ADMIN}/media/assets/${id}/purge`,
   seoSummary: `${ADMIN}/seo/summary`,
   seoHealth: `${ADMIN}/seo/health`,
 } as const;

@@ -121,3 +121,4 @@ export * from './legal';
 export * from './orders';
 export * from './storefront';
 export * from './seo-health';
+export * from './media-health';

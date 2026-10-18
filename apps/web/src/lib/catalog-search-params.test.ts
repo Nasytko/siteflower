@@ -18,17 +18,16 @@ test('parseCatalogSearchParams defaults to recommended sort and page 1', () => {
   assert.equal(state.sort, 'recommended');
   assert.equal(state.page, 1);
   assert.deepEqual(state.budgets, []);
-  assert.deepEqual(state.sizes, []);
+  assert.deepEqual(state.flowers, []);
 });
 
-test('parseCatalogSearchParams reads all five discovery dimensions', () => {
+test('parseCatalogSearchParams reads discovery dimensions', () => {
   const state = parseCatalogSearchParams({
     budget: 'range-1,range-2',
     occasion: 'den-rozhdeniya',
     recipient: ['mame', 'zhene'],
     color: 'belyy',
     flower: 'rozy,piony',
-    size: 'sredniy',
     sort: 'price_asc',
     q: 'амели',
     page: '2',
@@ -39,19 +38,19 @@ test('parseCatalogSearchParams reads all five discovery dimensions', () => {
   assert.deepEqual(state.recipients, ['mame', 'zhene']);
   assert.deepEqual(state.colors, ['belyy']);
   assert.deepEqual(state.flowers, ['rozy', 'piony']);
-  assert.deepEqual(state.sizes, ['sredniy']);
   assert.equal(state.sort, 'price_asc');
   assert.equal(state.search, 'амели');
   assert.equal(state.page, 2);
 });
 
-test('parseCatalogSearchParams ignores retired category/style/collection params', () => {
+test('parseCatalogSearchParams ignores retired category/style/collection/size params', () => {
   const state = parseCatalogSearchParams({
     category: 'bukety',
     style: 'klassika',
     collection: 'izbrannoe',
     featured: '1',
     availability: 'AVAILABLE',
+    size: 'sredniy',
   });
 
   assert.equal(catalogHasActiveFilters(state), false);
@@ -76,12 +75,12 @@ test('toggleSlug adds and removes', () => {
 
 test('catalogStateToListParams joins each dimension with the API vocabulary', () => {
   const params = catalogStateToListParams(
-    parseCatalogSearchParams({ budget: 'r1,r2', color: 'belyy', size: 'bolshoy', page: '3' }),
+    parseCatalogSearchParams({ budget: 'r1,r2', color: 'belyy', flower: 'rozy', page: '3' }),
   );
 
   assert.equal(params.budget, 'r1,r2');
   assert.equal(params.color, 'belyy');
-  assert.equal(params.size, 'bolshoy');
+  assert.equal(params.flower, 'rozy');
   assert.equal(params.occasion, undefined);
   assert.equal(params.page, 3);
   assert.equal(params.sort, 'recommended');

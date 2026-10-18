@@ -6,7 +6,6 @@
 import type {
   AdminPromotionListItemDto,
   BestsellerGroupAdminDto,
-  BouquetSizeAdminDto,
   BudgetRangeDto,
   CatalogCategoryAdminDto,
   CatalogCategoryTreeNodeDto,
@@ -64,8 +63,6 @@ export function fetchProduct(id: string): Promise<ProductAdminDto> {
 }
 
 export function fetchTaxonomy(kind: 'colors'): Promise<ColorAdminDto[]>;
-export function fetchTaxonomy(kind: 'bouquet-sizes'): Promise<BouquetSizeAdminDto[]>;
-export function fetchTaxonomy(kind: 'product-lines'): Promise<BouquetSizeAdminDto[]>;
 export function fetchTaxonomy(kind: TaxonomyKind): Promise<TaxonomyAdminDto[]>;
 export function fetchTaxonomy(kind: TaxonomyKind): Promise<unknown[]> {
   return safeList(withQuery(adminEndpoints.taxonomy(kind), { page: 1, pageSize: 200 }));
@@ -75,21 +72,15 @@ export type ProductPickerTaxonomies = {
   occasions: TaxonomyAdminDto[];
   recipients: TaxonomyAdminDto[];
   colors: ColorAdminDto[];
-  flowers: TaxonomyAdminDto[];
-  bouquetSizes: BouquetSizeAdminDto[];
-  productLines: BouquetSizeAdminDto[];
 };
 
 export async function fetchProductTaxonomies(): Promise<ProductPickerTaxonomies> {
-  const [occasions, recipients, colors, flowers, bouquetSizes, productLines] = await Promise.all([
+  const [occasions, recipients, colors] = await Promise.all([
     fetchTaxonomy('occasions'),
     fetchTaxonomy('recipients'),
     fetchTaxonomy('colors'),
-    fetchTaxonomy('flowers'),
-    fetchTaxonomy('bouquet-sizes'),
-    fetchTaxonomy('product-lines'),
   ]);
-  return { occasions, recipients, colors, flowers, bouquetSizes, productLines };
+  return { occasions, recipients, colors };
 }
 
 export type CatalogStructurePickers = {

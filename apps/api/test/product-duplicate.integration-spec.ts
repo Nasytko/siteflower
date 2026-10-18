@@ -73,7 +73,6 @@ describe('Product duplicate (integration)', () => {
     await pool.query('DELETE FROM product_occasions');
     await pool.query('DELETE FROM product_recipients');
     await pool.query('DELETE FROM product_colors');
-    await pool.query('DELETE FROM product_product_lines');
     await pool.query('DELETE FROM product_family_members');
     await pool.query('DELETE FROM product_families');
     await pool.query('DELETE FROM products');
@@ -175,15 +174,15 @@ describe('Product duplicate (integration)', () => {
       .set('Origin', origin)
       .send({ name: `Color ${stamp}`, slug: `col-dup-${stamp}`, swatch: '#cc3344' })
       .expect(201);
-    const flower = await http
-      .post('/api/v1/admin/catalog/flowers')
+    const flowerType = await http
+      .post('/api/v1/admin/catalog/flower-refs/types')
       .set('Origin', origin)
-      .send({ name: `Flower ${stamp}`, slug: `flw-dup-${stamp}` })
+      .send({ name: `Rose ${stamp}`, slug: `rose-dup-${stamp}` })
       .expect(201);
-    const line = await http
-      .post('/api/v1/admin/catalog/product-lines')
+    const flowerItem = await http
+      .post('/api/v1/admin/catalog/flower-refs/items')
       .set('Origin', origin)
-      .send({ name: `Line ${stamp}`, slug: `line-dup-${stamp}` })
+      .send({ flowerTypeId: flowerType.body.id, heightCm: 60 })
       .expect(201);
 
     let product = await http
@@ -197,7 +196,6 @@ describe('Product duplicate (integration)', () => {
         occasionIds: [occasion.body.id],
         recipientIds: [recipient.body.id],
         colorIds: [color.body.id],
-        productLineIds: [line.body.id],
         seoTitle: opts?.seoTitle ?? 'SEO title for roses',
         seoDescription: 'SEO description for roses',
         noIndex: false,
@@ -223,8 +221,8 @@ describe('Product duplicate (integration)', () => {
         expectedVersion: product.body.version,
         components: [
           {
-            flowerId: flower.body.id,
-            displayName: 'Роза',
+            flowerItemId: flowerItem.body.id,
+            displayName: flowerItem.body.name,
             quantity: 11,
             unit: 'STEM',
             sortOrder: 0,
@@ -281,19 +279,18 @@ describe('Product duplicate (integration)', () => {
         version: number;
         lifecycle: string;
         variants: Array<{ id: string; name: string }>;
-        components: Array<{ id: string; displayName: string }>;
+        components: Array<{ id: string; displayName: string; flowerItemId: string }>;
         media: Array<{ id: string; mediaAssetId: string }>;
         occasions: Array<{ id: string }>;
         recipients: Array<{ id: string }>;
         colors: Array<{ id: string }>;
-        productLines: Array<{ id: string }>;
         promotion: unknown;
         bestsellerGroupIds: string[];
         seoTitle: string | null;
         seoDescription: string | null;
         noIndex: boolean;
       },
-      flowerId: flower.body.id as string,
+      flowerItemId: flowerItem.body.id as string,
       groupId: group.body.id as string,
     };
   }
@@ -353,9 +350,7 @@ describe('Product duplicate (integration)', () => {
     expect(copy.colors.map((o: { id: string }) => o.id).sort()).toEqual(
       source.colors.map((o) => o.id).sort(),
     );
-    expect(copy.productLines.map((o: { id: string }) => o.id).sort()).toEqual(
-      source.productLines.map((o) => o.id).sort(),
-    );
+    expect(copy.components[0].flowerItemId).toBe(source.components[0].flowerItemId);
 
     expect(copy.media).toHaveLength(1);
     expect(copy.media[0].mediaAssetId).toBe(source.media[0].mediaAssetId);

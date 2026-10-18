@@ -61,33 +61,28 @@ function shortDeliveryText({
 function CompositionSection({ product }: { product: ProductPublicDto }) {
   const components = product.components;
   const meta: string[] = [];
-  if (product.bouquetSize?.name) meta.push(product.bouquetSize.name);
   if (product.heightCm != null) meta.push(`высота ${product.heightCm} см`);
 
-  if (components.length === 0 && product.flowers.length === 0) {
+  if (components.length === 0) {
     return <p className="sf-body text-muted">Состав уточнит флорист при сборке.</p>;
   }
 
   return (
     <div className="space-y-2.5">
-      {components.length > 0 ? (
-        <ul className="sf-pdp-composition">
-          {components.map((item, index) => {
-            const qty =
-              item.quantity != null
-                ? ` — ${item.quantity}${unitLabel(item.unit) ? `\u00a0${unitLabel(item.unit)}` : ''}`
-                : '';
-            return (
-              <li key={`${item.displayName}-${item.flowerSlug ?? index}`}>
-                {item.displayName}
-                {qty}
-              </li>
-            );
-          })}
-        </ul>
-      ) : (
-        <p className="sf-body text-muted">{product.flowers.map((f) => f.name).join(', ')}</p>
-      )}
+      <ul className="sf-pdp-composition">
+        {components.map((item, index) => {
+          const qty =
+            item.quantity != null
+              ? ` — ${item.quantity}${unitLabel(item.unit) ? `\u00a0${unitLabel(item.unit)}` : ''}`
+              : '';
+          return (
+            <li key={`${item.displayName}-${item.flowerSlug ?? index}`}>
+              {item.displayName}
+              {qty}
+            </li>
+          );
+        })}
+      </ul>
       {meta.length > 0 ? <p className="sf-small text-muted">{meta.join(' · ')}</p> : null}
     </div>
   );

@@ -60,7 +60,7 @@ export class FlowerRefsService {
   async listTypesAdmin(): Promise<FlowerTypeAdminDto[]> {
     const rows = await this.prisma.client.flowerType.findMany({
       orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }],
-      include: { _count: { select: { products: true, varieties: true, items: true } } },
+      include: { _count: { select: { varieties: true, items: true } } },
     });
     return rows.map((row) => ({
       id: row.id,
@@ -69,7 +69,7 @@ export class FlowerRefsService {
       sortOrder: row.sortOrder,
       visibility: row.visibility,
       version: row.version,
-      productsCount: row._count.products,
+      productsCount: 0,
       varietiesCount: row._count.varieties,
       itemsCount: row._count.items,
     }));
@@ -97,7 +97,7 @@ export class FlowerRefsService {
     const rows = await this.prisma.client.flowerVariety.findMany({
       where: flowerTypeId ? { flowerTypeId } : undefined,
       orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }],
-      include: { _count: { select: { products: true, items: true } } },
+      include: { _count: { select: { items: true } } },
     });
     return rows.map((row) => ({
       id: row.id,
@@ -107,7 +107,7 @@ export class FlowerRefsService {
       sortOrder: row.sortOrder,
       visibility: row.visibility,
       version: row.version,
-      productsCount: row._count.products,
+      productsCount: 0,
       itemsCount: row._count.items,
     }));
   }
@@ -129,7 +129,7 @@ export class FlowerRefsService {
   async listOriginsAdmin(): Promise<FlowerOriginAdminDto[]> {
     const rows = await this.prisma.client.flowerOrigin.findMany({
       orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }],
-      include: { _count: { select: { products: true, items: true } } },
+      include: { _count: { select: { items: true } } },
     });
     return rows.map((row) => ({
       id: row.id,
@@ -138,7 +138,7 @@ export class FlowerRefsService {
       sortOrder: row.sortOrder,
       visibility: row.visibility,
       version: row.version,
-      productsCount: row._count.products,
+      productsCount: 0,
       itemsCount: row._count.items,
     }));
   }
@@ -153,7 +153,7 @@ export class FlowerRefsService {
       const row = await this.prisma.client.$transaction(async (tx) => {
         const created = await tx.flowerType.create({
           data: { name: input.name.trim(), slug, sortOrder: input.sortOrder ?? 0 },
-          include: { _count: { select: { products: true, varieties: true } } },
+          include: { _count: { select: { varieties: true } } },
         });
         if (actor) {
           await this.audit.record(
@@ -180,7 +180,7 @@ export class FlowerRefsService {
         sortOrder: row.sortOrder,
         visibility: row.visibility,
         version: row.version,
-        productsCount: row._count.products,
+        productsCount: 0,
         varietiesCount: row._count.varieties,
         itemsCount: 0,
       };
@@ -208,7 +208,7 @@ export class FlowerRefsService {
             slug,
             sortOrder: input.sortOrder ?? 0,
           },
-          include: { _count: { select: { products: true } } },
+          include: { _count: { select: { items: true } } },
         });
         if (actor) {
           await this.audit.record(
@@ -236,7 +236,7 @@ export class FlowerRefsService {
         sortOrder: row.sortOrder,
         visibility: row.visibility,
         version: row.version,
-        productsCount: row._count.products,
+        productsCount: 0,
         itemsCount: 0,
       };
     } catch {
@@ -254,7 +254,7 @@ export class FlowerRefsService {
       const row = await this.prisma.client.$transaction(async (tx) => {
         const created = await tx.flowerOrigin.create({
           data: { name: input.name.trim(), slug, sortOrder: input.sortOrder ?? 0 },
-          include: { _count: { select: { products: true } } },
+          include: { _count: { select: { items: true } } },
         });
         if (actor) {
           await this.audit.record(
@@ -281,7 +281,7 @@ export class FlowerRefsService {
         sortOrder: row.sortOrder,
         visibility: row.visibility,
         version: row.version,
-        productsCount: row._count.products,
+        productsCount: 0,
         itemsCount: 0,
       };
     } catch {
@@ -404,12 +404,6 @@ export class FlowerRefsService {
         throw new ConflictException('Сорт был изменён в другом окне');
       }
 
-      // Keep legacy Product.flowerVariety rows consistent when they still point here.
-      await tx.product.updateMany({
-        where: { flowerVarietyId: id },
-        data: { flowerTypeId: input.targetFlowerTypeId },
-      });
-
       if (actor) {
         await this.audit.record(
           {
@@ -433,7 +427,7 @@ export class FlowerRefsService {
 
       const updated = await tx.flowerVariety.findUniqueOrThrow({
         where: { id },
-        include: { _count: { select: { products: true, items: true } } },
+        include: { _count: { select: { items: true } } },
       });
       return updated;
     });
@@ -447,7 +441,7 @@ export class FlowerRefsService {
       sortOrder: result.sortOrder,
       visibility: result.visibility,
       version: result.version,
-      productsCount: result._count.products,
+      productsCount: 0,
       itemsCount: result._count.items,
     };
   }
@@ -470,7 +464,7 @@ export class FlowerRefsService {
     await this.prisma.client.$transaction(async (tx) => {
       const row = await tx.flowerType.findUnique({
         where: { id },
-        include: { _count: { select: { products: true, varieties: true } } },
+        include: { _count: { select: { varieties: true } } },
       });
       if (!row) throw new NotFoundException('Flower type not found');
       if (row.version !== expectedVersion) {
@@ -491,14 +485,6 @@ export class FlowerRefsService {
           error: 'CatalogDeleteBlocked',
           code: 'HAS_ITEMS',
           itemsCount,
-        });
-      }
-      if (row._count.products > 0) {
-        throw new BadRequestException({
-          message: 'Flower type has products',
-          error: 'CatalogDeleteBlocked',
-          code: 'HAS_PRODUCTS',
-          productsCount: row._count.products,
         });
       }
       await tx.flowerType.delete({ where: { id } });
@@ -532,7 +518,7 @@ export class FlowerRefsService {
     const result = await this.prisma.client.$transaction(async (tx) => {
       const row = await tx.flowerType.findUnique({
         where: { id },
-        include: { _count: { select: { products: true, varieties: true } } },
+        include: { _count: { select: { varieties: true } } },
       });
       if (!row) throw new NotFoundException('Flower type not found');
       if (row.version !== input.expectedVersion) {
@@ -558,11 +544,7 @@ export class FlowerRefsService {
       const target = await tx.flowerType.findUnique({ where: { id: input.targetFlowerTypeId } });
       if (!target) throw new BadRequestException('Target flower type not found');
 
-      // Clear variety when type changes — variety belongs to the old type.
-      const updated = await tx.product.updateMany({
-        where: { flowerTypeId: id },
-        data: { flowerTypeId: input.targetFlowerTypeId, flowerVarietyId: null },
-      });
+      // Product links go through FlowerItem composition — nothing to reassign on Product.
       await tx.flowerType.delete({ where: { id } });
       if (actor) {
         await this.audit.record(
@@ -574,9 +556,8 @@ export class FlowerRefsService {
             metadata: {
               slug: row.slug,
               name: row.name,
-              reassignedCount: updated.count,
+              reassignedCount: 0,
               targetFlowerTypeId: input.targetFlowerTypeId,
-              clearedVariety: true,
             },
             requestId: actor.requestId,
             ipHash: actor.ipHash,
@@ -585,7 +566,7 @@ export class FlowerRefsService {
           tx,
         );
       }
-      return { reassignedCount: updated.count };
+      return { reassignedCount: 0 };
     });
     await this.pingStorefront();
     return result;
@@ -617,7 +598,7 @@ export class FlowerRefsService {
     const result = await this.prisma.client.$transaction(async (tx) => {
       const row = await tx.flowerVariety.findUnique({
         where: { id },
-        include: { _count: { select: { products: true } } },
+        include: { _count: { select: { items: true } } },
       });
       if (!row) throw new NotFoundException('Flower variety not found');
       if (row.version !== input.expectedVersion) {
@@ -635,13 +616,6 @@ export class FlowerRefsService {
       const target = await tx.flowerVariety.findUnique({ where: { id: input.targetVarietyId } });
       if (!target) throw new BadRequestException('Target variety not found');
 
-      const updated = await tx.product.updateMany({
-        where: { flowerVarietyId: id },
-        data: {
-          flowerVarietyId: input.targetVarietyId,
-          flowerTypeId: target.flowerTypeId,
-        },
-      });
       await tx.flowerVariety.delete({ where: { id } });
       if (actor) {
         await this.audit.record(
@@ -653,7 +627,7 @@ export class FlowerRefsService {
             metadata: {
               slug: row.slug,
               name: row.name,
-              reassignedCount: updated.count,
+              reassignedCount: 0,
               targetVarietyId: input.targetVarietyId,
             },
             requestId: actor.requestId,
@@ -663,7 +637,7 @@ export class FlowerRefsService {
           tx,
         );
       }
-      return { reassignedCount: updated.count };
+      return { reassignedCount: 0 };
     });
     await this.pingStorefront();
     return result;
@@ -695,7 +669,7 @@ export class FlowerRefsService {
     const result = await this.prisma.client.$transaction(async (tx) => {
       const row = await tx.flowerOrigin.findUnique({
         where: { id },
-        include: { _count: { select: { products: true } } },
+        include: { _count: { select: { items: true } } },
       });
       if (!row) throw new NotFoundException('Flower origin not found');
       if (row.version !== input.expectedVersion) {
@@ -713,10 +687,6 @@ export class FlowerRefsService {
       const target = await tx.flowerOrigin.findUnique({ where: { id: input.targetOriginId } });
       if (!target) throw new BadRequestException('Target origin not found');
 
-      const updated = await tx.product.updateMany({
-        where: { flowerOriginId: id },
-        data: { flowerOriginId: input.targetOriginId },
-      });
       await tx.flowerOrigin.delete({ where: { id } });
       if (actor) {
         await this.audit.record(
@@ -728,7 +698,7 @@ export class FlowerRefsService {
             metadata: {
               slug: row.slug,
               name: row.name,
-              reassignedCount: updated.count,
+              reassignedCount: 0,
               targetOriginId: input.targetOriginId,
             },
             requestId: actor.requestId,
@@ -738,7 +708,7 @@ export class FlowerRefsService {
           tx,
         );
       }
-      return { reassignedCount: updated.count };
+      return { reassignedCount: 0 };
     });
     await this.pingStorefront();
     return result;
@@ -1416,8 +1386,8 @@ export class FlowerRefsService {
         }
         const include =
           model === 'flowerType'
-            ? { _count: { select: { products: true, varieties: true } } }
-            : { _count: { select: { products: true } } };
+            ? { _count: { select: { varieties: true } } }
+            : { _count: { select: { items: true } } };
         const updated = (await client.findUniqueOrThrow({
           where: { id },
           include,
@@ -1459,7 +1429,7 @@ export class FlowerRefsService {
           sortOrder: row.sortOrder,
           visibility: row.visibility,
           version: row.version,
-          productsCount: row._count.products,
+          productsCount: 0,
           varietiesCount: row._count.varieties ?? 0,
         };
       }
@@ -1472,7 +1442,7 @@ export class FlowerRefsService {
           sortOrder: row.sortOrder,
           visibility: row.visibility,
           version: row.version,
-          productsCount: row._count.products,
+          productsCount: 0,
         };
       }
       return {
@@ -1482,7 +1452,7 @@ export class FlowerRefsService {
         sortOrder: row.sortOrder,
         visibility: row.visibility,
         version: row.version,
-        productsCount: row._count.products,
+        productsCount: 0,
       };
     } catch (err) {
       if (
@@ -1516,19 +1486,11 @@ export class FlowerRefsService {
       };
       const row = await client.findUnique({
         where: { id },
-        include: { _count: { select: { products: true } } },
+        include: { _count: { select: { items: true } } },
       });
       if (!row) throw new NotFoundException(`${entityType} not found`);
       if (row.version !== expectedVersion) {
         throw new ConflictException(`${entityType} was modified elsewhere`);
-      }
-      if (row._count.products > 0) {
-        throw new BadRequestException({
-          message: `${entityType} has products`,
-          error: 'CatalogDeleteBlocked',
-          code: 'HAS_PRODUCTS',
-          productsCount: row._count.products,
-        });
       }
       await client.delete({ where: { id } });
       if (actor) {

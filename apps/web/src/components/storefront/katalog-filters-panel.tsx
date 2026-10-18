@@ -51,8 +51,6 @@ function slugListForKey(key: CatalogFilterKey, state: KatalogSearchState): strin
       return state.occasions;
     case 'recipient':
       return state.recipients;
-    case 'bouquet_size':
-      return state.sizes;
     default:
       return [];
   }
@@ -76,8 +74,6 @@ function patchForKey(
       return { occasions: toggleSlug(state.occasions, slug) };
     case 'recipient':
       return { recipients: toggleSlug(state.recipients, slug) };
-    case 'bouquet_size':
-      return { sizes: toggleSlug(state.sizes, slug) };
     case 'stem_height':
       return { height: state.height === slug ? null : (slug as KatalogSearchState['height']) };
     case 'promo':

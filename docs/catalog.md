@@ -1,6 +1,6 @@
 # Catalog domain
 
-> **Current model:** sellable **Product** (+ in-card **ProductVariant**), optional **ProductFamily** (cross-product UX only), hierarchical **CatalogCategory**, flower dictionary (**FlowerType** → **FlowerVariety** → **FlowerItem** with origin/height), composition via **ProductComponent** → FlowerItem + quantity, plus discovery facets (budget, occasion, recipient, color, legacy composition Flower, size), promotions and bestsellers.
+> **Current model:** sellable **Product** (+ in-card **ProductVariant** for size/price, e.g. «7 шт»), optional **ProductFamily** (cross-product UX only), hierarchical **CatalogCategory**, flower dictionary (**FlowerType** → **FlowerVariety** → **FlowerItem** with origin/height), composition via **ProductComponent** → FlowerItem + quantity, plus discovery facets (budget, occasion, recipient, color, flower type / variety / origin / stem height), promotions and bestsellers. **`/cvety` uses FlowerType**, not a legacy composition-Flower table.
 
 ## Product vs Variant vs Family
 
@@ -52,13 +52,11 @@ Never denormalize a stale `product.price`. Checkout uses `effectiveVariantPriceM
 
 ## Composition
 
-`ProductComponent` holds quantity/unit and preferably references a reusable **FlowerItem** (concrete stem/SKU). Quantity is never stored on FlowerItem — one FlowerItem can appear in hundreds of products with different quantities.
+`ProductComponent` holds quantity/unit and **must** reference a reusable **FlowerItem** (concrete stem/SKU). Quantity is never stored on FlowerItem — one FlowerItem can appear in hundreds of products with different quantities.
 
-Legacy optional `flowerId` → old `Flower` taxonomy still feeds `/cvety` discovery when set. Prefer `flowerItemId` for new work.
+Duplicate product copies component rows but **reuses** the same FlowerItem rows (no dictionary cloning).
 
-Duplicate product copies component rows but **reuses** the same FlowerItem / Flower references (no dictionary cloning).
-
-Composition stays **product-level** (not per ProductVariant) so cart/checkout remain unchanged. Cross-height/origin “variants” continue as separate Products in a ProductFamily.
+Composition stays **product-level** (not per ProductVariant) so cart/checkout remain unchanged. Customer-facing stem counts / price tiers live on **ProductVariant** names and prices. Cross-height/origin “variants” continue as separate Products in a ProductFamily.
 
 ## Catalog navigation (CatalogCategory)
 
@@ -69,8 +67,6 @@ Hierarchical tree for storefront menus and PLPs (Цветы → Розы, Бук
 - Public list filters by `categorySlug` expand to the category **and its descendants**.
 
 ## Flower dictionary
-
-Do **not** confuse with legacy composition `Flower` taxonomy (`/cvety` SEO facet).
 
 | Entity | Example | Role |
 | --- | --- | --- |
@@ -90,7 +86,7 @@ Canonical name: `flowerItemDisplayName` only. **Form is omitted** from the retai
 
 Composition: ProductComponent → FlowerItem + quantity (quantity never on FlowerItem).
 
-Legacy `Product.flowerType/Variety/Origin` is hidden from Product Editor; cleared on save once composition uses FlowerItem. Legacy `Flower` + `/cvety` remains SEO compatibility only.
+Public **`/cvety` and flower-type filters** resolve through composition (`ProductComponent` → `FlowerItem.flowerType`), not product-level flower FKs.
 
 ### Heights — never mix
 
@@ -129,18 +125,9 @@ Query params for disabled category filters are ignored on both the web PLP and t
 
 **«Цветы»** = `FlowerType` via composition. **«Цвет»** = product color facet. Do not mix.
 
-Storefront type / variety / origin filters: if a product has any `ProductComponent.flowerItemId`, **only composition** matches. Legacy `Product.flower*` applies only to products still without FlowerItem composition (migration). Stem-height filter matches **only** `FlowerItem.stemLengthCm`. Bouquet-height filter matches **only** `Product.bouquetHeightCm`. Never `bouquetHeightCm ?? stemLengthCm` for bouquet display.
+Storefront type / variety / origin filters match **only** via composition (`ProductComponent` → FlowerItem). Stem-height filter matches **only** `FlowerItem.stemLengthCm`. Bouquet-height filter matches **only** `Product.bouquetHeightCm`. Never `bouquetHeightCm ?? stemLengthCm` for bouquet display.
 
-Saving a product with FlowerItem composition **always clears** `Product.flowerType/Variety/Origin` server-side.
-
-### ProductComponent XOR (DB)
-
-PostgreSQL CHECK `product_components_flower_ref_xor` (migration `20261005140000_product_component_flower_ref_xor`):
-
-- exactly one of `flower_item_id` / `flower_id` is NOT NULL
-- migration aborts with sample IDs if invalid rows exist (no silent data rewrite)
-
-App-level: `assertComponentFlowerRefXor` on every composition write.
+App-level: `assertComponentFlowerRefXor` requires a non-empty `flowerItemId` on every composition write. DB: `product_components.flower_item_id` is NOT NULL.
 
 ### Navigation menu (separate from CatalogCategory)
 
@@ -158,9 +145,7 @@ A menu item may target:
 
 Menu hierarchy is independent of the category tree. Admin: **Магазин → Главное меню**.
 
-`/cvety` hub and SEO landings still use the legacy `Flower` taxonomy table. Product listing under `/cvety/:slug` also matches `ProductComponent → FlowerItem.flowerType.slug` when the Flower slug equals the FlowerType slug (bridge; Flower table is not dropped).
-
-Admin tool **«Настройка состава»** (`/admin/catalog/composition-setup`) lists products with legacy flower attrs but no FlowerItem composition. Managers pick an existing FlowerItem + quantity manually — no auto-guessing of height/origin from the product name.
+`/cvety` hub and SEO landings use **FlowerType** slugs from the dictionary. Sitemap entries are emitted for visible flower types.
 
 Used FlowerItems cannot be hard-deleted — archive with `visibility: HIDDEN`. Future ERP mapping should target FlowerItem (prefer a separate mapping table).
 
@@ -172,7 +157,6 @@ Managed taxonomy entities (slug, name, sortOrder, visibility `VISIBLE`|`HIDDEN`,
 
 | Entity | Role |
 | --- | --- |
-| Flowers | Composition + flower filter facet (not catalog tree) |
 | Occasions | «Повод» |
 | Recipients | «Кому» |
 | Colors | Merchandising colors (optional `swatch`) |
@@ -181,7 +165,6 @@ Additional catalog config (not generic CMS taxonomies):
 
 | Entity | Role |
 | --- | --- |
-| **BouquetSize** | Customer-facing size; optional FK on product |
 | **BudgetRange** | Admin-managed min/max minor BYN filter labels |
 | **ProductPromotion** | Sale (`PERCENT` or `FIXED`) with optional schedule |
 | **BestsellerGroup** | Manual homepage tabs + product membership |
@@ -224,7 +207,7 @@ Invalidate storefront cache on product publish/update and merchandising changes 
 | `/katalog/[slug]` | CatalogCategory PLP (filters via `var`, `color`, `h`, `orig`) |
 | `/bukety`, `/bukety/[slug]` | Bouquet listing / **Product PDP** (canonical product URL) |
 | `/akcii` | Effective promotions |
-| `/cvety`, `/cvety/[slug]` | Composition-flower discovery hub (legacy facet, not CatalogCategory) |
+| `/cvety`, `/cvety/[slug]` | FlowerType discovery hub (via composition; not CatalogCategory) |
 | `/povod`, `/povod/[slug]` | Occasions hub / landing |
 | `/komu/[slug]` | Recipients |
 

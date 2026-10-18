@@ -1,19 +1,13 @@
 import { isValidProductComponentFlowerRefXor } from './product-component-xor.util';
 
-describe('product-component-xor.util', () => {
-  it('accepts flowerItemId only', () => {
-    expect(isValidProductComponentFlowerRefXor({ flowerItemId: 'a', flowerId: null })).toBe(true);
+describe('product component flower ref', () => {
+  it('accepts flowerItemId', () => {
+    expect(isValidProductComponentFlowerRefXor({ flowerItemId: 'a' })).toBe(true);
   });
 
-  it('accepts flowerId only (legacy)', () => {
-    expect(isValidProductComponentFlowerRefXor({ flowerItemId: null, flowerId: 'b' })).toBe(true);
-  });
-
-  it('rejects both null', () => {
-    expect(isValidProductComponentFlowerRefXor({ flowerItemId: null, flowerId: null })).toBe(false);
-  });
-
-  it('rejects both set', () => {
-    expect(isValidProductComponentFlowerRefXor({ flowerItemId: 'a', flowerId: 'b' })).toBe(false);
+  it('rejects missing flowerItemId', () => {
+    expect(isValidProductComponentFlowerRefXor({ flowerItemId: null })).toBe(false);
+    expect(isValidProductComponentFlowerRefXor({ flowerItemId: '  ' })).toBe(false);
+    expect(isValidProductComponentFlowerRefXor({})).toBe(false);
   });
 });

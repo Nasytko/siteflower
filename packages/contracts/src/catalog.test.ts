@@ -23,26 +23,7 @@ import {
   suggestProductNameFromComposition,
   deriveCompositionManagerSummary,
   deriveProductEditorReadiness,
-  resolveCompositionSetupStatus,
 } from './catalog.js';
-
-test('resolveCompositionSetupStatus', () => {
-  assert.equal(
-    resolveCompositionSetupStatus({
-      flowerTypeId: 't',
-      components: [],
-    }),
-    'legacy_pending',
-  );
-  assert.equal(
-    resolveCompositionSetupStatus({
-      flowerTypeId: 't',
-      components: [{ flowerItemId: 'i1' }],
-    }),
-    'ready',
-  );
-  assert.equal(resolveCompositionSetupStatus({ components: [] }), 'empty');
-});
 
 test('flowerItemIdentityKey and display name', () => {
   assert.equal(
@@ -339,13 +320,18 @@ test('heightBandWhere maps non-overlapping stem-height bands', () => {
   assert.deepEqual(heightBandWhere('70_plus'), { gt: 70 });
 });
 
-test('assertComponentFlowerRefXor enforces FlowerItem XOR legacy Flower', () => {
-  assert.deepEqual(assertComponentFlowerRefXor({ flowerItemId: 'a', flowerId: null }), {
+test('assertComponentFlowerRefXor requires flowerItemId', () => {
+  assert.deepEqual(assertComponentFlowerRefXor({ flowerItemId: 'a' }), {
     flowerItemId: 'a',
-    flowerId: null,
   });
-  assert.throws(() => assertComponentFlowerRefXor({ flowerItemId: null, flowerId: null }));
-  assert.throws(() => assertComponentFlowerRefXor({ flowerItemId: 'a', flowerId: 'b' }));
+  assert.throws(
+    () => assertComponentFlowerRefXor({ flowerItemId: null }),
+    /COMPONENT_NO_REF/,
+  );
+  assert.throws(
+    () => assertComponentFlowerRefXor({ flowerItemId: '  ' }),
+    /COMPONENT_NO_REF/,
+  );
 });
 
 test('defaultFilterKeysForPreset seeds category filter pools', () => {

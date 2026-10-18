@@ -91,27 +91,9 @@ export class PublicCatalogController {
   }
 
   @Public()
-  @Get('flowers')
-  listFlowers() {
-    return this.catalog.listFlowers();
-  }
-
-  @Public()
   @Get('colors')
   listColors() {
     return this.catalog.listColors();
-  }
-
-  @Public()
-  @Get('product-lines')
-  listProductLines() {
-    return this.catalog.listProductLines();
-  }
-
-  @Public()
-  @Get('bouquet-sizes')
-  listBouquetSizes() {
-    return this.catalog.listBouquetSizes();
   }
 
   @Public()

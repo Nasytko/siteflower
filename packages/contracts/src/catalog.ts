@@ -4,11 +4,10 @@
  *
  * Navigation: CatalogCategory tree (Цветы → Розы, …).
  * Flower dictionary: FlowerType → FlowerVariety → FlowerItem (type+variety+origin+height).
- * Composition: ProductComponent → FlowerItem (+ quantity/unit). Legacy Flower facet optional.
- * Product.flowerType/Variety/Origin/heightCm: legacy denormalized attrs (deprecated for discovery).
+ * Composition: ProductComponent → FlowerItem (+ quantity/unit).
  * Cross-product UX: ProductFamily (not sellable).
  * In-card commerce: ProductVariant (unchanged; composition stays product-level).
- * Discovery facets: Budget, Occasion/Recipient, Color, Flower (legacy), BouquetSize, ProductLine.
+ * Discovery facets: Budget, Occasion/Recipient, Color, stem_height, etc.
  * Merchandising: Promotions, Bestsellers.
  */
 
@@ -37,8 +36,6 @@ export const SLUG_ENTITY_TYPES = [
   'OCCASION',
   'RECIPIENT',
   'COLOR',
-  'FLOWER',
-  'BOUQUET_SIZE',
   'CATALOG_CATEGORY',
 ] as const;
 export type SlugEntityType = (typeof SLUG_ENTITY_TYPES)[number];
@@ -84,7 +81,6 @@ export const CATALOG_FILTER_KEYS = [
   'bouquet_height',
   'color',
   'quantity',
-  'bouquet_size',
   'occasion',
   'recipient',
 ] as const;
@@ -133,7 +129,7 @@ export function defaultFilterKeysForPreset(preset: CatalogFilterPreset): Catalog
     case 'FLOWERS':
       return ['price', 'promo', 'flower_type', 'variety', 'origin', 'stem_height', 'color'];
     case 'BOUQUETS':
-      return ['price', 'promo', 'flower_type', 'color', 'bouquet_size', 'occasion', 'recipient'];
+      return ['price', 'promo', 'flower_type', 'color', 'occasion', 'recipient'];
     case 'CARDS':
       return ['price', 'occasion', 'recipient'];
     case 'CANDLES':
@@ -176,8 +172,6 @@ export type GatedListingFilterFields = {
   occasionSlugs?: string[];
   recipientIds?: string[];
   recipientSlugs?: string[];
-  bouquetSizeIds?: string[];
-  bouquetSizeSlugs?: string[];
   heightCm?: { gt?: number; gte?: number; lte?: number };
   heightBand?: string;
   promotionalOnly?: boolean;
@@ -215,10 +209,6 @@ export function gateListingFiltersByEnabledKeys<T extends GatedListingFilterFiel
   if (!keys.has('recipient')) {
     delete next.recipientIds;
     delete next.recipientSlugs;
-  }
-  if (!keys.has('bouquet_size')) {
-    delete next.bouquetSizeIds;
-    delete next.bouquetSizeSlugs;
   }
   if (!keys.has('stem_height')) {
     delete next.heightCm;
@@ -463,23 +453,15 @@ export function flowerItemDisplayName(input: {
   return parts.filter(Boolean).join(' ');
 }
 
-/**
- * ProductComponent must reference exactly one composition target:
- * FlowerItem (new) XOR legacy Flower — never both, never neither.
- */
+/** ProductComponent must reference a FlowerItem. */
 export function assertComponentFlowerRefXor(input: {
   flowerItemId?: string | null;
-  flowerId?: string | null;
-}): { flowerItemId: string | null; flowerId: string | null } {
+}): { flowerItemId: string } {
   const flowerItemId = input.flowerItemId?.trim() ? input.flowerItemId.trim() : null;
-  const flowerId = input.flowerId?.trim() ? input.flowerId.trim() : null;
-  if (flowerItemId && flowerId) {
-    throw new Error('COMPONENT_BOTH_REFS');
-  }
-  if (!flowerItemId && !flowerId) {
+  if (!flowerItemId) {
     throw new Error('COMPONENT_NO_REF');
   }
-  return { flowerItemId, flowerId };
+  return { flowerItemId };
 }
 
 /** Default in-card variant name for new products (manager-facing). */
@@ -809,25 +791,6 @@ export type ColorAdminDto = TaxonomyAdminDto & {
   swatch: string | null;
 };
 
-export type BouquetSizeAdminDto = {
-  id: string;
-  slug: string;
-  name: string;
-  description: string | null;
-  sortOrder: number;
-  visibility: TaxonomyVisibility;
-  version: number;
-  createdAt: string;
-  updatedAt: string;
-};
-
-export type BouquetSizePublicDto = {
-  id: string;
-  slug: string;
-  name: string;
-  description: string | null;
-};
-
 export type BudgetRangeDto = {
   id: string;
   label: string;
@@ -859,35 +822,13 @@ export type ProductVariantDto = {
 
 export type ProductComponentDto = {
   id: string;
-  flowerItemId: string | null;
+  flowerItemId: string;
   flowerItem: FlowerItemDto | null;
-  /** @deprecated Prefer flowerItemId. Kept for /cvety legacy facet. */
-  flowerId: string | null;
-  flower: TaxonomyRefDto | null;
   displayName: string;
   quantity: number | null;
   unit: ComponentUnit;
   sortOrder: number;
 };
-
-/** Admin helper: whether composition is on FlowerItem or still on legacy flower attrs. */
-export type CompositionSetupStatus = 'ready' | 'legacy_pending' | 'empty';
-
-export function resolveCompositionSetupStatus(input: {
-  flowerTypeId?: string | null;
-  flowerVarietyId?: string | null;
-  flowerOriginId?: string | null;
-  components: Array<{ flowerItemId?: string | null; flowerId?: string | null }>;
-}): CompositionSetupStatus {
-  if (input.components.some((row) => Boolean(row.flowerItemId))) return 'ready';
-  const hasLegacyProduct =
-    Boolean(input.flowerTypeId) ||
-    Boolean(input.flowerVarietyId) ||
-    Boolean(input.flowerOriginId);
-  const hasLegacyComponent = input.components.some((row) => Boolean(row.flowerId));
-  if (hasLegacyProduct || hasLegacyComponent) return 'legacy_pending';
-  return 'empty';
-}
 
 export type ProductMediaDto = {
   id: string;
@@ -961,11 +902,7 @@ export type ProductListItemDto = {
   version: number;
   /** Bouquet/card height in cm (Product.heightCm). Stem height lives on FlowerItem. */
   heightCm: number | null;
-  bouquetSize: TaxonomyRefDto | null;
   catalogCategory: TaxonomyRefDto | null;
-  flowerType: TaxonomyRefDto | null;
-  flowerVariety: TaxonomyRefDto | null;
-  flowerOrigin: TaxonomyRefDto | null;
   family: { id: string; name: string } | null;
   /** Presentation helper for storefront cards. */
   cardSubtitle: string | null;
@@ -974,9 +911,7 @@ export type ProductListItemDto = {
   /** Cheapest active variant for quick-add (effective promotional price). */
   defaultVariant: { id: string; name: string; priceMinor: string } | null;
   primaryImageUrl: string | null;
-  flowers: TaxonomyRefDto[];
   colors: TaxonomyRefDto[];
-  productLines: TaxonomyRefDto[];
   updatedAt: string;
   /** Admin list helpers */
   bestsellerGroupIds?: string[];
@@ -991,16 +926,8 @@ export type ProductAdminDto = {
   lifecycle: ProductLifecycle;
   availability: CommercialAvailability;
   heightCm: number | null;
-  bouquetSize: TaxonomyRefDto | null;
-  bouquetSizeId: string | null;
   catalogCategoryId: string | null;
   catalogCategory: TaxonomyRefDto | null;
-  flowerTypeId: string | null;
-  flowerType: TaxonomyRefDto | null;
-  flowerVarietyId: string | null;
-  flowerVariety: TaxonomyRefDto | null;
-  flowerOriginId: string | null;
-  flowerOrigin: TaxonomyRefDto | null;
   family: ProductFamilyDto | null;
   currency: string;
   publishedAt: string | null;
@@ -1019,11 +946,6 @@ export type ProductAdminDto = {
   occasions: TaxonomyRefDto[];
   recipients: TaxonomyRefDto[];
   colors: TaxonomyRefDto[];
-  productLines: TaxonomyRefDto[];
-  /** Derived from composition (ProductComponent.flowerId). */
-  flowers: TaxonomyRefDto[];
-  /** ready = has FlowerItem composition; legacy_pending = old flower attrs without FlowerItem. */
-  compositionSetupStatus: CompositionSetupStatus;
   bestsellerGroupIds: string[];
   createdAt: string;
   updatedAt: string;
@@ -1038,11 +960,7 @@ export type ProductPublicDto = {
   description: string | null;
   availability: CommercialAvailability;
   heightCm: number | null;
-  bouquetSize: TaxonomyRefDto | null;
   catalogCategory: TaxonomyRefDto | null;
-  flowerType: TaxonomyRefDto | null;
-  flowerVariety: TaxonomyRefDto | null;
-  flowerOrigin: TaxonomyRefDto | null;
   /** Other sellable products in the same family (human UX: «Другие варианты»). */
   family: ProductFamilyDto | null;
   cardSubtitle: string | null;
@@ -1075,8 +993,6 @@ export type ProductPublicDto = {
   occasions: TaxonomyRefDto[];
   recipients: TaxonomyRefDto[];
   colors: TaxonomyRefDto[];
-  productLines: TaxonomyRefDto[];
-  flowers: TaxonomyRefDto[];
 };
 
 export type BestsellerGroupAdminDto = {

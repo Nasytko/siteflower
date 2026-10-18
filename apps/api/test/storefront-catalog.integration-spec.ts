@@ -59,11 +59,13 @@ describe('Storefront catalog (integration)', () => {
     await pool.query('DELETE FROM product_families');
     await pool.query('DELETE FROM products');
     await pool.query('DELETE FROM budget_ranges');
-    await pool.query('DELETE FROM bouquet_sizes');
+    await pool.query('DELETE FROM flower_items');
+    await pool.query('DELETE FROM flower_varieties');
+    await pool.query('DELETE FROM flower_types');
+    await pool.query('DELETE FROM flower_origins');
     await pool.query('DELETE FROM occasions');
     await pool.query('DELETE FROM recipients');
     await pool.query('DELETE FROM colors');
-    await pool.query('DELETE FROM flowers');
     await pool.query('DELETE FROM slug_redirects');
     await pool.query('DELETE FROM audit_logs');
     await pool.query('DELETE FROM admin_sessions');
@@ -142,11 +144,11 @@ describe('Storefront catalog (integration)', () => {
     name: string;
     slug?: string;
     priceMinor: string;
+    variantName?: string;
     occasionIds?: string[];
     recipientIds?: string[];
     colorIds?: string[];
-    bouquetSizeId?: string;
-    flowerId?: string;
+    flowerItemId?: string;
   }) {
     let product = await http
       .post('/api/v1/admin/catalog/products')
@@ -161,7 +163,6 @@ describe('Storefront catalog (integration)', () => {
         expectedVersion: product.body.version,
         shortDescription: `${input.name} short`,
         description: `${input.name} long description`,
-        ...(input.bouquetSizeId ? { bouquetSizeId: input.bouquetSizeId } : {}),
       })
       .expect(200);
 
@@ -170,11 +171,18 @@ describe('Storefront catalog (integration)', () => {
       .set('Origin', origin)
       .send({
         expectedVersion: product.body.version,
-        variants: [{ name: 'Std', priceMinor: input.priceMinor, sortOrder: 0, status: 'ACTIVE' }],
+        variants: [
+          {
+            name: input.variantName ?? 'Std',
+            priceMinor: input.priceMinor,
+            sortOrder: 0,
+            status: 'ACTIVE',
+          },
+        ],
       })
       .expect(200);
 
-    if (input.flowerId) {
+    if (input.flowerItemId) {
       product = await http
         .put(`/api/v1/admin/catalog/products/${product.body.id}/components`)
         .set('Origin', origin)
@@ -182,8 +190,8 @@ describe('Storefront catalog (integration)', () => {
           expectedVersion: product.body.version,
           components: [
             {
-              flowerId: input.flowerId,
-              displayName: 'Rose',
+              flowerItemId: input.flowerItemId,
+              displayName: 'Rose stem',
               quantity: 5,
               unit: 'STEM',
               sortOrder: 0,
@@ -193,7 +201,7 @@ describe('Storefront catalog (integration)', () => {
         .expect(200);
     }
 
-    if (input.occasionIds || input.recipientIds || input.colorIds || input.bouquetSizeId) {
+    if (input.occasionIds || input.recipientIds || input.colorIds) {
       product = await http
         .put(`/api/v1/admin/catalog/products/${product.body.id}/taxonomies`)
         .set('Origin', origin)
@@ -202,7 +210,6 @@ describe('Storefront catalog (integration)', () => {
           occasionIds: input.occasionIds ?? [],
           recipientIds: input.recipientIds ?? [],
           colorIds: input.colorIds ?? [],
-          ...(input.bouquetSizeId ? { bouquetSizeId: input.bouquetSizeId } : {}),
         })
         .expect(200);
     }
@@ -262,7 +269,7 @@ describe('Storefront catalog (integration)', () => {
     }
   });
 
-  it('filters by budget, multi color/flower/occasion/recipient/size', async () => {
+  it('filters by budget, multi color/flower-type/occasion/recipient', async () => {
     const stamp = Date.now();
 
     const occasionA = await http
@@ -293,26 +300,25 @@ describe('Storefront catalog (integration)', () => {
       .send({ name: 'White', slug: `white-${stamp}`, swatch: '#f5f2ea' })
       .expect(201);
 
-    const flowerRose = await http
-      .post('/api/v1/admin/catalog/flowers')
+    const typeRose = await http
+      .post('/api/v1/admin/catalog/flower-refs/types')
       .set('Origin', origin)
       .send({ name: 'Rose', slug: `rose-${stamp}` })
       .expect(201);
-    const flowerPeony = await http
-      .post('/api/v1/admin/catalog/flowers')
+    const typePeony = await http
+      .post('/api/v1/admin/catalog/flower-refs/types')
       .set('Origin', origin)
       .send({ name: 'Peony', slug: `peony-${stamp}` })
       .expect(201);
-
-    const sizeM = await http
-      .post('/api/v1/admin/catalog/bouquet-sizes')
+    const itemRose = await http
+      .post('/api/v1/admin/catalog/flower-refs/items')
       .set('Origin', origin)
-      .send({ name: 'Medium', slug: `medium-${stamp}` })
+      .send({ flowerTypeId: typeRose.body.id, heightCm: 60 })
       .expect(201);
-    const sizeL = await http
-      .post('/api/v1/admin/catalog/bouquet-sizes')
+    const itemPeony = await http
+      .post('/api/v1/admin/catalog/flower-refs/items')
       .set('Origin', origin)
-      .send({ name: 'Large', slug: `large-${stamp}` })
+      .send({ flowerTypeId: typePeony.body.id, heightCm: 50 })
       .expect(201);
 
     const budgetMid = await http
@@ -328,8 +334,8 @@ describe('Storefront catalog (integration)', () => {
       occasionIds: [occasionA.body.id],
       recipientIds: [recipient.body.id],
       colorIds: [colorPink.body.id],
-      bouquetSizeId: sizeM.body.id,
-      flowerId: flowerRose.body.id,
+      flowerItemId: itemRose.body.id,
+      variantName: '7 шт',
     });
     const orMatch = await publishProduct({
       name: 'Facet Or Color',
@@ -337,15 +343,15 @@ describe('Storefront catalog (integration)', () => {
       priceMinor: '9500',
       occasionIds: [occasionB.body.id],
       colorIds: [colorWhite.body.id],
-      bouquetSizeId: sizeL.body.id,
-      flowerId: flowerPeony.body.id,
+      flowerItemId: itemPeony.body.id,
+      variantName: '15 шт',
     });
     const miss = await publishProduct({
       name: 'Facet Miss',
       slug: `facet-miss-${stamp}`,
       priceMinor: '20000',
       colorIds: [colorPink.body.id],
-      bouquetSizeId: sizeL.body.id,
+      variantName: '21 шт',
     });
 
     const byBudget = await request(base)
@@ -365,13 +371,13 @@ describe('Storefront catalog (integration)', () => {
     expect(colorSlugs).toContain(match.slug);
     expect(colorSlugs).toContain(orMatch.slug);
 
-    const byFlower = await request(base)
+    const byFlowerType = await request(base)
       .get('/api/v1/catalog/products')
-      .query({ flowerSlugs: flowerRose.body.slug })
+      .query({ flowerTypeSlug: typeRose.body.slug })
       .expect(200);
-    const flowerSlugs = byFlower.body.items.map((item: { slug: string }) => item.slug);
-    expect(flowerSlugs).toContain(match.slug);
-    expect(flowerSlugs).not.toContain(orMatch.slug);
+    const flowerTypeSlugs = byFlowerType.body.items.map((item: { slug: string }) => item.slug);
+    expect(flowerTypeSlugs).toContain(match.slug);
+    expect(flowerTypeSlugs).not.toContain(orMatch.slug);
 
     const byOccasion = await request(base)
       .get('/api/v1/catalog/products')
@@ -387,21 +393,15 @@ describe('Storefront catalog (integration)', () => {
       .expect(200);
     expect(byRecipient.body.items.map((item: { slug: string }) => item.slug)).toContain(match.slug);
 
-    const bySize = await request(base)
-      .get('/api/v1/catalog/products')
-      .query({ bouquetSizeSlugs: sizeM.body.slug })
-      .expect(200);
-    const sizeSlugs = bySize.body.items.map((item: { slug: string }) => item.slug);
-    expect(sizeSlugs).toContain(match.slug);
-    expect(sizeSlugs).not.toContain(orMatch.slug);
-
     const budgetRanges = await request(base).get('/api/v1/catalog/budget-ranges').expect(200);
     expect(budgetRanges.body.some((item: { id: string }) => item.id === budgetMid.body.id)).toBe(
       true,
     );
 
-    const sizes = await request(base).get('/api/v1/catalog/bouquet-sizes').expect(200);
-    expect(sizes.body.some((item: { slug: string }) => item.slug === sizeM.body.slug)).toBe(true);
+    const flowerTypes = await request(base).get('/api/v1/catalog/flower-types').expect(200);
+    expect(flowerTypes.body.some((item: { slug: string }) => item.slug === typeRose.body.slug)).toBe(
+      true,
+    );
   });
 
   it('exposes promotion effective pricing on list and detail', async () => {
@@ -496,10 +496,15 @@ describe('Storefront catalog (integration)', () => {
       .send({ name: 'Romantic Day', slug: `romantic-${stamp}`, description: 'Soft' })
       .expect(201);
 
-    const flower = await http
-      .post('/api/v1/admin/catalog/flowers')
+    const flowerType = await http
+      .post('/api/v1/admin/catalog/flower-refs/types')
       .set('Origin', origin)
       .send({ name: 'Peony Rel', slug: `peony-rel-${stamp}` })
+      .expect(201);
+    const flowerItem = await http
+      .post('/api/v1/admin/catalog/flower-refs/items')
+      .set('Origin', origin)
+      .send({ flowerTypeId: flowerType.body.id, heightCm: 55 })
       .expect(201);
 
     const color = await http
@@ -513,7 +518,7 @@ describe('Storefront catalog (integration)', () => {
       priceMinor: '7000',
       occasionIds: [occasion.body.id],
       colorIds: [color.body.id],
-      flowerId: flower.body.id,
+      flowerItemId: flowerItem.body.id,
     });
     const sibling = await publishProduct({
       name: 'Sibling Related',
@@ -555,7 +560,7 @@ describe('Storefront catalog (integration)', () => {
     const sitemap = await request(base).get('/api/v1/catalog/sitemap').expect(200);
     const paths = sitemap.body.map((entry: { path: string }) => entry.path);
     expect(paths).toContain(`/bukety/${primary.slug}`);
-    expect(paths).toContain(`/cvety/${flower.body.slug}`);
+    expect(paths).toContain(`/cvety/${flowerType.body.slug}`);
     expect(paths).toContain(`/povod/${occasion.body.slug}`);
     expect(paths).not.toContain(`/bukety/${draft.body.slug}`);
   });

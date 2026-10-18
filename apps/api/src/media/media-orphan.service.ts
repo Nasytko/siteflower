@@ -1,4 +1,17 @@
-import { Inject, Injectable, Logger } from '@nestjs/common';
+import {
+  BadRequestException,
+  Inject,
+  Injectable,
+  Logger,
+  NotFoundException,
+} from '@nestjs/common';
+import type {
+  MediaAssetAdminListDto,
+  MediaAssetAdminListItemDto,
+  MediaAssetListStatus,
+  MediaAssetPurgeResultDto,
+} from '@bouquet-one/contracts';
+import type { Prisma } from '@bouquet-one/database';
 import { PrismaService } from '../database/prisma.service';
 import { MEDIA_ORPHAN_GRACE_HOURS } from './media.constants';
 import { orphanGraceCutoff } from './media-orphan.util';
@@ -80,6 +93,183 @@ export class MediaOrphanService {
         )
     `;
     return { marked: Number(marked), cleared: Number(cleared) };
+  }
+
+  async listAssets(options: {
+    status: MediaAssetListStatus;
+    page?: number;
+    pageSize?: number;
+    reconcile?: boolean;
+  }): Promise<MediaAssetAdminListDto> {
+    if (options.reconcile !== false) {
+      await this.reconcileOrphanMarkers();
+    }
+
+    const page = Math.max(options.page ?? 1, 1);
+    const pageSize = Math.min(Math.max(options.pageSize ?? 20, 1), 100);
+    const cutoff = orphanGraceCutoff(MEDIA_ORPHAN_GRACE_HOURS);
+    const where = this.listWhere(options.status, cutoff);
+
+    const [total, assets] = await Promise.all([
+      this.prisma.client.mediaAsset.count({ where }),
+      this.prisma.client.mediaAsset.findMany({
+        where,
+        include: {
+          productMedia: {
+            select: {
+              product: { select: { id: true, slug: true, name: true } },
+            },
+          },
+          navigationMenuItems: {
+            select: { id: true, label: true },
+          },
+        },
+        orderBy:
+          options.status === 'referenced'
+            ? { createdAt: 'desc' }
+            : { orphanedAt: 'asc' },
+        skip: (page - 1) * pageSize,
+        take: pageSize,
+      }),
+    ]);
+
+    const items: MediaAssetAdminListItemDto[] = assets.map((asset) => {
+      const productRefs = asset.productMedia.map((pm) => ({
+        kind: 'product' as const,
+        productId: pm.product.id,
+        productSlug: pm.product.slug,
+        productName: pm.product.name,
+      }));
+      const navRefs = asset.navigationMenuItems.map((item) => ({
+        kind: 'navigation' as const,
+        itemId: item.id,
+        label: item.label,
+      }));
+      return {
+        id: asset.id,
+        storageKey: asset.storageKey,
+        url: this.storage.getPublicUrl(asset.storageKey),
+        byteSize: asset.byteSize,
+        mimeType: asset.mimeType,
+        width: asset.width,
+        height: asset.height,
+        orphanedAt: asset.orphanedAt?.toISOString() ?? null,
+        createdAt: asset.createdAt.toISOString(),
+        refs: [...productRefs, ...navRefs],
+      };
+    });
+
+    return {
+      status: options.status,
+      items,
+      total,
+      page,
+      pageSize,
+    };
+  }
+
+  /**
+   * Purge a single past-grace orphan. Rejects referenced or in-grace assets.
+   */
+  async purgeAsset(id: string): Promise<MediaAssetPurgeResultDto> {
+    await this.reconcileOrphanMarkers();
+
+    const asset = await this.prisma.client.mediaAsset.findUnique({
+      where: { id },
+      include: {
+        derivatives: { select: { storageKey: true, byteSize: true } },
+        productMedia: { select: { id: true } },
+        navigationMenuItems: { select: { id: true } },
+      },
+    });
+
+    if (!asset) {
+      throw new NotFoundException('Media asset not found');
+    }
+
+    if (asset.productMedia.length + asset.navigationMenuItems.length > 0) {
+      throw new BadRequestException('Media asset is still referenced');
+    }
+
+    const cutoff = orphanGraceCutoff(MEDIA_ORPHAN_GRACE_HOURS);
+    if (!asset.orphanedAt || asset.orphanedAt > cutoff) {
+      throw new BadRequestException('Media asset is still within the grace period');
+    }
+
+    const candidate: OrphanCandidate = {
+      id: asset.id,
+      storageKey: asset.storageKey,
+      byteSize: asset.byteSize,
+      createdAt: asset.createdAt.toISOString(),
+      orphanedAt: asset.orphanedAt.toISOString(),
+      derivativeKeys: asset.derivatives.map((d) => d.storageKey),
+      estimatedBytes:
+        asset.byteSize + asset.derivatives.reduce((sum, d) => sum + d.byteSize, 0),
+    };
+
+    const report: CleanupReport = {
+      dryRun: false,
+      graceHours: MEDIA_ORPHAN_GRACE_HOURS,
+      scanned: 1,
+      candidates: [candidate],
+      deletedAssets: [],
+      deletedKeys: [],
+      skippedLocked: [],
+      failures: [],
+      estimatedReclaimableBytes: candidate.estimatedBytes,
+    };
+
+    try {
+      await this.deleteOrphanAsset(candidate, report, MEDIA_ORPHAN_GRACE_HOURS);
+    } catch (err) {
+      throw new BadRequestException(
+        `Failed to purge media asset: ${(err as Error).message}`,
+      );
+    }
+
+    if (!report.deletedAssets.includes(id)) {
+      // Race: re-attached or grace window moved during lock.
+      throw new BadRequestException(
+        'Media asset could not be purged (referenced or within grace)',
+      );
+    }
+
+    return {
+      id,
+      deleted: true,
+      deletedKeys: report.deletedKeys,
+    };
+  }
+
+  private listWhere(
+    status: MediaAssetListStatus,
+    cutoff: Date,
+  ): Prisma.MediaAssetWhereInput {
+    const unreferenced: Prisma.MediaAssetWhereInput = {
+      productMedia: { none: {} },
+      navigationMenuItems: { none: {} },
+    };
+
+    switch (status) {
+      case 'referenced':
+        return {
+          OR: [{ productMedia: { some: {} } }, { navigationMenuItems: { some: {} } }],
+        };
+      case 'grace':
+        return {
+          ...unreferenced,
+          orphanedAt: { not: null, gt: cutoff },
+        };
+      case 'purgeable':
+        return {
+          ...unreferenced,
+          orphanedAt: { not: null, lte: cutoff },
+        };
+      default: {
+        const _exhaustive: never = status;
+        throw new BadRequestException(`Unknown status: ${_exhaustive}`);
+      }
+    }
   }
 
   async findOrphanCandidates(options?: {

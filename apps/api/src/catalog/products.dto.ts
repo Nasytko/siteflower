@@ -202,27 +202,7 @@ export class SaveProductEditorDto extends ExpectedVersionDto {
   @IsOptional()
   @ValidateIf((_, value) => value !== null)
   @IsUUID()
-  bouquetSizeId?: string | null;
-
-  @IsOptional()
-  @ValidateIf((_, value) => value !== null)
-  @IsUUID()
   catalogCategoryId?: string | null;
-
-  @IsOptional()
-  @ValidateIf((_, value) => value !== null)
-  @IsUUID()
-  flowerTypeId?: string | null;
-
-  @IsOptional()
-  @ValidateIf((_, value) => value !== null)
-  @IsUUID()
-  flowerVarietyId?: string | null;
-
-  @IsOptional()
-  @ValidateIf((_, value) => value !== null)
-  @IsUUID()
-  flowerOriginId?: string | null;
 
   /** null clears family membership; omit to leave unchanged. */
   @IsOptional()
@@ -252,11 +232,6 @@ export class SaveProductEditorDto extends ExpectedVersionDto {
   @IsUUID(undefined, { each: true })
   colorIds!: string[];
 
-  @IsArray()
-  @ArrayMaxSize(50)
-  @IsUUID(undefined, { each: true })
-  productLineIds!: string[];
-
   @ValidateNested()
   @Type(() => EditorPromotionInputDto)
   promotion!: EditorPromotionInputDto;
@@ -268,16 +243,8 @@ export class SaveProductEditorDto extends ExpectedVersionDto {
 }
 
 export class ProductComponentInputDto {
-  @IsOptional()
-  @ValidateIf((_, value) => value !== null)
   @IsUUID()
-  flowerItemId?: string | null;
-
-  /** @deprecated Prefer flowerItemId. Kept for /cvety legacy facet. */
-  @IsOptional()
-  @ValidateIf((_, value) => value !== null)
-  @IsUUID()
-  flowerId?: string | null;
+  flowerItemId!: string;
 
   @IsString()
   @MinLength(1)
@@ -340,10 +307,6 @@ export class CreateProductDto {
   heightCm?: number;
 
   @IsOptional()
-  @IsUUID()
-  bouquetSizeId?: string;
-
-  @IsOptional()
   @Matches(CURRENCY_PATTERN, { message: 'currency must be an ISO 4217 code' })
   currency?: string;
 
@@ -385,12 +348,6 @@ export class CreateProductDto {
   @ArrayMaxSize(50)
   @IsUUID(undefined, { each: true })
   colorIds?: string[];
-
-  @IsOptional()
-  @IsArray()
-  @ArrayMaxSize(50)
-  @IsUUID(undefined, { each: true })
-  productLineIds?: string[];
 }
 
 export class UpdateProductDto extends ExpectedVersionDto {
@@ -434,12 +391,6 @@ export class UpdateProductDto extends ExpectedVersionDto {
   @Min(15)
   @Max(250)
   heightCm?: number | null;
-
-  /** Set null to detach the bouquet size. */
-  @IsOptional()
-  @ValidateIf((_, value) => value !== null)
-  @IsUUID()
-  bouquetSizeId?: string | null;
 
   @IsOptional()
   @Matches(CURRENCY_PATTERN, { message: 'currency must be an ISO 4217 code' })
@@ -488,27 +439,6 @@ export class SetProductComponentsDto extends ExpectedVersionDto {
   components!: ProductComponentInputDto[];
 }
 
-/** Manual migration: attach one FlowerItem as composition (no auto-guessing). */
-export class SetupCompositionFromItemDto extends ExpectedVersionDto {
-  @IsUUID()
-  flowerItemId!: string;
-
-  @Type(() => Number)
-  @IsInt()
-  @Min(1)
-  @Max(10_000)
-  quantity!: number;
-
-  @IsOptional()
-  @IsIn(COMPONENT_UNITS)
-  unit?: ComponentUnit;
-
-  /** Clear deprecated Product.flowerType/Variety/Origin after composition is set. Keeps heightCm. */
-  @IsOptional()
-  @IsBoolean()
-  clearLegacyFlowerAttrs?: boolean;
-}
-
 export class SetProductTaxonomiesDto extends ExpectedVersionDto {
   @IsOptional()
   @IsArray()
@@ -527,18 +457,6 @@ export class SetProductTaxonomiesDto extends ExpectedVersionDto {
   @ArrayMaxSize(50)
   @IsUUID(undefined, { each: true })
   colorIds?: string[];
-
-  @IsOptional()
-  @IsArray()
-  @ArrayMaxSize(50)
-  @IsUUID(undefined, { each: true })
-  productLineIds?: string[];
-
-  /** Explicit null detaches the bouquet size; omit to leave unchanged. */
-  @IsOptional()
-  @ValidateIf((_, value) => value !== null)
-  @IsUUID()
-  bouquetSizeId?: string | null;
 }
 
 export class SetProductBestsellerGroupsDto extends ExpectedVersionDto {
@@ -721,13 +639,7 @@ class ProductFacetQueryDto {
   @MaxLength(120, { each: true })
   colorSlugs?: string[];
 
-  @IsOptional()
-  @Transform(toStringList)
-  @IsArray()
-  @ArrayMaxSize(FACET_LIST_MAX)
-  @IsUUID(undefined, { each: true })
-  flowerIds?: string[];
-
+  /** /cvety rewrite: flower-type slug matched via FlowerItem composition. */
   @IsOptional()
   @Transform(toStringList)
   @IsArray()
@@ -736,29 +648,9 @@ class ProductFacetQueryDto {
   flowerSlugs?: string[];
 
   @IsOptional()
-  @Transform(toStringList)
-  @IsArray()
-  @ArrayMaxSize(FACET_LIST_MAX)
-  @IsUUID(undefined, { each: true })
-  bouquetSizeIds?: string[];
-
-  @IsOptional()
-  @Transform(toStringList)
-  @IsArray()
-  @ArrayMaxSize(FACET_LIST_MAX)
-  @MaxLength(120, { each: true })
-  bouquetSizeSlugs?: string[];
-
-  @IsOptional()
   @Transform(toOptionalBoolean)
   @IsBoolean()
   promotionalOnly?: boolean;
-
-  /** Admin: products with legacy flower data but no FlowerItem composition. */
-  @IsOptional()
-  @Transform(toOptionalBoolean)
-  @IsBoolean()
-  needsCompositionMigration?: boolean;
 
   @IsOptional()
   @IsUUID()

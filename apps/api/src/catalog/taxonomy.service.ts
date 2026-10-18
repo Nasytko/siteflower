@@ -6,7 +6,6 @@ import {
 } from '@nestjs/common';
 import {
   normalizeSlug,
-  type BouquetSizeAdminDto,
   type ColorAdminDto,
   type PaginatedResponse,
   type SlugEntityType,
@@ -23,49 +22,30 @@ import { trimmedOrNull } from '../common/string.util';
 import { StorefrontRevalidateService } from '../storefront/storefront-revalidate.service';
 import { OCC_CONFLICT_MESSAGE } from './catalog.logic';
 import {
-  toBouquetSizeAdminDto,
   toColorAdminDto,
   toTaxonomyAdminDto,
   type TaxonomyRecord,
 } from './catalog.mapper';
 import { SlugRedirectsService } from './slug-redirects.service';
 
-/** Discovery dimensions only — categories and styles are gone by design. */
-export const TAXONOMY_KINDS = [
-  'flowers',
-  'occasions',
-  'recipients',
-  'colors',
-  'bouquet-sizes',
-  'product-lines',
-] as const;
+/** Discovery facets only — flowers / bouquet sizes / product lines are gone. */
+export const TAXONOMY_KINDS = ['occasions', 'recipients', 'colors'] as const;
 
 export type TaxonomyKind = (typeof TAXONOMY_KINDS)[number];
 
-export type TaxonomyEntryDto = TaxonomyAdminDto | ColorAdminDto | BouquetSizeAdminDto;
+export type TaxonomyEntryDto = TaxonomyAdminDto | ColorAdminDto;
 
-/** ProductLine has no SEO landings yet — slug redirects are skipped for it. */
-const SLUG_ENTITY_BY_KIND: Partial<Record<TaxonomyKind, SlugEntityType>> = {
-  flowers: 'FLOWER',
+const SLUG_ENTITY_BY_KIND: Record<TaxonomyKind, SlugEntityType> = {
   occasions: 'OCCASION',
   recipients: 'RECIPIENT',
   colors: 'COLOR',
-  'bouquet-sizes': 'BOUQUET_SIZE',
 };
 
 const ENTITY_TYPE_BY_KIND: Record<TaxonomyKind, string> = {
-  flowers: 'Flower',
   occasions: 'Occasion',
   recipients: 'Recipient',
   colors: 'Color',
-  'bouquet-sizes': 'BouquetSize',
-  'product-lines': 'ProductLine',
 };
-
-/** BouquetSize / ProductLine are filter facets, not landing pages — no SEO columns. */
-function hasSeoColumns(kind: TaxonomyKind): boolean {
-  return kind !== 'bouquet-sizes' && kind !== 'product-lines';
-}
 
 type TaxonomyWhere = {
   visibility?: TaxonomyVisibility;
@@ -75,10 +55,7 @@ type TaxonomyWhere = {
   }>;
 };
 
-type TaxonomyRow = Omit<TaxonomyRecord, 'seoTitle' | 'seoDescription' | 'noIndex'> & {
-  seoTitle?: string | null;
-  seoDescription?: string | null;
-  noIndex?: boolean;
+type TaxonomyRow = TaxonomyRecord & {
   swatch?: string | null;
 };
 
@@ -216,13 +193,9 @@ export class TaxonomyService {
           description: trimmedOrNull(input.description),
           ...(input.sortOrder === undefined ? {} : { sortOrder: input.sortOrder }),
           ...(input.visibility ? { visibility: input.visibility } : {}),
-          ...(hasSeoColumns(kind)
-            ? {
-                seoTitle: trimmedOrNull(input.seoTitle),
-                seoDescription: trimmedOrNull(input.seoDescription),
-                ...(input.noIndex === undefined ? {} : { noIndex: input.noIndex }),
-              }
-            : {}),
+          seoTitle: trimmedOrNull(input.seoTitle),
+          seoDescription: trimmedOrNull(input.seoDescription),
+          ...(input.noIndex === undefined ? {} : { noIndex: input.noIndex }),
           ...(kind === 'colors' ? { swatch: trimmedOrNull(input.swatch) } : {}),
         },
       });
@@ -258,10 +231,7 @@ export class TaxonomyService {
         if (taken) {
           throw new ConflictException('Slug already in use');
         }
-        const slugEntity = SLUG_ENTITY_BY_KIND[kind];
-        if (slugEntity) {
-          await this.slugRedirects.record(tx, slugEntity, current.slug, nextSlug);
-        }
+        await this.slugRedirects.record(tx, SLUG_ENTITY_BY_KIND[kind], current.slug, nextSlug);
       }
 
       const data: TaxonomyWriteData = {
@@ -272,15 +242,11 @@ export class TaxonomyService {
           : { description: trimmedOrNull(input.description) }),
         ...(input.sortOrder === undefined ? {} : { sortOrder: input.sortOrder }),
         ...(input.visibility === undefined ? {} : { visibility: input.visibility }),
-        ...(hasSeoColumns(kind)
-          ? {
-              ...(input.seoTitle === undefined ? {} : { seoTitle: trimmedOrNull(input.seoTitle) }),
-              ...(input.seoDescription === undefined
-                ? {}
-                : { seoDescription: trimmedOrNull(input.seoDescription) }),
-              ...(input.noIndex === undefined ? {} : { noIndex: input.noIndex }),
-            }
-          : {}),
+        ...(input.seoTitle === undefined ? {} : { seoTitle: trimmedOrNull(input.seoTitle) }),
+        ...(input.seoDescription === undefined
+          ? {}
+          : { seoDescription: trimmedOrNull(input.seoDescription) }),
+        ...(input.noIndex === undefined ? {} : { noIndex: input.noIndex }),
         ...(kind === 'colors' && input.swatch !== undefined
           ? { swatch: trimmedOrNull(input.swatch) }
           : {}),
@@ -306,30 +272,18 @@ export class TaxonomyService {
   }
 
   private toDto(kind: TaxonomyKind, row: TaxonomyRow): TaxonomyEntryDto {
-    if (kind === 'bouquet-sizes' || kind === 'product-lines') {
-      return toBouquetSizeAdminDto(row);
-    }
-    const withSeo: TaxonomyRecord = {
-      ...row,
-      seoTitle: row.seoTitle ?? null,
-      seoDescription: row.seoDescription ?? null,
-      noIndex: row.noIndex ?? false,
-    };
     if (kind === 'colors') {
-      return toColorAdminDto({ ...withSeo, swatch: row.swatch ?? null });
+      return toColorAdminDto({ ...row, swatch: row.swatch ?? null });
     }
-    return toTaxonomyAdminDto(withSeo);
+    return toTaxonomyAdminDto(row);
   }
 
   private delegate(kind: TaxonomyKind, tx?: Prisma.TransactionClient): TaxonomyDelegate {
     const db = tx ?? this.prisma.client;
     const delegates = {
-      flowers: db.flower,
       occasions: db.occasion,
       recipients: db.recipient,
       colors: db.color,
-      'bouquet-sizes': db.bouquetSize,
-      'product-lines': db.productLine,
     };
     return delegates[kind] as unknown as TaxonomyDelegate;
   }

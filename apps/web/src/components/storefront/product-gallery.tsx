@@ -13,7 +13,6 @@ type Props = {
   productName: string;
   /** Optional merchandising height — ruler beside + bar under photos when set. */
   heightCm?: number | null;
-  bouquetSizeName?: string | null;
   promotionPercent?: number | null;
 };
 
@@ -21,7 +20,6 @@ export function ProductGallery({
   media,
   productName,
   heightCm = null,
-  bouquetSizeName = null,
   promotionPercent = null,
 }: Props) {
   const sorted = [...media].sort((a, b) => {
@@ -32,12 +30,7 @@ export function ProductGallery({
   const active = sorted[activeIndex] ?? sorted[0];
   const showHeight = heightCm != null && heightCm > 0;
   const heightValue = showHeight ? heightCm : null;
-  const sizeCaption =
-    heightValue != null
-      ? `${heightValue} см`
-      : bouquetSizeName
-        ? bouquetSizeName
-        : null;
+  const sizeCaption = heightValue != null ? `${heightValue} см` : null;
 
   if (sorted.length === 0) {
     return (

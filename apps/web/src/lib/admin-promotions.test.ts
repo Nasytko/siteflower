@@ -24,11 +24,7 @@ function row(
     availability: 'AVAILABLE',
     version: 1,
     heightCm: null,
-    bouquetSize: null,
     catalogCategory: null,
-    flowerType: null,
-    flowerVariety: null,
-    flowerOrigin: null,
     family: null,
     cardSubtitle: null,
     price: {
@@ -58,9 +54,7 @@ function row(
     },
     defaultVariant: null,
     primaryImageUrl: null,
-    flowers: [],
     colors: [],
-    productLines: [],
     updatedAt: '2026-03-08T09:00:00.000Z',
     promotionAdmin: {
       enabled: true,

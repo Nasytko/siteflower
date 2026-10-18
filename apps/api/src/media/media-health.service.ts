@@ -120,6 +120,7 @@ export class MediaHealthService {
     const graceCutoff = orphanGraceCutoff(MEDIA_ORPHAN_GRACE_HOURS);
 
     // Heal marker drift before counting (cascade detach / attach races).
+    // Refs = product_media OR navigation_menu_items (same as MediaOrphanService).
     await this.prisma.client.$executeRaw`
       UPDATE media_assets AS ma
       SET orphaned_at = NOW()
@@ -127,29 +128,42 @@ export class MediaHealthService {
         AND NOT EXISTS (
           SELECT 1 FROM product_media pm WHERE pm.media_asset_id = ma.id
         )
+        AND NOT EXISTS (
+          SELECT 1 FROM navigation_menu_items nmi WHERE nmi.media_asset_id = ma.id
+        )
     `;
     await this.prisma.client.$executeRaw`
       UPDATE media_assets AS ma
       SET orphaned_at = NULL
       WHERE ma.orphaned_at IS NOT NULL
-        AND EXISTS (
-          SELECT 1 FROM product_media pm WHERE pm.media_asset_id = ma.id
+        AND (
+          EXISTS (SELECT 1 FROM product_media pm WHERE pm.media_asset_id = ma.id)
+          OR EXISTS (SELECT 1 FROM navigation_menu_items nmi WHERE nmi.media_asset_id = ma.id)
         )
     `;
+
+    const unreferenced = {
+      productMedia: { none: {} },
+      navigationMenuItems: { none: {} },
+    } as const;
 
     const [assetCount, referencedAssets, orphanWithinGrace, orphanCandidates] =
       await Promise.all([
         this.prisma.client.mediaAsset.count(),
-        this.prisma.client.mediaAsset.count({ where: { productMedia: { some: {} } } }),
         this.prisma.client.mediaAsset.count({
           where: {
-            productMedia: { none: {} },
+            OR: [{ productMedia: { some: {} } }, { navigationMenuItems: { some: {} } }],
+          },
+        }),
+        this.prisma.client.mediaAsset.count({
+          where: {
+            ...unreferenced,
             orphanedAt: { not: null, gt: graceCutoff },
           },
         }),
         this.prisma.client.mediaAsset.count({
           where: {
-            productMedia: { none: {} },
+            ...unreferenced,
             orphanedAt: { not: null, lte: graceCutoff },
           },
         }),

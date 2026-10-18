@@ -15,7 +15,13 @@ import { mkdir, writeFile } from 'node:fs/promises';
 import { dirname, join, resolve } from 'node:path';
 import { config } from 'dotenv';
 import sharp from 'sharp';
-import { defaultHomepageConfig, defaultTimeWindows } from '@bouquet-one/contracts';
+import {
+  defaultHomepageConfig,
+  defaultTimeWindows,
+  flowerItemDisplayName,
+  flowerItemIdentityKey,
+  normalizeSlug,
+} from '@bouquet-one/contracts';
 import { createPrismaClient, type PrismaClient } from '@bouquet-one/database';
 
 // Capture BEFORE dotenv so a checked-in/local `.env` cannot silently enable seeding.
@@ -42,7 +48,6 @@ const PRODUCTION_HOST_HINTS = [
 
 type TaxonomySeed = { slug: string; name: string; sortOrder: number };
 type ColorSeed = TaxonomySeed & { swatch?: string };
-type BouquetSizeSeed = TaxonomySeed & { description?: string };
 type BudgetRangeSeed = {
   label: string;
   minMinor: number | null;
@@ -57,20 +62,19 @@ type BouquetSeed = {
   description: string;
   /** Optional height in cm — not every bouquet has it. */
   heightCm?: number;
-  bouquetSizeSlug: string;
   colorHex: string;
   prices: { S: number; M: number; L: number };
   occasions: string[];
   recipients: string[];
   colors: string[];
-  components: Array<{ displayName: string; quantity: number; flowerSlug?: string }>;
+  components: Array<{ displayName: string; quantity: number; flowerTypeSlug: string }>;
   /** When set, seed attaches a ProductPromotion after variants exist. */
   promotion?:
     | { type: 'PERCENT'; percentOff: number }
     | { type: 'FIXED'; salePrices: { S: number; M: number; L: number } };
 };
 
-const FLOWERS: TaxonomySeed[] = [
+const FLOWER_TYPES: TaxonomySeed[] = [
   { slug: 'rozy', name: 'Розы', sortOrder: 10 },
   { slug: 'piony', name: 'Пионы', sortOrder: 20 },
   { slug: 'tyulpany', name: 'Тюльпаны', sortOrder: 30 },
@@ -95,21 +99,6 @@ const COLORS: ColorSeed[] = [
   { slug: 'krasnyy', name: 'Красный', sortOrder: 30, swatch: '#c45c5c' },
 ];
 
-const PRODUCT_LINES: TaxonomySeed[] = [
-  { slug: 'mono-bukety-roza', name: 'Моно букеты Роза', sortOrder: 10 },
-  { slug: 'kompozicii-v-shlyapnoj-korobke', name: 'Композиции в шляпной коробке', sortOrder: 20 },
-  { slug: 'mono-bukety-kalla', name: 'Моно букеты Калла', sortOrder: 30 },
-  { slug: 'mono-bukety-eustoma', name: 'Моно букеты Эустома', sortOrder: 40 },
-];
-
-const BOUQUET_SIZES: BouquetSizeSeed[] = [
-  // Slugs match migration 20260926120000 defaults (transliteration without trailing soft-sign).
-  { slug: 'malenkij', name: 'Маленький', sortOrder: 10, description: 'Компактный букет' },
-  { slug: 'srednij', name: 'Средний', sortOrder: 20, description: 'Универсальный размер' },
-  { slug: 'bolshoj', name: 'Большой', sortOrder: 30, description: 'Объёмный подарок' },
-  { slug: 'ochen-bolshoj', name: 'Очень большой', sortOrder: 40, description: 'Максимальный размер' },
-];
-
 /** Admin-managed budget chips — minor BYN (1 BYN = 100). */
 const BUDGET_RANGES: BudgetRangeSeed[] = [
   { label: 'до 100 BYN', minMinor: null, maxMinor: 9999, sortOrder: 10 },
@@ -125,15 +114,14 @@ const BOUQUETS: BouquetSeed[] = [
     shortDescription: 'Нежный розовый букет с розами и эустомой.',
     description: 'Мягкая палитра для тёплого поздравления. Подходит на день рождения и «просто так».',
     heightCm: 45,
-    bouquetSizeSlug: 'srednij',
     colorHex: '#f3c4d4',
     prices: { S: 8900, M: 11900, L: 14900 },
     occasions: ['den-rozhdeniya', 'bez-povoda'],
     recipients: ['lyubimoy', 'mame'],
     colors: ['rozovyy'],
     components: [
-      { displayName: 'Роза', quantity: 7, flowerSlug: 'rozy' },
-      { displayName: 'Эустома', quantity: 3, flowerSlug: 'eustoma' },
+      { displayName: 'Роза', quantity: 7, flowerTypeSlug: 'rozy' },
+      { displayName: 'Эустома', quantity: 3, flowerTypeSlug: 'eustoma' },
     ],
     promotion: { type: 'PERCENT', percentOff: 15 },
   },
@@ -143,15 +131,14 @@ const BOUQUETS: BouquetSeed[] = [
     shortDescription: 'Светлый букет с белыми акцентами.',
     description: 'Чистая композиция для спокойного подарка маме или коллеге.',
     heightCm: 40,
-    bouquetSizeSlug: 'srednij',
     colorHex: '#efe8df',
     prices: { S: 7900, M: 10900, L: 13900 },
     occasions: ['den-rozhdeniya', 'bez-povoda'],
     recipients: ['mame', 'kollege'],
     colors: ['belyy', 'rozovyy'],
     components: [
-      { displayName: 'Роза', quantity: 5, flowerSlug: 'rozy' },
-      { displayName: 'Эустома', quantity: 5, flowerSlug: 'eustoma' },
+      { displayName: 'Роза', quantity: 5, flowerTypeSlug: 'rozy' },
+      { displayName: 'Эустома', quantity: 5, flowerTypeSlug: 'eustoma' },
     ],
     promotion: { type: 'PERCENT', percentOff: 10 },
   },
@@ -161,13 +148,12 @@ const BOUQUETS: BouquetSeed[] = [
     shortDescription: 'Воздушный монобукет из роз.',
     description: 'Лёгкий объём и спокойный белый тон — когда хочется «воздуха».',
     heightCm: 55,
-    bouquetSizeSlug: 'bolshoj',
     colorHex: '#e8eef5',
     prices: { S: 9900, M: 12900, L: 16900 },
     occasions: ['bez-povoda'],
     recipients: ['lyubimoy'],
     colors: ['belyy'],
-    components: [{ displayName: 'Роза белая', quantity: 15, flowerSlug: 'rozy' }],
+    components: [{ displayName: 'Роза белая', quantity: 15, flowerTypeSlug: 'rozy' }],
     promotion: { type: 'PERCENT', percentOff: 12 },
   },
   {
@@ -176,15 +162,14 @@ const BOUQUETS: BouquetSeed[] = [
     shortDescription: 'Пионы и розы в мягкой гамме.',
     description: 'Сезонный характер пионов — букет для особого дня.',
     heightCm: 50,
-    bouquetSizeSlug: 'srednij',
     colorHex: '#f7d6e0',
     prices: { S: 12900, M: 16900, L: 21900 },
     occasions: ['den-rozhdeniya', '8-marta'],
     recipients: ['lyubimoy', 'mame'],
     colors: ['rozovyy'],
     components: [
-      { displayName: 'Пион', quantity: 5, flowerSlug: 'piony' },
-      { displayName: 'Роза', quantity: 5, flowerSlug: 'rozy' },
+      { displayName: 'Пион', quantity: 5, flowerTypeSlug: 'piony' },
+      { displayName: 'Роза', quantity: 5, flowerTypeSlug: 'rozy' },
     ],
   },
   {
@@ -193,13 +178,12 @@ const BOUQUETS: BouquetSeed[] = [
     shortDescription: 'Классические красные розы.',
     description: 'Прямой и понятный жест — монобукет для любимой.',
     heightCm: 60,
-    bouquetSizeSlug: 'bolshoj',
     colorHex: '#e8b4b8',
     prices: { S: 10900, M: 14900, L: 19900 },
     occasions: ['bez-povoda', 'den-rozhdeniya'],
     recipients: ['lyubimoy'],
     colors: ['krasnyy'],
-    components: [{ displayName: 'Роза красная', quantity: 11, flowerSlug: 'rozy' }],
+    components: [{ displayName: 'Роза красная', quantity: 11, flowerTypeSlug: 'rozy' }],
     promotion: { type: 'FIXED', salePrices: { S: 8900, M: 11900, L: 15900 } },
   },
   {
@@ -207,13 +191,12 @@ const BOUQUETS: BouquetSeed[] = [
     name: 'Весна',
     shortDescription: 'Тюльпаны в свежей весенней сборке.',
     description: 'Лёгкий сезонный букет — к 8 марта и просто так.',
-    bouquetSizeSlug: 'malenkij',
     colorHex: '#f5e6c8',
     prices: { S: 6900, M: 9900, L: 12900 },
     occasions: ['8-marta', 'bez-povoda'],
     recipients: ['mame', 'kollege'],
     colors: ['rozovyy', 'belyy'],
-    components: [{ displayName: 'Тюльпан', quantity: 15, flowerSlug: 'tyulpany' }],
+    components: [{ displayName: 'Тюльпан', quantity: 15, flowerTypeSlug: 'tyulpany' }],
     promotion: { type: 'PERCENT', percentOff: 20 },
   },
   {
@@ -221,13 +204,12 @@ const BOUQUETS: BouquetSeed[] = [
     name: 'Тиффани',
     shortDescription: 'Эустома с акцентом на воздушную форму.',
     description: 'Мягкий силуэт для спокойного поздравления.',
-    bouquetSizeSlug: 'srednij',
     colorHex: '#d9ebe6',
     prices: { S: 9500, M: 12500, L: 15500 },
     occasions: ['den-rozhdeniya'],
     recipients: ['kollege', 'mame'],
     colors: ['belyy'],
-    components: [{ displayName: 'Эустома', quantity: 9, flowerSlug: 'eustoma' }],
+    components: [{ displayName: 'Эустома', quantity: 9, flowerTypeSlug: 'eustoma' }],
     promotion: { type: 'FIXED', salePrices: { S: 7900, M: 10500, L: 12900 } },
   },
   {
@@ -236,28 +218,26 @@ const BOUQUETS: BouquetSeed[] = [
     shortDescription: 'Пышный букет на пионах.',
     description: 'Объём и фактура — когда нужен заметный подарок.',
     heightCm: 48,
-    bouquetSizeSlug: 'bolshoj',
     colorHex: '#f0c9d4',
     prices: { S: 15900, M: 19900, L: 24900 },
     occasions: ['den-rozhdeniya', '8-marta'],
     recipients: ['lyubimoy'],
     colors: ['rozovyy'],
-    components: [{ displayName: 'Пион', quantity: 9, flowerSlug: 'piony' }],
+    components: [{ displayName: 'Пион', quantity: 9, flowerTypeSlug: 'piony' }],
   },
   {
     slug: 'lavanda',
     name: 'Лаванда',
     shortDescription: 'Спокойная палитра с эустомой и розами.',
     description: 'Сдержанный букет для коллеги или «просто так».',
-    bouquetSizeSlug: 'srednij',
     colorHex: '#ddd6e8',
     prices: { S: 8500, M: 11500, L: 14500 },
     occasions: ['bez-povoda'],
     recipients: ['kollege', 'mame'],
     colors: ['rozovyy', 'belyy'],
     components: [
-      { displayName: 'Эустома', quantity: 5, flowerSlug: 'eustoma' },
-      { displayName: 'Роза', quantity: 5, flowerSlug: 'rozy' },
+      { displayName: 'Эустома', quantity: 5, flowerTypeSlug: 'eustoma' },
+      { displayName: 'Роза', quantity: 5, flowerTypeSlug: 'rozy' },
     ],
   },
   {
@@ -265,15 +245,14 @@ const BOUQUETS: BouquetSeed[] = [
     name: 'Солнце',
     shortDescription: 'Тёплый акцент на тюльпанах и розах.',
     description: 'Ярче обычного нежного букета — для дня рождения.',
-    bouquetSizeSlug: 'srednij',
     colorHex: '#f3dfb8',
     prices: { S: 10500, M: 13500, L: 17500 },
     occasions: ['den-rozhdeniya'],
     recipients: ['lyubimoy', 'mame'],
     colors: ['rozovyy'],
     components: [
-      { displayName: 'Тюльпан', quantity: 7, flowerSlug: 'tyulpany' },
-      { displayName: 'Роза', quantity: 5, flowerSlug: 'rozy' },
+      { displayName: 'Тюльпан', quantity: 7, flowerTypeSlug: 'tyulpany' },
+      { displayName: 'Роза', quantity: 5, flowerTypeSlug: 'rozy' },
     ],
   },
 ];
@@ -318,16 +297,53 @@ function assertDevSeedAllowed(databaseUrl: string): { host: string; database: st
   return { host, database };
 }
 
-async function upsertFlower(
+async function upsertFlowerType(
   prisma: PrismaClient,
   item: TaxonomySeed,
-): Promise<{ id: string; slug: string }> {
+): Promise<{ id: string; slug: string; name: string }> {
   const data = { name: item.name, sortOrder: item.sortOrder, visibility: 'VISIBLE' as const };
-  const row = await prisma.flower.upsert({
+  const row = await prisma.flowerType.upsert({
     where: { slug: item.slug },
     create: { slug: item.slug, ...data },
     update: data,
   });
+  return { id: row.id, slug: row.slug, name: row.name };
+}
+
+/** Minimal FlowerItem per type for composition seed (type-only identity). */
+async function upsertFlowerItemForType(
+  prisma: PrismaClient,
+  flowerType: { id: string; slug: string; name: string },
+): Promise<{ id: string; slug: string }> {
+  const identityKey = flowerItemIdentityKey({ flowerTypeId: flowerType.id });
+  const name = flowerItemDisplayName({ typeName: flowerType.name });
+  const slug = normalizeSlug(`${flowerType.slug}-default`);
+  const data = {
+    flowerTypeId: flowerType.id,
+    flowerFormId: null,
+    flowerVarietyId: null,
+    flowerOriginId: null,
+    stemLengthCm: null,
+    identityKey,
+    slug,
+    name,
+    sortOrder: 0,
+    visibility: 'VISIBLE' as const,
+  };
+  const existing = await prisma.flowerItem.findUnique({ where: { identityKey } });
+  if (existing) {
+    const row = await prisma.flowerItem.update({
+      where: { id: existing.id },
+      data: {
+        name,
+        slug,
+        sortOrder: 0,
+        visibility: 'VISIBLE',
+      },
+    });
+    return { id: row.id, slug: row.slug };
+  }
+  const row = await prisma.flowerItem.create({ data });
   return { id: row.id, slug: row.slug };
 }
 
@@ -368,37 +384,6 @@ async function upsertColor(
     swatch: item.swatch ?? null,
   };
   const row = await prisma.color.upsert({
-    where: { slug: item.slug },
-    create: { slug: item.slug, ...data },
-    update: data,
-  });
-  return { id: row.id, slug: row.slug };
-}
-
-async function upsertProductLine(
-  prisma: PrismaClient,
-  item: TaxonomySeed,
-): Promise<{ id: string; slug: string }> {
-  const data = { name: item.name, sortOrder: item.sortOrder, visibility: 'VISIBLE' as const };
-  const row = await prisma.productLine.upsert({
-    where: { slug: item.slug },
-    create: { slug: item.slug, ...data },
-    update: data,
-  });
-  return { id: row.id, slug: row.slug };
-}
-
-async function upsertBouquetSize(
-  prisma: PrismaClient,
-  item: BouquetSizeSeed,
-): Promise<{ id: string; slug: string }> {
-  const data = {
-    name: item.name,
-    description: item.description ?? null,
-    sortOrder: item.sortOrder,
-    visibility: 'VISIBLE' as const,
-  };
-  const row = await prisma.bouquetSize.upsert({
     where: { slug: item.slug },
     create: { slug: item.slug, ...data },
     update: data,
@@ -514,11 +499,10 @@ async function ensureProductMedia(
 }
 
 type IdMaps = {
-  flowers: Map<string, string>;
+  flowerItemsByTypeSlug: Map<string, string>;
   occasions: Map<string, string>;
   recipients: Map<string, string>;
   colors: Map<string, string>;
-  bouquetSizes: Map<string, string>;
 };
 
 async function upsertBouquet(
@@ -527,8 +511,6 @@ async function upsertBouquet(
   ids: IdMaps,
   mediaRoot: string,
 ): Promise<string> {
-  const bouquetSizeId = ids.bouquetSizes.get(bouquet.bouquetSizeSlug) ?? null;
-
   const product = await prisma.product.upsert({
     where: { slug: bouquet.slug },
     create: {
@@ -539,7 +521,6 @@ async function upsertBouquet(
       lifecycle: 'PUBLISHED',
       availability: 'AVAILABLE',
       bouquetHeightCm: bouquet.heightCm ?? null,
-      bouquetSizeId,
       currency: 'BYN',
       publishedAt: new Date(),
       seoTitle: `${bouquet.name} — букет с доставкой по Гродно`,
@@ -552,7 +533,6 @@ async function upsertBouquet(
       lifecycle: 'PUBLISHED',
       availability: 'AVAILABLE',
       bouquetHeightCm: bouquet.heightCm ?? null,
-      bouquetSizeId,
       publishedAt: new Date(),
       seoTitle: `${bouquet.name} — букет с доставкой по Гродно`,
       seoDescription: bouquet.shortDescription,
@@ -565,23 +545,48 @@ async function upsertBouquet(
   await prisma.productVariant.deleteMany({ where: { productId: product.id } });
   await prisma.productVariant.createMany({
     data: [
-      { productId: product.id, name: 'S', priceMinor: BigInt(bouquet.prices.S), sortOrder: 0, status: 'ACTIVE' },
-      { productId: product.id, name: 'M', priceMinor: BigInt(bouquet.prices.M), sortOrder: 1, status: 'ACTIVE' },
-      { productId: product.id, name: 'L', priceMinor: BigInt(bouquet.prices.L), sortOrder: 2, status: 'ACTIVE' },
+      {
+        productId: product.id,
+        name: '7 шт',
+        priceMinor: BigInt(bouquet.prices.S),
+        sortOrder: 0,
+        status: 'ACTIVE',
+      },
+      {
+        productId: product.id,
+        name: '15 шт',
+        priceMinor: BigInt(bouquet.prices.M),
+        sortOrder: 1,
+        status: 'ACTIVE',
+      },
+      {
+        productId: product.id,
+        name: '25 шт',
+        priceMinor: BigInt(bouquet.prices.L),
+        sortOrder: 2,
+        status: 'ACTIVE',
+      },
     ],
   });
 
   await prisma.productComponent.deleteMany({ where: { productId: product.id } });
-  await prisma.productComponent.createMany({
-    data: bouquet.components.map((component, index) => ({
+  const componentRows = bouquet.components.map((component, index) => {
+    const flowerItemId = ids.flowerItemsByTypeSlug.get(component.flowerTypeSlug);
+    if (!flowerItemId) {
+      throw new Error(
+        `Missing FlowerItem for type slug "${component.flowerTypeSlug}" (product ${bouquet.slug})`,
+      );
+    }
+    return {
       productId: product.id,
       displayName: component.displayName,
       quantity: component.quantity,
       unit: 'STEM' as const,
       sortOrder: index,
-      flowerId: component.flowerSlug ? ids.flowers.get(component.flowerSlug) ?? null : null,
-    })),
+      flowerItemId,
+    };
   });
+  await prisma.productComponent.createMany({ data: componentRows });
 
   await prisma.productOccasion.deleteMany({ where: { productId: product.id } });
   await prisma.productRecipient.deleteMany({ where: { productId: product.id } });
@@ -820,15 +825,15 @@ async function main(): Promise<void> {
   const prisma = await createPrismaClient({ connectionString: databaseUrl });
 
   try {
-    const flowers = new Map<string, string>();
+    const flowerItemsByTypeSlug = new Map<string, string>();
     const occasions = new Map<string, string>();
     const recipients = new Map<string, string>();
     const colors = new Map<string, string>();
-    const bouquetSizes = new Map<string, string>();
 
-    for (const item of FLOWERS) {
-      const row = await upsertFlower(prisma, item);
-      flowers.set(row.slug, row.id);
+    for (const item of FLOWER_TYPES) {
+      const type = await upsertFlowerType(prisma, item);
+      const flowerItem = await upsertFlowerItemForType(prisma, type);
+      flowerItemsByTypeSlug.set(type.slug, flowerItem.id);
     }
     for (const item of OCCASIONS) {
       const row = await upsertOccasion(prisma, item);
@@ -842,23 +847,16 @@ async function main(): Promise<void> {
       const row = await upsertColor(prisma, item);
       colors.set(row.slug, row.id);
     }
-    for (const item of PRODUCT_LINES) {
-      await upsertProductLine(prisma, item);
-    }
-    for (const item of BOUQUET_SIZES) {
-      const row = await upsertBouquetSize(prisma, item);
-      bouquetSizes.set(row.slug, row.id);
-    }
     await upsertBudgetRanges(prisma);
     console.log(`Upserted ${BUDGET_RANGES.length} budget ranges.`);
-    console.log(`Upserted ${PRODUCT_LINES.length} product lines.`);
+    console.log(`Upserted ${FLOWER_TYPES.length} flower types + FlowerItems.`);
 
     const productsBySlug = new Map<string, string>();
     for (const bouquet of BOUQUETS) {
       const id = await upsertBouquet(
         prisma,
         bouquet,
-        { flowers, occasions, recipients, colors, bouquetSizes },
+        { flowerItemsByTypeSlug, occasions, recipients, colors },
         mediaRoot,
       );
       productsBySlug.set(bouquet.slug, id);

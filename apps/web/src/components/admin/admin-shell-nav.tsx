@@ -71,9 +71,10 @@ const NAV_GROUPS: NavGroup[] = [
       { href: '/admin/promotions', label: 'Акции', permission: 'CATALOG_READ' },
       { href: '/admin/bestsellers', label: 'Бестселлеры', permission: 'CATALOG_READ' },
       {
-        href: '/admin/catalog/composition-setup',
-        label: 'Миграция состава',
+        href: '/admin/catalog/colors',
+        label: 'Справочники',
         permission: 'CATALOG_READ',
+        isActive: isDictionaryPath,
       },
     ],
   },
@@ -101,12 +102,6 @@ const NAV_GROUPS: NavGroup[] = [
     label: 'Система',
     tier: 'system',
     items: [
-      {
-        href: '/admin/catalog/flowers',
-        label: 'Справочники (legacy)',
-        permission: 'CATALOG_READ',
-        isActive: isDictionaryPath,
-      },
       { href: '/admin/users', label: 'Пользователи', permission: 'USERS_READ' },
       { href: '/admin/audit', label: 'Журнал действий', permission: 'AUDIT_READ' },
       {

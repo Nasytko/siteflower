@@ -55,8 +55,6 @@ export default async function AdminProductEditPage({ params, searchParams }: Pro
             name: item.name,
             swatch: item.swatch,
           })),
-          bouquetSizes: taxonomies.bouquetSizes.map((item) => ({ id: item.id, name: item.name })),
-          productLines: taxonomies.productLines.map((item) => ({ id: item.id, name: item.name })),
           categories: categoryPickerOptions(structure.categories),
           families: structure.families.map((item) => ({ id: item.id, name: item.name })),
         }}

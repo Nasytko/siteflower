@@ -5,61 +5,89 @@ function baseProduct(
 ): ProductWithRelations {
   return {
     id: 'p1',
-    name: 'Букет',
-    slug: 'buket',
+    slug: 'test',
+    name: 'Test',
+    shortDescription: null,
+    description: null,
     bouquetHeightCm: 45,
-    flowerType: { id: 'legacy-type', slug: 'roza', name: 'Роза', visibility: 'VISIBLE' },
-    flowerVariety: null,
-    flowerOrigin: { id: 'legacy-origin', slug: 'ekvador', name: 'Эквадор', visibility: 'VISIBLE' },
+    catalogCategoryId: null,
+    lifecycle: 'PUBLISHED',
+    availability: 'AVAILABLE',
+    currency: 'BYN',
+    publishedAt: new Date(),
+    publishAt: null,
+    unpublishAt: null,
+    version: 1,
+    seoTitle: null,
+    seoDescription: null,
+    noIndex: false,
+    createdAt: new Date(),
+    updatedAt: new Date(),
+    catalogCategory: null,
+    familyMember: null,
+    variants: [],
     components: [],
+    media: [],
+    occasions: [],
+    recipients: [],
+    colors: [],
+    promotion: null,
+    bestsellerLinks: [],
     ...overrides,
   } as unknown as ProductWithRelations;
 }
 
-describe('productDisplayFlowerAttrs composition-first', () => {
-  it('prefers FlowerItem taxonomy over conflicting Product.flower* (Rose vs Chrysanthemum)', () => {
+describe('productDisplayFlowerAttrs', () => {
+  it('reads type/variety/origin and stem height from composition FlowerItem', () => {
     const product = baseProduct({
-      flowerType: { id: 'legacy-type', slug: 'roza', name: 'Роза', visibility: 'VISIBLE' },
-      flowerVariety: {
-        id: 'legacy-var',
-        slug: 'mondial',
-        name: 'Мондиаль',
-        visibility: 'VISIBLE',
-      },
-      flowerOrigin: {
-        id: 'legacy-origin',
-        slug: 'ekvador',
-        name: 'Эквадор',
-        visibility: 'VISIBLE',
-      },
       components: [
         {
+          id: 'c1',
+          productId: 'p1',
+          flowerItemId: 'fi1',
+          displayName: 'Хризантема',
+          quantity: 5,
+          unit: 'STEM',
+          sortOrder: 0,
+          createdAt: new Date(),
+          updatedAt: new Date(),
           flowerItem: {
-            id: 'item-1',
+            id: 'fi1',
+            flowerTypeId: 't2',
+            flowerFormId: null,
+            flowerVarietyId: 'v2',
+            flowerOriginId: 'o2',
             stemLengthCm: 60,
-            flowerType: { id: 't2', slug: 'hrizantema', name: 'Хризантема', visibility: 'VISIBLE' },
-            flowerVariety: { id: 'v2', slug: 'bigudi', name: 'Бигуди', visibility: 'VISIBLE' },
-            flowerOrigin: { id: 'o2', slug: 'ferma', name: 'Фермерская', visibility: 'VISIBLE' },
+            identityKey: 'k',
+            slug: 'item',
+            name: 'Хризантема Бигуди 60',
+            sortOrder: 0,
+            visibility: 'VISIBLE',
+            version: 1,
+            createdAt: new Date(),
+            updatedAt: new Date(),
+            flowerType: { id: 't2', slug: 'hrizantema', name: 'Хризантема' },
+            flowerForm: null,
+            flowerVariety: { id: 'v2', slug: 'bigudi', name: 'Бигуди' },
+            flowerOrigin: { id: 'o2', slug: 'ferma', name: 'Фермерская' },
           },
         },
       ],
     } as unknown as Partial<ProductWithRelations>);
 
     const attrs = productDisplayFlowerAttrs(product);
-    expect(attrs.flowerType?.name).toBe('Хризантема');
-    expect(attrs.flowerType?.slug).toBe('hrizantema');
-    expect(attrs.flowerVariety?.name).toBe('Бигуди');
-    expect(attrs.flowerOrigin?.name).toBe('Фермерская');
+    expect(attrs.varietyName).toBe('Бигуди');
+    expect(attrs.originName).toBe('Фермерская');
+    expect(attrs.flowerOrigin?.slug).toBe('ferma');
     // Bouquet height stays Product.bouquetHeightCm — never stemLengthCm.
     expect(attrs.heightCm).toBe(45);
     expect(attrs.stemHeightCm).toBe(60);
     expect(attrs.heightCm).not.toBe(attrs.stemHeightCm);
   });
 
-  it('falls back to Product.flower* when composition has no FlowerItem', () => {
+  it('returns null flower attrs when composition is empty', () => {
     const attrs = productDisplayFlowerAttrs(baseProduct());
-    expect(attrs.flowerType?.slug).toBe('roza');
-    expect(attrs.flowerOrigin?.slug).toBe('ekvador');
+    expect(attrs.flowerOrigin).toBeNull();
     expect(attrs.stemHeightCm).toBeNull();
     expect(attrs.heightCm).toBe(45);
   });

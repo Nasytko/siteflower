@@ -58,13 +58,7 @@ import { ProductsRepository } from './products.repository';
 import { mapPromotionPrismaError, PromotionsService } from './promotions.service';
 import { SlugRedirectsService } from './slug-redirects.service';
 
-type CatalogReference =
-  | 'occasion'
-  | 'recipient'
-  | 'color'
-  | 'flower'
-  | 'bouquetSize'
-  | 'productLine';
+type CatalogReference = 'occasion' | 'recipient' | 'color';
 
 export type UploadedImage = {
   buffer: Buffer;
@@ -185,13 +179,9 @@ export class ProductsService {
         recipientSlugs: query.recipientSlugs,
         colorIds: query.colorIds,
         colorSlugs: query.colorSlugs,
-        flowerIds: query.flowerIds,
         flowerSlugs: query.flowerSlugs,
-        bouquetSizeIds: query.bouquetSizeIds,
-        bouquetSizeSlugs: query.bouquetSizeSlugs,
         bestsellerGroupIds: query.bestsellerGroupIds,
         promotionalOnly: query.promotionalOnly,
-        needsCompositionMigration: query.needsCompositionMigration,
         budgetRanges,
         ...catalogFilters,
       },
@@ -244,13 +234,9 @@ export class ProductsService {
     }
 
     const created = await this.prisma.client.$transaction(async (tx) => {
-      if (input.bouquetSizeId) {
-        await this.assertReferencesExist(tx, 'bouquetSize', [input.bouquetSizeId]);
-      }
       await this.assertReferencesExist(tx, 'occasion', input.occasionIds ?? []);
       await this.assertReferencesExist(tx, 'recipient', input.recipientIds ?? []);
       await this.assertReferencesExist(tx, 'color', input.colorIds ?? []);
-      await this.assertReferencesExist(tx, 'productLine', input.productLineIds ?? []);
 
       const product = await this.products.create(
         {
@@ -263,9 +249,6 @@ export class ProductsService {
           lifecycle: 'DRAFT',
           ...(input.availability ? { availability: input.availability } : {}),
           ...(input.heightCm === undefined ? {} : { bouquetHeightCm: input.heightCm }),
-          ...(input.bouquetSizeId
-            ? { bouquetSize: { connect: { id: input.bouquetSizeId } } }
-            : {}),
           ...(input.currency ? { currency: input.currency } : {}),
           seoTitle: input.seoTitle ? trimmedOrNull(input.seoTitle) : null,
           seoDescription: input.seoDescription ? trimmedOrNull(input.seoDescription) : null,
@@ -307,9 +290,6 @@ export class ProductsService {
       }
       if (input.colorIds?.length) {
         await this.products.replaceColors(product.id, input.colorIds, tx);
-      }
-      if (input.productLineIds?.length) {
-        await this.products.replaceProductLines(product.id, input.productLineIds, tx);
       }
 
       await this.recordAudit(tx, actor, 'PRODUCT_CREATED', product.id, { slug, name });
@@ -356,21 +336,9 @@ export class ProductsService {
           seoTitle: source.seoTitle,
           seoDescription: source.seoDescription,
           noIndex: source.noIndex,
-          ...(source.bouquetSizeId
-            ? { bouquetSize: { connect: { id: source.bouquetSizeId } } }
-            : {}),
           // Copy structured catalog attrs; never auto-join ProductFamily (explicit manager action).
           ...(source.catalogCategoryId
             ? { catalogCategory: { connect: { id: source.catalogCategoryId } } }
-            : {}),
-          ...(source.flowerTypeId
-            ? { flowerType: { connect: { id: source.flowerTypeId } } }
-            : {}),
-          ...(source.flowerVarietyId
-            ? { flowerVariety: { connect: { id: source.flowerVarietyId } } }
-            : {}),
-          ...(source.flowerOriginId
-            ? { flowerOrigin: { connect: { id: source.flowerOriginId } } }
             : {}),
         },
         tx,
@@ -390,9 +358,7 @@ export class ProductsService {
       }
 
       if (source.components.length > 0) {
-        const flowerItemIds = source.components
-          .map((component) => component.flowerItemId)
-          .filter((id): id is string => Boolean(id));
+        const flowerItemIds = source.components.map((component) => component.flowerItemId);
         // Duplicate = new assignment. Archived FlowerItems cannot be copied onto the new draft.
         // Existing source product keeps its archived composition (policy: archive does not break live products).
         try {
@@ -409,7 +375,6 @@ export class ProductsService {
           product.id,
           source.components.map((component) => ({
             flowerItemId: component.flowerItemId,
-            flowerId: component.flowerId,
             displayName: component.displayName,
             quantity: component.quantity,
             unit: component.unit,
@@ -432,11 +397,6 @@ export class ProductsService {
       await this.products.replaceColors(
         product.id,
         source.colors.map((row) => row.colorId),
-        tx,
-      );
-      await this.products.replaceProductLines(
-        product.id,
-        source.productLines.map((row) => row.productLineId),
         tx,
       );
 
@@ -496,10 +456,6 @@ export class ProductsService {
         }
         await this.slugRedirects.record(tx, 'PRODUCT', product.slug, nextSlug);
       }
-      if (input.bouquetSizeId) {
-        await this.assertReferencesExist(tx, 'bouquetSize', [input.bouquetSizeId]);
-      }
-
       const data: Prisma.ProductUncheckedUpdateManyInput = {
         ...(input.name === undefined ? {} : { name: input.name.trim() }),
         ...(slugChanged ? { slug: nextSlug } : {}),
@@ -511,7 +467,6 @@ export class ProductsService {
           : { description: trimmedOrNull(input.description) }),
         ...(input.availability === undefined ? {} : { availability: input.availability }),
         ...(input.heightCm === undefined ? {} : { bouquetHeightCm: input.heightCm }),
-        ...(input.bouquetSizeId === undefined ? {} : { bouquetSizeId: input.bouquetSizeId }),
         ...(input.currency === undefined ? {} : { currency: input.currency }),
         ...(input.seoTitle === undefined ? {} : { seoTitle: trimmedOrNull(input.seoTitle) }),
         ...(input.seoDescription === undefined
@@ -580,39 +535,11 @@ export class ProductsService {
     const endsAt = input.promotion.endsAt ? new Date(input.promotion.endsAt) : null;
 
     const previousFlowerItemIds = new Set(
-      product.components
-        .map((component) => component.flowerItemId)
-        .filter((id): id is string => Boolean(id)),
+      product.components.map((component) => component.flowerItemId),
     );
     const normalizedComponents = await this.normalizeCompositionComponents(input.components, {
       previouslyAssignedFlowerItemIds: previousFlowerItemIds,
     });
-    const flowerIds = normalizedComponents
-      .map((component) => component.flowerId)
-      .filter((flowerId): flowerId is string => Boolean(flowerId));
-    const hasFlowerItemComposition = normalizedComponents.some((c) => Boolean(c.flowerItemId));
-
-    // SoT: once FlowerItem composition exists, clear legacy Product.flower* server-side
-    // (do not rely on the admin UI). Migration-only products keep legacy until migrated.
-    const nextFlowerTypeId = hasFlowerItemComposition
-      ? null
-      : input.flowerTypeId === undefined
-        ? product.flowerTypeId
-        : input.flowerTypeId;
-    const nextFlowerVarietyId = hasFlowerItemComposition
-      ? null
-      : nextFlowerTypeId == null
-        ? null
-        : input.flowerVarietyId === undefined
-          ? product.flowerVarietyId
-          : input.flowerVarietyId;
-    const nextFlowerOriginId = hasFlowerItemComposition
-      ? null
-      : input.flowerOriginId === undefined
-        ? product.flowerOriginId
-        : input.flowerOriginId;
-
-    await this.flowerRefs.assertVarietyMatchesType(nextFlowerTypeId, nextFlowerVarietyId);
 
     await this.prisma.client.$transaction(async (tx) => {
       const data: Prisma.ProductUncheckedUpdateManyInput = {
@@ -637,42 +564,19 @@ export class ProductsService {
             : input.unpublishAt
               ? new Date(input.unpublishAt)
               : null,
-        bouquetSizeId: input.bouquetSizeId === undefined ? undefined : input.bouquetSizeId,
         catalogCategoryId:
           input.catalogCategoryId === undefined ? undefined : input.catalogCategoryId,
-        flowerTypeId: nextFlowerTypeId,
-        flowerVarietyId: nextFlowerVarietyId,
-        flowerOriginId: nextFlowerOriginId,
       };
 
-      if (input.bouquetSizeId) {
-        await this.assertReferencesExist(tx, 'bouquetSize', [input.bouquetSizeId]);
-      }
       if (input.catalogCategoryId) {
         const category = await tx.catalogCategory.findUnique({
           where: { id: input.catalogCategoryId },
         });
         if (!category) throw new BadRequestException('Catalog category not found');
       }
-      if (input.flowerTypeId) {
-        const type = await tx.flowerType.findUnique({ where: { id: input.flowerTypeId } });
-        if (!type) throw new BadRequestException('Flower type not found');
-      }
-      if (input.flowerVarietyId) {
-        const variety = await tx.flowerVariety.findUnique({
-          where: { id: input.flowerVarietyId },
-        });
-        if (!variety) throw new BadRequestException('Flower variety not found');
-      }
-      if (input.flowerOriginId) {
-        const origin = await tx.flowerOrigin.findUnique({ where: { id: input.flowerOriginId } });
-        if (!origin) throw new BadRequestException('Flower origin not found');
-      }
-      await this.assertReferencesExist(tx, 'flower', flowerIds);
       await this.assertReferencesExist(tx, 'occasion', input.occasionIds);
       await this.assertReferencesExist(tx, 'recipient', input.recipientIds);
       await this.assertReferencesExist(tx, 'color', input.colorIds);
-      await this.assertReferencesExist(tx, 'productLine', input.productLineIds);
 
       if (nextSlug !== product.slug) {
         await this.slugRedirects.record(tx, 'PRODUCT', product.slug, nextSlug);
@@ -722,7 +626,6 @@ export class ProductsService {
       await this.products.replaceOccasions(id, input.occasionIds, tx);
       await this.products.replaceRecipients(id, input.recipientIds, tx);
       await this.products.replaceColors(id, input.colorIds, tx);
-      await this.products.replaceProductLines(id, input.productLineIds, tx);
 
       await this.promotions.applyPromotionUpsertInTx(tx, id, {
         enabled: input.promotion.enabled,
@@ -785,72 +688,7 @@ export class ProductsService {
   }
 
   /**
-   * Manual migration helper: set a single FlowerItem composition row.
-   * Does not invent origin/height — manager picks an existing FlowerItem.
-   */
-  async setupCompositionFromItem(
-    id: string,
-    input: {
-      expectedVersion: number;
-      flowerItemId: string;
-      quantity: number;
-      unit?: 'PIECE' | 'STEM' | 'BUNCH' | 'UNSPECIFIED';
-      clearLegacyFlowerAttrs?: boolean;
-    },
-    actor: ActorContext,
-  ): Promise<ProductAdminDto> {
-    const item = await this.prisma.client.flowerItem.findUnique({
-      where: { id: input.flowerItemId },
-      include: {
-        flowerType: { select: { id: true, slug: true, name: true } },
-        flowerVariety: { select: { id: true, slug: true, name: true } },
-        flowerOrigin: { select: { id: true, slug: true, name: true } },
-      },
-    });
-    if (!item) throw new BadRequestException('Flower item not found');
-    const product = await this.products.findById(id);
-    if (!product) throw new NotFoundException('Product not found');
-    const previousFlowerItemIds = new Set(
-      product.components
-        .map((component) => component.flowerItemId)
-        .filter((itemId): itemId is string => Boolean(itemId)),
-    );
-    await this.flowerRefs.assertFlowerItemsAssignable([item.id], previousFlowerItemIds);
-
-    await this.prisma.client.$transaction(async (tx) => {
-      const data: Prisma.ProductUncheckedUpdateManyInput =
-        input.clearLegacyFlowerAttrs === false
-          ? {}
-          : { flowerTypeId: null, flowerVarietyId: null, flowerOriginId: null };
-      await this.guardVersion(tx, id, input.expectedVersion, data);
-      await this.products.replaceComponents(
-        id,
-        [
-          {
-            flowerItemId: item.id,
-            flowerId: null,
-            displayName: item.name,
-            quantity: input.quantity,
-            unit: input.unit ?? 'STEM',
-            sortOrder: 0,
-          },
-        ],
-        tx,
-      );
-      await this.recordAudit(tx, actor, 'PRODUCT_UPDATED', id, {
-        compositionSetup: true,
-        flowerItemId: item.id,
-        quantity: input.quantity,
-        clearLegacyFlowerAttrs: Boolean(input.clearLegacyFlowerAttrs),
-      });
-    });
-
-    return this.finishAdminMutation(id);
-  }
-
-  /**
    * Composition source of truth: ProductComponent → FlowerItem (+ quantity/unit).
-   * Legacy `flowerId` still feeds /cvety discovery facet when set.
    */
   async setComponents(
     id: string,
@@ -860,24 +698,18 @@ export class ProductsService {
     const product = await this.products.findById(id);
     if (!product) throw new NotFoundException('Product not found');
     const previousFlowerItemIds = new Set(
-      product.components
-        .map((component) => component.flowerItemId)
-        .filter((itemId): itemId is string => Boolean(itemId)),
+      product.components.map((component) => component.flowerItemId),
     );
     const normalizedComponents = await this.normalizeCompositionComponents(input.components, {
       previouslyAssignedFlowerItemIds: previousFlowerItemIds,
     });
-    const flowerIds = normalizedComponents
-      .map((component) => component.flowerId)
-      .filter((flowerId): flowerId is string => Boolean(flowerId));
 
     await this.prisma.client.$transaction(async (tx) => {
       await this.guardVersion(tx, id, input.expectedVersion);
-      await this.assertReferencesExist(tx, 'flower', flowerIds);
       await this.products.replaceComponents(id, normalizedComponents, tx);
       await this.recordAudit(tx, actor, 'PRODUCT_UPDATED', id, {
         components: normalizedComponents.length,
-        flowerItems: normalizedComponents.filter((row) => row.flowerItemId).length,
+        flowerItems: normalizedComponents.length,
       });
     });
 
@@ -890,12 +722,7 @@ export class ProductsService {
     actor: ActorContext,
   ): Promise<ProductAdminDto> {
     await this.prisma.client.$transaction(async (tx) => {
-      const data: Prisma.ProductUncheckedUpdateManyInput =
-        input.bouquetSizeId === undefined ? {} : { bouquetSizeId: input.bouquetSizeId };
-      if (input.bouquetSizeId) {
-        await this.assertReferencesExist(tx, 'bouquetSize', [input.bouquetSizeId]);
-      }
-      await this.guardVersion(tx, id, input.expectedVersion, data);
+      await this.guardVersion(tx, id, input.expectedVersion);
 
       if (input.occasionIds) {
         await this.assertReferencesExist(tx, 'occasion', input.occasionIds);
@@ -908,10 +735,6 @@ export class ProductsService {
       if (input.colorIds) {
         await this.assertReferencesExist(tx, 'color', input.colorIds);
         await this.products.replaceColors(id, input.colorIds, tx);
-      }
-      if (input.productLineIds) {
-        await this.assertReferencesExist(tx, 'productLine', input.productLineIds);
-        await this.products.replaceProductLines(id, input.productLineIds, tx);
       }
 
       await this.recordAudit(tx, actor, 'PRODUCT_UPDATED', id, { taxonomies: true });
@@ -1219,12 +1042,11 @@ export class ProductsService {
   }
 
   /**
-   * Normalize composition rows: FlowerItem XOR legacy Flower; block newly assigned HIDDEN items.
+   * Normalize composition rows: require FlowerItem; block newly assigned HIDDEN items.
    */
   private async normalizeCompositionComponents(
     components: Array<{
-      flowerItemId?: string | null;
-      flowerId?: string | null;
+      flowerItemId: string;
       displayName: string;
       quantity?: number | null;
       unit?: 'PIECE' | 'STEM' | 'BUNCH' | 'UNSPECIFIED';
@@ -1233,8 +1055,7 @@ export class ProductsService {
     options?: { previouslyAssignedFlowerItemIds?: ReadonlySet<string> },
   ): Promise<
     Array<{
-      flowerItemId: string | null;
-      flowerId: string | null;
+      flowerItemId: string;
       displayName: string;
       quantity: number | null;
       unit: 'PIECE' | 'STEM' | 'BUNCH' | 'UNSPECIFIED';
@@ -1243,21 +1064,14 @@ export class ProductsService {
   > {
     const previous = options?.previouslyAssignedFlowerItemIds ?? new Set<string>();
     const normalized = components.map((component, index) => {
-      let refs: { flowerItemId: string | null; flowerId: string | null };
+      let flowerItemId: string;
       try {
-        refs = assertComponentFlowerRefXor({
+        flowerItemId = assertComponentFlowerRefXor({
           flowerItemId: component.flowerItemId,
-          flowerId: component.flowerId,
-        });
-      } catch (err) {
-        const code = err instanceof Error ? err.message : 'COMPONENT_INVALID';
-        if (code === 'COMPONENT_BOTH_REFS') {
-          throw new BadRequestException(
-            'Строка состава не может ссылаться и на позицию справочника, и на устаревший Flower одновременно',
-          );
-        }
+        }).flowerItemId;
+      } catch {
         throw new BadRequestException(
-          'Строка состава должна ссылаться на позицию справочника (FlowerItem) или на устаревший Flower',
+          'Строка состава должна ссылаться на позицию справочника (FlowerItem)',
         );
       }
       const displayName = component.displayName.trim();
@@ -1265,8 +1079,7 @@ export class ProductsService {
         throw new BadRequestException('Укажите название строки состава');
       }
       return {
-        flowerItemId: refs.flowerItemId,
-        flowerId: refs.flowerId,
+        flowerItemId,
         displayName,
         quantity: component.quantity ?? null,
         unit: component.unit ?? 'UNSPECIFIED',
@@ -1274,9 +1087,7 @@ export class ProductsService {
       };
     });
 
-    const flowerItemIds = normalized
-      .map((row) => row.flowerItemId)
-      .filter((id): id is string => Boolean(id));
+    const flowerItemIds = normalized.map((row) => row.flowerItemId);
     if (flowerItemIds.length > 0) {
       await this.flowerRefs.assertFlowerItemsAssignable(flowerItemIds, previous);
     }
@@ -1297,9 +1108,6 @@ export class ProductsService {
       occasion: () => tx.occasion.count({ where }),
       recipient: () => tx.recipient.count({ where }),
       color: () => tx.color.count({ where }),
-      flower: () => tx.flower.count({ where }),
-      bouquetSize: () => tx.bouquetSize.count({ where }),
-      productLine: () => tx.productLine.count({ where }),
     };
     if ((await counters[kind]()) !== unique.length) {
       throw new BadRequestException(`Unknown ${kind} reference`);

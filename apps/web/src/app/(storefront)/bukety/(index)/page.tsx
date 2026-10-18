@@ -17,10 +17,9 @@ import {
 } from '@/lib/catalog-search-params';
 import {
   EMPTY_PRODUCT_PAGE,
-  listBouquetSizes,
   listBudgetRanges,
   listColors,
-  listFlowers,
+  listFlowerTypes,
   listOccasions,
   listProducts,
   listRecipients,
@@ -45,7 +44,7 @@ export async function generateMetadata({
   return buildPageMetadata({
     title: filtered ? 'Каталог букетов — подборка' : 'Каталог букетов',
     description:
-      'Букеты с доставкой по Гродно. Подбор по бюджету, поводу, цвету, цветку и размеру букета.',
+      'Букеты с доставкой по Гродно. Подбор по бюджету, поводу, цвету и виду цветка.',
     path: '/bukety',
     noIndex: filtered,
   });
@@ -56,14 +55,13 @@ export default async function CatalogPage({ searchParams }: { searchParams: Sear
   const state = parseCatalogSearchParams(raw);
   const listParams = catalogStateToListParams(state);
 
-  const [products, budgets, occasions, recipients, colors, flowers, sizes] = await Promise.all([
+  const [products, budgets, occasions, recipients, colors, flowers] = await Promise.all([
     listProducts(listParams).catch(() => EMPTY_PRODUCT_PAGE),
     listBudgetRanges().catch(() => []),
     listOccasions().catch(() => []),
     listRecipients().catch(() => []),
     listColors().catch(() => []),
-    listFlowers().catch(() => []),
-    listBouquetSizes().catch(() => []),
+    listFlowerTypes().catch(() => []),
   ]);
 
   const options: CatalogFilterOptions = {
@@ -72,7 +70,6 @@ export default async function CatalogPage({ searchParams }: { searchParams: Sear
     recipients,
     colors,
     flowers,
-    sizes,
   };
 
   const totalPages =

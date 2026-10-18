@@ -35,6 +35,7 @@ export default async function AdminMediaHealthPage() {
       <MediaHealthPanel
         initial={initial}
         canProbe={roleHasPermission(me.user.role, 'SITE_HEALTH_READ')}
+        canWrite={roleHasPermission(me.user.role, 'SITE_HEALTH_WRITE')}
       />
     </main>
   );

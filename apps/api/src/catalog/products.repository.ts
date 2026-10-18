@@ -23,10 +23,8 @@ export type ProductListFilters = {
   recipientSlugs?: string[];
   colorIds?: string[];
   colorSlugs?: string[];
-  flowerIds?: string[];
+  /** /cvety rewrite: flower-type slug matched via FlowerItem.flowerType.slug. */
   flowerSlugs?: string[];
-  bouquetSizeIds?: string[];
-  bouquetSizeSlugs?: string[];
   budgetRanges?: BudgetBound[];
   bestsellerGroupIds?: string[];
   /** CatalogCategory ids (already expanded to include descendants). */
@@ -38,18 +36,13 @@ export type ProductListFilters = {
   flowerOriginIds?: string[];
   flowerOriginSlugs?: string[];
   /**
-   * Stem-height bounds for "Высота цветка" — matched ONLY against FlowerItem.heightCm.
-   * Product.heightCm (bouquet/card) is a separate filter (bouquetHeightCm).
+   * Stem-height bounds for "Высота цветка" — matched ONLY against FlowerItem.stemLengthCm.
+   * Product.bouquetHeightCm (bouquet/card) is a separate filter (bouquetHeightCm).
    */
   heightCm?: { gt?: number; gte?: number; lte?: number };
-  /** Optional bouquet/card height filter — Product.heightCm only. */
+  /** Optional bouquet/card height filter — Product.bouquetHeightCm only. */
   bouquetHeightCm?: { gt?: number; gte?: number; lte?: number };
   familyId?: string;
-  /**
-   * Admin migration helper: legacy Product.flower* / component.flowerId present,
-   * but no ProductComponent.flowerItemId yet.
-   */
-  needsCompositionMigration?: boolean;
   /** Only products with a currently effective promotion (used by /akcii). */
   promotionalOnly?: boolean;
   minPriceMinor?: string;
@@ -447,8 +440,7 @@ export class ProductsRepository {
   async replaceComponents(
     productId: string,
     components: Array<{
-      flowerItemId?: string | null;
-      flowerId: string | null;
+      flowerItemId: string;
       displayName: string;
       quantity: number | null;
       unit: Prisma.ProductComponentCreateManyInput['unit'];
@@ -499,19 +491,6 @@ export class ProductsRepository {
     if (colorIds.length > 0) {
       await tx.productColor.createMany({
         data: colorIds.map((colorId) => ({ productId, colorId })),
-      });
-    }
-  }
-
-  async replaceProductLines(
-    productId: string,
-    productLineIds: string[],
-    tx: Prisma.TransactionClient,
-  ): Promise<void> {
-    await tx.productProductLine.deleteMany({ where: { productId } });
-    if (productLineIds.length > 0) {
-      await tx.productProductLine.createMany({
-        data: productLineIds.map((productLineId) => ({ productId, productLineId })),
       });
     }
   }
@@ -566,47 +545,14 @@ export function buildProductWhere(
     }
   }
 
-  // /cvety + /bukety?flower= bridge: legacy Flower slug OR FlowerItem.flowerType.slug
-  // (same human slug, e.g. "rozy"). Flower.id UUIDs stay on the legacy path only.
-  const flowerIds = nonEmpty(filters.flowerIds);
-  if (flowerIds) {
-    and.push({ components: { some: { flowerId: { in: flowerIds } } } });
-  } else {
-    const flowerSlugs = nonEmpty(filters.flowerSlugs);
-    if (flowerSlugs) {
-      and.push({
-        OR: [
-          { components: { some: { flower: { slug: { in: flowerSlugs } } } } },
-          {
-            components: {
-              some: { flowerItem: { flowerType: { slug: { in: flowerSlugs } } } },
-            },
-          },
-        ],
-      });
-    }
-  }
-
-  if (filters.needsCompositionMigration) {
+  // /cvety rewrite: flower-type slug via FlowerItem composition only.
+  const flowerSlugs = nonEmpty(filters.flowerSlugs);
+  if (flowerSlugs) {
     and.push({
-      NOT: { components: { some: { flowerItemId: { not: null } } } },
-      OR: [
-        { flowerTypeId: { not: null } },
-        { flowerVarietyId: { not: null } },
-        { flowerOriginId: { not: null } },
-        { components: { some: { flowerId: { not: null } } } },
-      ],
+      components: {
+        some: { flowerItem: { flowerType: { slug: { in: flowerSlugs } } } },
+      },
     });
-  }
-
-  const bouquetSizeIds = nonEmpty(filters.bouquetSizeIds);
-  if (bouquetSizeIds) {
-    and.push({ bouquetSizeId: { in: bouquetSizeIds } });
-  } else {
-    const bouquetSizeSlugs = nonEmpty(filters.bouquetSizeSlugs);
-    if (bouquetSizeSlugs) {
-      and.push({ bouquetSize: { slug: { in: bouquetSizeSlugs } } });
-    }
   }
 
   const bestsellerGroupIds = nonEmpty(filters.bestsellerGroupIds);
@@ -619,53 +565,19 @@ export function buildProductWhere(
     and.push({ catalogCategoryId: { in: catalogCategoryIds } });
   }
 
-  // Discovery: when a product has FlowerItem composition, ONLY composition counts.
-  // Legacy Product.flower* applies solely to products with no flowerItemId rows (migration).
-  // Prevents stale Product.flowerTypeId=Peony matching when composition is Rose.
+  // Discovery facets: FlowerItem composition only.
   const flowerTypeIds = nonEmpty(filters.flowerTypeIds);
   if (flowerTypeIds) {
     and.push({
-      OR: [
-        {
-          AND: [
-            { components: { some: { flowerItemId: { not: null } } } },
-            {
-              components: {
-                some: { flowerItem: { flowerTypeId: { in: flowerTypeIds } } },
-              },
-            },
-          ],
-        },
-        {
-          AND: [
-            { NOT: { components: { some: { flowerItemId: { not: null } } } } },
-            { flowerTypeId: { in: flowerTypeIds } },
-          ],
-        },
-      ],
+      components: { some: { flowerItem: { flowerTypeId: { in: flowerTypeIds } } } },
     });
   } else {
     const flowerTypeSlugs = nonEmpty(filters.flowerTypeSlugs);
     if (flowerTypeSlugs) {
       and.push({
-        OR: [
-          {
-            AND: [
-              { components: { some: { flowerItemId: { not: null } } } },
-              {
-                components: {
-                  some: { flowerItem: { flowerType: { slug: { in: flowerTypeSlugs } } } },
-                },
-              },
-            ],
-          },
-          {
-            AND: [
-              { NOT: { components: { some: { flowerItemId: { not: null } } } } },
-              { flowerType: { slug: { in: flowerTypeSlugs } } },
-            ],
-          },
-        ],
+        components: {
+          some: { flowerItem: { flowerType: { slug: { in: flowerTypeSlugs } } } },
+        },
       });
     }
   }
@@ -673,49 +585,15 @@ export function buildProductWhere(
   const flowerVarietyIds = nonEmpty(filters.flowerVarietyIds);
   if (flowerVarietyIds) {
     and.push({
-      OR: [
-        {
-          AND: [
-            { components: { some: { flowerItemId: { not: null } } } },
-            {
-              components: {
-                some: { flowerItem: { flowerVarietyId: { in: flowerVarietyIds } } },
-              },
-            },
-          ],
-        },
-        {
-          AND: [
-            { NOT: { components: { some: { flowerItemId: { not: null } } } } },
-            { flowerVarietyId: { in: flowerVarietyIds } },
-          ],
-        },
-      ],
+      components: { some: { flowerItem: { flowerVarietyId: { in: flowerVarietyIds } } } },
     });
   } else {
     const flowerVarietySlugs = nonEmpty(filters.flowerVarietySlugs);
     if (flowerVarietySlugs) {
       and.push({
-        OR: [
-          {
-            AND: [
-              { components: { some: { flowerItemId: { not: null } } } },
-              {
-                components: {
-                  some: {
-                    flowerItem: { flowerVariety: { slug: { in: flowerVarietySlugs } } },
-                  },
-                },
-              },
-            ],
-          },
-          {
-            AND: [
-              { NOT: { components: { some: { flowerItemId: { not: null } } } } },
-              { flowerVariety: { slug: { in: flowerVarietySlugs } } },
-            ],
-          },
-        ],
+        components: {
+          some: { flowerItem: { flowerVariety: { slug: { in: flowerVarietySlugs } } } },
+        },
       });
     }
   }
@@ -723,49 +601,15 @@ export function buildProductWhere(
   const flowerOriginIds = nonEmpty(filters.flowerOriginIds);
   if (flowerOriginIds) {
     and.push({
-      OR: [
-        {
-          AND: [
-            { components: { some: { flowerItemId: { not: null } } } },
-            {
-              components: {
-                some: { flowerItem: { flowerOriginId: { in: flowerOriginIds } } },
-              },
-            },
-          ],
-        },
-        {
-          AND: [
-            { NOT: { components: { some: { flowerItemId: { not: null } } } } },
-            { flowerOriginId: { in: flowerOriginIds } },
-          ],
-        },
-      ],
+      components: { some: { flowerItem: { flowerOriginId: { in: flowerOriginIds } } } },
     });
   } else {
     const flowerOriginSlugs = nonEmpty(filters.flowerOriginSlugs);
     if (flowerOriginSlugs) {
       and.push({
-        OR: [
-          {
-            AND: [
-              { components: { some: { flowerItemId: { not: null } } } },
-              {
-                components: {
-                  some: {
-                    flowerItem: { flowerOrigin: { slug: { in: flowerOriginSlugs } } },
-                  },
-                },
-              },
-            ],
-          },
-          {
-            AND: [
-              { NOT: { components: { some: { flowerItemId: { not: null } } } } },
-              { flowerOrigin: { slug: { in: flowerOriginSlugs } } },
-            ],
-          },
-        ],
+        components: {
+          some: { flowerItem: { flowerOrigin: { slug: { in: flowerOriginSlugs } } } },
+        },
       });
     }
   }

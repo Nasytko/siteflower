@@ -821,16 +821,13 @@ export function ProductsManager({
                       >
                         {item.name}
                       </Link>
-                      <p className="text-xs text-[var(--admin-muted)]">
-                        /{item.slug}
-                        {item.bouquetSize ? ` · ${item.bouquetSize.name}` : ''}
-                      </p>
+                      <p className="text-xs text-[var(--admin-muted)]">/{item.slug}</p>
                     </td>
                     <td className="text-sm text-[var(--admin-muted)]">
                       {item.catalogCategory?.name ?? '—'}
                     </td>
                     <td className="text-sm text-[var(--admin-muted)]">
-                      {item.flowerVariety?.name ?? item.flowerType?.name ?? '—'}
+                      {item.cardSubtitle ?? '—'}
                     </td>
                     <td className="text-sm text-[var(--admin-muted)]">
                       {item.family?.name ?? '—'}

@@ -3,7 +3,6 @@
 import {
   DEFAULT_PRODUCT_VARIANT_NAME,
   deriveCompositionManagerSummary,
-  resolveCompositionSetupStatus,
   normalizeSlug,
   suggestProductNameFromComposition,
   type ComponentUnit,
@@ -29,7 +28,6 @@ export type ComponentDraft = {
   quantity: string;
   unit: ComponentUnit;
   flowerItemId: string;
-  flowerId: string;
   typeName: string;
   varietyName: string;
   originName: string;
@@ -161,11 +159,11 @@ export function ProductEditorMainTab(props: Props) {
           only.name.trim().toLowerCase() === DEFAULT_PRODUCT_VARIANT_NAME.toLowerCase();
         if (isDefault) {
           return [
-            { ...only, name: 'S' },
+            { ...only, name: '7 шт' },
             {
               key: nextVariantKey(),
               id: null,
-              name: 'M',
+              name: '15 шт',
               priceMajor: '',
               status: 'ACTIVE' as VariantStatus,
               salePriceMajor: '',
@@ -174,7 +172,8 @@ export function ProductEditorMainTab(props: Props) {
         }
       }
       const taken = new Set(prev.map((row) => row.name.trim().toLowerCase()));
-      const nextLabel = ['S', 'M', 'L'].find((label) => !taken.has(label.toLowerCase())) ?? '';
+      const nextLabel =
+        ['7 шт', '15 шт', '25 шт', '51 шт'].find((label) => !taken.has(label.toLowerCase())) ?? '';
       return [
         ...prev,
         {
@@ -200,30 +199,6 @@ export function ProductEditorMainTab(props: Props) {
   );
 
   const compositionSummary = deriveCompositionManagerSummary(components);
-
-  const legacyBanner = (() => {
-    const status = resolveCompositionSetupStatus({
-      flowerTypeId: server.flowerTypeId,
-      flowerVarietyId: server.flowerVarietyId,
-      flowerOriginId: server.flowerOriginId,
-      components: components.map((row) => ({
-        flowerItemId: row.flowerItemId || null,
-        flowerId: row.flowerId || null,
-      })),
-    });
-    if (status === 'legacy_pending') {
-      return (
-        <div className="rounded-lg border border-[var(--admin-warning,#b45309)]/40 p-3 text-sm">
-          У товара остались старые поля без состава. Добавьте цветы — при сохранении устаревшие
-          поля очистятся.{' '}
-          <a href="/admin/catalog/composition-setup" className="underline underline-offset-2">
-            Миграция состава
-          </a>
-        </div>
-      );
-    }
-    return null;
-  })();
 
   return (
     <section className="admin-section space-y-6">
@@ -293,7 +268,6 @@ export function ProductEditorMainTab(props: Props) {
 
       <div className="admin-subsection space-y-3">
         <h3 className="admin-subsection__title">Состав</h3>
-        {legacyBanner}
         <ul className="space-y-2">
           {components.length === 0 ? (
             <li className="text-sm text-[var(--admin-muted)]">Добавьте хотя бы один цветок.</li>
@@ -549,7 +523,7 @@ export function ProductEditorMainTab(props: Props) {
                       className="admin-input w-32"
                       value={variant.name}
                       disabled={!canUpdate}
-                      placeholder="S"
+                      placeholder="7 шт"
                       onChange={(event) => {
                         const value = event.target.value;
                         setVariants((prev) =>
@@ -596,7 +570,7 @@ export function ProductEditorMainTab(props: Props) {
           )}
           {canUpdate ? (
             <button type="button" className="admin-btn-ghost" onClick={addSizeRow}>
-              + Добавить размер (S / M / L)
+              + Добавить размер (7 шт / 15 шт)
             </button>
           ) : null}
         </div>
@@ -649,8 +623,8 @@ export function ProductEditorMainTab(props: Props) {
             <div className="space-y-3">
               <h3 className="admin-subsection__title">Линейка товаров</h3>
               <p className="text-xs text-[var(--admin-muted)]">
-                Отдельные карточки одного товара (40 / 50 / 60 см). Не путать с размерами S/M/L в
-                одной карточке.
+                Отдельные карточки одного товара (40 / 50 / 60 см). Не путать с размерами «7 шт /
+                15 шт» в одной карточке.
               </p>
               <label className="admin-field max-w-md">
                 <span>Линейка</span>

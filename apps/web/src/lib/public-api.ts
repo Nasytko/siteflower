@@ -1,6 +1,5 @@
 import type {
   BestsellerGroupPublicDto,
-  BouquetSizePublicDto,
   BudgetRangePublicDto,
   CatalogCategoryDto,
   CatalogCategoryTreeNodeDto,
@@ -87,9 +86,8 @@ export type CatalogListParams = {
   occasion?: string;
   recipient?: string;
   color?: string;
+  /** FlowerType slugs (legacy `flower=` URL key maps here). */
   flower?: string;
-  /** BouquetSize slugs */
-  size?: string;
   /** CatalogCategory slug (includes descendants). */
   categorySlug?: string;
   flowerTypeSlug?: string;
@@ -117,7 +115,6 @@ export function listProducts(params: CatalogListParams = {}) {
     recipient,
     color,
     flower,
-    size,
     categorySlug,
     flowerTypeSlug,
     flowerVarietySlug,
@@ -133,10 +130,9 @@ export function listProducts(params: CatalogListParams = {}) {
       occasionSlugs: occasion,
       recipientSlugs: recipient,
       colorSlugs: color,
-      flowerSlugs: flower,
-      bouquetSizeSlugs: size,
+      // /cvety + /bukety?flower= — FlowerType slugs via composition.
+      flowerTypeSlug: flowerTypeSlug ?? flower,
       categorySlug,
-      flowerTypeSlug,
       flowerVarietySlug,
       flowerOriginSlug,
       heightBand,
@@ -219,24 +215,14 @@ export function listRecipients() {
   return publicFetch<TaxonomyRefDto[]>('/catalog/recipients', { tags: ['catalog', 'taxonomies'] });
 }
 
-export function listFlowers() {
-  return publicFetch<TaxonomyRefDto[]>('/catalog/flowers', { tags: ['catalog', 'taxonomies'] });
-}
-
 export function listColors() {
   return publicFetch<TaxonomyRefDto[]>('/catalog/colors', { tags: ['catalog', 'taxonomies'] });
 }
 
-export function listProductLines() {
-  return publicFetch<TaxonomyRefDto[]>('/catalog/product-lines', {
-    tags: ['catalog', 'taxonomies'],
-  });
-}
-
-export function listBouquetSizes() {
-  return publicFetch<BouquetSizePublicDto[]>('/catalog/bouquet-sizes', {
-    tags: ['catalog', 'taxonomies'],
-  });
+/** Resolve a visible FlowerType by slug for /cvety/[slug] landings. */
+export async function getFlowerTypeBySlug(slug: string): Promise<FlowerTypeDto | null> {
+  const types = await listFlowerTypes();
+  return types.find((item) => item.slug === slug) ?? null;
 }
 
 /** Admin-managed budget bands — never hardcode price brackets in the UI. */

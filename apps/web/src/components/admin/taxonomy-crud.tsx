@@ -11,7 +11,7 @@ import { unwrapAdminList } from '@/lib/admin-list';
 import { formatAdminDate, visibilityLabel } from '@/lib/admin-labels';
 import { FormSaveStatus, phaseFromAdminError, type FormSavePhase } from '@/components/admin/form-status';
 
-/** Shape shared by TaxonomyAdminDto, ColorAdminDto and BouquetSizeAdminDto. */
+/** Shape shared by TaxonomyAdminDto and ColorAdminDto. */
 export type TaxonomyRow = {
   id: string;
   slug: string;

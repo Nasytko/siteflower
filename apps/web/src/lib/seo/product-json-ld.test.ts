@@ -32,7 +32,9 @@ function baseProduct(overrides: Partial<ProductPublicDto> = {}): ProductPublicDt
     description: null,
     availability: 'AVAILABLE',
     heightCm: null,
-    bouquetSize: null,
+    catalogCategory: null,
+    family: null,
+    cardSubtitle: null,
     currency: 'BYN',
     price: priceRange('8900', '14900'),
     promotion: null,
@@ -44,17 +46,15 @@ function baseProduct(overrides: Partial<ProductPublicDto> = {}): ProductPublicDt
       resolvedDescription: 'Нежный букет',
     },
     variants: [
-      variant('v1', 'S', '8900', 0),
-      variant('v2', 'M', '11900', 1),
-      variant('v3', 'L', '14900', 2),
+      variant('v1', '7 шт', '8900', 0),
+      variant('v2', '15 шт', '11900', 1),
+      variant('v3', '25 шт', '14900', 2),
     ],
     components: [],
     media: [],
     occasions: [],
     recipients: [],
     colors: [],
-    productLines: [],
-    flowers: [],
     ...overrides,
   };
 }
@@ -74,7 +74,7 @@ test('buildProductJsonLd uses Offer for a single variant', () => {
   process.env.NEXT_PUBLIC_SITE_URL = 'http://localhost:3000';
   const jsonLd = buildProductJsonLd(
     baseProduct({
-      variants: [variant('v1', 'M', '11900', 0)],
+      variants: [variant('v1', '15 шт', '11900', 0)],
       price: priceRange('11900', '11900'),
     }),
   );

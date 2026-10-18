@@ -1,8 +1,8 @@
 /**
  * Shareable catalog URL state for /bukety.
  *
- * Five customer-facing dimensions only: budget, occasion, recipient, color,
- * flower, bouquet size (+ sort / page / free-text search).
+ * Customer-facing dimensions: budget, occasion, recipient, color, flower type
+ * (+ sort / page / free-text search).
  * Semantics: AND across dimensions, OR within a dimension.
  */
 
@@ -18,9 +18,8 @@ export type CatalogSearchState = {
   occasions: string[];
   recipients: string[];
   colors: string[];
+  /** FlowerType slugs. */
   flowers: string[];
-  /** BouquetSize slugs. */
-  sizes: string[];
   sort: ProductSort;
   search?: string;
   page: number;
@@ -33,7 +32,6 @@ export const CATALOG_DIMENSION_PARAMS = {
   recipients: 'recipient',
   colors: 'color',
   flowers: 'flower',
-  sizes: 'size',
 } as const satisfies Record<CatalogDimension, string>;
 
 export type CatalogDimension =
@@ -41,8 +39,7 @@ export type CatalogDimension =
   | 'occasions'
   | 'recipients'
   | 'colors'
-  | 'flowers'
-  | 'sizes';
+  | 'flowers';
 
 export const CATALOG_DIMENSIONS: CatalogDimension[] = [
   'budgets',
@@ -50,7 +47,6 @@ export const CATALOG_DIMENSIONS: CatalogDimension[] = [
   'recipients',
   'colors',
   'flowers',
-  'sizes',
 ];
 
 const LIST_MAX = 16;
@@ -62,7 +58,6 @@ export function emptyCatalogSearchState(): CatalogSearchState {
     recipients: [],
     colors: [],
     flowers: [],
-    sizes: [],
     sort: DEFAULT_PRODUCT_SORT,
     page: 1,
   };
@@ -108,7 +103,6 @@ export function parseCatalogSearchParams(
     recipients: parseSlugListParam(raw[CATALOG_DIMENSION_PARAMS.recipients]),
     colors: parseSlugListParam(raw[CATALOG_DIMENSION_PARAMS.colors]),
     flowers: parseSlugListParam(raw[CATALOG_DIMENSION_PARAMS.flowers]),
-    sizes: parseSlugListParam(raw[CATALOG_DIMENSION_PARAMS.sizes]),
     sort,
     search: firstParam(raw.q) ?? firstParam(raw.search),
     page: pageNum > 0 ? pageNum : 1,
@@ -125,7 +119,6 @@ export function catalogStateToListParams(state: CatalogSearchState): CatalogList
     recipient: joinSlugList(state.recipients),
     color: joinSlugList(state.colors),
     flower: joinSlugList(state.flowers),
-    size: joinSlugList(state.sizes),
     sort: state.sort,
   };
 }

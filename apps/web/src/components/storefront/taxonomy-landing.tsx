@@ -15,17 +15,16 @@ import {
 import { buildPageMetadata } from '@/lib/seo/metadata';
 
 const KIND_META: Record<
-  TaxonomyLandingKind,
+  Exclude<TaxonomyLandingKind, 'flower'>,
   { pathPrefix: string; filterKey: keyof CatalogListParams; hubLabel: string; hubHref: string }
 > = {
-  flower: { pathPrefix: '/cvety', filterKey: 'flower', hubLabel: 'Цветы', hubHref: '/cvety' },
   occasion: { pathPrefix: '/povod', filterKey: 'occasion', hubLabel: 'Повод', hubHref: '/povod' },
   recipient: { pathPrefix: '/komu', filterKey: 'recipient', hubLabel: 'Кому', hubHref: '/bukety' },
   color: { pathPrefix: '/bukety', filterKey: 'color', hubLabel: 'Цвет', hubHref: '/bukety' },
 };
 
 export async function generateTaxonomyMetadata(
-  kind: TaxonomyLandingKind,
+  kind: Exclude<TaxonomyLandingKind, 'flower'>,
   slug: string,
 ): Promise<Metadata> {
   const meta = KIND_META[kind];
@@ -51,7 +50,7 @@ export async function TaxonomyLandingPage({
   kind,
   slug,
 }: {
-  kind: TaxonomyLandingKind;
+  kind: Exclude<TaxonomyLandingKind, 'flower'>;
   slug: string;
 }) {
   const meta = KIND_META[kind];

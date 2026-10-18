@@ -31,11 +31,7 @@ async function fetchProductBySlug(slug: string): Promise<ProductListItemDto | nu
       availability: product.availability,
       version: 0,
       heightCm: product.heightCm ?? null,
-      bouquetSize: product.bouquetSize,
       catalogCategory: product.catalogCategory,
-      flowerType: product.flowerType,
-      flowerVariety: product.flowerVariety,
-      flowerOrigin: product.flowerOrigin,
       family: product.family
         ? { id: product.family.id, name: product.family.name }
         : null,
@@ -46,9 +42,7 @@ async function fetchProductBySlug(slug: string): Promise<ProductListItemDto | nu
         ? { id: cheapest.id, name: cheapest.name, priceMinor: cheapest.effectivePriceMinor }
         : null,
       primaryImageUrl: primary?.url ?? null,
-      flowers: product.flowers,
       colors: product.colors,
-      productLines: product.productLines,
       updatedAt: new Date().toISOString(),
     };
   } catch {

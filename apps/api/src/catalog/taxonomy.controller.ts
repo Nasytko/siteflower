@@ -166,7 +166,7 @@ class UpdateTaxonomyDto extends ExpectedVersionDto {
 }
 
 /**
- * One controller for every taxonomy: `/admin/catalog/{flowers|occasions|recipients|colors|bouquet-sizes|product-lines}`.
+ * One controller for every taxonomy: `/admin/catalog/{occasions|recipients|colors}`.
  * Registered after the product, promotion, bestseller and budget-range controllers
  * so their concrete paths win over the `:kind` parameter.
  */

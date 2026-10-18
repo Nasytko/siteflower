@@ -77,8 +77,6 @@ type Props = {
     occasions: PickerOption[];
     recipients: PickerOption[];
     colors: Array<PickerOption & { swatch?: string | null }>;
-    bouquetSizes: PickerOption[];
-    productLines: PickerOption[];
     categories: PickerOption[];
     families: Array<{ id: string; name: string }>;
   };
@@ -154,7 +152,6 @@ function toComponentDrafts(product: ProductAdminDto): ComponentDraft[] {
       quantity: component.quantity === null ? '' : String(component.quantity),
       unit: component.unit,
       flowerItemId: component.flowerItemId ?? '',
-      flowerId: component.flowerId ?? '',
       typeName: component.flowerItem?.flowerType?.name ?? '',
       varietyName: component.flowerItem?.flowerVariety?.name ?? '',
       originName: component.flowerItem?.flowerOrigin?.name ?? '',
@@ -240,11 +237,9 @@ export function ProductEditor({
   const [variants, setVariants] = useState<VariantDraft[]>(() => toVariantDrafts(product));
   const [components, setComponents] = useState<ComponentDraft[]>(() => toComponentDrafts(product));
   const [discovery, setDiscovery] = useState({
-    bouquetSizeId: product.bouquetSizeId ?? '',
     occasionIds: product.occasions.map((item) => item.id),
     recipientIds: product.recipients.map((item) => item.id),
     colorIds: product.colors.map((item) => item.id),
-    productLineIds: product.productLines.map((item) => item.id),
   });
   const [promotion, setPromotion] = useState<PromotionDraft>(() => toPromotionDraft(product));
   const [groupIds, setGroupIds] = useState<string[]>(product.bestsellerGroupIds);
@@ -290,11 +285,9 @@ export function ProductEditor({
     setVariants(toVariantDrafts(updated));
     setComponents(toComponentDrafts(updated));
     setDiscovery({
-      bouquetSizeId: updated.bouquetSizeId ?? '',
       occasionIds: updated.occasions.map((item) => item.id),
       recipientIds: updated.recipients.map((item) => item.id),
       colorIds: updated.colors.map((item) => item.id),
-      productLineIds: updated.productLines.map((item) => item.id),
     });
     setPromotion(toPromotionDraft(updated));
     setGroupIds(updated.bestsellerGroupIds);
@@ -413,7 +406,6 @@ export function ProductEditor({
                 ...row,
                 ...meta,
                 flowerItemId: itemId,
-                flowerId: '',
                 quantity: row.quantity.trim() ? row.quantity : qty,
               }
             : row,
@@ -429,7 +421,6 @@ export function ProductEditor({
           quantity: qty,
           unit: 'STEM' as ComponentUnit,
           flowerItemId: itemId,
-          flowerId: '',
         },
       ]);
     }
@@ -551,7 +542,7 @@ export function ProductEditor({
     if (variants.length > 1) {
       const normalizedNames = variants.map((variant) => variant.name.trim().toLowerCase());
       if (normalizedNames.some((name) => name.length === 0)) {
-        return 'Укажите название для каждого размера (например S, M, L)';
+        return 'Укажите название для каждого размера (например 7 шт, 15 шт)';
       }
       if (new Set(normalizedNames).size !== normalizedNames.length) {
         return 'Названия размеров не должны повторяться';
@@ -667,14 +658,11 @@ export function ProductEditor({
           quantity: component.quantity.trim().length > 0 ? Number(component.quantity) : null,
           unit: component.unit,
           flowerItemId: component.flowerItemId || null,
-          flowerId: component.flowerId || null,
           sortOrder: index,
         })),
-        bouquetSizeId: discovery.bouquetSizeId || null,
         occasionIds: discovery.occasionIds,
         recipientIds: discovery.recipientIds,
         colorIds: discovery.colorIds,
-        productLineIds: discovery.productLineIds,
         promotion: {
           enabled: promotion.enabled,
           type: promotionType,
@@ -684,16 +672,6 @@ export function ProductEditor({
         },
         groupIds,
         catalogCategoryId: catalogCategoryId || null,
-        // Legacy Product.flower* is no longer edited here. Clear when composition uses FlowerItem.
-        flowerTypeId: components.some((c) => c.flowerItemId)
-          ? null
-          : server.flowerTypeId ?? null,
-        flowerVarietyId: components.some((c) => c.flowerItemId)
-          ? null
-          : server.flowerVarietyId ?? null,
-        flowerOriginId: components.some((c) => c.flowerItemId)
-          ? null
-          : server.flowerOriginId ?? null,
         familyId: familyId || null,
         ...(familyId
           ? {
@@ -996,11 +974,9 @@ export function ProductEditor({
           salePriceMinor: null,
         })),
         components: [],
-        bouquetSizeId: null,
         occasionIds: [],
         recipientIds: [],
         colorIds: [],
-        productLineIds: [],
         promotion: {
           enabled: false,
           type: 'PERCENT',
@@ -1010,9 +986,6 @@ export function ProductEditor({
         },
         groupIds: [],
         catalogCategoryId: null,
-        flowerTypeId: null,
-        flowerVarietyId: null,
-        flowerOriginId: null,
         familyId,
         familyMemberSortOrder: familyMembers.length,
       });
@@ -1470,28 +1443,6 @@ export function ProductEditor({
           <div className="admin-subsection space-y-3">
             <h3 className="admin-subsection__title">Как покупатель найдёт товар</h3>
 
-          {options.bouquetSizes.length > 0 ? (
-          <label className="admin-field max-w-sm">
-            <span>Размер букета</span>
-            <select
-              className="admin-select"
-              value={discovery.bouquetSizeId}
-              disabled={!canUpdate}
-              onChange={(event) => {
-                setDiscovery((prev) => ({ ...prev, bouquetSizeId: event.target.value }));
-                touch();
-              }}
-            >
-              <option value="">Не указан</option>
-              {options.bouquetSizes.map((size) => (
-                <option key={size.id} value={size.id}>
-                  {size.name}
-                </option>
-              ))}
-            </select>
-          </label>
-          ) : null}
-
           <div className="grid gap-4 lg:grid-cols-3">
             {options.occasions.length > 0 ? (
             <fieldset className="admin-fieldset">
@@ -1573,31 +1524,6 @@ export function ProductEditor({
             </fieldset>
             ) : null}
           </div>
-
-          {options.productLines.length > 0 ? (
-          <fieldset className="admin-fieldset">
-            <legend>Коллекция</legend>
-            <div className="admin-checks">
-              {options.productLines.map((option) => (
-                <label key={option.id} className="admin-check">
-                  <input
-                    type="checkbox"
-                    disabled={!canUpdate}
-                    checked={discovery.productLineIds.includes(option.id)}
-                    onChange={() => {
-                      setDiscovery((prev) => ({
-                        ...prev,
-                        productLineIds: toggleId(prev.productLineIds, option.id),
-                      }));
-                      touch();
-                    }}
-                  />
-                  {option.name}
-                </label>
-              ))}
-            </div>
-          </fieldset>
-          ) : null}
           </div>
 
           <div className="admin-subsection space-y-3">

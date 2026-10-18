@@ -3,9 +3,11 @@ import { join } from 'node:path';
 import { AppConfigModule } from '../config/app-config.module';
 import { AppConfigService } from '../config/app-config.service';
 import { DatabaseModule } from '../database/database.module';
+import { AdminMediaAssetsController } from './admin-media-assets.controller';
 import { AdminMediaHealthController } from './admin-media-health.controller';
 import { LocalMediaStorage } from './local-media.storage';
 import { MediaHealthService } from './media-health.service';
+import { MediaOrphanService } from './media-orphan.service';
 import { MEDIA_STORAGE } from './media-storage';
 import { MediaService } from './media.service';
 import { MediaServeController } from './media-serve.controller';
@@ -13,10 +15,15 @@ import { S3MediaStorage } from './s3-media.storage';
 
 @Module({
   imports: [AppConfigModule, DatabaseModule],
-  controllers: [MediaServeController, AdminMediaHealthController],
+  controllers: [
+    MediaServeController,
+    AdminMediaHealthController,
+    AdminMediaAssetsController,
+  ],
   providers: [
     MediaService,
     MediaHealthService,
+    MediaOrphanService,
     {
       provide: MEDIA_STORAGE,
       inject: [AppConfigService],

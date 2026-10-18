@@ -30,7 +30,6 @@ export type KatalogSearchState = {
   origins: string[];
   occasions: string[];
   recipients: string[];
-  sizes: string[];
   /** Only products with an active promotion. */
   promo: boolean;
   sort: ProductSort;
@@ -46,7 +45,6 @@ export const KATALOG_QUERY_KEYS = {
   origins: 'orig',
   occasions: 'occasion',
   recipients: 'recipient',
-  sizes: 'size',
   promo: 'promo',
 } as const;
 
@@ -64,7 +62,6 @@ export function emptyKatalogSearchState(): KatalogSearchState {
     origins: [],
     occasions: [],
     recipients: [],
-    sizes: [],
     promo: false,
     sort: DEFAULT_PRODUCT_SORT,
     page: 1,
@@ -89,7 +86,6 @@ export function gateKatalogSearchState(
     origins: keys.has('origin') ? state.origins : [],
     occasions: keys.has('occasion') ? state.occasions : [],
     recipients: keys.has('recipient') ? state.recipients : [],
-    sizes: keys.has('bouquet_size') ? state.sizes : [],
     promo: keys.has('promo') ? state.promo : false,
   };
 }
@@ -114,7 +110,6 @@ export function parseKatalogSearchParams(
     origins: parseSlugListParam(raw[KATALOG_QUERY_KEYS.origins]),
     occasions: parseSlugListParam(raw[KATALOG_QUERY_KEYS.occasions]),
     recipients: parseSlugListParam(raw[KATALOG_QUERY_KEYS.recipients]),
-    sizes: parseSlugListParam(raw[KATALOG_QUERY_KEYS.sizes]),
     promo: promoRaw === '1' || promoRaw === 'true',
     sort,
     search: firstParam(raw.q) ?? firstParam(raw.search),
@@ -137,7 +132,6 @@ export function katalogStateToListParams(
     flowerOriginSlug: joinSlugList(state.origins),
     occasion: joinSlugList(state.occasions),
     recipient: joinSlugList(state.recipients),
-    size: joinSlugList(state.sizes),
     heightBand: state.height ?? undefined,
     promotion: state.promo || undefined,
     sort: state.sort,
@@ -152,7 +146,6 @@ export function katalogHasActiveFilters(state: KatalogSearchState): boolean {
     state.origins.length > 0 ||
     state.occasions.length > 0 ||
     state.recipients.length > 0 ||
-    state.sizes.length > 0 ||
     state.height != null ||
     state.promo ||
     Boolean(state.search)
@@ -179,9 +172,6 @@ export function katalogStateToQuery(state: Partial<KatalogSearchState>): string 
 
   const recipientJoined = joinSlugList(state.recipients);
   if (recipientJoined) params.set(KATALOG_QUERY_KEYS.recipients, recipientJoined);
-
-  const sizeJoined = joinSlugList(state.sizes);
-  if (sizeJoined) params.set(KATALOG_QUERY_KEYS.sizes, sizeJoined);
 
   if (state.height) params.set(KATALOG_QUERY_KEYS.height, state.height);
   if (state.promo) params.set(KATALOG_QUERY_KEYS.promo, '1');

@@ -44,7 +44,6 @@ const PUBLIC_RUNTIME_FILTER_KEYS = new Set<CatalogFilterKey>([
   'color',
   'occasion',
   'recipient',
-  'bouquet_size',
 ]);
 
 @Injectable()
@@ -306,10 +305,7 @@ export class CatalogFiltersService {
         const rows = await this.prisma.client.flowerType.findMany({
           where: {
             visibility: 'VISIBLE',
-            OR: [
-              { items: { some: { components: { some: { product: productWhere } } } } },
-              { products: { some: productWhere } },
-            ],
+            items: { some: { components: { some: { product: productWhere } } } },
           },
           orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }],
           select: { id: true, slug: true, name: true },
@@ -320,10 +316,7 @@ export class CatalogFiltersService {
         const rows = await this.prisma.client.flowerVariety.findMany({
           where: {
             visibility: 'VISIBLE',
-            OR: [
-              { items: { some: { components: { some: { product: productWhere } } } } },
-              { products: { some: productWhere } },
-            ],
+            items: { some: { components: { some: { product: productWhere } } } },
           },
           orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }],
           select: { id: true, slug: true, name: true },
@@ -334,10 +327,7 @@ export class CatalogFiltersService {
         const rows = await this.prisma.client.flowerOrigin.findMany({
           where: {
             visibility: 'VISIBLE',
-            OR: [
-              { items: { some: { components: { some: { product: productWhere } } } } },
-              { products: { some: productWhere } },
-            ],
+            items: { some: { components: { some: { product: productWhere } } } },
           },
           orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }],
           select: { id: true, slug: true, name: true },
@@ -371,17 +361,6 @@ export class CatalogFiltersService {
           where: {
             visibility: 'VISIBLE',
             products: { some: { product: productWhere } },
-          },
-          orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }],
-          select: { id: true, slug: true, name: true },
-        });
-        return rows.length > 0 ? rows : null;
-      }
-      case 'bouquet_size': {
-        const rows = await this.prisma.client.bouquetSize.findMany({
-          where: {
-            visibility: 'VISIBLE',
-            products: { some: productWhere },
           },
           orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }],
           select: { id: true, slug: true, name: true },
