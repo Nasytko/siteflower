@@ -63,7 +63,7 @@ DROP TABLE IF EXISTS "flowers";
 
 -- Filter pool: remove bouquet_size definition and category links.
 DELETE FROM "catalog_category_filters"
-WHERE "filter_definition_id" IN (
+WHERE "definition_id" IN (
   SELECT id FROM "catalog_filter_definitions" WHERE "key" = 'bouquet_size'
 );
 DELETE FROM "catalog_filter_definitions" WHERE "key" = 'bouquet_size';
