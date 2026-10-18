@@ -1,5 +1,9 @@
 import Link from 'next/link';
-import type { CatalogCategoryFilterPublicDto, CatalogFilterKey } from '@bouquet-one/contracts';
+import type {
+  CatalogCategoryFilterPublicDto,
+  CatalogFilterKey,
+  CompositionKind,
+} from '@bouquet-one/contracts';
 import {
   bouquetCountLabel,
   katalogHasActiveFilters,
@@ -51,6 +55,10 @@ function slugListForKey(key: CatalogFilterKey, state: KatalogSearchState): strin
       return state.occasions;
     case 'recipient':
       return state.recipients;
+    case 'composition_kind':
+      return state.compositionKinds.map((k) =>
+        k === 'MONO' ? 'mono' : k === 'MIXED' ? 'mixed' : 'unknown',
+      );
     default:
       return [];
   }
@@ -74,10 +82,28 @@ function patchForKey(
       return { occasions: toggleSlug(state.occasions, slug) };
     case 'recipient':
       return { recipients: toggleSlug(state.recipients, slug) };
+    case 'composition_kind': {
+      const kind: CompositionKind | null =
+        slug === 'mono' || slug === 'MONO'
+          ? 'MONO'
+          : slug === 'mixed' || slug === 'MIXED'
+            ? 'MIXED'
+            : null;
+      if (!kind) return {};
+      const next: CompositionKind[] = state.compositionKinds.includes(kind)
+        ? state.compositionKinds.filter((item) => item !== kind)
+        : [...state.compositionKinds, kind];
+      return { compositionKinds: next };
+    }
     case 'stem_height':
       return { height: state.height === slug ? null : (slug as KatalogSearchState['height']) };
     case 'promo':
       return { promo: !state.promo };
+    case 'quantity': {
+      const qty = Number(slug);
+      if (!Number.isFinite(qty) || qty < 1) return {};
+      return { minQty: state.minQty === qty ? undefined : qty };
+    }
     default:
       return {};
   }
@@ -136,6 +162,28 @@ export function KatalogFiltersPanel({ categorySlug, state, total, filters }: Pro
                     key={option.slug}
                     label={option.name}
                     active={state.height === option.slug}
+                    href={katalogHref(categorySlug, state, patchForKey(filter.key, state, option.slug))}
+                  />
+                ))}
+              </div>
+            </fieldset>
+          );
+        }
+
+        if (filter.key === 'price') {
+          return null; // Budget chips live on /bukety; raw min/max via URL only for now.
+        }
+
+        if (filter.key === 'quantity') {
+          return (
+            <fieldset key={filter.key}>
+              <legend className="sf-label mb-2">{filter.label}</legend>
+              <div className="flex flex-wrap gap-1.5">
+                {filter.options.map((option) => (
+                  <FilterChip
+                    key={option.slug}
+                    label={`от ${option.name}`}
+                    active={state.minQty === Number(option.slug)}
                     href={katalogHref(categorySlug, state, patchForKey(filter.key, state, option.slug))}
                   />
                 ))}

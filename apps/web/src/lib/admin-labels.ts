@@ -5,7 +5,10 @@
 import type {
   AdminRole,
   CommercialAvailability,
+  ComponentRole,
   ComponentUnit,
+  CompositionKind,
+  CompositionPrecision,
   ProductLifecycle,
   PromotionType,
   TaxonomyVisibility,
@@ -47,6 +50,25 @@ const UNIT: Record<ComponentUnit, string> = {
   UNSPECIFIED: 'без единицы',
 };
 
+const COMPONENT_ROLE: Record<ComponentRole, string> = {
+  PRIMARY: 'Основной',
+  GREENERY: 'Зелень',
+  FILLER: 'Наполнитель',
+  OTHER: 'Другое',
+};
+
+const COMPOSITION_KIND: Record<CompositionKind, string> = {
+  MONO: 'Моно',
+  MIXED: 'Смешанный',
+  UNKNOWN: 'Не определён',
+};
+
+const COMPOSITION_PRECISION: Record<CompositionPrecision, string> = {
+  EXACT: 'Точный состав',
+  APPROXIMATE: 'Приблизительный',
+  UNKNOWN: 'Не указана',
+};
+
 const PROMOTION_TYPE: Record<PromotionType, string> = {
   PERCENT: 'Процент скидки',
   FIXED: 'Фиксированная цена',
@@ -80,6 +102,18 @@ export function visibilityLabel(value: TaxonomyVisibility): string {
 
 export function componentUnitLabel(value: ComponentUnit): string {
   return UNIT[value] ?? value;
+}
+
+export function componentRoleLabel(value: ComponentRole): string {
+  return COMPONENT_ROLE[value] ?? value;
+}
+
+export function compositionKindLabel(value: CompositionKind): string {
+  return COMPOSITION_KIND[value] ?? value;
+}
+
+export function compositionPrecisionLabel(value: CompositionPrecision): string {
+  return COMPOSITION_PRECISION[value] ?? value;
 }
 
 export function promotionTypeLabel(value: PromotionType): string {

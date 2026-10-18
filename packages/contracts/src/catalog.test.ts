@@ -22,6 +22,8 @@ import {
   defaultFilterKeysForPreset,
   suggestProductNameFromComposition,
   deriveCompositionManagerSummary,
+  deriveCompositionKind,
+  suggestVisualPaletteColorIds,
   deriveProductEditorReadiness,
 } from './catalog.js';
 
@@ -70,6 +72,50 @@ test('flowerItemIdentityKey and display name', () => {
       stemLengthCm: 50,
     }),
     'Тюльпан 50 см',
+  );
+});
+
+test('deriveCompositionKind scenarios (mono / mixed / greenery / unknown)', () => {
+  // 1. Mono red roses
+  assert.equal(deriveCompositionKind([{ role: 'PRIMARY', typeName: 'Роза' }]), 'MONO');
+  // 2. Mono roses of different colors (same type)
+  assert.equal(
+    deriveCompositionKind([
+      { role: 'PRIMARY', typeName: 'Роза', typeId: 'rose' },
+      { role: 'PRIMARY', typeName: 'Роза', typeId: 'rose' },
+    ]),
+    'MONO',
+  );
+  // 3. Mixed white roses + white eustoma
+  assert.equal(
+    deriveCompositionKind([
+      { role: 'PRIMARY', typeName: 'Роза' },
+      { role: 'PRIMARY', typeName: 'Эустома' },
+    ]),
+    'MIXED',
+  );
+  // 5. Mono with decorative greenery
+  assert.equal(
+    deriveCompositionKind([
+      { role: 'PRIMARY', typeName: 'Роза' },
+      { role: 'GREENERY', typeName: 'Эвкалипт' },
+    ]),
+    'MONO',
+  );
+  // 6. Unknown / empty composition
+  assert.equal(deriveCompositionKind([]), 'UNKNOWN');
+  assert.equal(deriveCompositionKind([{ role: 'GREENERY', typeName: 'Эвкалипт' }]), 'UNKNOWN');
+});
+
+test('suggestVisualPaletteColorIds skips greenery', () => {
+  assert.deepEqual(
+    suggestVisualPaletteColorIds([
+      { role: 'PRIMARY', colorId: 'c1' },
+      { role: 'GREENERY', colorId: 'c2' },
+      { role: 'PRIMARY', colorId: 'c1' },
+      { role: 'PRIMARY', colorId: 'c3' },
+    ]),
+    ['c1', 'c3'],
   );
 });
 
@@ -180,6 +226,18 @@ test('deriveProductEditorReadiness', () => {
     compositionHasFlowerItem: true,
   });
   assert.equal(ready.readyToPublish, true);
+  const withoutLongDesc = deriveProductEditorReadiness({
+    name: 'Букет',
+    slug: 'buket',
+    catalogCategoryId: 'cat-1',
+    variants: [{ status: 'ACTIVE', priceMajor: '69,00' }],
+    hasPrimaryImage: true,
+    shortDescription: 'Коротко',
+    description: '',
+    compositionHasFlowerItem: true,
+  });
+  assert.equal(withoutLongDesc.readyToPublish, true);
+  assert.equal(withoutLongDesc.items.find((item) => item.id === 'description')?.requiredForPublish, false);
   const zeroPrice = deriveProductEditorReadiness({
     name: 'Букет',
     slug: 'buket',

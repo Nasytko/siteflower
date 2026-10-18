@@ -79,10 +79,13 @@ describe('validatePublishRequirements', () => {
       'NAME_REQUIRED',
       'SLUG_REQUIRED',
       'SHORT_DESCRIPTION_REQUIRED',
-      'DESCRIPTION_REQUIRED',
       'VARIANT_REQUIRED',
       'PRIMARY_IMAGE_REQUIRED',
     ]);
+  });
+
+  it('allows publish without long description', () => {
+    expect(validatePublishRequirements({ ...publishReady, description: null })).toEqual([]);
   });
 
   it('requires an active variant, not just any variant', () => {

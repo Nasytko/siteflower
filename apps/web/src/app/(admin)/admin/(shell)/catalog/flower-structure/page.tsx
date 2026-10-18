@@ -1,11 +1,12 @@
 import { roleHasPermission } from '@bouquet-one/contracts';
+import { AdminPageHeader } from '@/components/admin/admin-page-header';
+import { FlowerStructureManager } from '@/components/admin/flower-structure-manager';
+import { TaxonomyKindTabs } from '@/components/admin/taxonomy-kind-tabs';
 import {
   fetchCatalogStructurePickers,
   fetchFlowerItemsPage,
 } from '@/lib/admin-catalog-api';
 import { requireAdminPermission } from '@/lib/admin-page-auth';
-import { AdminPageHeader } from '@/components/admin/admin-page-header';
-import { FlowerStructureManager } from '@/components/admin/flower-structure-manager';
 
 export default async function AdminFlowerStructurePage() {
   const me = await requireAdminPermission('CATALOG_READ');
@@ -21,6 +22,7 @@ export default async function AdminFlowerStructurePage() {
         title="Цветы"
         lead="Конкретные позиции для состава букетов. Выберите вид, форму, сорт, происхождение и высоту стебля — название соберётся само."
       />
+      <TaxonomyKindTabs />
       <FlowerStructureManager
         initialTypes={flowerTypes}
         initialVarieties={flowerVarieties}

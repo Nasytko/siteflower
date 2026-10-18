@@ -160,6 +160,10 @@ export const adminEndpoints = {
   mediaAssetPurge: (id: string) => `${ADMIN}/media/assets/${id}/purge`,
   seoSummary: `${ADMIN}/seo/summary`,
   seoHealth: `${ADMIN}/seo/health`,
+  seoLandings: `${ADMIN}/seo/landings`,
+  seoLanding: (id: string) => `${ADMIN}/seo/landings/${id}`,
+  seoLandingPublish: (id: string) => `${ADMIN}/seo/landings/${id}/publish`,
+  seoLandingPreviewProducts: (id: string) => `${ADMIN}/seo/landings/${id}/preview-products`,
 } as const;
 
 /** URL segment: ORDER_TERMS → order_terms */

@@ -36,6 +36,7 @@ type DefinitionRow = {
 
 /** Only filters with correct storefront PLP wiring are exposed publicly. */
 const PUBLIC_RUNTIME_FILTER_KEYS = new Set<CatalogFilterKey>([
+  'price',
   'promo',
   'flower_type',
   'variety',
@@ -44,6 +45,8 @@ const PUBLIC_RUNTIME_FILTER_KEYS = new Set<CatalogFilterKey>([
   'color',
   'occasion',
   'recipient',
+  'composition_kind',
+  'quantity',
 ]);
 
 @Injectable()
@@ -301,6 +304,20 @@ export class CatalogFiltersService {
       case 'price':
       case 'promo':
         return [];
+      case 'composition_kind': {
+        const kinds: Array<{ id: string; slug: string; name: string; kind: 'MONO' | 'MIXED' }> = [
+          { id: 'MONO', slug: 'mono', name: 'Монобукеты', kind: 'MONO' },
+          { id: 'MIXED', slug: 'mixed', name: 'Смешанные', kind: 'MIXED' },
+        ];
+        const present: CatalogFilterOptionDto[] = [];
+        for (const row of kinds) {
+          const count = await this.prisma.client.product.count({
+            where: { AND: [productWhere, { compositionKind: row.kind }] },
+          });
+          if (count > 0) present.push({ id: row.id, slug: row.slug, name: row.name });
+        }
+        return present.length > 0 ? present : null;
+      }
       case 'flower_type': {
         const rows = await this.prisma.client.flowerType.findMany({
           where: {

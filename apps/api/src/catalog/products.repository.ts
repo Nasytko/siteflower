@@ -21,8 +21,12 @@ export type ProductListFilters = {
   occasionSlugs?: string[];
   recipientIds?: string[];
   recipientSlugs?: string[];
+  /** Product-level visual palette (ProductColor). */
   colorIds?: string[];
   colorSlugs?: string[];
+  /** Composition-line color — ANDed with other composition facets on the same component. */
+  componentColorIds?: string[];
+  componentColorSlugs?: string[];
   /** /cvety rewrite: flower-type slug matched via FlowerItem.flowerType.slug. */
   flowerSlugs?: string[];
   budgetRanges?: BudgetBound[];
@@ -47,6 +51,12 @@ export type ProductListFilters = {
   promotionalOnly?: boolean;
   minPriceMinor?: string;
   maxPriceMinor?: string;
+  compositionKinds?: Array<'MONO' | 'MIXED' | 'UNKNOWN'>;
+  /** Min qty on a PRIMARY line for flowerTypeQuantitySlug (EXACT products only). */
+  minFlowerTypeQuantity?: number;
+  flowerTypeQuantitySlug?: string;
+  /** Product ids to exclude (SEO landing excludes). */
+  excludeProductIds?: string[];
   /** When set, restricts to effectively published products at that instant. */
   publishedAt?: Date;
 };
@@ -441,6 +451,8 @@ export class ProductsRepository {
     productId: string,
     components: Array<{
       flowerItemId: string;
+      colorId?: string | null;
+      role?: Prisma.ProductComponentCreateManyInput['role'];
       displayName: string;
       quantity: number | null;
       unit: Prisma.ProductComponentCreateManyInput['unit'];
@@ -451,7 +463,16 @@ export class ProductsRepository {
     await tx.productComponent.deleteMany({ where: { productId } });
     if (components.length > 0) {
       await tx.productComponent.createMany({
-        data: components.map((component) => ({ ...component, productId })),
+        data: components.map((component) => ({
+          productId,
+          flowerItemId: component.flowerItemId,
+          colorId: component.colorId ?? null,
+          role: component.role ?? 'PRIMARY',
+          displayName: component.displayName,
+          quantity: component.quantity,
+          unit: component.unit,
+          sortOrder: component.sortOrder,
+        })),
       });
     }
   }
@@ -545,16 +566,6 @@ export function buildProductWhere(
     }
   }
 
-  // /cvety rewrite: flower-type slug via FlowerItem composition only.
-  const flowerSlugs = nonEmpty(filters.flowerSlugs);
-  if (flowerSlugs) {
-    and.push({
-      components: {
-        some: { flowerItem: { flowerType: { slug: { in: flowerSlugs } } } },
-      },
-    });
-  }
-
   const bestsellerGroupIds = nonEmpty(filters.bestsellerGroupIds);
   if (bestsellerGroupIds) {
     and.push({ bestsellerLinks: { some: { groupId: { in: bestsellerGroupIds } } } });
@@ -565,65 +576,70 @@ export function buildProductWhere(
     and.push({ catalogCategoryId: { in: catalogCategoryIds } });
   }
 
-  // Discovery facets: FlowerItem composition only.
+  // Composition facets: same-component AND (type ∧ variety ∧ origin ∧ color ∧ stem).
+  // Multi-values within one facet stay OR (`in`).
   const flowerTypeIds = nonEmpty(filters.flowerTypeIds);
-  if (flowerTypeIds) {
-    and.push({
-      components: { some: { flowerItem: { flowerTypeId: { in: flowerTypeIds } } } },
-    });
-  } else {
-    const flowerTypeSlugs = nonEmpty(filters.flowerTypeSlugs);
-    if (flowerTypeSlugs) {
-      and.push({
-        components: {
-          some: { flowerItem: { flowerType: { slug: { in: flowerTypeSlugs } } } },
-        },
-      });
-    }
-  }
-
+  const flowerTypeSlugs = nonEmpty([
+    ...(filters.flowerTypeSlugs ?? []),
+    ...(filters.flowerSlugs ?? []),
+  ]);
   const flowerVarietyIds = nonEmpty(filters.flowerVarietyIds);
-  if (flowerVarietyIds) {
-    and.push({
-      components: { some: { flowerItem: { flowerVarietyId: { in: flowerVarietyIds } } } },
-    });
-  } else {
-    const flowerVarietySlugs = nonEmpty(filters.flowerVarietySlugs);
-    if (flowerVarietySlugs) {
-      and.push({
-        components: {
-          some: { flowerItem: { flowerVariety: { slug: { in: flowerVarietySlugs } } } },
-        },
-      });
-    }
-  }
-
+  const flowerVarietySlugs = nonEmpty(filters.flowerVarietySlugs);
   const flowerOriginIds = nonEmpty(filters.flowerOriginIds);
-  if (flowerOriginIds) {
-    and.push({
-      components: { some: { flowerItem: { flowerOriginId: { in: flowerOriginIds } } } },
-    });
-  } else {
-    const flowerOriginSlugs = nonEmpty(filters.flowerOriginSlugs);
-    if (flowerOriginSlugs) {
-      and.push({
-        components: {
-          some: { flowerItem: { flowerOrigin: { slug: { in: flowerOriginSlugs } } } },
-        },
-      });
-    }
-  }
+  const flowerOriginSlugs = nonEmpty(filters.flowerOriginSlugs);
+  const componentColorIds = nonEmpty(filters.componentColorIds);
+  const componentColorSlugs = nonEmpty(filters.componentColorSlugs);
 
+  const flowerItemWhere: Prisma.FlowerItemWhereInput = {};
+  if (flowerTypeIds) flowerItemWhere.flowerTypeId = { in: flowerTypeIds };
+  else if (flowerTypeSlugs) flowerItemWhere.flowerType = { slug: { in: flowerTypeSlugs } };
+  if (flowerVarietyIds) flowerItemWhere.flowerVarietyId = { in: flowerVarietyIds };
+  else if (flowerVarietySlugs) flowerItemWhere.flowerVariety = { slug: { in: flowerVarietySlugs } };
+  if (flowerOriginIds) flowerItemWhere.flowerOriginId = { in: flowerOriginIds };
+  else if (flowerOriginSlugs) flowerItemWhere.flowerOrigin = { slug: { in: flowerOriginSlugs } };
   if (filters.heightCm) {
-    const heightFilter = {
+    flowerItemWhere.stemLengthCm = {
       ...(filters.heightCm.gt !== undefined ? { gt: filters.heightCm.gt } : {}),
       ...(filters.heightCm.gte !== undefined ? { gte: filters.heightCm.gte } : {}),
       ...(filters.heightCm.lte !== undefined ? { lte: filters.heightCm.lte } : {}),
     };
-    // Stem height only — do not OR with Product.heightCm (bouquet/card).
+  }
+
+  const hasFlowerItemPredicate = Object.keys(flowerItemWhere).length > 0;
+  const hasComponentColor = Boolean(componentColorIds || componentColorSlugs);
+  if (hasFlowerItemPredicate || hasComponentColor) {
+    const componentSome: Prisma.ProductComponentWhereInput = {};
+    if (hasFlowerItemPredicate) componentSome.flowerItem = flowerItemWhere;
+    if (componentColorIds) componentSome.colorId = { in: componentColorIds };
+    else if (componentColorSlugs) componentSome.color = { slug: { in: componentColorSlugs } };
+    and.push({ components: { some: componentSome } });
+  }
+
+  const compositionKinds = nonEmpty(filters.compositionKinds);
+  if (compositionKinds) {
+    and.push({ compositionKind: { in: compositionKinds as Array<'MONO' | 'MIXED' | 'UNKNOWN'> } });
+  }
+
+  if (
+    filters.minFlowerTypeQuantity != null &&
+    filters.minFlowerTypeQuantity > 0 &&
+    filters.flowerTypeQuantitySlug
+  ) {
     and.push({
-      components: { some: { flowerItem: { stemLengthCm: heightFilter } } },
+      compositionPrecision: 'EXACT',
+      components: {
+        some: {
+          role: 'PRIMARY',
+          quantity: { gte: filters.minFlowerTypeQuantity },
+          flowerItem: { flowerType: { slug: filters.flowerTypeQuantitySlug } },
+        },
+      },
     });
+  }
+
+  const excludeProductIds = nonEmpty(filters.excludeProductIds);
+  if (excludeProductIds) {
+    and.push({ id: { notIn: excludeProductIds } });
   }
 
   if (filters.bouquetHeightCm) {

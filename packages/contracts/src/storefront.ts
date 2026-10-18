@@ -164,7 +164,7 @@ export type TaxonomyPublicDto = {
   slug: string;
   name: string;
   description: string | null;
-  kind: TaxonomyLandingKind | 'bouquet_size';
+  kind: TaxonomyLandingKind;
   seo: {
     seoTitle: string | null;
     seoDescription: string | null;

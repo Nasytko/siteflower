@@ -19,13 +19,19 @@ import {
 } from 'class-validator';
 import {
   COMMERCIAL_AVAILABILITIES,
+  COMPONENT_ROLES,
   COMPONENT_UNITS,
+  COMPOSITION_KINDS,
+  COMPOSITION_PRECISIONS,
   PRODUCT_LIFECYCLES,
   PRODUCT_SORTS,
   PROMOTION_TYPES,
   VARIANT_STATUSES,
   type CommercialAvailability,
+  type ComponentRole,
   type ComponentUnit,
+  type CompositionKind,
+  type CompositionPrecision,
   type ProductLifecycle,
   type ProductSort,
   type PromotionType,
@@ -163,6 +169,23 @@ export class SaveProductEditorDto extends ExpectedVersionDto {
   heightCm?: number | null;
 
   @IsOptional()
+  @Transform(({ value }) => {
+    if (value === '' || value === null) return null;
+    if (value === undefined) return undefined;
+    const n = typeof value === 'number' ? value : Number(value);
+    return Number.isFinite(n) ? n : undefined;
+  })
+  @ValidateIf((_, v) => v !== null && v !== undefined)
+  @IsInt()
+  @Min(5)
+  @Max(250)
+  diameterCm?: number | null;
+
+  @IsOptional()
+  @IsIn(COMPOSITION_PRECISIONS)
+  compositionPrecision?: CompositionPrecision;
+
+  @IsOptional()
   @ValidateIf((_, value) => value !== null)
   @IsString()
   @MaxLength(200)
@@ -245,6 +268,15 @@ export class SaveProductEditorDto extends ExpectedVersionDto {
 export class ProductComponentInputDto {
   @IsUUID()
   flowerItemId!: string;
+
+  @IsOptional()
+  @ValidateIf((_, value) => value !== null)
+  @IsUUID()
+  colorId?: string | null;
+
+  @IsOptional()
+  @IsIn(COMPONENT_ROLES)
+  role?: ComponentRole;
 
   @IsString()
   @MinLength(1)
@@ -639,6 +671,21 @@ class ProductFacetQueryDto {
   @MaxLength(120, { each: true })
   colorSlugs?: string[];
 
+  /** Composition-line color (same-component AND with flower type). */
+  @IsOptional()
+  @Transform(toStringList)
+  @IsArray()
+  @ArrayMaxSize(FACET_LIST_MAX)
+  @IsUUID(undefined, { each: true })
+  componentColorIds?: string[];
+
+  @IsOptional()
+  @Transform(toStringList)
+  @IsArray()
+  @ArrayMaxSize(FACET_LIST_MAX)
+  @MaxLength(120, { each: true })
+  componentColorSlugs?: string[];
+
   /** /cvety rewrite: flower-type slug matched via FlowerItem composition. */
   @IsOptional()
   @Transform(toStringList)
@@ -646,6 +693,42 @@ class ProductFacetQueryDto {
   @ArrayMaxSize(FACET_LIST_MAX)
   @MaxLength(120, { each: true })
   flowerSlugs?: string[];
+
+  @IsOptional()
+  @Transform(({ value }) => {
+    const list = toStringList({ value });
+    if (!list) return undefined;
+    const map: Record<string, CompositionKind> = {
+      mono: 'MONO',
+      mixed: 'MIXED',
+      unknown: 'UNKNOWN',
+      MONO: 'MONO',
+      MIXED: 'MIXED',
+      UNKNOWN: 'UNKNOWN',
+    };
+    const out: CompositionKind[] = [];
+    for (const item of list) {
+      const kind = map[item];
+      if (kind && !out.includes(kind)) out.push(kind);
+    }
+    return out.length > 0 ? out : undefined;
+  })
+  @IsArray()
+  @ArrayMaxSize(FACET_LIST_MAX)
+  @IsIn(COMPOSITION_KINDS, { each: true })
+  compositionKind?: CompositionKind[];
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(10_000)
+  minFlowerTypeQuantity?: number;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(120)
+  flowerTypeQuantitySlug?: string;
 
   @IsOptional()
   @Transform(toOptionalBoolean)

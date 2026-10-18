@@ -33,6 +33,7 @@ import { ProductFamiliesService } from './product-families.service';
 import type { PublicProductListQueryDto } from './products.dto';
 import { effectivelyPublishedWhere, ProductsRepository } from './products.repository';
 import { PromotionsService } from './promotions.service';
+import { SeoLandingsService } from './seo-landings.service';
 import { SlugRedirectsService } from './slug-redirects.service';
 
 /** Public landing-page taxonomies (flower types use /cvety via listFlowerTypes). */
@@ -58,6 +59,7 @@ export class PublicCatalogService {
     private readonly families: ProductFamiliesService,
     private readonly promotions: PromotionsService,
     private readonly slugRedirects: SlugRedirectsService,
+    private readonly seoLandings: SeoLandingsService,
     private readonly media: MediaService,
     private readonly prisma: PrismaService,
   ) {}
@@ -116,6 +118,8 @@ export class PublicCatalogService {
       recipientSlugs: query.recipientSlugs,
       colorIds: query.colorIds,
       colorSlugs: query.colorSlugs,
+      componentColorIds: query.componentColorIds,
+      componentColorSlugs: query.componentColorSlugs,
       promotionalOnly: query.promotionalOnly,
       minPriceMinor: query.minPriceMinor,
       maxPriceMinor: query.maxPriceMinor,
@@ -126,6 +130,9 @@ export class PublicCatalogService {
       flowerOriginIds: catalogFilters.flowerOriginIds,
       flowerOriginSlugs: catalogFilters.flowerOriginSlugs,
       heightCm: catalogFilters.heightCm,
+      compositionKinds: query.compositionKind,
+      minFlowerTypeQuantity: query.minFlowerTypeQuantity,
+      flowerTypeQuantitySlug: query.flowerTypeQuantitySlug,
     };
     if (query.categorySlug) {
       try {
@@ -322,33 +329,35 @@ export class PublicCatalogService {
 
   async getSitemap(): Promise<SitemapEntryDto[]> {
     const now = new Date();
-    const [products, flowerTypes, occasions, recipients, categories] = await Promise.all([
-      this.prisma.client.product.findMany({
-        where: { ...effectivelyPublishedWhere(now), noIndex: false },
-        select: { slug: true, updatedAt: true },
-        orderBy: { updatedAt: 'desc' },
-      }),
-      this.prisma.client.flowerType.findMany({
-        where: { visibility: 'VISIBLE' },
-        select: { slug: true, updatedAt: true },
-        orderBy: { updatedAt: 'desc' },
-      }),
-      this.prisma.client.occasion.findMany({
-        where: { visibility: 'VISIBLE', noIndex: false },
-        select: { slug: true, updatedAt: true },
-        orderBy: { updatedAt: 'desc' },
-      }),
-      this.prisma.client.recipient.findMany({
-        where: { visibility: 'VISIBLE', noIndex: false },
-        select: { slug: true, updatedAt: true },
-        orderBy: { updatedAt: 'desc' },
-      }),
-      this.prisma.client.catalogCategory.findMany({
-        where: { visibility: 'VISIBLE', noIndex: false },
-        select: { slug: true, updatedAt: true },
-        orderBy: { updatedAt: 'desc' },
-      }),
-    ]);
+    const [products, flowerTypes, occasions, recipients, categories, seoLandings] =
+      await Promise.all([
+        this.prisma.client.product.findMany({
+          where: { ...effectivelyPublishedWhere(now), noIndex: false },
+          select: { slug: true, updatedAt: true },
+          orderBy: { updatedAt: 'desc' },
+        }),
+        this.prisma.client.flowerType.findMany({
+          where: { visibility: 'VISIBLE', noIndex: false },
+          select: { slug: true, updatedAt: true },
+          orderBy: { updatedAt: 'desc' },
+        }),
+        this.prisma.client.occasion.findMany({
+          where: { visibility: 'VISIBLE', noIndex: false },
+          select: { slug: true, updatedAt: true },
+          orderBy: { updatedAt: 'desc' },
+        }),
+        this.prisma.client.recipient.findMany({
+          where: { visibility: 'VISIBLE', noIndex: false },
+          select: { slug: true, updatedAt: true },
+          orderBy: { updatedAt: 'desc' },
+        }),
+        this.prisma.client.catalogCategory.findMany({
+          where: { visibility: 'VISIBLE', noIndex: false },
+          select: { slug: true, updatedAt: true },
+          orderBy: { updatedAt: 'desc' },
+        }),
+        this.seoLandings.listSitemapEntries(),
+      ]);
 
     const newestProductUpdate = products[0]?.updatedAt.toISOString() ?? null;
     // Keep legacy hubs for cvety/bukety; other visible categories land on /katalog/[slug].
@@ -379,6 +388,7 @@ export class PublicCatalogService {
         path: `/komu/${recipient.slug}`,
         updatedAt: recipient.updatedAt.toISOString(),
       })),
+      ...seoLandings,
     ];
   }
 

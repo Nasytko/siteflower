@@ -18,7 +18,10 @@ export default async function AdminSeoPage() {
         <h1 className="admin-page-title">SEO сайта</h1>
         <p className="admin-page-lead">
           Проверка названий, описаний и фото для поиска. Технические детали (sitemap, canonical)
-          скрыты ниже списка страниц.
+          скрыты ниже списка страниц.{' '}
+          <a href="/admin/seo/landings" className="underline underline-offset-2">
+            SEO-подборки /p/…
+          </a>
         </p>
       </header>
       <SeoHealthPanel initial={initial} />

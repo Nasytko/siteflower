@@ -22,35 +22,37 @@ type NavGroup = {
   items: NavItem[];
 };
 
-const DICTIONARY_HREFS = TAXONOMY_KINDS.map((kind) => `/admin/catalog/${kind}`);
+const DICTIONARY_PATHS = [
+  '/admin/catalog/dictionaries',
+  '/admin/catalog/flower-structure',
+  '/admin/catalog/categories',
+  ...TAXONOMY_KINDS.map((kind) => `/admin/catalog/${kind}`),
+];
 
 function isDictionaryPath(pathname: string): boolean {
-  return DICTIONARY_HREFS.some(
+  return DICTIONARY_PATHS.some(
     (base) => pathname === base || pathname.startsWith(`${base}/`),
+  );
+}
+
+function isStorefrontHomePath(pathname: string): boolean {
+  return (
+    pathname === '/admin/storefront/homepage' ||
+    pathname.startsWith('/admin/storefront/homepage/') ||
+    pathname === '/admin/storefront/navigation' ||
+    pathname.startsWith('/admin/storefront/navigation/')
   );
 }
 
 /**
  * Florist store panel IA:
- * Работа → daily ops · Каталог → merchandising · Магазин → public site · Система → rare/tech
+ * Работа → orders · Каталог → goods & merchandising · Сайт → public site · Настройки + Система
  */
 const NAV_GROUPS: NavGroup[] = [
   {
     id: 'work',
     label: 'Работа',
-    items: [
-      {
-        href: '/admin',
-        label: 'Сводка',
-        isActive: (pathname) => pathname === '/admin',
-      },
-      { href: '/admin/orders', label: 'Заказы', permission: 'ORDERS_READ' },
-      {
-        href: '/admin/fulfillment',
-        label: 'Доставка и самовывоз',
-        permission: 'SETTINGS_READ',
-      },
-    ],
+    items: [{ href: '/admin/orders', label: 'Заказы', permission: 'ORDERS_READ' }],
   },
   {
     id: 'catalog',
@@ -58,43 +60,60 @@ const NAV_GROUPS: NavGroup[] = [
     items: [
       { href: '/admin/catalog/products', label: 'Товары', permission: 'CATALOG_READ' },
       {
-        href: '/admin/catalog/flower-structure',
-        label: 'Цветы',
-        permission: 'CATALOG_READ',
-      },
-      { href: '/admin/catalog/categories', label: 'Категории', permission: 'CATALOG_READ' },
-      {
-        href: '/admin/storefront/navigation',
-        label: 'Навигация',
-        permission: 'SETTINGS_READ',
-      },
-      { href: '/admin/promotions', label: 'Акции', permission: 'CATALOG_READ' },
-      { href: '/admin/bestsellers', label: 'Бестселлеры', permission: 'CATALOG_READ' },
-      {
-        href: '/admin/catalog/colors',
+        href: '/admin/catalog/dictionaries',
         label: 'Справочники',
         permission: 'CATALOG_READ',
         isActive: isDictionaryPath,
       },
+      {
+        href: '/admin/promotions',
+        label: 'Акции и подборки',
+        permission: 'CATALOG_READ',
+        isActive: (pathname) =>
+          pathname === '/admin/promotions' ||
+          pathname.startsWith('/admin/promotions/') ||
+          pathname === '/admin/bestsellers' ||
+          pathname.startsWith('/admin/bestsellers/'),
+      },
     ],
   },
   {
-    id: 'store',
-    label: 'Магазин',
+    id: 'site',
+    label: 'Сайт',
     items: [
       {
         href: '/admin/storefront/homepage',
-        label: 'Плитки на главной',
+        label: 'Главная и меню',
         permission: 'CONTENT_READ',
+        isActive: isStorefrontHomePath,
       },
-      { href: '/admin/storefront/instagram', label: 'Instagram', permission: 'CONTENT_READ' },
+      {
+        href: '/admin/seo',
+        label: 'Страницы каталога и SEO',
+        permission: 'SEO_READ',
+      },
+      {
+        href: '/admin/seo/landings',
+        label: 'SEO-подборки',
+        permission: 'SEO_READ',
+      },
+    ],
+  },
+  {
+    id: 'settings',
+    label: 'Настройки',
+    items: [
+      {
+        href: '/admin/fulfillment',
+        label: 'Доставка и самовывоз',
+        permission: 'SETTINGS_READ',
+      },
       {
         href: '/admin/storefront/settings',
         label: 'Настройки магазина',
         permission: 'SETTINGS_READ',
       },
-      { href: '/admin/seo', label: 'SEO', permission: 'SEO_READ' },
-      { href: '/admin/legal', label: 'Юридическая информация', permission: 'LEGAL_READ' },
+      { href: '/admin/users', label: 'Пользователи', permission: 'USERS_READ' },
     ],
   },
   {
@@ -102,7 +121,6 @@ const NAV_GROUPS: NavGroup[] = [
     label: 'Система',
     tier: 'system',
     items: [
-      { href: '/admin/users', label: 'Пользователи', permission: 'USERS_READ' },
       { href: '/admin/audit', label: 'Журнал действий', permission: 'AUDIT_READ' },
       {
         href: '/admin/media-health',

@@ -61,13 +61,7 @@ export function validatePublishRequirements(input: {
       field: 'shortDescription',
     });
   }
-  if (!input.description?.trim()) {
-    issues.push({
-      code: 'DESCRIPTION_REQUIRED',
-      message: 'Description is required to publish',
-      field: 'description',
-    });
-  }
+  // Full description is optional — short copy + photo + price are enough to publish.
   const active = input.variants.filter((v) => v.status === 'ACTIVE');
   if (active.length === 0) {
     issues.push({

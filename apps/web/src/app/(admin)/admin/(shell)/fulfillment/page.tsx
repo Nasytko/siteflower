@@ -18,7 +18,7 @@ export default async function AdminFulfillmentPage() {
       <header>
         <h1 className="admin-page-title">Доставка и самовывоз</h1>
         <p className="admin-page-lead">
-          Окна времени, lead time и методы получения (Europe/Minsk)
+          Курьер, самовывоз и окна времени получения — по времени Минска.
         </p>
       </header>
       <FulfillmentSettingsEditor

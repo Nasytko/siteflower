@@ -19,13 +19,16 @@ export default async function AdminPromotionsPage() {
     <main id="main-content" className="space-y-6">
       <header className="admin-page-header">
         <div className="admin-page-header__text">
-          <h1 className="admin-page-title">Акции</h1>
+          <h1 className="admin-page-title">Акции и подборки</h1>
           <p className="admin-page-lead">
             Обзор скидок по товарам. Создать или изменить акцию можно в карточке товара —
-            раздел «Акция и витрины».
+            раздел «Акция и витрины». Подборки бестселлеров — отдельный список.
           </p>
         </div>
         <div className="admin-page-header__actions">
+          <Link href="/admin/bestsellers" className="admin-btn-ghost">
+            Бестселлеры
+          </Link>
           <Link href="/admin/catalog/products" className="admin-btn">
             К товарам
           </Link>

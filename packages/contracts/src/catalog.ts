@@ -31,12 +31,25 @@ export type TaxonomyVisibility = (typeof TAXONOMY_VISIBILITIES)[number];
 export const COMPONENT_UNITS = ['PIECE', 'STEM', 'BUNCH', 'UNSPECIFIED'] as const;
 export type ComponentUnit = (typeof COMPONENT_UNITS)[number];
 
+export const COMPONENT_ROLES = ['PRIMARY', 'GREENERY', 'FILLER', 'OTHER'] as const;
+export type ComponentRole = (typeof COMPONENT_ROLES)[number];
+
+export const COMPOSITION_KINDS = ['MONO', 'MIXED', 'UNKNOWN'] as const;
+export type CompositionKind = (typeof COMPOSITION_KINDS)[number];
+
+export const COMPOSITION_PRECISIONS = ['EXACT', 'APPROXIMATE', 'UNKNOWN'] as const;
+export type CompositionPrecision = (typeof COMPOSITION_PRECISIONS)[number];
+
+export const SEO_LANDING_STATUSES = ['DRAFT', 'PUBLISHED', 'ARCHIVED'] as const;
+export type SeoLandingStatus = (typeof SEO_LANDING_STATUSES)[number];
+
 export const SLUG_ENTITY_TYPES = [
   'PRODUCT',
   'OCCASION',
   'RECIPIENT',
   'COLOR',
   'CATALOG_CATEGORY',
+  'SEO_LANDING',
 ] as const;
 export type SlugEntityType = (typeof SLUG_ENTITY_TYPES)[number];
 
@@ -83,6 +96,7 @@ export const CATALOG_FILTER_KEYS = [
   'quantity',
   'occasion',
   'recipient',
+  'composition_kind',
 ] as const;
 export type CatalogFilterKey = (typeof CATALOG_FILTER_KEYS)[number];
 
@@ -129,7 +143,7 @@ export function defaultFilterKeysForPreset(preset: CatalogFilterPreset): Catalog
     case 'FLOWERS':
       return ['price', 'promo', 'flower_type', 'variety', 'origin', 'stem_height', 'color'];
     case 'BOUQUETS':
-      return ['price', 'promo', 'flower_type', 'color', 'occasion', 'recipient'];
+      return ['price', 'promo', 'flower_type', 'color', 'composition_kind', 'occasion', 'recipient'];
     case 'CARDS':
       return ['price', 'occasion', 'recipient'];
     case 'CANDLES':
@@ -168,6 +182,9 @@ export type GatedListingFilterFields = {
   flowerOriginSlugs?: string[];
   colorIds?: string[];
   colorSlugs?: string[];
+  /** Component-line color (same-component AND with flower type). */
+  componentColorIds?: string[];
+  componentColorSlugs?: string[];
   occasionIds?: string[];
   occasionSlugs?: string[];
   recipientIds?: string[];
@@ -177,6 +194,10 @@ export type GatedListingFilterFields = {
   promotionalOnly?: boolean;
   minPriceMinor?: string;
   maxPriceMinor?: string;
+  compositionKinds?: CompositionKind[];
+  /** Min total PRIMARY qty for a flower type (EXACT compositions only). */
+  minFlowerTypeQuantity?: number;
+  flowerTypeQuantitySlug?: string;
 };
 
 export function gateListingFiltersByEnabledKeys<T extends GatedListingFilterFields>(
@@ -201,6 +222,8 @@ export function gateListingFiltersByEnabledKeys<T extends GatedListingFilterFiel
   if (!keys.has('color')) {
     delete next.colorIds;
     delete next.colorSlugs;
+    delete next.componentColorIds;
+    delete next.componentColorSlugs;
   }
   if (!keys.has('occasion')) {
     delete next.occasionIds;
@@ -220,6 +243,13 @@ export function gateListingFiltersByEnabledKeys<T extends GatedListingFilterFiel
   if (!keys.has('price')) {
     delete next.minPriceMinor;
     delete next.maxPriceMinor;
+  }
+  if (!keys.has('composition_kind')) {
+    delete next.compositionKinds;
+  }
+  if (!keys.has('quantity')) {
+    delete next.minFlowerTypeQuantity;
+    delete next.flowerTypeQuantitySlug;
   }
 
   return next as T;
@@ -301,6 +331,9 @@ export type FlowerTypeDto = {
   name: string;
   sortOrder: number;
   visibility: TaxonomyVisibility;
+  seoTitle?: string | null;
+  seoDescription?: string | null;
+  noIndex?: boolean;
 };
 
 /** Admin list for flower types — includes usage for safe delete UX. */
@@ -310,6 +343,9 @@ export type FlowerTypeAdminDto = FlowerTypeDto & {
   varietiesCount: number;
   /** Concrete FlowerItem rows under this type. */
   itemsCount?: number;
+  seoTitle: string | null;
+  seoDescription: string | null;
+  noIndex: boolean;
 };
 
 export type FlowerVarietyDto = {
@@ -519,6 +555,67 @@ function inferCompositionVarietyName(row: {
   return '';
 }
 
+/**
+ * Derive mono/mixed from PRIMARY composition lines only.
+ * GREENERY / FILLER / OTHER never break mono.
+ * Empty or only non-primary → UNKNOWN.
+ */
+export function deriveCompositionKind(
+  rows: Array<{
+    role?: ComponentRole | null;
+    typeId?: string | null;
+    typeName?: string | null;
+    flowerItem?: { flowerTypeId?: string | null; flowerType?: { id?: string; name?: string } | null } | null;
+  }>,
+): CompositionKind {
+  const primary = rows.filter((row) => (row.role ?? 'PRIMARY') === 'PRIMARY');
+  if (primary.length === 0) return 'UNKNOWN';
+
+  const typeKeys = new Set<string>();
+  for (const row of primary) {
+    const key =
+      row.typeId?.trim() ||
+      row.flowerItem?.flowerTypeId?.trim() ||
+      row.flowerItem?.flowerType?.id?.trim() ||
+      row.typeName?.trim().toLowerCase() ||
+      row.flowerItem?.flowerType?.name?.trim().toLowerCase() ||
+      '';
+    if (key) typeKeys.add(key);
+  }
+  if (typeKeys.size === 0) return 'UNKNOWN';
+  if (typeKeys.size === 1) return 'MONO';
+  return 'MIXED';
+}
+
+/** Suggest product-level visual palette color ids from component line colors (unique, order preserved). */
+export function suggestVisualPaletteColorIds(
+  rows: Array<{ role?: ComponentRole | null; colorId?: string | null }>,
+): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const row of rows) {
+    const role = row.role ?? 'PRIMARY';
+    if (role === 'GREENERY') continue;
+    const id = row.colorId?.trim();
+    if (!id || seen.has(id)) continue;
+    seen.add(id);
+    out.push(id);
+  }
+  return out;
+}
+
+export function isComponentRole(value: string): value is ComponentRole {
+  return (COMPONENT_ROLES as readonly string[]).includes(value);
+}
+
+export function isCompositionKind(value: string): value is CompositionKind {
+  return (COMPOSITION_KINDS as readonly string[]).includes(value);
+}
+
+export function isCompositionPrecision(value: string): value is CompositionPrecision {
+  return (COMPOSITION_PRECISIONS as readonly string[]).includes(value);
+}
+
 /** Suggest a product name from composition rows (manager confirms — never auto-applied). */
 export function suggestProductNameFromComposition(
   rows: Array<{
@@ -678,7 +775,7 @@ export function deriveProductEditorReadiness(input: {
     { id: 'name', label: 'Название', ok: nameOk, requiredForPublish: true },
     { id: 'slug', label: 'Адрес в ссылке', ok: slugOk, requiredForPublish: true },
     { id: 'shortDescription', label: 'Короткое описание', ok: shortOk, requiredForPublish: true },
-    { id: 'description', label: 'Полное описание', ok: longOk, requiredForPublish: true },
+    { id: 'description', label: 'Полное описание', ok: longOk, requiredForPublish: false },
     { id: 'price', label: 'Цена', ok: priceOk, requiredForPublish: true },
     { id: 'photo', label: 'Основное фото', ok: photoOk, requiredForPublish: true },
     { id: 'category', label: 'Категория', ok: categoryOk, requiredForPublish: false },
@@ -824,10 +921,47 @@ export type ProductComponentDto = {
   id: string;
   flowerItemId: string;
   flowerItem: FlowerItemDto | null;
+  colorId: string | null;
+  color: TaxonomyRefDto | null;
+  role: ComponentRole;
   displayName: string;
   quantity: number | null;
   unit: ComponentUnit;
   sortOrder: number;
+};
+
+/** Managed SEO landing page (Admin + public). */
+export type SeoLandingPageDto = {
+  id: string;
+  slug: string;
+  title: string;
+  h1: string;
+  seoTitle: string | null;
+  seoDescription: string | null;
+  body: string | null;
+  /** Catalog list filter shape (JSON-compatible). */
+  rules: Record<string, unknown>;
+  status: SeoLandingStatus;
+  noIndex: boolean;
+  navVisible: boolean;
+  sortOrder: number;
+  version: number;
+  publishedAt: string | null;
+  pinnedProductIds: string[];
+  excludedProductIds: string[];
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type SeoLandingPagePublicDto = {
+  id: string;
+  slug: string;
+  title: string;
+  h1: string;
+  seoTitle: string | null;
+  seoDescription: string | null;
+  body: string | null;
+  noIndex: boolean;
 };
 
 export type ProductMediaDto = {
@@ -926,6 +1060,9 @@ export type ProductAdminDto = {
   lifecycle: ProductLifecycle;
   availability: CommercialAvailability;
   heightCm: number | null;
+  diameterCm: number | null;
+  compositionKind: CompositionKind;
+  compositionPrecision: CompositionPrecision;
   catalogCategoryId: string | null;
   catalogCategory: TaxonomyRefDto | null;
   family: ProductFamilyDto | null;
@@ -945,6 +1082,7 @@ export type ProductAdminDto = {
   media: ProductMediaDto[];
   occasions: TaxonomyRefDto[];
   recipients: TaxonomyRefDto[];
+  /** Visual palette of the bouquet (not per-component color). */
   colors: TaxonomyRefDto[];
   bestsellerGroupIds: string[];
   createdAt: string;
@@ -960,6 +1098,8 @@ export type ProductPublicDto = {
   description: string | null;
   availability: CommercialAvailability;
   heightCm: number | null;
+  diameterCm: number | null;
+  compositionKind: CompositionKind;
   catalogCategory: TaxonomyRefDto | null;
   /** Other sellable products in the same family (human UX: «Другие варианты»). */
   family: ProductFamilyDto | null;
@@ -979,7 +1119,9 @@ export type ProductPublicDto = {
     displayName: string;
     quantity: number | null;
     unit: ComponentUnit;
+    role: ComponentRole;
     flowerSlug: string | null;
+    colorSlug: string | null;
   }>;
   media: Array<{
     url: string;

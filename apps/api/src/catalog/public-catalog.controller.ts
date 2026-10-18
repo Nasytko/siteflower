@@ -6,6 +6,7 @@ import { Public } from '../auth/decorators';
 import { CatalogFiltersService } from './catalog-filters.service';
 import { PublicProductListQueryDto, RelatedProductsQueryDto } from './products.dto';
 import { PublicCatalogService } from './public-catalog.service';
+import { SeoLandingsService } from './seo-landings.service';
 
 class PromotionalProductsQueryDto {
   @IsOptional()
@@ -16,12 +17,28 @@ class PromotionalProductsQueryDto {
   limit?: number = 24;
 }
 
+class SeoLandingProductsQueryDto {
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  page?: number = 1;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(48)
+  pageSize?: number = 24;
+}
+
 @ApiTags('catalog')
 @Controller('catalog')
 export class PublicCatalogController {
   constructor(
     private readonly catalog: PublicCatalogService,
     private readonly filters: CatalogFiltersService,
+    private readonly seoLandings: SeoLandingsService,
   ) {}
 
   @Public()
@@ -124,6 +141,21 @@ export class PublicCatalogController {
   @Get('taxonomies/:kind/:slug')
   getTaxonomy(@Param('kind') kind: string, @Param('slug') slug: string) {
     return this.catalog.getTaxonomyPublic(kind, slug);
+  }
+
+  @Public()
+  @Get('seo-landings/:slug/products')
+  listSeoLandingProducts(
+    @Param('slug') slug: string,
+    @Query() query: SeoLandingProductsQueryDto,
+  ) {
+    return this.seoLandings.listPublicProducts(slug, query);
+  }
+
+  @Public()
+  @Get('seo-landings/:slug')
+  getSeoLanding(@Param('slug') slug: string) {
+    return this.seoLandings.getPublicBySlug(slug);
   }
 
   @Public()

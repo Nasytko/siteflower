@@ -162,12 +162,35 @@ enum ComponentUnit {
   UNSPECIFIED
 }
 
+/// Role of a composition line. GREENERY does not break mono/mixed detection.
+enum ComponentRole {
+  PRIMARY
+  GREENERY
+  FILLER
+  OTHER
+}
+
+/// Derived from PRIMARY composition lines (ignore GREENERY/FILLER/OTHER).
+enum CompositionKind {
+  MONO
+  MIXED
+  UNKNOWN
+}
+
+/// How precise the composition quantities are for filters/SEO.
+enum CompositionPrecision {
+  EXACT
+  APPROXIMATE
+  UNKNOWN
+}
+
 enum SlugEntityType {
   PRODUCT
   OCCASION
   RECIPIENT
   COLOR
   CATALOG_CATEGORY
+  SEO_LANDING
 }
 
 enum CatalogFilterType {
@@ -272,7 +295,8 @@ model Color {
   createdAt      DateTime           @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt      DateTime           @updatedAt @map("updated_at") @db.Timestamptz(3)
 
-  products ProductColor[]
+  products   ProductColor[]
+  components ProductComponent[]
 
   @@index([visibility, sortOrder])
   @@map("colors")
@@ -372,14 +396,17 @@ model CatalogCategoryFilter {
 
 /// Flower species / type (Роза, Хризантема) — dictionary level 1, not composition Flower.
 model FlowerType {
-  id         String             @id @default(uuid()) @db.Uuid
-  slug       String             @unique @db.VarChar(120)
-  name       String             @db.VarChar(120)
-  sortOrder  Int                @default(0) @map("sort_order")
-  visibility TaxonomyVisibility @default(VISIBLE)
-  version    Int                @default(1)
-  createdAt  DateTime           @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt  DateTime           @updatedAt @map("updated_at") @db.Timestamptz(3)
+  id             String             @id @default(uuid()) @db.Uuid
+  slug           String             @unique @db.VarChar(120)
+  name           String             @db.VarChar(120)
+  sortOrder      Int                @default(0) @map("sort_order")
+  visibility     TaxonomyVisibility @default(VISIBLE)
+  version        Int                @default(1)
+  seoTitle       String?            @map("seo_title") @db.VarChar(200)
+  seoDescription String?            @map("seo_description") @db.VarChar(500)
+  noIndex        Boolean            @default(false) @map("no_index")
+  createdAt      DateTime           @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt      DateTime           @updatedAt @map("updated_at") @db.Timestamptz(3)
 
   forms     FlowerForm[]
   varieties FlowerVariety[]
@@ -524,7 +551,12 @@ model Product {
   description      String?                 @db.Text
   /// Bouquet/card height for ruler. Stem length lives on FlowerItem.stemLengthCm.
   bouquetHeightCm  Int?                    @map("height_cm")
+  /// Optional bouquet diameter in cm (not stem length).
+  diameterCm       Int?                    @map("diameter_cm")
   catalogCategoryId String?                @map("catalog_category_id") @db.Uuid
+  /// Cached from PRIMARY composition lines on save.
+  compositionKind  CompositionKind         @default(UNKNOWN) @map("composition_kind")
+  compositionPrecision CompositionPrecision @default(UNKNOWN) @map("composition_precision")
   lifecycle        ProductLifecycle        @default(DRAFT)
   availability     CommercialAvailability  @default(AVAILABLE)
   currency         String                  @default("BYN") @db.Char(3)
@@ -548,11 +580,14 @@ model Product {
   colors           ProductColor[]
   promotion        ProductPromotion?
   bestsellerLinks  BestsellerGroupProduct[]
+  seoLandingPins   SeoLandingPageProduct[]
+  seoLandingExcludes SeoLandingPageExclude[]
 
   @@index([lifecycle, publishAt])
   @@index([lifecycle, availability])
   @@index([catalogCategoryId, lifecycle])
   @@index([bouquetHeightCm, lifecycle])
+  @@index([compositionKind, lifecycle])
   @@index([updatedAt(sort: Desc)])
   @@map("products")
 }
@@ -580,6 +615,9 @@ model ProductComponent {
   productId    String        @map("product_id") @db.Uuid
   /// Concrete stem/SKU from flower dictionary. Source of truth for composition filters.
   flowerItemId String        @map("flower_item_id") @db.Uuid
+  /// Optional color of this composition line (same-component filters).
+  colorId      String?       @map("color_id") @db.Uuid
+  role         ComponentRole @default(PRIMARY)
   displayName  String        @map("display_name") @db.VarChar(160)
   quantity     Int?
   unit         ComponentUnit @default(UNSPECIFIED)
@@ -589,9 +627,12 @@ model ProductComponent {
 
   product    Product    @relation(fields: [productId], references: [id], onDelete: Cascade)
   flowerItem FlowerItem @relation(fields: [flowerItemId], references: [id], onDelete: Restrict)
+  color      Color?     @relation(fields: [colorId], references: [id], onDelete: SetNull)
 
   @@index([productId, sortOrder])
   @@index([flowerItemId])
+  @@index([colorId])
+  @@index([productId, role])
   @@map("product_components")
 }
 
@@ -781,8 +822,72 @@ model SlugRedirect {
 }
 
 // ---------------------------------------------------------------------------
-// Storefront configuration (constrained CMS — not a page builder)
+// Managed SEO landing pages (rules-based product selection)
 // ---------------------------------------------------------------------------
+
+enum SeoLandingStatus {
+  DRAFT
+  PUBLISHED
+  ARCHIVED
+}
+
+/// Indexable commercial landing with automatic product selection rules.
+/// Separate from CatalogCategory (navigation) and filter querystrings (noindex).
+model SeoLandingPage {
+  id             String           @id @default(uuid()) @db.Uuid
+  slug           String           @unique @db.VarChar(160)
+  title          String           @db.VarChar(200)
+  h1             String           @db.VarChar(200)
+  seoTitle       String?          @map("seo_title") @db.VarChar(200)
+  seoDescription String?          @map("seo_description") @db.VarChar(500)
+  body           String?          @db.Text
+  /// Public catalog filter shape (JSON) — same semantics as list products query.
+  rules          Json             @default("{}")
+  status         SeoLandingStatus @default(DRAFT)
+  noIndex        Boolean          @default(false) @map("no_index")
+  navVisible     Boolean          @default(false) @map("nav_visible")
+  sortOrder      Int              @default(0) @map("sort_order")
+  version        Int              @default(1)
+  publishedAt    DateTime?        @map("published_at") @db.Timestamptz(3)
+  createdAt      DateTime         @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt      DateTime         @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  pinnedProducts   SeoLandingPageProduct[]
+  excludedProducts SeoLandingPageExclude[]
+
+  @@index([status, sortOrder])
+  @@index([navVisible, status])
+  @@map("seo_landing_pages")
+}
+
+model SeoLandingPageProduct {
+  landingId String @map("landing_id") @db.Uuid
+  productId String @map("product_id") @db.Uuid
+  sortOrder Int    @default(0) @map("sort_order")
+
+  landing SeoLandingPage @relation(fields: [landingId], references: [id], onDelete: Cascade)
+  product Product        @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@id([landingId, productId])
+  @@index([productId])
+  @@map("seo_landing_page_products")
+}
+
+model SeoLandingPageExclude {
+  landingId String @map("landing_id") @db.Uuid
+  productId String @map("product_id") @db.Uuid
+
+  landing SeoLandingPage @relation(fields: [landingId], references: [id], onDelete: Cascade)
+  product Product        @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@id([landingId, productId])
+  @@index([productId])
+  @@map("seo_landing_page_excludes")
+}
+
+// ---------------------------------------------------------------------------
+// Storefront configuration (constrained CMS — not a page builder)
+// ---------------------------------------------------------------------------}
 
 /// Named storefront menu (e.g. key = "main"). Independent of CatalogCategory.
 model NavigationMenu {

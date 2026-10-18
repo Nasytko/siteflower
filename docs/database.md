@@ -64,14 +64,16 @@ See [docs/catalog.md](catalog.md), [catalog-simplification-and-merchandising.md]
 
 **Products & composition**
 
-- `products` (optional `bouquet_size_id`, optional `height_cm`; no `featured`)
+- `products` (optional `height_cm` / `diameter_cm`, `composition_kind`, `composition_precision`; no `featured`)
 - `product_variants`, `product_components`
 - Join tables: `product_occasions`, `product_recipients`, `product_colors`
 
-**Taxonomies & size**
+**Taxonomies & composition dictionary**
 
-- `flowers`, `occasions`, `recipients`, `colors` (optional `swatch`)
-- `bouquet_sizes`
+- `flower_types`, `flower_forms`, `flower_varieties`, `flower_origins`, `flower_items`
+- `occasions`, `recipients`, `colors` (optional `swatch`; also on `product_components.color_id`)
+- ~~`flowers` / `bouquet_sizes` / `product_lines`~~ (removed)
+- `seo_landing_pages` (+ pin/exclude join tables)
 
 **Merchandising**
 

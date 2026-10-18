@@ -11,6 +11,7 @@ import { AdminProductFamiliesController } from './admin-product-families.control
 import { AdminProductsController } from './admin-products.controller';
 import { AdminPromotionsController } from './admin-promotions.controller';
 import { AdminSeoController } from './admin-seo.controller';
+import { AdminSeoLandingsController } from './admin-seo-landings.controller';
 import { BestsellersService } from './bestsellers.service';
 import { BudgetRangesService } from './budget-ranges.service';
 import { CatalogCategoriesService } from './catalog-categories.service';
@@ -24,6 +25,7 @@ import { PromotionsService } from './promotions.service';
 import { PublicCatalogController } from './public-catalog.controller';
 import { PublicCatalogService } from './public-catalog.service';
 import { SeoHealthService } from './seo-health.service';
+import { SeoLandingsService } from './seo-landings.service';
 import { SlugRedirectsService } from './slug-redirects.service';
 import { TaxonomyController } from './taxonomy.controller';
 import { TaxonomyService } from './taxonomy.service';
@@ -43,6 +45,7 @@ import { TaxonomyService } from './taxonomy.service';
     AdminFlowerRefsController,
     AdminProductFamiliesController,
     AdminSeoController,
+    AdminSeoLandingsController,
     TaxonomyController,
     PublicCatalogController,
   ],
@@ -61,7 +64,14 @@ import { TaxonomyService } from './taxonomy.service';
     PublicCatalogService,
     SlugRedirectsService,
     SeoHealthService,
+    SeoLandingsService,
   ],
-  exports: [ProductsService, ProductsRepository, PromotionsService, BestsellersService],
+  exports: [
+    ProductsService,
+    ProductsRepository,
+    PromotionsService,
+    BestsellersService,
+    SeoLandingsService,
+  ],
 })
 export class CatalogModule {}

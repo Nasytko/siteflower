@@ -6,9 +6,11 @@ import {
 } from '@nestjs/common';
 import {
   assertComponentFlowerRefXor,
+  deriveCompositionKind,
   heightBandWhere,
   isHeightBandId,
   normalizeSlug,
+  type CompositionPrecision,
   type PaginatedResponse,
   type ProductAdminDto,
   type ProductListItemDto,
@@ -179,6 +181,11 @@ export class ProductsService {
         recipientSlugs: query.recipientSlugs,
         colorIds: query.colorIds,
         colorSlugs: query.colorSlugs,
+        componentColorIds: query.componentColorIds,
+        componentColorSlugs: query.componentColorSlugs,
+        compositionKinds: query.compositionKind,
+        minFlowerTypeQuantity: query.minFlowerTypeQuantity,
+        flowerTypeQuantitySlug: query.flowerTypeQuantitySlug,
         flowerSlugs: query.flowerSlugs,
         bestsellerGroupIds: query.bestsellerGroupIds,
         promotionalOnly: query.promotionalOnly,
@@ -375,6 +382,8 @@ export class ProductsService {
           product.id,
           source.components.map((component) => ({
             flowerItemId: component.flowerItemId,
+            colorId: component.colorId,
+            role: component.role,
             displayName: component.displayName,
             quantity: component.quantity,
             unit: component.unit,
@@ -382,6 +391,14 @@ export class ProductsService {
           })),
           tx,
         );
+        await tx.product.update({
+          where: { id: product.id },
+          data: {
+            compositionKind: source.compositionKind,
+            compositionPrecision: source.compositionPrecision,
+            diameterCm: source.diameterCm,
+          },
+        });
       }
 
       await this.products.replaceOccasions(
@@ -537,8 +554,11 @@ export class ProductsService {
     const previousFlowerItemIds = new Set(
       product.components.map((component) => component.flowerItemId),
     );
-    const normalizedComponents = await this.normalizeCompositionComponents(input.components, {
+    const normalizedComposition = await this.normalizeCompositionComponents(input.components, {
       previouslyAssignedFlowerItemIds: previousFlowerItemIds,
+      compositionPrecision:
+        input.compositionPrecision ??
+        (input.components.length === 0 ? 'UNKNOWN' : product.compositionPrecision),
     });
 
     await this.prisma.client.$transaction(async (tx) => {
@@ -549,6 +569,9 @@ export class ProductsService {
         description: trimmedOrNull(input.description ?? null),
         availability: input.availability,
         bouquetHeightCm: input.heightCm === undefined ? product.bouquetHeightCm : input.heightCm,
+        diameterCm: input.diameterCm === undefined ? product.diameterCm : input.diameterCm,
+        compositionKind: normalizedComposition.compositionKind,
+        compositionPrecision: normalizedComposition.compositionPrecision,
         seoTitle: trimmedOrNull(input.seoTitle ?? null),
         seoDescription: trimmedOrNull(input.seoDescription ?? null),
         noIndex: input.noIndex,
@@ -621,7 +644,7 @@ export class ProductsService {
           .map((variant) => ({ id: variant.id, priceMinor: variant.priceMinor })),
       });
 
-      await this.products.replaceComponents(id, normalizedComponents, tx);
+      await this.products.replaceComponents(id, normalizedComposition.rows, tx);
 
       await this.products.replaceOccasions(id, input.occasionIds, tx);
       await this.products.replaceRecipients(id, input.recipientIds, tx);
@@ -700,16 +723,20 @@ export class ProductsService {
     const previousFlowerItemIds = new Set(
       product.components.map((component) => component.flowerItemId),
     );
-    const normalizedComponents = await this.normalizeCompositionComponents(input.components, {
+    const normalizedComposition = await this.normalizeCompositionComponents(input.components, {
       previouslyAssignedFlowerItemIds: previousFlowerItemIds,
     });
 
     await this.prisma.client.$transaction(async (tx) => {
-      await this.guardVersion(tx, id, input.expectedVersion);
-      await this.products.replaceComponents(id, normalizedComponents, tx);
+      await this.guardVersion(tx, id, input.expectedVersion, {
+        compositionKind: normalizedComposition.compositionKind,
+        compositionPrecision: normalizedComposition.compositionPrecision,
+      });
+      await this.products.replaceComponents(id, normalizedComposition.rows, tx);
       await this.recordAudit(tx, actor, 'PRODUCT_UPDATED', id, {
-        components: normalizedComponents.length,
-        flowerItems: normalizedComponents.length,
+        components: normalizedComposition.rows.length,
+        flowerItems: normalizedComposition.rows.length,
+        compositionKind: normalizedComposition.compositionKind,
       });
     });
 
@@ -1047,22 +1074,35 @@ export class ProductsService {
   private async normalizeCompositionComponents(
     components: Array<{
       flowerItemId: string;
+      colorId?: string | null;
+      role?: 'PRIMARY' | 'GREENERY' | 'FILLER' | 'OTHER';
       displayName: string;
       quantity?: number | null;
       unit?: 'PIECE' | 'STEM' | 'BUNCH' | 'UNSPECIFIED';
       sortOrder?: number;
     }>,
-    options?: { previouslyAssignedFlowerItemIds?: ReadonlySet<string> },
-  ): Promise<
-    Array<{
+    options?: {
+      previouslyAssignedFlowerItemIds?: ReadonlySet<string>;
+      compositionPrecision?: CompositionPrecision;
+    },
+  ): Promise<{
+    rows: Array<{
       flowerItemId: string;
+      colorId: string | null;
+      role: 'PRIMARY' | 'GREENERY' | 'FILLER' | 'OTHER';
       displayName: string;
       quantity: number | null;
       unit: 'PIECE' | 'STEM' | 'BUNCH' | 'UNSPECIFIED';
       sortOrder: number;
-    }>
-  > {
+    }>;
+    compositionKind: 'MONO' | 'MIXED' | 'UNKNOWN';
+    compositionPrecision: CompositionPrecision;
+  }> {
     const previous = options?.previouslyAssignedFlowerItemIds ?? new Set<string>();
+    const precision: CompositionPrecision =
+      options?.compositionPrecision ??
+      (components.length === 0 ? 'UNKNOWN' : 'EXACT');
+
     const normalized = components.map((component, index) => {
       let flowerItemId: string;
       try {
@@ -1078,10 +1118,19 @@ export class ProductsService {
       if (!displayName) {
         throw new BadRequestException('Укажите название строки состава');
       }
+      const role = component.role ?? 'PRIMARY';
+      const quantity = component.quantity ?? null;
+      if (precision === 'EXACT' && role === 'PRIMARY' && (quantity == null || quantity < 1)) {
+        throw new BadRequestException(
+          'При точном составе укажите количество для каждого основного цветка',
+        );
+      }
       return {
         flowerItemId,
+        colorId: component.colorId ?? null,
+        role,
         displayName,
-        quantity: component.quantity ?? null,
+        quantity,
         unit: component.unit ?? 'UNSPECIFIED',
         sortOrder: component.sortOrder ?? index,
       };
@@ -1091,7 +1140,36 @@ export class ProductsService {
     if (flowerItemIds.length > 0) {
       await this.flowerRefs.assertFlowerItemsAssignable(flowerItemIds, previous);
     }
-    return normalized;
+
+    const colorIds = [
+      ...new Set(normalized.map((row) => row.colorId).filter((id): id is string => Boolean(id))),
+    ];
+    if (colorIds.length > 0) {
+      const colorCount = await this.prisma.client.color.count({
+        where: { id: { in: colorIds } },
+      });
+      if (colorCount !== colorIds.length) {
+        throw new BadRequestException('Unknown color reference in composition');
+      }
+    }
+
+    const items =
+      flowerItemIds.length > 0
+        ? await this.prisma.client.flowerItem.findMany({
+            where: { id: { in: flowerItemIds } },
+            select: { id: true, flowerTypeId: true },
+          })
+        : [];
+    const typeByItem = new Map(items.map((item) => [item.id, item.flowerTypeId]));
+
+    const compositionKind = deriveCompositionKind(
+      normalized.map((row) => ({
+        role: row.role,
+        typeId: typeByItem.get(row.flowerItemId) ?? null,
+      })),
+    );
+
+    return { rows: normalized, compositionKind, compositionPrecision: precision };
   }
 
   private async assertReferencesExist(

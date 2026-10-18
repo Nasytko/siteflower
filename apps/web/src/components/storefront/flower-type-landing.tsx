@@ -24,9 +24,12 @@ export async function generateFlowerTypeMetadata(slug: string): Promise<Metadata
       });
     }
     return buildPageMetadata({
-      title: flowerType.name,
-      description: `Букеты с ${flowerType.name.toLowerCase()} — доставка по Гродно.`,
+      title: flowerType.seoTitle?.trim() || flowerType.name,
+      description:
+        flowerType.seoDescription?.trim() ||
+        `Букеты с ${flowerType.name.toLowerCase()} — доставка по Гродно.`,
       path: `/cvety/${flowerType.slug}`,
+      noIndex: flowerType.noIndex === true,
     });
   } catch {
     return buildPageMetadata({

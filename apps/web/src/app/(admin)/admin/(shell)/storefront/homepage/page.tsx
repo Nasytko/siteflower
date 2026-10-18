@@ -1,3 +1,4 @@
+import Link from 'next/link';
 import { roleHasPermission, type HomepageConfigAdminDto } from '@bouquet-one/contracts';
 import { DiscoveryTilesEditor } from '@/components/admin/discovery-tiles-editor';
 import { adminFetch } from '@/lib/admin-api';
@@ -7,14 +8,24 @@ import { requireAdminPermission } from '@/lib/admin-page-auth';
 export default async function AdminHomepageDiscoveryPage() {
   const me = await requireAdminPermission('CONTENT_READ');
   const initial = await adminFetch<HomepageConfigAdminDto>(adminEndpoints.homepage);
+  const canReadNavigation = roleHasPermission(me.user.role, 'SETTINGS_READ');
 
   return (
     <main id="main-content" className="space-y-6">
-      <header>
-        <h1 className="admin-page-title">Плитки на главной</h1>
-        <p className="admin-page-lead">
-          Категории под героем: можно переименовать, сменить фото и ссылку.
-        </p>
+      <header className="admin-page-header">
+        <div className="admin-page-header__text">
+          <h1 className="admin-page-title">Главная и меню</h1>
+          <p className="admin-page-lead">
+            Категории под героем: можно переименовать, сменить фото и ссылку.
+          </p>
+        </div>
+        {canReadNavigation ? (
+          <div className="admin-page-header__actions">
+            <Link href="/admin/storefront/navigation" className="admin-btn-ghost">
+              Навигация сайта
+            </Link>
+          </div>
+        ) : null}
       </header>
       <DiscoveryTilesEditor
         initial={initial}

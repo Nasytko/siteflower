@@ -13,6 +13,7 @@ import {
 import { ApiTags } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import {
+  IsBoolean,
   IsIn,
   IsInt,
   IsOptional,
@@ -113,6 +114,22 @@ class UpdateFlowerRefDto extends ExpectedVersionDto {
   @IsOptional()
   @IsIn(['VISIBLE', 'HIDDEN'])
   visibility?: 'VISIBLE' | 'HIDDEN';
+
+  @IsOptional()
+  @ValidateIf((_, value) => value !== null)
+  @IsString()
+  @MaxLength(200)
+  seoTitle?: string | null;
+
+  @IsOptional()
+  @ValidateIf((_, value) => value !== null)
+  @IsString()
+  @MaxLength(500)
+  seoDescription?: string | null;
+
+  @IsOptional()
+  @IsBoolean()
+  noIndex?: boolean;
 }
 
 class UpdateFlowerVarietyDto extends UpdateFlowerRefDto {

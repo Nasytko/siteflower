@@ -16,6 +16,7 @@ import type {
   ProductListItemDto,
   ProductResolveDto,
   ProductSort,
+  SeoLandingPagePublicDto,
   SitemapEntryDto,
   StorefrontSettingsPublicDto,
   TaxonomyPublicDto,
@@ -86,6 +87,10 @@ export type CatalogListParams = {
   occasion?: string;
   recipient?: string;
   color?: string;
+  /** Composition-line color slugs (same-component AND). */
+  componentColor?: string;
+  /** mono|mixed|unknown (comma-separated). */
+  compositionKind?: string;
   /** FlowerType slugs (legacy `flower=` URL key maps here). */
   flower?: string;
   /** CatalogCategory slug (includes descendants). */
@@ -95,6 +100,10 @@ export type CatalogListParams = {
   flowerOriginSlug?: string;
   /** HEIGHT_BANDS id */
   heightBand?: string;
+  minPriceMinor?: string;
+  maxPriceMinor?: string;
+  minFlowerTypeQuantity?: number;
+  flowerTypeQuantitySlug?: string;
   /** Only products with an effective promotion (powers /akcii). */
   promotion?: boolean;
   sort?: ProductSort;
@@ -114,12 +123,18 @@ export function listProducts(params: CatalogListParams = {}) {
     occasion,
     recipient,
     color,
+    componentColor,
+    compositionKind,
     flower,
     categorySlug,
     flowerTypeSlug,
     flowerVarietySlug,
     flowerOriginSlug,
     heightBand,
+    minPriceMinor,
+    maxPriceMinor,
+    minFlowerTypeQuantity,
+    flowerTypeQuantitySlug,
     ...rest
   } = params;
   return publicFetch<PaginatedResponse<ProductListItemDto>>('/catalog/products', {
@@ -130,12 +145,18 @@ export function listProducts(params: CatalogListParams = {}) {
       occasionSlugs: occasion,
       recipientSlugs: recipient,
       colorSlugs: color,
+      componentColorSlugs: componentColor,
+      compositionKind,
       // /cvety + /bukety?flower= — FlowerType slugs via composition.
       flowerTypeSlug: flowerTypeSlug ?? flower,
       categorySlug,
       flowerVarietySlug,
       flowerOriginSlug,
       heightBand,
+      minPriceMinor,
+      maxPriceMinor,
+      minFlowerTypeQuantity,
+      flowerTypeQuantitySlug,
       // API field is `promotionalOnly` (not `promotion`).
       promotionalOnly: promotion === true ? true : undefined,
     },
@@ -259,6 +280,27 @@ export function getTaxonomy(kind: string, slug: string) {
   return publicFetch<TaxonomyPublicDto>(
     `/catalog/taxonomies/${encodeURIComponent(kind)}/${encodeURIComponent(slug)}`,
     { tags: ['catalog', 'taxonomies', `taxonomy:${kind}:${slug}`] },
+  );
+}
+
+export function getSeoLanding(slug: string) {
+  return publicFetch<
+    SeoLandingPagePublicDto & { redirectedFrom?: string | null; canonicalSlug?: string }
+  >(`/catalog/seo-landings/${encodeURIComponent(slug)}`, {
+    tags: ['catalog', 'seo-landings', `seo-landing:${slug}`],
+  });
+}
+
+export function listSeoLandingProducts(
+  slug: string,
+  params: { page?: number; pageSize?: number } = {},
+) {
+  return publicFetch<PaginatedResponse<ProductListItemDto>>(
+    `/catalog/seo-landings/${encodeURIComponent(slug)}/products`,
+    {
+      searchParams: params,
+      tags: ['catalog', 'seo-landings', 'products', `seo-landing:${slug}`],
+    },
   );
 }
 

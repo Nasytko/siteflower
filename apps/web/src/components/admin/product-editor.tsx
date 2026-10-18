@@ -5,22 +5,19 @@ import { useRouter } from 'next/navigation';
 import {
   analyzeProductSeo,
   applyPercentOff,
-  COMMERCIAL_AVAILABILITIES,
   defaultProductSeoDescription,
   defaultProductSeoTitle,
   formatPriceFromMinor,
   normalizeSlug,
-  PROMOTION_TYPES,
-  seoStatusEmoji,
-  seoStatusLabel,
-  DEFAULT_PRODUCT_VARIANT_NAME,
+  deriveCompositionKind,
   deriveProductEditorReadiness,
   parsePositivePriceMajor,
   type ComponentUnit,
   type CommercialAvailability,
+  type CompositionPrecision,
   type ProductAdminDto,
   type PromotionType,
-  type VariantStatus,
+  DEFAULT_PRODUCT_VARIANT_NAME,
 } from '@bouquet-one/contracts';
 import {
   adminDelete,
@@ -37,10 +34,8 @@ import {
 import { adminEndpoints, withQuery } from '@/lib/admin-endpoints';
 import {
   availabilityLabel,
-  formatAdminDateTime,
   fromDateTimeLocalValue,
   lifecycleLabel,
-  promotionTypeLabel,
   toDateTimeLocalValue,
 } from '@/lib/admin-labels';
 import { availabilityChipClass, lifecycleChipClass } from '@/lib/admin-status';
@@ -51,24 +46,31 @@ import {
   type MediaPreflightStatus,
 } from '@/lib/admin-media-preflight';
 import { prepareAdminMediaFile } from '@/lib/admin-media-prepare';
-import { majorInputToMinor, minorToMajorInput } from '@/lib/admin-money';
+import { majorInputToMinor } from '@/lib/admin-money';
 import { toSameOriginMediaUrl } from '@/lib/media';
 import {
-  FieldError,
   FormErrorSummary,
   FormSaveStatus,
   phaseFromAdminError,
   type FormSavePhase,
 } from '@/components/admin/form-status';
 import { ProductReadinessPanel } from '@/components/admin/product-readiness-panel';
+import { ProductEditorMainTab } from '@/components/admin/product-editor-main-tab';
+import { ProductEditorCompositionTab } from '@/components/admin/product-editor-composition-tab';
+import { ProductEditorMatchingTab } from '@/components/admin/product-editor-matching-tab';
+import { ProductEditorExtraTab } from '@/components/admin/product-editor-extra-tab';
 import {
-  ProductEditorMainTab,
+  emptyComponentDraft,
+  nextEditorKey,
+  toComponentDrafts,
+  toVariantDrafts,
   type CompositionHit,
   type ComponentDraft,
+  type PickerOption,
   type VariantDraft,
-} from '@/components/admin/product-editor-main-tab';
+} from '@/components/admin/product-editor-shared';
 
-export type PickerOption = { id: string; name: string };
+export type { PickerOption, ComponentDraft, VariantDraft };
 
 type Props = {
   product: ProductAdminDto;
@@ -85,13 +87,13 @@ type Props = {
   canPublish: boolean;
 };
 
-type SectionId = 'basic' | 'photos' | 'sales' | 'publish';
+type SectionId = 'main' | 'composition' | 'matching' | 'extra' | 'photos';
 
-const SECTIONS: Array<[SectionId, string]> = [
-  ['basic', 'Основное'],
-  ['photos', 'Фото'],
-  ['sales', 'Продажи'],
-  ['publish', 'SEO и публикация'],
+const SECTIONS: Array<[Exclude<SectionId, 'photos'>, string]> = [
+  ['main', 'Основное'],
+  ['composition', 'Состав'],
+  ['matching', 'Подбор'],
+  ['extra', 'Дополнительно'],
 ];
 
 type PromotionDraft = {
@@ -102,63 +104,6 @@ type PromotionDraft = {
   endsAt: string;
 };
 
-let keySeed = 0;
-function nextKey(prefix: string): string {
-  keySeed += 1;
-  return `${prefix}-${keySeed}`;
-}
-
-function toVariantDrafts(product: ProductAdminDto): VariantDraft[] {
-  const salePrices = new Map(
-    (product.promotion?.variantSalePrices ?? []).map((entry) => [
-      entry.variantId,
-      entry.salePriceMinor,
-    ]),
-  );
-  const sorted = [...product.variants].sort((a, b) => a.sortOrder - b.sortOrder);
-  const drafts = sorted.map((variant) => ({
-    key: nextKey('variant'),
-    id: variant.id,
-    name: variant.name,
-    // Treat DB placeholder 0 as "price not set yet" for the manager UI.
-    priceMajor:
-      variant.priceMinor === '0'
-        ? ''
-        : minorToMajorInput(variant.priceMinor),
-    status: variant.status,
-    salePriceMajor: minorToMajorInput(salePrices.get(variant.id) ?? null),
-  }));
-  if (drafts.length === 0) {
-    return [
-      {
-        key: nextKey('variant'),
-        id: null,
-        name: DEFAULT_PRODUCT_VARIANT_NAME,
-        priceMajor: '',
-        status: 'ACTIVE' as VariantStatus,
-        salePriceMajor: '',
-      },
-    ];
-  }
-  return drafts;
-}
-
-function toComponentDrafts(product: ProductAdminDto): ComponentDraft[] {
-  return [...product.components]
-    .sort((a, b) => a.sortOrder - b.sortOrder)
-    .map((component) => ({
-      key: nextKey('component'),
-      displayName: component.displayName,
-      quantity: component.quantity === null ? '' : String(component.quantity),
-      unit: component.unit,
-      flowerItemId: component.flowerItemId ?? '',
-      typeName: component.flowerItem?.flowerType?.name ?? '',
-      varietyName: component.flowerItem?.flowerVariety?.name ?? '',
-      originName: component.flowerItem?.flowerOrigin?.name ?? '',
-      stemLengthCm: component.flowerItem?.stemLengthCm ?? null,
-    }));
-}
-
 function familyMemberSortOrderFor(product: ProductAdminDto): number | undefined {
   return product.family?.members.find((member) => member.productId === product.id)?.sortOrder;
 }
@@ -168,7 +113,10 @@ function toPromotionDraft(product: ProductAdminDto): PromotionDraft {
   return {
     enabled: promotion?.enabled ?? false,
     type: promotion?.type ?? 'PERCENT',
-    percentOff: promotion?.percentOff === null || promotion?.percentOff === undefined ? '' : String(promotion.percentOff),
+    percentOff:
+      promotion?.percentOff === null || promotion?.percentOff === undefined
+        ? ''
+        : String(promotion.percentOff),
     startsAt: toDateTimeLocalValue(promotion?.startsAt ?? null),
     endsAt: toDateTimeLocalValue(promotion?.endsAt ?? null),
   };
@@ -183,7 +131,7 @@ export function ProductEditor({
   canPublish,
 }: Props) {
   const router = useRouter();
-  const [section, setSection] = useState<SectionId>('basic');
+  const [section, setSection] = useState<SectionId>(justCreated ? 'composition' : 'main');
   const [server, setServer] = useState(product);
   const [version, setVersion] = useState(product.version);
   const [dirty, setDirty] = useState(false);
@@ -216,7 +164,11 @@ export function ProductEditor({
     shortDescription: product.shortDescription ?? '',
     description: product.description ?? '',
     heightCm: product.heightCm === null ? '' : String(product.heightCm),
+    diameterCm: product.diameterCm === null ? '' : String(product.diameterCm),
   });
+  const [compositionPrecision, setCompositionPrecision] = useState<CompositionPrecision>(
+    product.compositionPrecision ?? 'UNKNOWN',
+  );
   const [catalogCategoryId, setCatalogCategoryId] = useState(product.catalogCategoryId ?? '');
   const [familyId, setFamilyId] = useState(product.family?.id ?? '');
   const [familyPanelOpen, setFamilyPanelOpen] = useState(
@@ -277,7 +229,9 @@ export function ProductEditor({
       shortDescription: updated.shortDescription ?? '',
       description: updated.description ?? '',
       heightCm: updated.heightCm === null ? '' : String(updated.heightCm),
+      diameterCm: updated.diameterCm === null ? '' : String(updated.diameterCm),
     });
+    setCompositionPrecision(updated.compositionPrecision ?? 'UNKNOWN');
     setCatalogCategoryId(updated.catalogCategoryId ?? '');
     setFamilyId(updated.family?.id ?? '');
     if (updated.family?.id) setFamilyPanelOpen(true);
@@ -318,8 +272,18 @@ export function ProductEditor({
   }
 
   const activeVariants = variants.filter((variant) => variant.status === 'ACTIVE');
-
   const hasPrimaryImage = server.media.some((item) => item.isPrimary);
+
+  const derivedKind = useMemo(
+    () =>
+      deriveCompositionKind(
+        components.map((row) => ({
+          role: row.role,
+          typeName: row.typeName,
+        })),
+      ),
+    [components],
+  );
 
   const readiness = useMemo(
     () =>
@@ -415,13 +379,13 @@ export function ProductEditor({
     } else {
       setComponents((prev) => [
         ...prev,
-        {
-          key: nextKey('component'),
+        emptyComponentDraft({
           ...meta,
           quantity: qty,
           unit: 'STEM' as ComponentUnit,
           flowerItemId: itemId,
-        },
+          role: 'PRIMARY',
+        }),
       ]);
     }
     setCompositionSearch('');
@@ -433,6 +397,12 @@ export function ProductEditor({
     setCompositionReplaceKey(componentKey);
     setCompositionPickerOpen(true);
     setCompositionSearch('');
+  }
+
+  function applySuggestedPalette(colorIds: string[]) {
+    setDiscovery((prev) => ({ ...prev, colorIds }));
+    touch();
+    setSection('matching');
   }
 
   const familyMembers = useMemo(() => {
@@ -490,7 +460,6 @@ export function ProductEditor({
         basic.shortDescription.trim() || server.shortDescription,
       );
     const slug = basic.slug.trim() || server.slug;
-    // Mirror API effectivelyPublishedWhere / SeoHealthService.isEffectivelyPublished.
     const now = Date.now();
     const publishAtMs = server.publishAt ? Date.parse(server.publishAt) : NaN;
     const publishedAtMs = server.publishedAt ? Date.parse(server.publishedAt) : NaN;
@@ -547,12 +516,10 @@ export function ProductEditor({
       if (new Set(normalizedNames).size !== normalizedNames.length) {
         return 'Названия размеров не должны повторяться';
       }
-    } else {
-      // single size: empty name becomes «Стандарт» on save
     }
     for (const variant of variants) {
       const raw = variant.priceMajor.trim();
-      if (!raw) continue; // draft may leave price empty → stored as 0 placeholder
+      if (!raw) continue;
       if (parsePositivePriceMajor(raw) === null) {
         return `Укажите цену больше нуля для «${variant.name || 'размера'}» (или очистите поле)`;
       }
@@ -560,6 +527,19 @@ export function ProductEditor({
     for (const component of components) {
       if (component.displayName.trim().length === 0) {
         return 'В составе есть строка без названия';
+      }
+      if (!component.flowerItemId) {
+        return `В составе «${component.displayName}» не выбран цветок из справочника`;
+      }
+    }
+    if (compositionPrecision === 'EXACT') {
+      for (const component of components) {
+        if (component.role === 'PRIMARY') {
+          const qty = Number(component.quantity);
+          if (!Number.isInteger(qty) || qty < 1) {
+            return `При точном составе укажите количество ≥ 1 для «${component.displayName}»`;
+          }
+        }
       }
     }
     if (promotion.enabled && promotion.type === 'PERCENT') {
@@ -597,9 +577,7 @@ export function ProductEditor({
     const problem = validate();
     if (problem) {
       setError(problem);
-      setFieldErrors(
-        problem.includes('Скидка') ? { percentOff: problem } : {},
-      );
+      setFieldErrors(problem.includes('Скидка') ? { percentOff: problem } : {});
       setSavePhase('validation');
       return;
     }
@@ -613,8 +591,6 @@ export function ProductEditor({
       const percentValue = Number(promotion.percentOff);
       const hasValidPercent =
         Number.isInteger(percentValue) && percentValue >= 1 && percentValue <= 99;
-      // DB requires PERCENT ⇒ percent_off NOT NULL. When disabled without a percent,
-      // persist as FIXED + null (commercial rules skipped while disabled).
       const promotionType: PromotionType =
         promotion.type === 'PERCENT' && (promotion.enabled || hasValidPercent)
           ? 'PERCENT'
@@ -631,6 +607,8 @@ export function ProductEditor({
         shortDescription: basic.shortDescription.trim() || null,
         description: basic.description.trim() || null,
         heightCm: basic.heightCm.trim().length > 0 ? Number(basic.heightCm) : null,
+        diameterCm: basic.diameterCm.trim().length > 0 ? Number(basic.diameterCm) : null,
+        compositionPrecision,
         availability: publication.availability,
         publishAt: fromDateTimeLocalValue(publication.publishAt),
         unpublishAt: fromDateTimeLocalValue(publication.unpublishAt),
@@ -646,7 +624,6 @@ export function ProductEditor({
             priceMinor: majorInputToMinor(variant.priceMajor) ?? '0',
             sortOrder: index,
             status: variant.status,
-            // FIXED sale price travels with this variant row — server binds it to the new id.
             salePriceMinor:
               promotion.enabled && promotionType === 'FIXED' && variant.status === 'ACTIVE'
                 ? (majorInputToMinor(variant.salePriceMajor) ?? null)
@@ -657,7 +634,9 @@ export function ProductEditor({
           displayName: component.displayName.trim(),
           quantity: component.quantity.trim().length > 0 ? Number(component.quantity) : null,
           unit: component.unit,
-          flowerItemId: component.flowerItemId || null,
+          flowerItemId: component.flowerItemId,
+          colorId: component.colorId || null,
+          role: component.role,
           sortOrder: index,
         })),
         occasionIds: discovery.occasionIds,
@@ -829,7 +808,6 @@ export function ProductEditor({
           ),
         );
       } catch {
-        // Client prepare failed — fall back to original; API validates.
         uploadFile = row.file;
         setUploadStates((prev) =>
           prev.map((item) =>
@@ -957,6 +935,8 @@ export function ProductEditor({
         shortDescription: created.shortDescription,
         description: created.description,
         heightCm: created.heightCm,
+        diameterCm: created.diameterCm ?? null,
+        compositionPrecision: created.compositionPrecision ?? 'UNKNOWN',
         availability: created.availability,
         publishAt: null,
         unpublishAt: null,
@@ -1054,8 +1034,12 @@ export function ProductEditor({
   }
 
   const statusPhase: FormSavePhase =
-    savePhase === 'saving' || savePhase === 'validation' || savePhase === 'conflict' ||
-    savePhase === 'server' || savePhase === 'network' || savePhase === 'saved'
+    savePhase === 'saving' ||
+    savePhase === 'validation' ||
+    savePhase === 'conflict' ||
+    savePhase === 'server' ||
+    savePhase === 'network' ||
+    savePhase === 'saved'
       ? savePhase
       : dirty
         ? 'dirty'
@@ -1174,7 +1158,7 @@ export function ProductEditor({
           <button
             key={id}
             type="button"
-            className={`admin-seg__btn ${section === id ? 'admin-seg__btn--active' : ''}`}
+            className={`admin-seg__btn ${section === id || (section === 'photos' && id === 'main') ? 'admin-seg__btn--active' : ''}`}
             onClick={() => setSection(id)}
           >
             {label}
@@ -1194,23 +1178,40 @@ export function ProductEditor({
         </p>
       ) : null}
 
-
-
-      {section === 'basic' ? (
+      {section === 'main' ? (
         <ProductEditorMainTab
           server={server}
           canUpdate={canUpdate}
+          canPublish={canPublish}
+          pending={pending}
           basic={basic}
           setBasic={setBasic}
           slugManual={slugManual}
           setSlugManual={setSlugManual}
-          catalogCategoryId={catalogCategoryId}
-          setCatalogCategoryId={setCatalogCategoryId}
-          categories={options.categories}
           components={components}
-          setComponents={setComponents}
           variants={variants}
           setVariants={setVariants}
+          publication={publication}
+          setPublication={setPublication}
+          hasPrimaryImage={hasPrimaryImage}
+          mediaCount={server.media.length}
+          onGoPhotos={() => setSection('photos')}
+          onGoExtraVariants={() => setSection('extra')}
+          onPublish={() => void runLifecycle('publish')}
+          onUnpublish={() => void runLifecycle('unpublish')}
+          onArchive={() => void runLifecycle('archive')}
+          touch={touch}
+        />
+      ) : null}
+
+      {section === 'composition' ? (
+        <ProductEditorCompositionTab
+          canUpdate={canUpdate}
+          components={components}
+          setComponents={setComponents}
+          compositionPrecision={compositionPrecision}
+          setCompositionPrecision={setCompositionPrecision}
+          colors={options.colors}
           compositionPickerOpen={compositionPickerOpen}
           setCompositionPickerOpen={setCompositionPickerOpen}
           compositionReplaceKey={compositionReplaceKey}
@@ -1223,6 +1224,40 @@ export function ProductEditor({
           compositionSearchPending={compositionSearchPending}
           onAddFlower={addFlowerItemToComposition}
           onOpenReplace={openCompositionReplace}
+          onSuggestPalette={applySuggestedPalette}
+          touch={touch}
+          nextComponentKey={() => nextEditorKey('component')}
+        />
+      ) : null}
+
+      {section === 'matching' ? (
+        <ProductEditorMatchingTab
+          canUpdate={canUpdate}
+          components={components}
+          derivedKind={derivedKind}
+          discovery={discovery}
+          setDiscovery={setDiscovery}
+          occasions={options.occasions}
+          recipients={options.recipients}
+          colors={options.colors}
+          touch={touch}
+          toggleId={toggleId}
+        />
+      ) : null}
+
+      {section === 'extra' ? (
+        <ProductEditorExtraTab
+          server={server}
+          canUpdate={canUpdate}
+          canPublish={canPublish}
+          pending={pending}
+          basic={basic}
+          setBasic={setBasic}
+          catalogCategoryId={catalogCategoryId}
+          setCatalogCategoryId={setCatalogCategoryId}
+          categories={options.categories}
+          variants={variants}
+          setVariants={setVariants}
           familyId={familyId}
           setFamilyId={setFamilyId}
           familyPanelOpen={familyPanelOpen}
@@ -1237,15 +1272,41 @@ export function ProductEditor({
           onReorderFamilyMember={(id, dir) => void reorderFamilyMember(id, dir)}
           onAddProductToLine={() => void onAddProductToLine()}
           addingFamilyProduct={addingFamilyProduct}
-          hasPrimaryImage={hasPrimaryImage}
-          onGoPhotos={() => setSection('photos')}
+          promotion={promotion}
+          setPromotion={setPromotion}
+          promotionPreview={promotionPreview}
+          groupIds={groupIds}
+          setGroupIds={setGroupIds}
+          bestsellerGroups={bestsellerGroups}
+          seo={seo}
+          setSeo={setSeo}
+          seoManualOpen={seoManualOpen}
+          setSeoManualOpen={setSeoManualOpen}
+          seoHealth={seoHealth}
+          previewTitle={previewTitle}
+          previewDescription={previewDescription}
+          titleIsAutomatic={titleIsAutomatic}
+          descriptionIsAutomatic={descriptionIsAutomatic}
+          publication={publication}
+          setPublication={setPublication}
+          readiness={readiness}
+          fieldErrors={fieldErrors}
+          onPublish={() => void runLifecycle('publish')}
+          onUnpublish={() => void runLifecycle('unpublish')}
+          onArchive={() => void runLifecycle('archive')}
           touch={touch}
-          nextVariantKey={() => nextKey('variant')}
+          toggleId={toggleId}
+          nextVariantKey={() => nextEditorKey('variant')}
         />
       ) : null}
 
       {section === 'photos' ? (
         <section className="admin-section">
+          <div className="mb-4 flex flex-wrap items-center gap-3">
+            <button type="button" className="admin-link text-sm" onClick={() => setSection('main')}>
+              ← К основному
+            </button>
+          </div>
           <h2 className="admin-section__title">Фотографии</h2>
           <p className="admin-section__lead">
             Добавьте до 12 фотографий товара. {server.media.length} из 12 уже загружено. Главное фото
@@ -1421,382 +1482,6 @@ export function ProductEditor({
           </p>
         </section>
       ) : null}
-
-      {section === 'sales' ? (
-        <section className="admin-section">
-          <h2 className="admin-section__title">Продажи</h2>
-          <p className="admin-section__lead">
-            Как покупатель найдёт товар, акции и витрины.
-          </p>
-
-          <div className="admin-subsection space-y-3">
-            <h3 className="admin-subsection__title">Из состава</h3>
-            {components.some((row) => row.typeName.trim()) ? (
-              <p className="text-sm">
-                {[...new Set(components.map((r) => r.typeName.trim()).filter(Boolean))].join(' · ')}
-              </p>
-            ) : (
-              <p className="admin-help">Добавьте цветы во вкладке «Основное».</p>
-            )}
-          </div>
-
-          <div className="admin-subsection space-y-3">
-            <h3 className="admin-subsection__title">Как покупатель найдёт товар</h3>
-
-          <div className="grid gap-4 lg:grid-cols-3">
-            {options.occasions.length > 0 ? (
-            <fieldset className="admin-fieldset">
-              <legend>Повод</legend>
-              <div className="admin-checks">
-                {options.occasions.map((option) => (
-                  <label key={option.id} className="admin-check">
-                    <input
-                      type="checkbox"
-                      disabled={!canUpdate}
-                      checked={discovery.occasionIds.includes(option.id)}
-                      onChange={() => {
-                        setDiscovery((prev) => ({
-                          ...prev,
-                          occasionIds: toggleId(prev.occasionIds, option.id),
-                        }));
-                        touch();
-                      }}
-                    />
-                    {option.name}
-                  </label>
-                ))}
-              </div>
-            </fieldset>
-            ) : null}
-
-            {options.recipients.length > 0 ? (
-            <fieldset className="admin-fieldset">
-              <legend>Кому</legend>
-              <div className="admin-checks">
-                {options.recipients.map((option) => (
-                  <label key={option.id} className="admin-check">
-                    <input
-                      type="checkbox"
-                      disabled={!canUpdate}
-                      checked={discovery.recipientIds.includes(option.id)}
-                      onChange={() => {
-                        setDiscovery((prev) => ({
-                          ...prev,
-                          recipientIds: toggleId(prev.recipientIds, option.id),
-                        }));
-                        touch();
-                      }}
-                    />
-                    {option.name}
-                  </label>
-                ))}
-              </div>
-            </fieldset>
-            ) : null}
-
-            {options.colors.length > 0 ? (
-            <fieldset className="admin-fieldset">
-              <legend>Цвет</legend>
-              <div className="admin-checks">
-                {options.colors.map((option) => (
-                  <label key={option.id} className="admin-check">
-                    <input
-                      type="checkbox"
-                      disabled={!canUpdate}
-                      checked={discovery.colorIds.includes(option.id)}
-                      onChange={() => {
-                        setDiscovery((prev) => ({
-                          ...prev,
-                          colorIds: toggleId(prev.colorIds, option.id),
-                        }));
-                        touch();
-                      }}
-                    />
-                    <span
-                      aria-hidden
-                      className="admin-swatch admin-swatch--sm"
-                      style={option.swatch ? { background: option.swatch } : undefined}
-                    />
-                    {option.name}
-                  </label>
-                ))}
-              </div>
-            </fieldset>
-            ) : null}
-          </div>
-          </div>
-
-          <div className="admin-subsection space-y-3">
-            <h3 className="admin-subsection__title">Акция и витрины</h3>
-            <label className="admin-check">
-              <input
-                type="checkbox"
-                disabled={!canUpdate}
-                checked={promotion.enabled}
-                onChange={(event) => {
-                  setPromotion((prev) => ({ ...prev, enabled: event.target.checked }));
-                  touch();
-                }}
-              />
-              Товар участвует в акции
-            </label>
-            {promotion.enabled ? (
-              <div className="grid gap-4 md:grid-cols-2">
-                <label className="admin-field">
-                  <span>Тип скидки</span>
-                  <select
-                    className="admin-select"
-                    value={promotion.type}
-                    disabled={!canUpdate}
-                    onChange={(event) => {
-                      setPromotion((prev) => ({
-                        ...prev,
-                        type: event.target.value as PromotionType,
-                      }));
-                      touch();
-                    }}
-                  >
-                    {PROMOTION_TYPES.map((type) => (
-                      <option key={type} value={type}>
-                        {promotionTypeLabel(type)}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                {promotion.type === 'PERCENT' ? (
-                  <label className="admin-field">
-                    <span>Скидка, %</span>
-                    <input
-                      className="admin-input w-28 tabular-nums"
-                      type="number"
-                      min={1}
-                      max={99}
-                      value={promotion.percentOff}
-                      disabled={!canUpdate}
-                      onChange={(event) => {
-                        setPromotion((prev) => ({ ...prev, percentOff: event.target.value }));
-                        touch();
-                      }}
-                    />
-                    <FieldError message={fieldErrors.percentOff} />
-                  </label>
-                ) : null}
-              </div>
-            ) : null}
-            {promotion.enabled && promotionPreview.length > 0 ? (
-              <ul className="space-y-1 text-sm">
-                {promotionPreview.map((row) => (
-                  <li key={row.key}>
-                    {row.name}: {row.regular}
-                    {row.sale !== '—' ? ` → ${row.sale}` : ''}
-                    {row.note ? ` (${row.note})` : ''}
-                  </li>
-                ))}
-              </ul>
-            ) : null}
-            {bestsellerGroups.length > 0 ? (
-              <div className="admin-checks">
-                {bestsellerGroups.map((group) => (
-                  <label key={group.id} className="admin-check">
-                    <input
-                      type="checkbox"
-                      disabled={!canUpdate}
-                      checked={groupIds.includes(group.id)}
-                      onChange={() => {
-                        setGroupIds((prev) => toggleId(prev, group.id));
-                        touch();
-                      }}
-                    />
-                    {group.name}
-                  </label>
-                ))}
-              </div>
-            ) : null}
-          </div>
-        </section>
-      ) : null}
-
-      {section === 'publish' ? (
-        <section className="admin-section space-y-4">
-          <h2 className="admin-section__title">SEO и публикация</h2>
-          <ProductReadinessPanel
-            items={readiness.items}
-            readyToPublish={readiness.readyToPublish}
-            blockingLabels={readiness.blockingLabels}
-            compact
-          />
-          <div className="admin-subsection space-y-3">
-            <h3 className="admin-subsection__title">Поиск (SEO)</h3>
-            <p className="text-sm text-[var(--admin-muted)]">
-              {seoStatusEmoji(seoHealth.status)} {seoStatusLabel(seoHealth.status)} · {previewTitle}
-            </p>
-            <p className="text-sm text-[var(--admin-muted)] line-clamp-2">{previewDescription}</p>
-            <button
-              type="button"
-              className="admin-btn-ghost text-sm"
-              disabled={!canUpdate}
-              onClick={() => setSeoManualOpen((open) => !open)}
-            >
-              {seoManualOpen ? 'Свернуть ручные поля SEO' : 'Настроить заголовок и описание для поиска'}
-            </button>
-            {seoManualOpen ? (
-              <div className="grid max-w-2xl gap-4">
-                <label className="admin-field">
-                  <span>Заголовок в поиске {titleIsAutomatic ? '(авто)' : ''}</span>
-                  <input
-                    className="admin-input"
-                    value={seo.seoTitle}
-                    disabled={!canUpdate}
-                    onChange={(event) => {
-                      setSeo((prev) => ({ ...prev, seoTitle: event.target.value }));
-                      touch();
-                    }}
-                    placeholder={defaultProductSeoTitle(basic.name.trim() || server.name)}
-                  />
-                </label>
-                <label className="admin-field">
-                  <span>Описание в поиске {descriptionIsAutomatic ? '(авто)' : ''}</span>
-                  <textarea
-                    className="admin-textarea"
-                    rows={3}
-                    value={seo.seoDescription}
-                    disabled={!canUpdate}
-                    onChange={(event) => {
-                      setSeo((prev) => ({ ...prev, seoDescription: event.target.value }));
-                      touch();
-                    }}
-                    placeholder={defaultProductSeoDescription(
-                      basic.name.trim() || server.name,
-                      basic.shortDescription.trim() || server.shortDescription,
-                    )}
-                  />
-                </label>
-              </div>
-            ) : null}
-            <label className="admin-check">
-              <input
-                type="checkbox"
-                disabled={!canUpdate}
-                checked={seo.noIndex}
-                onChange={(event) => {
-                  setSeo((prev) => ({ ...prev, noIndex: event.target.checked }));
-                  touch();
-                }}
-              />
-              Скрыть страницу от поисковых систем
-            </label>
-          </div>
-          <div className="grid max-w-2xl gap-4">
-            <p className="admin-status-row text-sm text-[var(--admin-muted)]">
-              <span>Состояние:</span>
-              <span className={lifecycleChipClass(server.lifecycle)}>
-                {lifecycleLabel(server.lifecycle)}
-              </span>
-              {server.publishedAt
-                ? ` · опубликован ${formatAdminDateTime(server.publishedAt)}`
-                : ''}
-            </p>
-
-            <label className="admin-field max-w-sm">
-              <span>Наличие</span>
-              <select
-                className="admin-select"
-                value={publication.availability}
-                disabled={!canUpdate}
-                onChange={(event) => {
-                  setPublication((prev) => ({
-                    ...prev,
-                    availability: event.target.value as CommercialAvailability,
-                  }));
-                  touch();
-                }}
-              >
-                {COMMERCIAL_AVAILABILITIES.map((value) => (
-                  <option key={value} value={value}>
-                    {availabilityLabel(value)}
-                  </option>
-                ))}
-              </select>
-            </label>
-
-            <div className="grid gap-4 sm:grid-cols-2">
-              <label className="admin-field">
-                <span>Опубликовать позже</span>
-                <input
-                  className="admin-input"
-                  type="datetime-local"
-                  value={publication.publishAt}
-                  disabled={!canUpdate}
-                  onChange={(event) => {
-                    setPublication((prev) => ({ ...prev, publishAt: event.target.value }));
-                    touch();
-                  }}
-                />
-                <span className="admin-field__hint">По времени Минска (Europe/Minsk)</span>
-              </label>
-              <label className="admin-field">
-                <span>Снять с витрины</span>
-                <input
-                  className="admin-input"
-                  type="datetime-local"
-                  value={publication.unpublishAt}
-                  disabled={!canUpdate}
-                  onChange={(event) => {
-                    setPublication((prev) => ({ ...prev, unpublishAt: event.target.value }));
-                    touch();
-                  }}
-                />
-                <span className="admin-field__hint">По времени Минска (Europe/Minsk)</span>
-              </label>
-            </div>
-
-            <div className="flex flex-wrap items-center gap-2">
-              {canPublish ? (
-                <>
-                  <button
-                    type="button"
-                    className="admin-btn"
-                    disabled={pending || server.lifecycle === 'PUBLISHED'}
-                    onClick={() => void runLifecycle('publish')}
-                  >
-                    Опубликовать
-                  </button>
-                  <button
-                    type="button"
-                    className="admin-btn-ghost"
-                    disabled={pending || server.lifecycle !== 'PUBLISHED'}
-                    onClick={() => void runLifecycle('unpublish')}
-                  >
-                    Снять с витрины
-                  </button>
-                  <button
-                    type="button"
-                    className="admin-btn-ghost"
-                    disabled={pending || server.lifecycle === 'ARCHIVED'}
-                    onClick={() => void runLifecycle('archive')}
-                  >
-                    В архив
-                  </button>
-                </>
-              ) : (
-                <p className="admin-help">Публикацией управляет роль с правом публикации.</p>
-              )}
-              <a
-                className="admin-btn-ghost"
-                href={`/admin/catalog/products/${server.id}/preview`}
-              >
-                Предпросмотр
-              </a>
-            </div>
-
-            <p className="admin-help">
-              «Черновик» не виден покупателям. «В архиве» убирает товар из каталога, но сохраняет
-              историю заказов.
-            </p>
-          </div>
-        </section>
-      ) : null}
-
     </div>
   );
 }

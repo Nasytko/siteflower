@@ -1,3 +1,4 @@
+import Link from 'next/link';
 import { roleHasPermission, type NavigationMenuAdminDto } from '@bouquet-one/contracts';
 import { AdminPageHeader } from '@/components/admin/admin-page-header';
 import { NavigationMenuManager } from '@/components/admin/navigation-menu-manager';
@@ -14,6 +15,11 @@ export default async function StorefrontNavigationPage() {
       <AdminPageHeader
         title="Навигация"
         lead="Редактор главного меню витрины: пункты, колонки, иконки и ссылки. Служебные страницы (О нас, Доставка) живут в верхней строке сайта."
+        actions={
+          <Link href="/admin/storefront/homepage" className="admin-btn-ghost">
+            Плитки на главной
+          </Link>
+        }
       />
       <NavigationMenuManager
         initial={menu}

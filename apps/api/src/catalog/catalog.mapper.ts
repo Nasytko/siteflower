@@ -50,6 +50,7 @@ export const PRODUCT_INCLUDE = {
   components: {
     orderBy: { sortOrder: 'asc' },
     include: {
+      color: { select: { id: true, slug: true, name: true } },
       flowerItem: {
         include: {
           flowerType: { select: { id: true, slug: true, name: true } },
@@ -331,6 +332,9 @@ export function toProductAdminDto(
     lifecycle: product.lifecycle,
     availability: product.availability,
     heightCm: product.bouquetHeightCm ?? null,
+    diameterCm: product.diameterCm ?? null,
+    compositionKind: product.compositionKind,
+    compositionPrecision: product.compositionPrecision,
     catalogCategoryId: product.catalogCategoryId,
     catalogCategory: product.catalogCategory ? toTaxonomyRef(product.catalogCategory) : null,
     family:
@@ -361,6 +365,9 @@ export function toProductAdminDto(
       flowerItem: component.flowerItem
         ? toFlowerItemDto(component.flowerItem as FlowerItemRow)
         : null,
+      colorId: component.colorId ?? null,
+      color: component.color ? toTaxonomyRef(component.color) : null,
+      role: component.role,
       displayName: component.displayName,
       quantity: component.quantity,
       unit: component.unit,
@@ -406,6 +413,8 @@ export function toProductPublicDto(
     description: product.description,
     availability: product.availability,
     heightCm: product.bouquetHeightCm ?? null,
+    diameterCm: product.diameterCm ?? null,
+    compositionKind: product.compositionKind,
     catalogCategory: product.catalogCategory ? toTaxonomyRef(product.catalogCategory) : null,
     family: resolvedFamily
       ? {
@@ -439,7 +448,9 @@ export function toProductPublicDto(
       displayName: component.displayName,
       quantity: component.quantity,
       unit: component.unit,
+      role: component.role,
       flowerSlug: component.flowerItem?.flowerType?.slug ?? null,
+      colorSlug: component.color?.slug ?? null,
     })),
     media: product.media.map((media) => {
       const dto = toProductMediaDto(media, urlFor);

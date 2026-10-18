@@ -54,6 +54,9 @@ export class FlowerRefsService {
       name: row.name,
       sortOrder: row.sortOrder,
       visibility: row.visibility,
+      seoTitle: row.seoTitle,
+      seoDescription: row.seoDescription,
+      noIndex: row.noIndex,
     }));
   }
 
@@ -72,6 +75,9 @@ export class FlowerRefsService {
       productsCount: 0,
       varietiesCount: row._count.varieties,
       itemsCount: row._count.items,
+      seoTitle: row.seoTitle,
+      seoDescription: row.seoDescription,
+      noIndex: row.noIndex,
     }));
   }
 
@@ -183,6 +189,9 @@ export class FlowerRefsService {
         productsCount: 0,
         varietiesCount: row._count.varieties,
         itemsCount: 0,
+        seoTitle: row.seoTitle,
+        seoDescription: row.seoDescription,
+        noIndex: row.noIndex,
       };
     } catch {
       throw new ConflictException('Flower type slug already in use');
@@ -297,6 +306,9 @@ export class FlowerRefsService {
       slug?: string;
       sortOrder?: number;
       visibility?: TaxonomyVisibility;
+      seoTitle?: string | null;
+      seoDescription?: string | null;
+      noIndex?: boolean;
     },
     actor?: ActorContext,
   ): Promise<FlowerTypeAdminDto> {
@@ -1351,6 +1363,9 @@ export class FlowerRefsService {
       sortOrder?: number;
       visibility?: TaxonomyVisibility;
       flowerTypeId?: string;
+      seoTitle?: string | null;
+      seoDescription?: string | null;
+      noIndex?: boolean;
     },
     actor?: ActorContext,
   ): Promise<FlowerTypeAdminDto | FlowerVarietyAdminDto | FlowerOriginAdminDto> {
@@ -1376,6 +1391,15 @@ export class FlowerRefsService {
             ...(input.sortOrder !== undefined ? { sortOrder: input.sortOrder } : {}),
             ...(input.visibility !== undefined ? { visibility: input.visibility } : {}),
             ...(input.flowerTypeId !== undefined ? { flowerTypeId: input.flowerTypeId } : {}),
+            ...(model === 'flowerType' && input.seoTitle !== undefined
+              ? { seoTitle: input.seoTitle?.trim() || null }
+              : {}),
+            ...(model === 'flowerType' && input.seoDescription !== undefined
+              ? { seoDescription: input.seoDescription?.trim() || null }
+              : {}),
+            ...(model === 'flowerType' && input.noIndex !== undefined
+              ? { noIndex: input.noIndex }
+              : {}),
             version: { increment: 1 },
           },
         });
@@ -1399,6 +1423,9 @@ export class FlowerRefsService {
           visibility: TaxonomyVisibility;
           version: number;
           flowerTypeId?: string;
+          seoTitle?: string | null;
+          seoDescription?: string | null;
+          noIndex?: boolean;
           _count: { products: number; varieties?: number };
         };
         if (actor) {
@@ -1431,6 +1458,9 @@ export class FlowerRefsService {
           version: row.version,
           productsCount: 0,
           varietiesCount: row._count.varieties ?? 0,
+          seoTitle: row.seoTitle ?? null,
+          seoDescription: row.seoDescription ?? null,
+          noIndex: row.noIndex ?? false,
         };
       }
       if (model === 'flowerVariety') {

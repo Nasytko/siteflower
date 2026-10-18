@@ -52,11 +52,15 @@ Never denormalize a stale `product.price`. Checkout uses `effectiveVariantPriceM
 
 ## Composition
 
-`ProductComponent` holds quantity/unit and **must** reference a reusable **FlowerItem** (concrete stem/SKU). Quantity is never stored on FlowerItem — one FlowerItem can appear in hundreds of products with different quantities.
+`ProductComponent` holds quantity/unit and **must** reference a reusable **FlowerItem** (concrete stem/SKU). Optional **`role`** (`PRIMARY` / `GREENERY` / `FILLER` / `OTHER`) and **`colorId`** (line color for same-component filters). Quantity is never stored on FlowerItem — one FlowerItem can appear in hundreds of products with different quantities.
+
+On save, the API derives **`compositionKind`** (`MONO` / `MIXED` / `UNKNOWN`) from PRIMARY lines only (greenery does not break mono) and stores **`compositionPrecision`** (`EXACT` / `APPROXIMATE` / `UNKNOWN`). **`ProductColor`** remains the visual palette of the bouquet (manager-confirmed), separate from component line colors.
 
 Duplicate product copies component rows but **reuses** the same FlowerItem rows (no dictionary cloning).
 
 Composition stays **product-level** (not per ProductVariant) so cart/checkout remain unchanged. Customer-facing stem counts / price tiers live on **ProductVariant** names and prices. Cross-height/origin “variants” continue as separate Products in a ProductFamily.
+
+Managed SEO landings (`SeoLandingPage`, public `/p/{slug}`) use the same list-filter rules plus pin/exclude — not one category per facet combo.
 
 ## Catalog navigation (CatalogCategory)
 
