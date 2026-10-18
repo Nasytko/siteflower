@@ -33,7 +33,6 @@ function isDictionaryPath(pathname: string): boolean {
 /**
  * Florist store panel IA:
  * Работа → daily ops · Каталог → merchandising · Магазин → public site · Система → rare/tech
- * Homepage editor is intentionally absent (fixed layout; route redirects to Сводка).
  */
 const NAV_GROUPS: NavGroup[] = [
   {
@@ -82,6 +81,11 @@ const NAV_GROUPS: NavGroup[] = [
     id: 'store',
     label: 'Магазин',
     items: [
+      {
+        href: '/admin/storefront/homepage',
+        label: 'Плитки на главной',
+        permission: 'CONTENT_READ',
+      },
       { href: '/admin/storefront/instagram', label: 'Instagram', permission: 'CONTENT_READ' },
       {
         href: '/admin/storefront/settings',

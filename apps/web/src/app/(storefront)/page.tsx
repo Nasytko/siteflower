@@ -14,11 +14,8 @@ import {
 } from '@/lib/public-api';
 import { buildPageMetadata } from '@/lib/seo/metadata';
 import { BestsellersSection } from '@/components/storefront/bestsellers-section';
-import {
-  CategoryNav,
-  filterDiscoveryTiles,
-  HOME_DISCOVERY_TILES,
-} from '@/components/storefront/category-nav';
+import { CategoryNav, filterDiscoveryTiles } from '@/components/storefront/category-nav';
+import type { DiscoveryTile } from '@/components/storefront/category-nav-types';
 import { ExpandingHero, type HeroSlide } from '@/components/storefront/expanding-hero';
 import { HomeAnalytics } from '@/components/storefront/home-analytics';
 import { InstagramSection } from '@/components/storefront/instagram-section';
@@ -84,7 +81,18 @@ export default async function StorefrontHomePage() {
     );
   }
 
-  const discoveryTiles = filterDiscoveryTiles(HOME_DISCOVERY_TILES, {
+  const configuredTiles: DiscoveryTile[] = [...(homepage.discoveryTiles ?? [])]
+    .filter((tile) => tile.enabled)
+    .sort((a, b) => a.sortOrder - b.sortOrder || a.id.localeCompare(b.id))
+    .map((tile) => ({
+      id: tile.id,
+      label: tile.label,
+      href: tile.href,
+      imageSrc: tile.imageUrl,
+      imageAlt: tile.imageAlt || tile.label,
+    }));
+
+  const discoveryTiles = filterDiscoveryTiles(configuredTiles, {
     flowerSlugs: new Set(flowers.map((item) => item.slug)),
     recipientSlugs: new Set(recipients.map((item) => item.slug)),
     occasionSlugs: new Set(occasions.map((item) => item.slug)),
@@ -131,7 +139,7 @@ export default async function StorefrontHomePage() {
     },
   ];
 
-  /** Fixed editorial rhythm: promo → discovery → bestsellers → gifts → rest. */
+  /** Fixed editorial rhythm: discovery → promo → bestsellers → gifts → rest. */
   const promotionsSection = sections.find((section) => section.kind === 'promotions');
   const bestsellersSection = sections.find((section) => section.kind === 'bestsellers');
   // Read from raw config (not the enabled-only list) so a disabled section stays hidden.
@@ -155,6 +163,8 @@ export default async function StorefrontHomePage() {
 
       <ExpandingHero slides={heroSlides} />
 
+      <CategoryNav items={discoveryTiles} />
+
       <section className="sf-promo-band py-10 md:py-14">
         <div className="sf-container-wide">
           <SectionRail
@@ -176,8 +186,6 @@ export default async function StorefrontHomePage() {
           )}
         </div>
       </section>
-
-      <CategoryNav city={settings.city} items={discoveryTiles} />
 
       {bestsellersSection ? (
         <BestsellersSection

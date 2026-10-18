@@ -140,6 +140,42 @@ export class HomepageSectionInputDto {
   sortOrder!: number;
 }
 
+export class HomepageDiscoveryTileInputDto {
+  @IsString()
+  @MinLength(1)
+  @MaxLength(80)
+  id!: string;
+
+  @IsString()
+  @MinLength(1)
+  @MaxLength(120)
+  label!: string;
+
+  @IsString()
+  @MinLength(1)
+  @MaxLength(500)
+  href!: string;
+
+  @IsString()
+  @MinLength(1)
+  @MaxLength(500)
+  imageUrl!: string;
+
+  @IsString()
+  @MinLength(1)
+  @MaxLength(200)
+  imageAlt!: string;
+
+  @IsBoolean()
+  enabled!: boolean;
+
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  @Max(10_000)
+  sortOrder!: number;
+}
+
 export class UpdateHomepageConfigDto {
   @Type(() => Number)
   @IsInt()
@@ -155,6 +191,12 @@ export class UpdateHomepageConfigDto {
   @ValidateNested({ each: true })
   @Type(() => HomepageSectionInputDto)
   sections!: HomepageSectionInputDto[];
+
+  @IsArray()
+  @ArrayMaxSize(24)
+  @ValidateNested({ each: true })
+  @Type(() => HomepageDiscoveryTileInputDto)
+  discoveryTiles!: HomepageDiscoveryTileInputDto[];
 }
 
 export class CreateInstagramPostDto {

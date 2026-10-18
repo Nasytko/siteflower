@@ -40,9 +40,22 @@ export type HomepageSectionDto = {
   sortOrder: number;
 };
 
+/** Illustrated category tiles on the homepage (no section title on the storefront). */
+export type HomepageDiscoveryTileDto = {
+  id: string;
+  label: string;
+  href: string;
+  /** Public media URL or site-relative path (e.g. /categories/…). */
+  imageUrl: string;
+  imageAlt: string;
+  enabled: boolean;
+  sortOrder: number;
+};
+
 export type HomepageConfigDto = {
   hero: HomepageHeroDto;
   sections: HomepageSectionDto[];
+  discoveryTiles: HomepageDiscoveryTileDto[];
 };
 
 export type HomepageConfigAdminDto = HomepageConfigDto & {
@@ -77,6 +90,7 @@ export type UpdateHomepageConfigDto = {
   expectedVersion: number;
   hero: HomepageHeroDto;
   sections: HomepageSectionDto[];
+  discoveryTiles: HomepageDiscoveryTileDto[];
 };
 
 /** Curated Instagram post (admin + public share the same shape). */
@@ -174,6 +188,75 @@ export type ProductResolveDto = {
   canonicalSlug: string;
 };
 
+/** Default illustrated tiles for the homepage category row. */
+export function defaultHomepageDiscoveryTiles(): HomepageDiscoveryTileDto[] {
+  return [
+    {
+      id: 'cvety-pcs',
+      label: 'Цветы поштучно',
+      href: '/cvety',
+      imageUrl: '/categories/discovery-roza.png',
+      imageAlt: 'Роза',
+      enabled: true,
+      sortOrder: 10,
+    },
+    {
+      id: 'rozy',
+      label: 'Букеты из роз',
+      href: '/cvety/rozy',
+      imageUrl: '/categories/discovery-buket-roz.png',
+      imageAlt: 'Букет роз',
+      enabled: true,
+      sortOrder: 20,
+    },
+    {
+      id: 'bukety',
+      label: 'Букеты цветов',
+      href: '/bukety',
+      imageUrl: '/categories/discovery-sbornye.png',
+      imageAlt: 'Сборный букет',
+      enabled: true,
+      sortOrder: 30,
+    },
+    {
+      id: 'kompozicii',
+      label: 'Композиции',
+      href: '/bukety?size=bolshoj',
+      imageUrl: '/categories/discovery-kompozicii.png',
+      imageAlt: 'Цветочная композиция',
+      enabled: true,
+      sortOrder: 40,
+    },
+    {
+      id: 'neveste',
+      label: 'Букет невесты',
+      href: '/komu/neveste',
+      imageUrl: '/categories/discovery-nevesta.png',
+      imageAlt: 'Свадебный букет',
+      enabled: true,
+      sortOrder: 50,
+    },
+    {
+      id: 'den-rozhdeniya',
+      label: 'На день рождения',
+      href: '/povod/den-rozhdeniya',
+      imageUrl: '/categories/discovery-den-rozhdeniya.png',
+      imageAlt: 'Букет на день рождения',
+      enabled: true,
+      sortOrder: 60,
+    },
+    {
+      id: 'podarki',
+      label: 'Подарки',
+      href: '/bukety',
+      imageUrl: '/categories/discovery-podarki.png',
+      imageAlt: 'Букет в подарок',
+      enabled: true,
+      sortOrder: 70,
+    },
+  ];
+}
+
 export function defaultHomepageConfig(): HomepageConfigDto {
   return {
     hero: {
@@ -227,6 +310,7 @@ export function defaultHomepageConfig(): HomepageConfigDto {
         sortOrder: 50,
       },
     ],
+    discoveryTiles: defaultHomepageDiscoveryTiles(),
   };
 }
 

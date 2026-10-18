@@ -7,7 +7,6 @@ export type AnalyticsEventMap = {
   view_home: Record<string, never>;
   view_catalog: { filters?: string };
   view_product: { slug: string };
-  search: { query: string; resultCount?: number };
   select_filter: { key: string; value: string };
   add_to_favorites: { productId: string; slug: string };
   remove_from_favorites: { productId: string; slug: string };

@@ -94,7 +94,6 @@ known. Do not list hypothetical future services.
 | Admin session | HttpOnly cookie | Admin auth only |
 | `bouquet-one:cart:v1` | localStorage | Cart |
 | `bouquet-one:favorites:v1` | localStorage | Favorites |
-| `bouquet-one:recent-searches:v1` | localStorage | Search UX |
 | `bouquet-one:checkout-*` / `last-order` | sessionStorage | Checkout idempotency / success |
 
 No consent banner while only functional storage and no marketing/analytics

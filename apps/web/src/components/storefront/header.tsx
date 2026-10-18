@@ -7,7 +7,6 @@ import { cartItemCount, readCart } from '@/lib/cart';
 import { nextCompactFromScroll } from '@/lib/scroll-chrome';
 import { BrandLogo } from './brand-logo';
 import { PRIMARY_NAV, PrimaryNav, type PrimaryNavItem } from './primary-nav';
-import { SearchDialog } from './search-dialog';
 
 type Props = {
   city: string;
@@ -24,7 +23,6 @@ type Props = {
 export function StorefrontHeader({ city, brandName, phone, workingHours, navItems = PRIMARY_NAV }: Props) {
   const pathname = usePathname();
   const [menuOpen, setMenuOpen] = useState(false);
-  const [searchOpen, setSearchOpen] = useState(false);
   const [compact, setCompact] = useState(false);
   const [placeOpen, setPlaceOpen] = useState(false);
   const [cartCount, setCartCount] = useState(0);
@@ -172,11 +170,7 @@ export function StorefrontHeader({ city, brandName, phone, workingHours, navItem
             <PrimaryNav items={navItems} inline />
           </div>
 
-          <HeaderActions
-            cartCount={cartCount}
-            showLabels={!compact}
-            onSearch={() => setSearchOpen(true)}
-          />
+          <HeaderActions cartCount={cartCount} showLabels={!compact} />
         </div>
 
         {/* Row 2 — primary nav (collapses via grid-template-rows) */}
@@ -336,8 +330,6 @@ export function StorefrontHeader({ city, brandName, phone, workingHours, navItem
           </nav>
         </div>
       ) : null}
-
-      <SearchDialog open={searchOpen} onClose={() => setSearchOpen(false)} />
     </>
   );
 }
@@ -345,25 +337,12 @@ export function StorefrontHeader({ city, brandName, phone, workingHours, navItem
 function HeaderActions({
   cartCount,
   showLabels,
-  onSearch,
 }: {
   cartCount: number;
   showLabels: boolean;
-  onSearch: () => void;
 }) {
   return (
     <div className="ml-auto flex shrink-0 items-center justify-self-end gap-1 sm:gap-2.5">
-      <button
-        type="button"
-        className="inline-flex flex-col items-center gap-0.5 px-1 text-ink hover:text-brand"
-        aria-label="Найти букет"
-        onClick={onSearch}
-      >
-        <SearchIcon />
-        {showLabels ? (
-          <span className="hidden text-[0.65rem] font-medium sm:block">Поиск</span>
-        ) : null}
-      </button>
       <Link
         href="/favorites"
         className="inline-flex flex-col items-center gap-0.5 px-1 text-ink hover:text-brand"
@@ -428,15 +407,6 @@ function ChevronIcon({ open }: { open: boolean }) {
       aria-hidden
     >
       <path d="M2.5 4.5 6 8l3.5-3.5" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  );
-}
-
-function SearchIcon() {
-  return (
-    <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden>
-      <circle cx="11" cy="11" r="6.5" />
-      <path d="M16.5 16.5 20 20" strokeLinecap="round" />
     </svg>
   );
 }

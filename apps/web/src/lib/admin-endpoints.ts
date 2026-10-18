@@ -162,6 +162,7 @@ export const adminEndpoints = {
 
   orders: `${ADMIN}/orders`,
   storefrontSettings: `${ADMIN}/storefront/settings`,
+  homepage: `${ADMIN}/storefront/homepage`,
   navigationMain: `${ADMIN}/storefront/navigation/main`,
   navigationTargets: `${ADMIN}/storefront/navigation/targets`,
   navigationItem: (id: string) => `${ADMIN}/storefront/navigation/main/items/${id}`,

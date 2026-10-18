@@ -5,9 +5,11 @@ import {
 } from '@nestjs/common';
 import {
   defaultHomepageConfig,
+  defaultHomepageDiscoveryTiles,
   HOMEPAGE_SECTION_KINDS,
   type HomepageConfigAdminDto,
   type HomepageConfigDto,
+  type HomepageDiscoveryTileDto,
   type HomepageSectionDto,
   type HomepageSectionKind,
   type UpdateHomepageConfigDto,
@@ -19,6 +21,7 @@ import { hashIp } from '../auth/crypto.util';
 import { AppConfigService } from '../config/app-config.service';
 import { PrismaService } from '../database/prisma.service';
 import type { ActorContext } from '../common/actor.util';
+import { StorefrontRevalidateService } from './storefront-revalidate.service';
 
 const SINGLETON_ID = 1;
 const OCC_CONFLICT_MESSAGE =
@@ -46,10 +49,23 @@ const sectionSchema = z
   })
   .strict();
 
+const discoveryTileSchema = z
+  .object({
+    id: z.string().trim().min(1).max(80),
+    label: z.string().trim().min(1).max(120),
+    href: z.string().trim().min(1).max(500),
+    imageUrl: z.string().trim().min(1).max(500),
+    imageAlt: z.string().trim().min(1).max(200),
+    enabled: z.boolean(),
+    sortOrder: z.number().int().min(0).max(10_000),
+  })
+  .strict();
+
 const homepageConfigSchema = z
   .object({
     hero: heroSchema,
     sections: z.array(sectionSchema).max(40),
+    discoveryTiles: z.array(discoveryTileSchema).max(24),
   })
   .strict();
 
@@ -65,50 +81,59 @@ const LEGACY_SECTION_KINDS: Record<string, HomepageSectionKind> = {
 
 export function migrateLegacyHomepageConfig(value: unknown): unknown {
   if (!value || typeof value !== 'object') return value;
-  const raw = value as { sections?: unknown };
-  if (!Array.isArray(raw.sections)) return value;
+  const raw = value as { sections?: unknown; discoveryTiles?: unknown };
+  const base = { ...(value as Record<string, unknown>) };
 
-  const migratedKinds = new Set<HomepageSectionKind>();
-  const ids = new Set<string>();
-  const sections: Array<Record<string, unknown>> = [];
+  if (Array.isArray(raw.sections)) {
+    const migratedKinds = new Set<HomepageSectionKind>();
+    const ids = new Set<string>();
+    const sections: Array<Record<string, unknown>> = [];
 
-  for (const entry of raw.sections) {
-    if (!entry || typeof entry !== 'object') continue;
-    const rest = { ...(entry as Record<string, unknown>) };
-    delete rest.collectionSlug;
-    const originalKind = typeof rest.kind === 'string' ? rest.kind : '';
-    const replacement = LEGACY_SECTION_KINDS[originalKind];
-    if (replacement) {
-      // Several collection sections collapse into a single promotions section.
-      if (migratedKinds.has(replacement)) continue;
-      migratedKinds.add(replacement);
-      rest.kind = replacement;
-      rest.id = replacement;
+    for (const entry of raw.sections) {
+      if (!entry || typeof entry !== 'object') continue;
+      const rest = { ...(entry as Record<string, unknown>) };
+      delete rest.collectionSlug;
+      const originalKind = typeof rest.kind === 'string' ? rest.kind : '';
+      const replacement = LEGACY_SECTION_KINDS[originalKind];
+      if (replacement) {
+        // Several collection sections collapse into a single promotions section.
+        if (migratedKinds.has(replacement)) continue;
+        migratedKinds.add(replacement);
+        rest.kind = replacement;
+        rest.id = replacement;
+      }
+      const id = typeof rest.id === 'string' ? rest.id : '';
+      if (!id || ids.has(id)) continue;
+      ids.add(id);
+      sections.push(rest);
+      if (typeof rest.kind === 'string') {
+        migratedKinds.add(rest.kind as HomepageSectionKind);
+      }
     }
-    const id = typeof rest.id === 'string' ? rest.id : '';
-    if (!id || ids.has(id)) continue;
-    ids.add(id);
-    sections.push(rest);
-    if (typeof rest.kind === 'string') {
-      migratedKinds.add(rest.kind as HomepageSectionKind);
+
+    // Ensure gifts shelf exists for configs created before catalog simplification.
+    if (!migratedKinds.has('gifts') && !ids.has('gifts')) {
+      const bestsellers = sections.find((section) => section.kind === 'bestsellers');
+      const sortOrder =
+        typeof bestsellers?.sortOrder === 'number' ? bestsellers.sortOrder + 5 : 30;
+      sections.push({
+        id: 'gifts',
+        kind: 'gifts',
+        enabled: true,
+        heading: 'Подарки',
+        sortOrder,
+      });
     }
+
+    base.sections = sections;
   }
 
-  // Ensure gifts shelf exists for configs created before catalog simplification.
-  if (!migratedKinds.has('gifts') && !ids.has('gifts')) {
-    const bestsellers = sections.find((section) => section.kind === 'bestsellers');
-    const sortOrder =
-      typeof bestsellers?.sortOrder === 'number' ? bestsellers.sortOrder + 5 : 30;
-    sections.push({
-      id: 'gifts',
-      kind: 'gifts',
-      enabled: true,
-      heading: 'Подарки',
-      sortOrder,
-    });
+  // Configs from before discovery tiles lived in homepage JSON.
+  if (!Array.isArray(raw.discoveryTiles)) {
+    base.discoveryTiles = defaultHomepageDiscoveryTiles();
   }
 
-  return { ...(value as Record<string, unknown>), sections };
+  return base;
 }
 
 /** Constrained homepage JSON — known fields only, no HTML blobs. */
@@ -128,12 +153,27 @@ export function parseHomepageConfig(value: unknown): HomepageConfigDto {
     throw new BadRequestException('sections[].id must be unique');
   }
 
+  const tileIds = result.data.discoveryTiles.map((tile) => tile.id);
+  if (new Set(tileIds).size !== tileIds.length) {
+    throw new BadRequestException('discoveryTiles[].id must be unique');
+  }
+
   const sections: HomepageSectionDto[] = result.data.sections.map((section) => ({
     id: section.id,
     kind: section.kind,
     enabled: section.enabled,
     heading: section.heading,
     sortOrder: section.sortOrder,
+  }));
+
+  const discoveryTiles: HomepageDiscoveryTileDto[] = result.data.discoveryTiles.map((tile) => ({
+    id: tile.id,
+    label: tile.label,
+    href: tile.href,
+    imageUrl: tile.imageUrl,
+    imageAlt: tile.imageAlt,
+    enabled: tile.enabled,
+    sortOrder: tile.sortOrder,
   }));
 
   return {
@@ -145,6 +185,9 @@ export function parseHomepageConfig(value: unknown): HomepageConfigDto {
       ctaHref: result.data.hero.ctaHref,
     },
     sections: [...sections].sort((a, b) => a.sortOrder - b.sortOrder || a.id.localeCompare(b.id)),
+    discoveryTiles: [...discoveryTiles].sort(
+      (a, b) => a.sortOrder - b.sortOrder || a.id.localeCompare(b.id),
+    ),
   };
 }
 
@@ -154,6 +197,7 @@ export class HomepageConfigService {
     private readonly prisma: PrismaService,
     private readonly audit: AuditService,
     private readonly appConfig: AppConfigService,
+    private readonly revalidate: StorefrontRevalidateService,
   ) {}
 
   async getPublic(): Promise<HomepageConfigDto> {
@@ -178,6 +222,7 @@ export class HomepageConfigService {
     const config = parseHomepageConfig({
       hero: input.hero,
       sections: input.sections,
+      discoveryTiles: input.discoveryTiles,
     });
 
     await this.prisma.client.$transaction(async (tx) => {
@@ -201,6 +246,8 @@ export class HomepageConfigService {
           metadata: {
             sectionCount: config.sections.length,
             sectionIds: config.sections.map((section) => section.id),
+            discoveryTileCount: config.discoveryTiles.length,
+            discoveryTileIds: config.discoveryTiles.map((tile) => tile.id),
           },
           requestId: actor.requestId,
           ipHash: hashIp(actor.ip, this.appConfig.sessionHmacSecret),
@@ -210,7 +257,10 @@ export class HomepageConfigService {
       );
     });
 
-    return this.getAdmin();
+    return this.getAdmin().then(async (dto) => {
+      await this.revalidate.ping({ tags: ['storefront', 'homepage'], paths: ['/'] });
+      return dto;
+    });
   }
 
   private async getOrCreate(): Promise<HomepageConfigRow> {

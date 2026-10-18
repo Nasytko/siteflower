@@ -338,23 +338,3 @@ export function getInstagramFeed() {
     tags: ['storefront', 'instagram'],
   });
 }
-
-/** Browser-side search with cancellation (relative rewrite). */
-export async function searchProductsBrowser(
-  query: string,
-  signal?: AbortSignal,
-): Promise<PaginatedResponse<ProductListItemDto>> {
-  const params = new URLSearchParams({
-    search: query,
-    pageSize: '12',
-    sort: 'recommended',
-  });
-  const response = await fetch(`/api/v1/catalog/products?${params.toString()}`, {
-    signal,
-    headers: { Accept: 'application/json' },
-  });
-  if (!response.ok) {
-    throw new PublicApiError('Search failed', response.status);
-  }
-  return (await response.json()) as PaginatedResponse<ProductListItemDto>;
-}
