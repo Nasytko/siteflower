@@ -108,6 +108,25 @@ describe('validatePublishRequirements', () => {
     });
     expect(issues.map((issue) => issue.code)).toEqual(['PRICE_REQUIRED']);
   });
+
+  it('requires composition for floral kinds when flag set', () => {
+    const issues = validatePublishRequirements({
+      ...publishReady,
+      requiresComposition: true,
+      hasCompositionFlowerItem: false,
+    });
+    expect(issues.map((issue) => issue.code)).toEqual(['COMPOSITION_REQUIRED']);
+  });
+
+  it('allows gift publish without composition', () => {
+    expect(
+      validatePublishRequirements({
+        ...publishReady,
+        requiresComposition: false,
+        hasCompositionFlowerItem: false,
+      }),
+    ).toEqual([]);
+  });
 });
 
 describe('wouldCreateRedirectLoop', () => {

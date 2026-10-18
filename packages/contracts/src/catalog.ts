@@ -40,6 +40,105 @@ export type CompositionKind = (typeof COMPOSITION_KINDS)[number];
 export const COMPOSITION_PRECISIONS = ['EXACT', 'APPROXIMATE', 'UNKNOWN'] as const;
 export type CompositionPrecision = (typeof COMPOSITION_PRECISIONS)[number];
 
+/** What is sold — drives admin editor (composition required or not). */
+export const PRODUCT_KINDS = [
+  'BOUQUET',
+  'COMPOSITION',
+  'STEM',
+  'PLANT',
+  'GIFT',
+  'OTHER',
+] as const;
+export type ProductKind = (typeof PRODUCT_KINDS)[number];
+
+export function isProductKind(value: string): value is ProductKind {
+  return (PRODUCT_KINDS as readonly string[]).includes(value);
+}
+
+/** Floral kinds that use the composition editor. */
+export function productKindNeedsComposition(kind: ProductKind | null | undefined): boolean {
+  return kind === 'BOUQUET' || kind === 'COMPOSITION' || kind === 'STEM';
+}
+
+/**
+ * Mono/mixed are bouquet/composition classifications only.
+ * STEM (поштучно), plants, gifts must never store or filter as mono bouquets.
+ */
+export function productKindUsesBouquetCompositionKind(
+  kind: ProductKind | null | undefined,
+): boolean {
+  return kind === 'BOUQUET' || kind === 'COMPOSITION';
+}
+
+/** Persistable compositionKind from derived rows + product kind. */
+export function resolveStoredCompositionKind(
+  productKind: ProductKind | null | undefined,
+  derived: CompositionKind,
+): CompositionKind {
+  if (!productKindUsesBouquetCompositionKind(productKind)) return 'UNKNOWN';
+  return derived;
+}
+
+/** Suggest CatalogCategory.listingKind when manager picks a product kind. */
+export function suggestedListingKindForProductKind(
+  kind: ProductKind,
+): CatalogListingKind {
+  switch (kind) {
+    case 'BOUQUET':
+      return 'BOUQUETS';
+    case 'COMPOSITION':
+      return 'COMPOSITIONS';
+    case 'STEM':
+      return 'FLOWERS';
+    case 'GIFT':
+      return 'GIFTS';
+    default:
+      return 'OTHER';
+  }
+}
+
+/** Compact storefront/admin summary line when classification is reliable. */
+export function formatCompositionSummaryLine(input: {
+  kind: CompositionKind;
+  typeNames: string[];
+  colorNames?: string[];
+  productKind?: ProductKind | null;
+}): string | null {
+  if (!productKindUsesBouquetCompositionKind(input.productKind ?? 'BOUQUET')) {
+    const types =
+      input.typeNames.length === 0
+        ? null
+        : input.typeNames.length === 1
+          ? input.typeNames[0]!
+          : `${input.typeNames.length} вида`;
+    const colors = input.colorNames?.filter(Boolean) ?? [];
+    const palette =
+      colors.length === 0
+        ? null
+        : colors.length === 1
+          ? `${colors[0]} гамма`
+          : 'Разноцветный';
+    const line = [types, palette].filter(Boolean).join(' · ');
+    return line || null;
+  }
+  if (input.kind === 'UNKNOWN') return null;
+  const kindLabel = input.kind === 'MONO' ? 'Монобукет' : 'Смешанный букет';
+  const types =
+    input.typeNames.length === 0
+      ? null
+      : input.typeNames.length === 1
+        ? input.typeNames[0]!
+        : `${input.typeNames.length} вида`;
+  const colors = input.colorNames?.filter(Boolean) ?? [];
+  const palette =
+    colors.length === 0
+      ? null
+      : colors.length === 1
+        ? `${colors[0]} гамма`
+        : 'Разноцветный';
+  return [kindLabel, types, palette].filter(Boolean).join(' · ');
+}
+
 export const SEO_LANDING_STATUSES = ['DRAFT', 'PUBLISHED', 'ARCHIVED'] as const;
 export type SeoLandingStatus = (typeof SEO_LANDING_STATUSES)[number];
 
@@ -749,6 +848,7 @@ export function deriveProductEditorReadiness(input: {
   name: string;
   slug?: string | null;
   catalogCategoryId: string | null;
+  productKind?: ProductKind | null;
   variants: Array<{ status: string; priceMajor: string | null | undefined }>;
   hasPrimaryImage: boolean;
   shortDescription: string | null | undefined;
@@ -758,7 +858,10 @@ export function deriveProductEditorReadiness(input: {
   items: ProductEditorReadinessItem[];
   readyToPublish: boolean;
   blockingLabels: string[];
+  /** Issues that block publish — empty when ready. */
+  issues: Array<{ id: string; label: string }>;
 } {
+  const needsComposition = productKindNeedsComposition(input.productKind ?? 'BOUQUET');
   const nameOk = input.name.trim().length > 0;
   const slugOk = (input.slug ?? '').trim().length >= 2;
   const categoryOk = Boolean(input.catalogCategoryId);
@@ -769,7 +872,7 @@ export function deriveProductEditorReadiness(input: {
   const photoOk = input.hasPrimaryImage;
   const shortOk = Boolean(input.shortDescription?.trim());
   const longOk = Boolean(input.description?.trim());
-  const compositionOk = input.compositionHasFlowerItem;
+  const compositionOk = !needsComposition || input.compositionHasFlowerItem;
 
   const items: ProductEditorReadinessItem[] = [
     { id: 'name', label: 'Название', ok: nameOk, requiredForPublish: true },
@@ -779,16 +882,22 @@ export function deriveProductEditorReadiness(input: {
     { id: 'price', label: 'Цена', ok: priceOk, requiredForPublish: true },
     { id: 'photo', label: 'Основное фото', ok: photoOk, requiredForPublish: true },
     { id: 'category', label: 'Категория', ok: categoryOk, requiredForPublish: false },
-    { id: 'composition', label: 'Состав', ok: compositionOk, requiredForPublish: false },
+    {
+      id: 'composition',
+      label: needsComposition ? 'Состав' : 'Состав (не нужен)',
+      ok: compositionOk,
+      requiredForPublish: needsComposition,
+    },
   ];
 
-  const blockingLabels = items
+  const issues = items
     .filter((item) => item.requiredForPublish && !item.ok)
-    .map((item) => item.label.toLowerCase());
+    .map((item) => ({ id: item.id, label: item.label }));
 
-  const readyToPublish = blockingLabels.length === 0;
+  const blockingLabels = issues.map((item) => item.label.toLowerCase());
+  const readyToPublish = issues.length === 0;
 
-  return { items, readyToPublish, blockingLabels };
+  return { items, readyToPublish, blockingLabels, issues };
 }
 
 export type ProductFamilyMemberDto = {
@@ -1060,7 +1169,9 @@ export type ProductAdminDto = {
   lifecycle: ProductLifecycle;
   availability: CommercialAvailability;
   heightCm: number | null;
+  /** @deprecated Not shown in admin; retained for API compatibility. */
   diameterCm: number | null;
+  productKind: ProductKind;
   compositionKind: CompositionKind;
   compositionPrecision: CompositionPrecision;
   catalogCategoryId: string | null;
@@ -1098,7 +1209,7 @@ export type ProductPublicDto = {
   description: string | null;
   availability: CommercialAvailability;
   heightCm: number | null;
-  diameterCm: number | null;
+  productKind: ProductKind;
   compositionKind: CompositionKind;
   catalogCategory: TaxonomyRefDto | null;
   /** Other sellable products in the same family (human UX: «Другие варианты»). */

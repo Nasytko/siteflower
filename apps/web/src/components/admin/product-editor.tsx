@@ -9,13 +9,13 @@ import {
   defaultProductSeoTitle,
   formatPriceFromMinor,
   normalizeSlug,
-  deriveCompositionKind,
   deriveProductEditorReadiness,
   parsePositivePriceMajor,
+  productKindNeedsComposition,
   type ComponentUnit,
-  type CommercialAvailability,
   type CompositionPrecision,
   type ProductAdminDto,
+  type ProductKind,
   type PromotionType,
   DEFAULT_PRODUCT_VARIANT_NAME,
 } from '@bouquet-one/contracts';
@@ -57,7 +57,6 @@ import {
 import { ProductReadinessPanel } from '@/components/admin/product-readiness-panel';
 import { ProductEditorMainTab } from '@/components/admin/product-editor-main-tab';
 import { ProductEditorCompositionTab } from '@/components/admin/product-editor-composition-tab';
-import { ProductEditorMatchingTab } from '@/components/admin/product-editor-matching-tab';
 import { ProductEditorExtraTab } from '@/components/admin/product-editor-extra-tab';
 import {
   emptyComponentDraft,
@@ -84,17 +83,28 @@ type Props = {
   };
   bestsellerGroups: PickerOption[];
   canUpdate: boolean;
+  canCreate: boolean;
   canPublish: boolean;
 };
 
-type SectionId = 'main' | 'composition' | 'matching' | 'extra' | 'photos';
+type SectionId = 'main' | 'composition' | 'extra' | 'photos';
 
 const SECTIONS: Array<[Exclude<SectionId, 'photos'>, string]> = [
   ['main', 'Основное'],
   ['composition', 'Состав'],
-  ['matching', 'Подбор'],
   ['extra', 'Дополнительно'],
 ];
+
+const READINESS_SECTION: Record<string, SectionId> = {
+  name: 'main',
+  shortDescription: 'main',
+  description: 'main',
+  price: 'main',
+  category: 'main',
+  photo: 'photos',
+  composition: 'composition',
+  slug: 'extra',
+};
 
 type PromotionDraft = {
   enabled: boolean;
@@ -128,10 +138,14 @@ export function ProductEditor({
   options,
   bestsellerGroups,
   canUpdate,
+  canCreate,
   canPublish,
 }: Props) {
   const router = useRouter();
-  const [section, setSection] = useState<SectionId>(justCreated ? 'composition' : 'main');
+  const initialKind: ProductKind = product.productKind ?? 'BOUQUET';
+  const [section, setSection] = useState<SectionId>(() =>
+    justCreated && productKindNeedsComposition(initialKind) ? 'composition' : 'main',
+  );
   const [server, setServer] = useState(product);
   const [version, setVersion] = useState(product.version);
   const [dirty, setDirty] = useState(false);
@@ -164,12 +178,17 @@ export function ProductEditor({
     shortDescription: product.shortDescription ?? '',
     description: product.description ?? '',
     heightCm: product.heightCm === null ? '' : String(product.heightCm),
-    diameterCm: product.diameterCm === null ? '' : String(product.diameterCm),
   });
+  const [productKind, setProductKindState] = useState<ProductKind>(initialKind);
   const [compositionPrecision, setCompositionPrecision] = useState<CompositionPrecision>(
     product.compositionPrecision ?? 'UNKNOWN',
   );
   const [catalogCategoryId, setCatalogCategoryId] = useState(product.catalogCategoryId ?? '');
+  const [taxonomyOptions, setTaxonomyOptions] = useState({
+    occasions: options.occasions,
+    recipients: options.recipients,
+    colors: options.colors,
+  });
   const [familyId, setFamilyId] = useState(product.family?.id ?? '');
   const [familyPanelOpen, setFamilyPanelOpen] = useState(
     () => Boolean(product.family?.id) || (product.family?.members?.length ?? 0) > 0,
@@ -186,6 +205,15 @@ export function ProductEditor({
   useEffect(() => {
     setFamilyOptions(options.families);
   }, [options.families]);
+
+  useEffect(() => {
+    setTaxonomyOptions({
+      occasions: options.occasions,
+      recipients: options.recipients,
+      colors: options.colors,
+    });
+  }, [options.occasions, options.recipients, options.colors]);
+
   const [variants, setVariants] = useState<VariantDraft[]>(() => toVariantDrafts(product));
   const [components, setComponents] = useState<ComponentDraft[]>(() => toComponentDrafts(product));
   const [discovery, setDiscovery] = useState({
@@ -193,6 +221,7 @@ export function ProductEditor({
     recipientIds: product.recipients.map((item) => item.id),
     colorIds: product.colors.map((item) => item.id),
   });
+  const needsComposition = productKindNeedsComposition(productKind);
   const [promotion, setPromotion] = useState<PromotionDraft>(() => toPromotionDraft(product));
   const [groupIds, setGroupIds] = useState<string[]>(product.bestsellerGroupIds);
   const [seo, setSeo] = useState({
@@ -229,8 +258,8 @@ export function ProductEditor({
       shortDescription: updated.shortDescription ?? '',
       description: updated.description ?? '',
       heightCm: updated.heightCm === null ? '' : String(updated.heightCm),
-      diameterCm: updated.diameterCm === null ? '' : String(updated.diameterCm),
     });
+    setProductKindState(updated.productKind ?? 'BOUQUET');
     setCompositionPrecision(updated.compositionPrecision ?? 'UNKNOWN');
     setCatalogCategoryId(updated.catalogCategoryId ?? '');
     setFamilyId(updated.family?.id ?? '');
@@ -274,23 +303,13 @@ export function ProductEditor({
   const activeVariants = variants.filter((variant) => variant.status === 'ACTIVE');
   const hasPrimaryImage = server.media.some((item) => item.isPrimary);
 
-  const derivedKind = useMemo(
-    () =>
-      deriveCompositionKind(
-        components.map((row) => ({
-          role: row.role,
-          typeName: row.typeName,
-        })),
-      ),
-    [components],
-  );
-
   const readiness = useMemo(
     () =>
       deriveProductEditorReadiness({
         name: basic.name,
         slug: basic.slug,
         catalogCategoryId: catalogCategoryId || null,
+        productKind,
         variants: variants.map((v) => ({ status: v.status, priceMajor: v.priceMajor })),
         hasPrimaryImage,
         shortDescription: basic.shortDescription,
@@ -303,11 +322,55 @@ export function ProductEditor({
       basic.shortDescription,
       basic.description,
       catalogCategoryId,
+      productKind,
       variants,
       hasPrimaryImage,
       components,
     ],
   );
+
+  function changeProductKind(next: ProductKind) {
+    if (next === productKind) return;
+    const leavingComposition =
+      productKindNeedsComposition(productKind) && !productKindNeedsComposition(next);
+    if (leavingComposition && components.length > 0) {
+      const ok = window.confirm(
+        'У этого типа товара нет состава. Очистить строки состава в редакторе?',
+      );
+      if (!ok) return;
+      setComponents([]);
+    }
+    setProductKindState(next);
+    if (!productKindNeedsComposition(next) && section === 'composition') {
+      setSection('main');
+    }
+    touch();
+  }
+
+  function jumpToReadinessIssue(issueId: string) {
+    const target = READINESS_SECTION[issueId] ?? 'main';
+    setSection(target);
+    window.requestAnimationFrame(() => {
+      const el = document.querySelector(`[data-section="${issueId}"]`);
+      if (el instanceof HTMLElement) {
+        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
+    });
+  }
+
+  function onTaxonomyCreated(
+    kind: 'occasions' | 'recipients' | 'colors',
+    item: PickerOption & { swatch?: string | null },
+  ) {
+    setTaxonomyOptions((prev) => {
+      const list = prev[kind];
+      if (list.some((row) => row.id === item.id)) return prev;
+      return {
+        ...prev,
+        [kind]: [...list, item].sort((a, b) => a.name.localeCompare(b.name, 'ru')),
+      };
+    });
+  }
 
   const [compositionSearch, setCompositionSearch] = useState('');
   const [compositionAddQty, setCompositionAddQty] = useState('1');
@@ -402,7 +465,7 @@ export function ProductEditor({
   function applySuggestedPalette(colorIds: string[]) {
     setDiscovery((prev) => ({ ...prev, colorIds }));
     touch();
-    setSection('matching');
+    setSection('main');
   }
 
   const familyMembers = useMemo(() => {
@@ -524,20 +587,22 @@ export function ProductEditor({
         return `Укажите цену больше нуля для «${variant.name || 'размера'}» (или очистите поле)`;
       }
     }
-    for (const component of components) {
-      if (component.displayName.trim().length === 0) {
-        return 'В составе есть строка без названия';
-      }
-      if (!component.flowerItemId) {
-        return `В составе «${component.displayName}» не выбран цветок из справочника`;
-      }
-    }
-    if (compositionPrecision === 'EXACT') {
+    if (needsComposition) {
       for (const component of components) {
-        if (component.role === 'PRIMARY') {
-          const qty = Number(component.quantity);
-          if (!Number.isInteger(qty) || qty < 1) {
-            return `При точном составе укажите количество ≥ 1 для «${component.displayName}»`;
+        if (component.displayName.trim().length === 0) {
+          return 'В составе есть строка без названия';
+        }
+        if (!component.flowerItemId) {
+          return `В составе «${component.displayName}» не выбран цветок из справочника`;
+        }
+      }
+      if (compositionPrecision === 'EXACT') {
+        for (const component of components) {
+          if (component.role === 'PRIMARY') {
+            const qty = Number(component.quantity);
+            if (!Number.isInteger(qty) || qty < 1) {
+              return `При точном составе укажите количество ≥ 1 для «${component.displayName}»`;
+            }
           }
         }
       }
@@ -607,7 +672,7 @@ export function ProductEditor({
         shortDescription: basic.shortDescription.trim() || null,
         description: basic.description.trim() || null,
         heightCm: basic.heightCm.trim().length > 0 ? Number(basic.heightCm) : null,
-        diameterCm: basic.diameterCm.trim().length > 0 ? Number(basic.diameterCm) : null,
+        productKind,
         compositionPrecision,
         availability: publication.availability,
         publishAt: fromDateTimeLocalValue(publication.publishAt),
@@ -630,15 +695,17 @@ export function ProductEditor({
                 : null,
           };
         }),
-        components: components.map((component, index) => ({
-          displayName: component.displayName.trim(),
-          quantity: component.quantity.trim().length > 0 ? Number(component.quantity) : null,
-          unit: component.unit,
-          flowerItemId: component.flowerItemId,
-          colorId: component.colorId || null,
-          role: component.role,
-          sortOrder: index,
-        })),
+        components: needsComposition
+          ? components.map((component, index) => ({
+              displayName: component.displayName.trim(),
+              quantity: component.quantity.trim().length > 0 ? Number(component.quantity) : null,
+              unit: component.unit,
+              flowerItemId: component.flowerItemId,
+              colorId: component.colorId || null,
+              role: component.role,
+              sortOrder: index,
+            }))
+          : [],
         occasionIds: discovery.occasionIds,
         recipientIds: discovery.recipientIds,
         colorIds: discovery.colorIds,
@@ -935,7 +1002,7 @@ export function ProductEditor({
         shortDescription: created.shortDescription,
         description: created.description,
         heightCm: created.heightCm,
-        diameterCm: created.diameterCm ?? null,
+        productKind: created.productKind ?? productKind,
         compositionPrecision: created.compositionPrecision ?? 'UNKNOWN',
         availability: created.availability,
         publishAt: null,
@@ -1154,7 +1221,7 @@ export function ProductEditor({
       {readOnlyNote}
 
       <div className="admin-seg admin-seg--wrap">
-        {SECTIONS.map(([id, label]) => (
+        {SECTIONS.filter(([id]) => id !== 'composition' || needsComposition).map(([id, label]) => (
           <button
             key={id}
             type="button"
@@ -1167,14 +1234,15 @@ export function ProductEditor({
       </div>
 
       <ProductReadinessPanel
-        items={readiness.items}
         readyToPublish={readiness.readyToPublish}
-        blockingLabels={readiness.blockingLabels}
+        issues={readiness.issues}
+        onJump={jumpToReadinessIssue}
       />
 
       {justCreated ? (
         <p className="text-sm text-[var(--admin-muted)]">
-          Черновик создан. Добавьте цветы, укажите цену и сохраните — затем фото и публикация.
+          Черновик создан. Укажите цену и сохраните — затем фото и публикация
+          {needsComposition ? '; состав — во вкладке «Состав»' : ''}.
         </p>
       ) : null}
 
@@ -1182,15 +1250,26 @@ export function ProductEditor({
         <ProductEditorMainTab
           server={server}
           canUpdate={canUpdate}
+          canCreate={canCreate}
           canPublish={canPublish}
           pending={pending}
+          productKind={productKind}
+          setProductKind={changeProductKind}
           basic={basic}
           setBasic={setBasic}
           slugManual={slugManual}
-          setSlugManual={setSlugManual}
           components={components}
           variants={variants}
           setVariants={setVariants}
+          catalogCategoryId={catalogCategoryId}
+          setCatalogCategoryId={setCatalogCategoryId}
+          categories={options.categories}
+          discovery={discovery}
+          setDiscovery={setDiscovery}
+          occasions={taxonomyOptions.occasions}
+          recipients={taxonomyOptions.recipients}
+          colors={taxonomyOptions.colors}
+          onTaxonomyCreated={onTaxonomyCreated}
           publication={publication}
           setPublication={setPublication}
           hasPrimaryImage={hasPrimaryImage}
@@ -1204,14 +1283,15 @@ export function ProductEditor({
         />
       ) : null}
 
-      {section === 'composition' ? (
+      {section === 'composition' && needsComposition ? (
         <ProductEditorCompositionTab
           canUpdate={canUpdate}
+          productKind={productKind}
           components={components}
           setComponents={setComponents}
           compositionPrecision={compositionPrecision}
           setCompositionPrecision={setCompositionPrecision}
-          colors={options.colors}
+          colors={taxonomyOptions.colors}
           compositionPickerOpen={compositionPickerOpen}
           setCompositionPickerOpen={setCompositionPickerOpen}
           compositionReplaceKey={compositionReplaceKey}
@@ -1230,21 +1310,6 @@ export function ProductEditor({
         />
       ) : null}
 
-      {section === 'matching' ? (
-        <ProductEditorMatchingTab
-          canUpdate={canUpdate}
-          components={components}
-          derivedKind={derivedKind}
-          discovery={discovery}
-          setDiscovery={setDiscovery}
-          occasions={options.occasions}
-          recipients={options.recipients}
-          colors={options.colors}
-          touch={touch}
-          toggleId={toggleId}
-        />
-      ) : null}
-
       {section === 'extra' ? (
         <ProductEditorExtraTab
           server={server}
@@ -1253,9 +1318,7 @@ export function ProductEditor({
           pending={pending}
           basic={basic}
           setBasic={setBasic}
-          catalogCategoryId={catalogCategoryId}
-          setCatalogCategoryId={setCatalogCategoryId}
-          categories={options.categories}
+          setSlugManual={setSlugManual}
           variants={variants}
           setVariants={setVariants}
           familyId={familyId}
@@ -1289,7 +1352,6 @@ export function ProductEditor({
           descriptionIsAutomatic={descriptionIsAutomatic}
           publication={publication}
           setPublication={setPublication}
-          readiness={readiness}
           fieldErrors={fieldErrors}
           onPublish={() => void runLifecycle('publish')}
           onUnpublish={() => void runLifecycle('unpublish')}
@@ -1301,7 +1363,7 @@ export function ProductEditor({
       ) : null}
 
       {section === 'photos' ? (
-        <section className="admin-section">
+        <section className="admin-section" data-section="photo">
           <div className="mb-4 flex flex-wrap items-center gap-3">
             <button type="button" className="admin-link text-sm" onClick={() => setSection('main')}>
               ← К основному

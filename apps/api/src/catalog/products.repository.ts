@@ -617,7 +617,13 @@ export function buildProductWhere(
 
   const compositionKinds = nonEmpty(filters.compositionKinds);
   if (compositionKinds) {
-    and.push({ compositionKind: { in: compositionKinds as Array<'MONO' | 'MIXED' | 'UNKNOWN'> } });
+    const kinds = compositionKinds as Array<'MONO' | 'MIXED' | 'UNKNOWN'>;
+    const bouquetOnly = kinds.some((k) => k === 'MONO' || k === 'MIXED');
+    and.push({ compositionKind: { in: kinds } });
+    // Mono/mixed apply only to bouquets & compositions — never STEM/gifts.
+    if (bouquetOnly) {
+      and.push({ productKind: { in: ['BOUQUET', 'COMPOSITION'] } });
+    }
   }
 
   if (

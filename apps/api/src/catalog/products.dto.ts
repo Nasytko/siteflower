@@ -23,6 +23,7 @@ import {
   COMPONENT_UNITS,
   COMPOSITION_KINDS,
   COMPOSITION_PRECISIONS,
+  PRODUCT_KINDS,
   PRODUCT_LIFECYCLES,
   PRODUCT_SORTS,
   PROMOTION_TYPES,
@@ -32,6 +33,7 @@ import {
   type ComponentUnit,
   type CompositionKind,
   type CompositionPrecision,
+  type ProductKind,
   type ProductLifecycle,
   type ProductSort,
   type PromotionType,
@@ -168,6 +170,11 @@ export class SaveProductEditorDto extends ExpectedVersionDto {
   @Max(250)
   heightCm?: number | null;
 
+  @IsOptional()
+  @IsIn(PRODUCT_KINDS)
+  productKind?: ProductKind;
+
+  /** @deprecated Ignored by editor; retained for API compatibility. */
   @IsOptional()
   @Transform(({ value }) => {
     if (value === '' || value === null) return null;

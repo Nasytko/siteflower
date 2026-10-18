@@ -2,18 +2,15 @@
 
 import {
   COMPONENT_ROLES,
-  COMPOSITION_PRECISIONS,
   deriveCompositionKind,
-  deriveCompositionManagerSummary,
+  formatCompositionSummaryLine,
+  productKindUsesBouquetCompositionKind,
   suggestVisualPaletteColorIds,
   type ComponentRole,
   type CompositionPrecision,
+  type ProductKind,
 } from '@bouquet-one/contracts';
-import {
-  componentRoleLabel,
-  compositionKindLabel,
-  compositionPrecisionLabel,
-} from '@/lib/admin-labels';
+import { componentRoleLabel } from '@/lib/admin-labels';
 import {
   emptyComponentDraft,
   type ComponentDraft,
@@ -25,6 +22,7 @@ type ColorOption = PickerOption & { swatch?: string | null };
 
 type Props = {
   canUpdate: boolean;
+  productKind: ProductKind;
   components: ComponentDraft[];
   setComponents: React.Dispatch<React.SetStateAction<ComponentDraft[]>>;
   compositionPrecision: CompositionPrecision;
@@ -50,6 +48,7 @@ type Props = {
 export function ProductEditorCompositionTab(props: Props) {
   const {
     canUpdate,
+    productKind,
     components,
     setComponents,
     compositionPrecision,
@@ -78,10 +77,24 @@ export function ProductEditorCompositionTab(props: Props) {
       typeName: row.typeName,
     })),
   );
-  const compositionSummary = deriveCompositionManagerSummary(components);
+  const typeNames = [
+    ...new Set(components.map((row) => row.typeName.trim()).filter(Boolean)),
+  ];
+  const colorNames = [
+    ...new Set(components.map((row) => row.colorName.trim()).filter(Boolean)),
+  ];
+  const summaryLine = formatCompositionSummaryLine({
+    kind: derivedKind,
+    typeNames,
+    colorNames,
+    productKind,
+  });
   const suggestedPaletteIds = suggestVisualPaletteColorIds(
     components.map((row) => ({ role: row.role, colorId: row.colorId || null })),
   );
+  const replacementsAllowed = compositionPrecision === 'APPROXIMATE';
+  const showBouquetRoles = productKindUsesBouquetCompositionKind(productKind);
+  const isStem = productKind === 'STEM';
 
   function updateRow(index: number, patch: Partial<ComponentDraft>) {
     setComponents((prev) => prev.map((item, i) => (i === index ? { ...item, ...patch } : item)));
@@ -104,39 +117,34 @@ export function ProductEditorCompositionTab(props: Props) {
   }
 
   return (
-    <section className="admin-section space-y-6">
+    <section className="admin-section space-y-6" data-section="composition">
       <div>
         <h2 className="admin-section__title">Состав</h2>
         <p className="admin-section__lead">
-          Строки цветов с цветом, количеством и ролью. Вид состава считается автоматически.
+          {isStem
+            ? 'Вид, сорт и цвет для продажи поштучно.'
+            : 'Цветы из справочника: количество, роль и цвет.'}
         </p>
       </div>
 
-      <div className="flex flex-wrap items-end gap-4">
-        <label className="admin-field max-w-xs">
-          <span>Точность состава</span>
-          <select
-            className="admin-select"
-            value={compositionPrecision}
+      {summaryLine ? (
+        <p className="text-sm text-[var(--admin-muted)]">{summaryLine}</p>
+      ) : null}
+
+      {showBouquetRoles ? (
+        <label className="admin-check">
+          <input
+            type="checkbox"
             disabled={!canUpdate}
+            checked={replacementsAllowed}
             onChange={(event) => {
-              setCompositionPrecision(event.target.value as CompositionPrecision);
+              setCompositionPrecision(event.target.checked ? 'APPROXIMATE' : 'EXACT');
               touch();
             }}
-          >
-            {COMPOSITION_PRECISIONS.map((value) => (
-              <option key={value} value={value}>
-                {compositionPrecisionLabel(value)}
-              </option>
-            ))}
-          </select>
+          />
+          Допускается замена цветов
         </label>
-        <p className="text-sm">
-          <span className="text-[var(--admin-muted)]">Вид состава: </span>
-          <strong>{compositionKindLabel(derivedKind)}</strong>
-          <span className="admin-field__hint ml-2">(по основным позициям)</span>
-        </p>
-      </div>
+      ) : null}
 
       <ul className="space-y-3">
         {components.length === 0 ? (
@@ -189,7 +197,7 @@ export function ProductEditorCompositionTab(props: Props) {
 
               <div className="grid gap-3 sm:grid-cols-3">
                 <label className="admin-field">
-                  <span>Цвет в букете</span>
+                  <span>{isStem ? 'Цвет' : 'Цвет в букете'}</span>
                   <select
                     className="admin-select"
                     value={component.colorId}
@@ -222,23 +230,25 @@ export function ProductEditorCompositionTab(props: Props) {
                     <span className="text-sm text-[var(--admin-muted)]">шт.</span>
                   </div>
                 </label>
-                <label className="admin-field">
-                  <span>Роль</span>
-                  <select
-                    className="admin-select"
-                    value={component.role}
-                    disabled={!canUpdate}
-                    onChange={(event) =>
-                      updateRow(index, { role: event.target.value as ComponentRole })
-                    }
-                  >
-                    {COMPONENT_ROLES.map((role) => (
-                      <option key={role} value={role}>
-                        {componentRoleLabel(role)}
-                      </option>
-                    ))}
-                  </select>
-                </label>
+                {showBouquetRoles ? (
+                  <label className="admin-field">
+                    <span>Роль</span>
+                    <select
+                      className="admin-select"
+                      value={component.role}
+                      disabled={!canUpdate}
+                      onChange={(event) =>
+                        updateRow(index, { role: event.target.value as ComponentRole })
+                      }
+                    >
+                      {COMPONENT_ROLES.map((role) => (
+                        <option key={role} value={role}>
+                          {componentRoleLabel(role)}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                ) : null}
               </div>
             </li>
           ))
@@ -345,38 +355,8 @@ export function ProductEditorCompositionTab(props: Props) {
           </button>
           <span className="admin-field__hint">
             {suggestedPaletteIds.length}{' '}
-            {suggestedPaletteIds.length === 1 ? 'цвет' : 'цвета'} → вкладка «Подбор»
+            {suggestedPaletteIds.length === 1 ? 'цвет' : 'цвета'} → вкладка «Основное»
           </span>
-        </div>
-      ) : null}
-
-      {compositionSummary.flowerTypes.length > 0 ? (
-        <div className="rounded-lg bg-[var(--admin-surface-muted,rgba(0,0,0,0.03))] p-3 text-sm">
-          <p className="font-medium">Из состава система знает</p>
-          <dl className="mt-2 grid gap-1 sm:grid-cols-2">
-            <div>
-              <dt className="text-[var(--admin-muted)]">Цветы</dt>
-              <dd>{compositionSummary.flowerTypes.join(' · ')}</dd>
-            </div>
-            {compositionSummary.varieties.length > 0 ? (
-              <div>
-                <dt className="text-[var(--admin-muted)]">Сорта</dt>
-                <dd>{compositionSummary.varieties.join(' · ')}</dd>
-              </div>
-            ) : null}
-            {compositionSummary.origins.length > 0 ? (
-              <div>
-                <dt className="text-[var(--admin-muted)]">Происхождение</dt>
-                <dd>{compositionSummary.origins.join(' · ')}</dd>
-              </div>
-            ) : null}
-            {compositionSummary.stemLengthLabel ? (
-              <div>
-                <dt className="text-[var(--admin-muted)]">Высота стеблей</dt>
-                <dd>{compositionSummary.stemLengthLabel}</dd>
-              </div>
-            ) : null}
-          </dl>
         </div>
       ) : null}
     </section>

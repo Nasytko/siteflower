@@ -10,9 +10,12 @@ import {
   heightBandWhere,
   isHeightBandId,
   normalizeSlug,
+  productKindNeedsComposition,
+  resolveStoredCompositionKind,
   type CompositionPrecision,
   type PaginatedResponse,
   type ProductAdminDto,
+  type ProductKind,
   type ProductListItemDto,
   type ProductPublicDto,
   type PublishValidationIssue,
@@ -391,15 +394,23 @@ export class ProductsService {
           })),
           tx,
         );
-        await tx.product.update({
-          where: { id: product.id },
-          data: {
-            compositionKind: source.compositionKind,
-            compositionPrecision: source.compositionPrecision,
-            diameterCm: source.diameterCm,
-          },
-        });
       }
+
+      await tx.product.update({
+        where: { id: product.id },
+        data: {
+          productKind: source.productKind,
+          compositionKind: resolveStoredCompositionKind(
+            source.productKind,
+            source.compositionKind,
+          ),
+          compositionPrecision: productKindNeedsComposition(source.productKind)
+            ? source.compositionPrecision
+            : 'UNKNOWN',
+          // diameterCm: copy for data continuity until column drop migration.
+          diameterCm: source.diameterCm,
+        },
+      });
 
       await this.products.replaceOccasions(
         product.id,
@@ -554,11 +565,15 @@ export class ProductsService {
     const previousFlowerItemIds = new Set(
       product.components.map((component) => component.flowerItemId),
     );
-    const normalizedComposition = await this.normalizeCompositionComponents(input.components, {
+    const nextKind: ProductKind = input.productKind ?? product.productKind;
+    const needsComposition = productKindNeedsComposition(nextKind);
+    const componentsForSave = needsComposition ? input.components : [];
+    const normalizedComposition = await this.normalizeCompositionComponents(componentsForSave, {
       previouslyAssignedFlowerItemIds: previousFlowerItemIds,
-      compositionPrecision:
-        input.compositionPrecision ??
-        (input.components.length === 0 ? 'UNKNOWN' : product.compositionPrecision),
+      compositionPrecision: needsComposition
+        ? (input.compositionPrecision ??
+          (componentsForSave.length === 0 ? 'UNKNOWN' : product.compositionPrecision))
+        : 'UNKNOWN',
     });
 
     await this.prisma.client.$transaction(async (tx) => {
@@ -569,9 +584,15 @@ export class ProductsService {
         description: trimmedOrNull(input.description ?? null),
         availability: input.availability,
         bouquetHeightCm: input.heightCm === undefined ? product.bouquetHeightCm : input.heightCm,
-        diameterCm: input.diameterCm === undefined ? product.diameterCm : input.diameterCm,
-        compositionKind: normalizedComposition.compositionKind,
-        compositionPrecision: normalizedComposition.compositionPrecision,
+        productKind: nextKind,
+        // diameterCm intentionally not updated from editor (deprecated UI field).
+        compositionKind: resolveStoredCompositionKind(
+          nextKind,
+          needsComposition ? normalizedComposition.compositionKind : 'UNKNOWN',
+        ),
+        compositionPrecision: needsComposition
+          ? normalizedComposition.compositionPrecision
+          : 'UNKNOWN',
         seoTitle: trimmedOrNull(input.seoTitle ?? null),
         seoDescription: trimmedOrNull(input.seoDescription ?? null),
         noIndex: input.noIndex,
@@ -726,17 +747,21 @@ export class ProductsService {
     const normalizedComposition = await this.normalizeCompositionComponents(input.components, {
       previouslyAssignedFlowerItemIds: previousFlowerItemIds,
     });
+    const compositionKind = resolveStoredCompositionKind(
+      product.productKind,
+      normalizedComposition.compositionKind,
+    );
 
     await this.prisma.client.$transaction(async (tx) => {
       await this.guardVersion(tx, id, input.expectedVersion, {
-        compositionKind: normalizedComposition.compositionKind,
+        compositionKind,
         compositionPrecision: normalizedComposition.compositionPrecision,
       });
       await this.products.replaceComponents(id, normalizedComposition.rows, tx);
       await this.recordAudit(tx, actor, 'PRODUCT_UPDATED', id, {
         components: normalizedComposition.rows.length,
         flowerItems: normalizedComposition.rows.length,
-        compositionKind: normalizedComposition.compositionKind,
+        compositionKind,
       });
     });
 
@@ -804,6 +829,8 @@ export class ProductsService {
       description: product.description,
       variants: product.variants,
       hasPrimaryImage: product.media.some((media) => media.isPrimary),
+      requiresComposition: productKindNeedsComposition(product.productKind),
+      hasCompositionFlowerItem: product.components.some((row) => Boolean(row.flowerItemId)),
     });
     if (issues.length > 0) {
       throw publishValidationException(issues);

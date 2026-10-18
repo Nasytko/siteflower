@@ -46,6 +46,9 @@ export function validatePublishRequirements(input: {
   description: string | null;
   variants: Array<{ status: string; priceMinor: bigint }>;
   hasPrimaryImage: boolean;
+  /** When true (bouquet/composition/stem), at least one FlowerItem line is required. */
+  requiresComposition?: boolean;
+  hasCompositionFlowerItem?: boolean;
 }): PublishValidationIssue[] {
   const issues: PublishValidationIssue[] = [];
   if (!input.name.trim()) {
@@ -81,6 +84,13 @@ export function validatePublishRequirements(input: {
       code: 'PRIMARY_IMAGE_REQUIRED',
       message: 'Primary image is required to publish',
       field: 'media',
+    });
+  }
+  if (input.requiresComposition && !input.hasCompositionFlowerItem) {
+    issues.push({
+      code: 'COMPOSITION_REQUIRED',
+      message: 'Composition with at least one flower is required to publish',
+      field: 'components',
     });
   }
   return issues;

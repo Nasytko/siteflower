@@ -36,11 +36,14 @@ describe('buildProductWhere composition facets', () => {
     );
   });
 
-  it('filters compositionKind mono', () => {
+  it('filters compositionKind mono only for bouquet/composition kinds', () => {
     const where = buildProductWhere({ compositionKinds: ['MONO'] });
     const and = (where.AND ?? []) as Array<Record<string, unknown>>;
     expect(and).toEqual(
-      expect.arrayContaining([{ compositionKind: { in: ['MONO'] } }]),
+      expect.arrayContaining([
+        { compositionKind: { in: ['MONO'] } },
+        { productKind: { in: ['BOUQUET', 'COMPOSITION'] } },
+      ]),
     );
   });
 

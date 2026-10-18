@@ -178,10 +178,21 @@ enum CompositionKind {
 }
 
 /// How precise the composition quantities are for filters/SEO.
+/// EXACT = fixed composition; APPROXIMATE = substitutions allowed.
 enum CompositionPrecision {
   EXACT
   APPROXIMATE
   UNKNOWN
+}
+
+/// Sellable product shape — drives editor UI (composition required or not).
+enum ProductKind {
+  BOUQUET
+  COMPOSITION
+  STEM
+  PLANT
+  GIFT
+  OTHER
 }
 
 enum SlugEntityType {
@@ -551,10 +562,12 @@ model Product {
   description      String?                 @db.Text
   /// Bouquet/card height for ruler. Stem length lives on FlowerItem.stemLengthCm.
   bouquetHeightCm  Int?                    @map("height_cm")
-  /// Optional bouquet diameter in cm (not stem length).
+  /// Deprecated — kept for data safety; removed from admin UI.
   diameterCm       Int?                    @map("diameter_cm")
   catalogCategoryId String?                @map("catalog_category_id") @db.Uuid
-  /// Cached from PRIMARY composition lines on save.
+  /// What is sold — drives editor (composition vs gift/plant form).
+  productKind      ProductKind             @default(BOUQUET) @map("product_kind")
+  /// Cached from PRIMARY composition lines on save (UNKNOWN for non-floral kinds).
   compositionKind  CompositionKind         @default(UNKNOWN) @map("composition_kind")
   compositionPrecision CompositionPrecision @default(UNKNOWN) @map("composition_precision")
   lifecycle        ProductLifecycle        @default(DRAFT)
@@ -588,6 +601,7 @@ model Product {
   @@index([catalogCategoryId, lifecycle])
   @@index([bouquetHeightCm, lifecycle])
   @@index([compositionKind, lifecycle])
+  @@index([productKind, lifecycle])
   @@index([updatedAt(sort: Desc)])
   @@map("products")
 }

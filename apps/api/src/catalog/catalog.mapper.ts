@@ -333,6 +333,7 @@ export function toProductAdminDto(
     availability: product.availability,
     heightCm: product.bouquetHeightCm ?? null,
     diameterCm: product.diameterCm ?? null,
+    productKind: product.productKind,
     compositionKind: product.compositionKind,
     compositionPrecision: product.compositionPrecision,
     catalogCategoryId: product.catalogCategoryId,
@@ -413,7 +414,7 @@ export function toProductPublicDto(
     description: product.description,
     availability: product.availability,
     heightCm: product.bouquetHeightCm ?? null,
-    diameterCm: product.diameterCm ?? null,
+    productKind: product.productKind,
     compositionKind: product.compositionKind,
     catalogCategory: product.catalogCategory ? toTaxonomyRef(product.catalogCategory) : null,
     family: resolvedFamily

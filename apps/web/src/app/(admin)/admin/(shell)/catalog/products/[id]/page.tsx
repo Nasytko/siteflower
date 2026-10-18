@@ -76,6 +76,7 @@ export default async function AdminProductEditPage({ params, searchParams }: Pro
           .filter((group) => group.active)
           .map((group) => ({ id: group.id, name: group.name }))}
         canUpdate={roleHasPermission(me.user.role, 'CATALOG_UPDATE')}
+        canCreate={roleHasPermission(me.user.role, 'CATALOG_CREATE')}
         canPublish={roleHasPermission(me.user.role, 'CATALOG_PUBLISH')}
       />
     </main>

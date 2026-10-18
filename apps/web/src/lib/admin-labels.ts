@@ -9,6 +9,7 @@ import type {
   ComponentUnit,
   CompositionKind,
   CompositionPrecision,
+  ProductKind,
   ProductLifecycle,
   PromotionType,
   TaxonomyVisibility,
@@ -64,9 +65,18 @@ const COMPOSITION_KIND: Record<CompositionKind, string> = {
 };
 
 const COMPOSITION_PRECISION: Record<CompositionPrecision, string> = {
-  EXACT: 'Точный состав',
-  APPROXIMATE: 'Приблизительный',
-  UNKNOWN: 'Не указана',
+  EXACT: 'Без замены цветов',
+  APPROXIMATE: 'Допускается замена цветов',
+  UNKNOWN: 'Не указано',
+};
+
+const PRODUCT_KIND: Record<ProductKind, string> = {
+  BOUQUET: 'Букет',
+  COMPOSITION: 'Композиция',
+  STEM: 'Цветок поштучно',
+  PLANT: 'Растение',
+  GIFT: 'Подарок',
+  OTHER: 'Другое',
 };
 
 const PROMOTION_TYPE: Record<PromotionType, string> = {
@@ -114,6 +124,15 @@ export function compositionKindLabel(value: CompositionKind): string {
 
 export function compositionPrecisionLabel(value: CompositionPrecision): string {
   return COMPOSITION_PRECISION[value] ?? value;
+}
+
+/** Toggle-friendly wording for flower substitution (APPROXIMATE vs EXACT). */
+export function flowerSubstitutionLabel(value: CompositionPrecision): string {
+  return compositionPrecisionLabel(value);
+}
+
+export function productKindLabel(value: ProductKind): string {
+  return PRODUCT_KIND[value] ?? value;
 }
 
 export function promotionTypeLabel(value: PromotionType): string {

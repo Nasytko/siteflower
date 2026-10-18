@@ -3,14 +3,17 @@
 import {
   COMMERCIAL_AVAILABILITIES,
   DEFAULT_PRODUCT_VARIANT_NAME,
+  PRODUCT_KINDS,
   normalizeSlug,
   suggestProductNameFromComposition,
   type CommercialAvailability,
   type ProductAdminDto,
+  type ProductKind,
 } from '@bouquet-one/contracts';
-import { availabilityLabel, lifecycleLabel } from '@/lib/admin-labels';
+import { TaxonomyQuickPick } from '@/components/admin/taxonomy-quick-pick';
+import type { ComponentDraft, PickerOption, VariantDraft } from '@/components/admin/product-editor-shared';
+import { availabilityLabel, lifecycleLabel, productKindLabel } from '@/lib/admin-labels';
 import { availabilityChipClass, lifecycleChipClass } from '@/lib/admin-status';
-import type { ComponentDraft, VariantDraft } from '@/components/admin/product-editor-shared';
 
 export type {
   ComponentDraft,
@@ -18,18 +21,22 @@ export type {
   VariantDraft,
 } from '@/components/admin/product-editor-shared';
 
+type ColorOption = PickerOption & { swatch?: string | null };
+
 type Props = {
   server: ProductAdminDto;
   canUpdate: boolean;
+  canCreate: boolean;
   canPublish: boolean;
   pending: boolean;
+  productKind: ProductKind;
+  setProductKind: (value: ProductKind) => void;
   basic: {
     name: string;
     slug: string;
     shortDescription: string;
     description: string;
     heightCm: string;
-    diameterCm: string;
   };
   setBasic: React.Dispatch<
     React.SetStateAction<{
@@ -38,14 +45,34 @@ type Props = {
       shortDescription: string;
       description: string;
       heightCm: string;
-      diameterCm: string;
     }>
   >;
   slugManual: boolean;
-  setSlugManual: (value: boolean) => void;
   components: ComponentDraft[];
   variants: VariantDraft[];
   setVariants: React.Dispatch<React.SetStateAction<VariantDraft[]>>;
+  catalogCategoryId: string;
+  setCatalogCategoryId: (value: string) => void;
+  categories: PickerOption[];
+  discovery: {
+    occasionIds: string[];
+    recipientIds: string[];
+    colorIds: string[];
+  };
+  setDiscovery: React.Dispatch<
+    React.SetStateAction<{
+      occasionIds: string[];
+      recipientIds: string[];
+      colorIds: string[];
+    }>
+  >;
+  occasions: PickerOption[];
+  recipients: PickerOption[];
+  colors: ColorOption[];
+  onTaxonomyCreated: (
+    kind: 'occasions' | 'recipients' | 'colors',
+    item: ColorOption,
+  ) => void;
   publication: {
     availability: CommercialAvailability;
     publishAt: string;
@@ -72,15 +99,26 @@ export function ProductEditorMainTab(props: Props) {
   const {
     server,
     canUpdate,
+    canCreate,
     canPublish,
     pending,
+    productKind,
+    setProductKind,
     basic,
     setBasic,
     slugManual,
-    setSlugManual,
     components,
     variants,
     setVariants,
+    catalogCategoryId,
+    setCatalogCategoryId,
+    categories,
+    discovery,
+    setDiscovery,
+    occasions,
+    recipients,
+    colors,
+    onTaxonomyCreated,
     publication,
     setPublication,
     hasPrimaryImage,
@@ -110,12 +148,29 @@ export function ProductEditorMainTab(props: Props) {
       <div>
         <h2 className="admin-section__title">Основное</h2>
         <p className="admin-section__lead">
-          Название, цена и статус. Состав, подбор и расширенные настройки — в соседних вкладках.
+          Тип товара, название, цена, описание и подбор. Состав и расширенные настройки — в соседних
+          вкладках.
         </p>
       </div>
 
       <div className="grid max-w-2xl gap-4">
-        <label className="admin-field">
+        <label className="admin-field" data-section="productKind">
+          <span>Тип товара</span>
+          <select
+            className="admin-select"
+            value={productKind}
+            disabled={!canUpdate}
+            onChange={(event) => setProductKind(event.target.value as ProductKind)}
+          >
+            {PRODUCT_KINDS.map((value) => (
+              <option key={value} value={value}>
+                {productKindLabel(value)}
+              </option>
+            ))}
+          </select>
+        </label>
+
+        <label className="admin-field" data-section="name">
           <span>Название</span>
           <input
             className="admin-input"
@@ -155,22 +210,27 @@ export function ProductEditorMainTab(props: Props) {
           ) : null}
         </label>
 
-        <label className="admin-field">
-          <span>Адрес в ссылке</span>
-          <input
-            className="admin-input"
-            value={basic.slug}
+        <label className="admin-field" data-section="category">
+          <span>Категория</span>
+          <select
+            className="admin-select"
+            value={catalogCategoryId}
             disabled={!canUpdate}
             onChange={(event) => {
-              setSlugManual(true);
-              setBasic((prev) => ({ ...prev, slug: event.target.value }));
+              setCatalogCategoryId(event.target.value);
               touch();
             }}
-          />
-          <span className="admin-field__hint">/bukety/{basic.slug || '…'}</span>
+          >
+            <option value="">Не указана</option>
+            {categories.map((option) => (
+              <option key={option.id} value={option.id}>
+                {option.name}
+              </option>
+            ))}
+          </select>
         </label>
 
-        <div className="admin-subsection space-y-3">
+        <div className="admin-subsection space-y-3" data-section="price">
           <h3 className="admin-subsection__title">
             {multiSize ? 'Цена (несколько размеров)' : 'Цена товара'}
           </h3>
@@ -215,7 +275,7 @@ export function ProductEditorMainTab(props: Props) {
           ) : null}
         </div>
 
-        <div className="flex flex-wrap items-center gap-3 text-sm">
+        <div className="flex flex-wrap items-center gap-3 text-sm" data-section="photo">
           <span className="text-[var(--admin-muted)]">Фото:</span>
           {hasPrimaryImage ? (
             <span>
@@ -230,6 +290,77 @@ export function ProductEditorMainTab(props: Props) {
             {hasPrimaryImage ? 'Управление фото' : 'Добавить'}
           </button>
         </div>
+
+        <label className="admin-field" data-section="shortDescription">
+          <span>Короткое описание</span>
+          <textarea
+            className="admin-input"
+            rows={2}
+            value={basic.shortDescription}
+            disabled={!canUpdate}
+            onChange={(event) => {
+              setBasic((prev) => ({ ...prev, shortDescription: event.target.value }));
+              touch();
+            }}
+          />
+        </label>
+
+        <label className="admin-field" data-section="description">
+          <span>Полное описание</span>
+          <textarea
+            className="admin-input"
+            rows={5}
+            value={basic.description}
+            disabled={!canUpdate}
+            onChange={(event) => {
+              setBasic((prev) => ({ ...prev, description: event.target.value }));
+              touch();
+            }}
+          />
+        </label>
+
+        <div className="grid gap-4 lg:grid-cols-2">
+          <TaxonomyQuickPick
+            kind="occasions"
+            legend="Повод"
+            options={occasions}
+            selectedIds={discovery.occasionIds}
+            canCreate={canCreate}
+            canUpdate={canUpdate}
+            onChange={(ids) => {
+              setDiscovery((prev) => ({ ...prev, occasionIds: ids }));
+              touch();
+            }}
+            onCreated={(item) => onTaxonomyCreated('occasions', item)}
+          />
+          <TaxonomyQuickPick
+            kind="recipients"
+            legend="Кому"
+            options={recipients}
+            selectedIds={discovery.recipientIds}
+            canCreate={canCreate}
+            canUpdate={canUpdate}
+            onChange={(ids) => {
+              setDiscovery((prev) => ({ ...prev, recipientIds: ids }));
+              touch();
+            }}
+            onCreated={(item) => onTaxonomyCreated('recipients', item)}
+          />
+        </div>
+
+        <TaxonomyQuickPick
+          kind="colors"
+          legend="Цвета"
+          options={colors}
+          selectedIds={discovery.colorIds}
+          canCreate={canCreate}
+          canUpdate={canUpdate}
+          onChange={(ids) => {
+            setDiscovery((prev) => ({ ...prev, colorIds: ids }));
+            touch();
+          }}
+          onCreated={(item) => onTaxonomyCreated('colors', item)}
+        />
 
         <div className="admin-subsection space-y-3">
           <h3 className="admin-subsection__title">Статус</h3>
@@ -295,20 +426,6 @@ export function ProductEditorMainTab(props: Props) {
             )}
           </div>
         </div>
-
-        <label className="admin-field">
-          <span>Короткое описание</span>
-          <textarea
-            className="admin-input"
-            rows={2}
-            value={basic.shortDescription}
-            disabled={!canUpdate}
-            onChange={(event) => {
-              setBasic((prev) => ({ ...prev, shortDescription: event.target.value }));
-              touch();
-            }}
-          />
-        </label>
       </div>
     </section>
   );

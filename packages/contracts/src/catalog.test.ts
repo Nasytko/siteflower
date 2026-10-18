@@ -23,6 +23,8 @@ import {
   suggestProductNameFromComposition,
   deriveCompositionManagerSummary,
   deriveCompositionKind,
+  formatCompositionSummaryLine,
+  resolveStoredCompositionKind,
   suggestVisualPaletteColorIds,
   deriveProductEditorReadiness,
 } from './catalog.js';
@@ -105,6 +107,35 @@ test('deriveCompositionKind scenarios (mono / mixed / greenery / unknown)', () =
   // 6. Unknown / empty composition
   assert.equal(deriveCompositionKind([]), 'UNKNOWN');
   assert.equal(deriveCompositionKind([{ role: 'GREENERY', typeName: 'Эвкалипт' }]), 'UNKNOWN');
+});
+
+test('resolveStoredCompositionKind: STEM/gift never store mono', () => {
+  assert.equal(resolveStoredCompositionKind('BOUQUET', 'MONO'), 'MONO');
+  assert.equal(resolveStoredCompositionKind('COMPOSITION', 'MIXED'), 'MIXED');
+  assert.equal(resolveStoredCompositionKind('STEM', 'MONO'), 'UNKNOWN');
+  assert.equal(resolveStoredCompositionKind('GIFT', 'MIXED'), 'UNKNOWN');
+  assert.equal(resolveStoredCompositionKind('PLANT', 'MONO'), 'UNKNOWN');
+});
+
+test('formatCompositionSummaryLine hides mono label for STEM', () => {
+  assert.equal(
+    formatCompositionSummaryLine({
+      kind: 'MONO',
+      typeNames: ['Роза'],
+      colorNames: ['Красный'],
+      productKind: 'STEM',
+    }),
+    'Роза · Красный гамма',
+  );
+  assert.equal(
+    formatCompositionSummaryLine({
+      kind: 'MONO',
+      typeNames: ['Роза'],
+      colorNames: ['Красный'],
+      productKind: 'BOUQUET',
+    }),
+    'Монобукет · Роза · Красный гамма',
+  );
 });
 
 test('suggestVisualPaletteColorIds skips greenery', () => {
@@ -262,6 +293,19 @@ test('deriveProductEditorReadiness', () => {
   });
   assert.equal(blocked.readyToPublish, false);
   assert.match(blocked.blockingLabels.join(' '), /цена|фото|описание/);
+  const giftReady = deriveProductEditorReadiness({
+    name: 'Ваза',
+    slug: 'vaza',
+    catalogCategoryId: 'cat-1',
+    productKind: 'GIFT',
+    variants: [{ status: 'ACTIVE', priceMajor: '25,00' }],
+    hasPrimaryImage: true,
+    shortDescription: 'Подарок',
+    description: '',
+    compositionHasFlowerItem: false,
+  });
+  assert.equal(giftReady.readyToPublish, true);
+  assert.equal(giftReady.items.find((item) => item.id === 'composition')?.requiredForPublish, false);
 });
 
 test('derivePriceRange single', () => {

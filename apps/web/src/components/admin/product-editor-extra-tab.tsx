@@ -8,14 +8,12 @@ import {
   seoStatusEmoji,
   seoStatusLabel,
   type ProductAdminDto,
-  type ProductEditorReadinessItem,
   type ProductFamilyMemberDto,
   type PromotionType,
   type SeoHealthStatus,
   type VariantStatus,
 } from '@bouquet-one/contracts';
 import { FieldError } from '@/components/admin/form-status';
-import { ProductReadinessPanel } from '@/components/admin/product-readiness-panel';
 import type { PickerOption, VariantDraft } from '@/components/admin/product-editor-shared';
 import {
   formatAdminDateTime,
@@ -35,7 +33,6 @@ type Props = {
     shortDescription: string;
     description: string;
     heightCm: string;
-    diameterCm: string;
   };
   setBasic: React.Dispatch<
     React.SetStateAction<{
@@ -44,12 +41,9 @@ type Props = {
       shortDescription: string;
       description: string;
       heightCm: string;
-      diameterCm: string;
     }>
   >;
-  catalogCategoryId: string;
-  setCatalogCategoryId: (value: string) => void;
-  categories: PickerOption[];
+  setSlugManual: (value: boolean) => void;
   variants: VariantDraft[];
   setVariants: React.Dispatch<React.SetStateAction<VariantDraft[]>>;
   familyId: string;
@@ -111,11 +105,6 @@ type Props = {
       unpublishAt: string;
     }>
   >;
-  readiness: {
-    items: ProductEditorReadinessItem[];
-    readyToPublish: boolean;
-    blockingLabels: string[];
-  };
   fieldErrors: Record<string, string>;
   onPublish: () => void;
   onUnpublish: () => void;
@@ -133,9 +122,7 @@ export function ProductEditorExtraTab(props: Props) {
     pending,
     basic,
     setBasic,
-    catalogCategoryId,
-    setCatalogCategoryId,
-    categories,
+    setSlugManual,
     variants,
     setVariants,
     familyId,
@@ -169,7 +156,6 @@ export function ProductEditorExtraTab(props: Props) {
     descriptionIsAutomatic,
     publication,
     setPublication,
-    readiness,
     fieldErrors,
     onPublish,
     onUnpublish,
@@ -178,6 +164,8 @@ export function ProductEditorExtraTab(props: Props) {
     toggleId,
     nextVariantKey,
   } = props;
+
+  const multiSize = variants.length > 1;
 
   function addSizeRow() {
     setVariants((prev) => {
@@ -223,34 +211,15 @@ export function ProductEditorExtraTab(props: Props) {
       <div>
         <h2 className="admin-section__title">Дополнительно</h2>
         <p className="admin-section__lead">
-          Размеры, линейка, размеры букета, SEO, акции и витрины.
+          Размеры, высота, линейка, SEO, акции и расписание публикации.
         </p>
       </div>
 
-      <div className="admin-subsection space-y-3">
+      <div className="admin-subsection space-y-3" data-section="variants">
         <h3 className="admin-subsection__title">
-          {variants.length === 1 ? 'Размер / цена' : 'Размеры и цены'}
+          {multiSize ? 'Размеры и цены' : 'Несколько размеров'}
         </h3>
-        {variants.length === 1 ? (
-          <label className="admin-field max-w-xs">
-            <span>{variants[0]?.name || DEFAULT_PRODUCT_VARIANT_NAME}</span>
-            <input
-              className="admin-input tabular-nums"
-              value={variants[0]?.priceMajor ?? ''}
-              disabled={!canUpdate}
-              inputMode="decimal"
-              placeholder="Укажите цену"
-              onChange={(event) => {
-                const value = event.target.value;
-                setVariants((prev) =>
-                  prev.map((item, i) => (i === 0 ? { ...item, priceMajor: value } : item)),
-                );
-                touch();
-              }}
-            />
-            <span className="admin-field__hint">BYN</span>
-          </label>
-        ) : (
+        {multiSize ? (
           <div className="space-y-2">
             {variants.map((variant, index) => (
               <div key={variant.key} className="flex flex-wrap items-end gap-2">
@@ -289,7 +258,7 @@ export function ProductEditorExtraTab(props: Props) {
                     }}
                   />
                 </label>
-                {canUpdate && variants.length > 1 ? (
+                {canUpdate ? (
                   <button
                     type="button"
                     className="admin-btn-ghost"
@@ -304,6 +273,11 @@ export function ProductEditorExtraTab(props: Props) {
               </div>
             ))}
           </div>
+        ) : (
+          <p className="admin-help">
+            Цена одной карточки задаётся во вкладке «Основное». Здесь можно добавить размеры (7 шт /
+            15 шт).
+          </p>
         )}
         {canUpdate ? (
           <button type="button" className="admin-btn-ghost" onClick={addSizeRow}>
@@ -312,73 +286,37 @@ export function ProductEditorExtraTab(props: Props) {
         ) : null}
       </div>
 
-      <div className="grid max-w-2xl gap-4 sm:grid-cols-2">
-        <label className="admin-field">
-          <span>Категория</span>
-          <select
-            className="admin-select"
-            value={catalogCategoryId}
-            disabled={!canUpdate}
-            onChange={(event) => {
-              setCatalogCategoryId(event.target.value);
-              touch();
-            }}
-          >
-            <option value="">Не указана</option>
-            {categories.map((option) => (
-              <option key={option.id} value={option.id}>
-                {option.name}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label className="admin-field">
-          <span>Высота букета, см</span>
-          <input
-            className="admin-input"
-            type="number"
-            min={15}
-            max={250}
-            value={basic.heightCm}
-            disabled={!canUpdate}
-            placeholder="не указана"
-            onChange={(event) => {
-              setBasic((prev) => ({ ...prev, heightCm: event.target.value }));
-              touch();
-            }}
-          />
-          <span className="admin-field__hint">Высота готового букета, не стебля.</span>
-        </label>
-        <label className="admin-field">
-          <span>Диаметр букета, см</span>
-          <input
-            className="admin-input"
-            type="number"
-            min={5}
-            max={250}
-            value={basic.diameterCm}
-            disabled={!canUpdate}
-            placeholder="не указан"
-            onChange={(event) => {
-              setBasic((prev) => ({ ...prev, diameterCm: event.target.value }));
-              touch();
-            }}
-          />
-        </label>
-      </div>
-
-      <label className="admin-field max-w-2xl">
-        <span>Полное описание</span>
-        <textarea
+      <label className="admin-field max-w-xs">
+        <span>Высота букета, см</span>
+        <input
           className="admin-input"
-          rows={5}
-          value={basic.description}
+          type="number"
+          min={15}
+          max={250}
+          value={basic.heightCm}
           disabled={!canUpdate}
+          placeholder="не указана"
           onChange={(event) => {
-            setBasic((prev) => ({ ...prev, description: event.target.value }));
+            setBasic((prev) => ({ ...prev, heightCm: event.target.value }));
             touch();
           }}
         />
+        <span className="admin-field__hint">Высота готового букета, не стебля.</span>
+      </label>
+
+      <label className="admin-field max-w-2xl" data-section="slug">
+        <span>Адрес в ссылке</span>
+        <input
+          className="admin-input"
+          value={basic.slug}
+          disabled={!canUpdate}
+          onChange={(event) => {
+            setSlugManual(true);
+            setBasic((prev) => ({ ...prev, slug: event.target.value }));
+            touch();
+          }}
+        />
+        <span className="admin-field__hint">/bukety/{basic.slug || '…'}</span>
       </label>
 
       <div className="admin-subsection space-y-2">
@@ -617,12 +555,6 @@ export function ProductEditorExtraTab(props: Props) {
 
       <div className="admin-subsection space-y-3">
         <h3 className="admin-subsection__title">Поиск (SEO)</h3>
-        <ProductReadinessPanel
-          items={readiness.items}
-          readyToPublish={readiness.readyToPublish}
-          blockingLabels={readiness.blockingLabels}
-          compact
-        />
         <p className="text-sm text-[var(--admin-muted)]">
           {seoStatusEmoji(seoHealth.status)} {seoStatusLabel(seoHealth.status)} · {previewTitle}
         </p>
