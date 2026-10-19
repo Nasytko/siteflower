@@ -122,6 +122,14 @@ export type StorefrontSettingsPublicDto = {
   instagramUrl: string | null;
   telegramUrl: string | null;
   substitutionNote: string | null;
+  /** wa.me / api.whatsapp.com link for «Заказать в WhatsApp». */
+  whatsappUrl: string | null;
+  /** Product page perk: delivery outside the city. */
+  outOfCityDeliveryNote: string | null;
+  /** Product page perk: photo of the bouquet before sending. */
+  photoReportNote: string | null;
+  packagingNote: string | null;
+  packagingImageUrl: string | null;
 };
 
 export type StorefrontSettingsAdminDto = StorefrontSettingsPublicDto & {
@@ -458,6 +466,11 @@ export function defaultStorefrontSettings(): StorefrontSettingsPublicDto {
     telegramUrl: null,
     substitutionNote:
       'Цветы — сезонный продукт. Отдельные позиции могут быть заменены на равноценные с сохранением стиля, палитры и стоимости букета.',
+    whatsappUrl: null,
+    outOfCityDeliveryNote: null,
+    photoReportNote: null,
+    packagingNote: null,
+    packagingImageUrl: null,
   };
 }
 

@@ -40,6 +40,7 @@ type Props = {
     name: string;
     slug: string;
     shortDescription: string;
+    badgeLabel: string;
     description: string;
     heightCm: string;
   };
@@ -48,6 +49,7 @@ type Props = {
       name: string;
       slug: string;
       shortDescription: string;
+      badgeLabel: string;
       description: string;
       heightCm: string;
     }>
@@ -333,6 +335,22 @@ export function ProductEditorMainTab(props: Props) {
               touch();
             }}
           />
+        </label>
+
+        <label className="admin-field" data-section="badgeLabel">
+          <span>Бейдж на карточке товара</span>
+          <input
+            className="admin-input"
+            maxLength={40}
+            placeholder="Например: Хит сезона"
+            value={basic.badgeLabel}
+            disabled={!canUpdate}
+            onChange={(event) => {
+              setBasic((prev) => ({ ...prev, badgeLabel: event.target.value }));
+              touch();
+            }}
+          />
+          <small className="admin-help">Рядом с «В наличии». Пусто — бейдж не показывается.</small>
         </label>
 
         <label className="admin-field" data-section="description">

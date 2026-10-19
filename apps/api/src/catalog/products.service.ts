@@ -362,6 +362,7 @@ export class ProductsService {
           slug,
           shortDescription: source.shortDescription,
           description: source.description,
+          badgeLabel: source.badgeLabel,
           bouquetHeightCm: source.bouquetHeightCm,
           lifecycle: 'DRAFT',
           availability: source.availability,
@@ -513,6 +514,9 @@ export class ProductsService {
         ...(input.shortDescription === undefined
           ? {}
           : { shortDescription: trimmedOrNull(input.shortDescription) }),
+        ...(input.badgeLabel === undefined
+          ? {}
+          : { badgeLabel: trimmedOrNull(input.badgeLabel) }),
         ...(input.description === undefined
           ? {}
           : { description: trimmedOrNull(input.description) }),
@@ -613,6 +617,9 @@ export class ProductsService {
         slug: nextSlug,
         shortDescription: trimmedOrNull(input.shortDescription ?? null),
         description: trimmedOrNull(input.description ?? null),
+        ...(input.badgeLabel === undefined
+          ? {}
+          : { badgeLabel: trimmedOrNull(input.badgeLabel) }),
         availability: input.availability,
         bouquetHeightCm: input.heightCm === undefined ? product.bouquetHeightCm : input.heightCm,
         productKind: nextKind,

@@ -180,6 +180,7 @@ export function ProductEditor({
     name: product.name,
     slug: product.slug,
     shortDescription: product.shortDescription ?? '',
+    badgeLabel: product.badgeLabel ?? '',
     description: product.description ?? '',
     heightCm: product.heightCm === null ? '' : String(product.heightCm),
   });
@@ -280,6 +281,7 @@ export function ProductEditor({
       name: updated.name,
       slug: updated.slug,
       shortDescription: updated.shortDescription ?? '',
+      badgeLabel: updated.badgeLabel ?? '',
       description: updated.description ?? '',
       heightCm: updated.heightCm === null ? '' : String(updated.heightCm),
     });
@@ -703,6 +705,7 @@ export function ProductEditor({
         name: basic.name.trim(),
         slug: basic.slug.trim(),
         shortDescription: basic.shortDescription.trim() || null,
+        badgeLabel: basic.badgeLabel.trim() || null,
         description: basic.description.trim() || null,
         heightCm: basic.heightCm.trim().length > 0 ? Number(basic.heightCm) : null,
         productKind,

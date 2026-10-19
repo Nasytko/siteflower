@@ -68,6 +68,21 @@ export class StorefrontSettingsService {
       ...(input.substitutionNote === undefined
         ? {}
         : { substitutionNote: this.nullableTrim(input.substitutionNote) }),
+      ...(input.whatsappUrl === undefined
+        ? {}
+        : { whatsappUrl: this.nullableTrim(input.whatsappUrl) }),
+      ...(input.outOfCityDeliveryNote === undefined
+        ? {}
+        : { outOfCityDeliveryNote: this.nullableTrim(input.outOfCityDeliveryNote) }),
+      ...(input.photoReportNote === undefined
+        ? {}
+        : { photoReportNote: this.nullableTrim(input.photoReportNote) }),
+      ...(input.packagingNote === undefined
+        ? {}
+        : { packagingNote: this.nullableTrim(input.packagingNote) }),
+      ...(input.packagingImageUrl === undefined
+        ? {}
+        : { packagingImageUrl: this.nullableTrim(input.packagingImageUrl) }),
     };
 
     await this.prisma.client.$transaction(async (tx) => {
@@ -150,6 +165,11 @@ export class StorefrontSettingsService {
       instagramUrl: row.instagramUrl,
       telegramUrl: row.telegramUrl,
       substitutionNote: row.substitutionNote,
+      whatsappUrl: row.whatsappUrl,
+      outOfCityDeliveryNote: row.outOfCityDeliveryNote,
+      photoReportNote: row.photoReportNote,
+      packagingNote: row.packagingNote,
+      packagingImageUrl: row.packagingImageUrl,
     };
   }
 

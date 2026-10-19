@@ -1,47 +1,108 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import type { ProductPublicDto } from '@bouquet-one/contracts';
-import { formatPriceFromMinor } from '@/lib/media';
+import Image from 'next/image';
+import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
+import type { ProductListItemDto, ProductPublicDto } from '@bouquet-one/contracts';
+import { formatPriceFromMinor, pickDerivativeUrl, sortProductMedia } from '@/lib/media';
 import { trackEvent } from '@/lib/analytics';
-import { addToCart, readCart, writeCart } from '@/lib/cart';
+import {
+  addToCart,
+  CARD_MESSAGE_MAX,
+  MAX_LINE_QTY,
+  readCardDraft,
+  readCart,
+  writeCardDraft,
+  writeCart,
+} from '@/lib/cart';
 
 type Variant = ProductPublicDto['variants'][number];
 
-type Props = {
-  product: Pick<
-    ProductPublicDto,
-    'id' | 'name' | 'slug' | 'currency' | 'availability' | 'price' | 'promotion' | 'media'
-  >;
-  variants: Variant[];
-  phone?: string | null;
+type PurchaseProduct = Pick<
+  ProductPublicDto,
+  | 'id'
+  | 'name'
+  | 'slug'
+  | 'currency'
+  | 'availability'
+  | 'price'
+  | 'promotion'
+  | 'media'
+  | 'variants'
+  | 'shortDescription'
+  | 'badgeLabel'
+>;
+
+/** Postcard products from the «Открытки» category — added to the cart with the bouquet. */
+export type PostcardOption = Pick<
+  ProductListItemDto,
+  'id' | 'slug' | 'name' | 'primaryImageUrl' | 'defaultVariant' | 'availability' | 'price'
+>;
+
+type PurchaseState = {
+  product: PurchaseProduct;
+  selected: Variant | undefined;
+  setSelectedId: (id: string) => void;
+  qty: number;
+  setQty: (qty: number) => void;
+  hydrated: boolean;
+  blocked: boolean;
+  priceLabel: string;
+  originalLabel: string | null;
+  cardEnabled: boolean;
+  setCardEnabled: (enabled: boolean) => void;
+  cardMessage: string;
+  setCardMessage: (message: string) => void;
+  postcardId: string | null;
+  setPostcardId: (id: string | null) => void;
+  postcards: PostcardOption[];
+  feedback: string | null;
+  cartCount: number;
+  onAdd: () => void;
 };
 
-export function ProductPurchasePanel({ product, variants, phone }: Props) {
-  const sorted = [...variants].sort((a, b) => a.sortOrder - b.sortOrder);
+const PurchaseContext = createContext<PurchaseState | null>(null);
+
+function usePurchase(): PurchaseState {
+  const value = useContext(PurchaseContext);
+  if (!value) throw new Error('ProductPurchaseProvider is missing');
+  return value;
+}
+
+export function ProductPurchaseProvider({
+  product,
+  postcards,
+  children,
+}: {
+  product: PurchaseProduct;
+  postcards: PostcardOption[];
+  children: ReactNode;
+}) {
+  const sorted = useMemo(
+    () => [...product.variants].sort((a, b) => a.sortOrder - b.sortOrder),
+    [product.variants],
+  );
   const [selectedId, setSelectedId] = useState(sorted[0]?.id ?? '');
   const [qty, setQty] = useState(1);
-  const [quickPhone, setQuickPhone] = useState('');
   const [feedback, setFeedback] = useState<string | null>(null);
   const [cartCount, setCartCount] = useState(0);
   const [hydrated, setHydrated] = useState(false);
+  const [cardEnabled, setCardEnabledState] = useState(true);
+  const [cardMessage, setCardMessageState] = useState('');
+  const [postcardId, setPostcardId] = useState<string | null>(null);
 
   const selected = sorted.find((v) => v.id === selectedId) ?? sorted[0];
   const priceLabel = selected
     ? formatPriceFromMinor(selected.effectivePriceMinor, product.currency)
     : product.price.label;
-  const discounted =
-    selected != null && selected.effectivePriceMinor !== selected.priceMinor;
+  const discounted = selected != null && selected.effectivePriceMinor !== selected.priceMinor;
   const originalLabel =
     discounted && selected ? formatPriceFromMinor(selected.priceMinor, product.currency) : null;
-  const percentOff = product.promotion?.percentOff ?? null;
   const blocked = product.availability === 'TEMPORARILY_UNAVAILABLE' || !selected;
 
   useEffect(() => {
     setHydrated(true);
-  }, []);
-
-  useEffect(() => {
+    const draft = readCardDraft();
+    if (draft.trim()) setCardMessageState(draft);
     const sync = () => {
       const cart = readCart();
       setCartCount(cart.items.reduce((s, i) => s + i.quantity, 0));
@@ -51,11 +112,22 @@ export function ProductPurchasePanel({ product, variants, phone }: Props) {
     return () => window.removeEventListener('bouquet:cart', sync as EventListener);
   }, []);
 
+  function setCardEnabled(enabled: boolean) {
+    setCardEnabledState(enabled);
+    writeCardDraft(enabled ? cardMessage : '');
+    if (!enabled) setPostcardId(null);
+  }
+
+  function setCardMessage(message: string) {
+    const value = message.slice(0, CARD_MESSAGE_MAX);
+    setCardMessageState(value);
+    writeCardDraft(value);
+  }
+
   function onAdd() {
     if (!selected || blocked) return;
-    const primary =
-      product.media.find((m) => m.isPrimary)?.url ?? product.media[0]?.url ?? null;
-    const next = addToCart(readCart(), {
+    const primary = sortProductMedia(product.media)[0]?.url ?? null;
+    let next = addToCart(readCart(), {
       productId: product.id,
       variantId: selected.id,
       quantity: qty,
@@ -65,65 +137,151 @@ export function ProductPurchasePanel({ product, variants, phone }: Props) {
       unitPriceMinor: selected.effectivePriceMinor,
       primaryImageUrl: primary,
     });
+    const postcard = cardEnabled ? postcards.find((p) => p.id === postcardId) : undefined;
+    if (postcard?.defaultVariant) {
+      const alreadyInCart = next.items.some((i) => i.variantId === postcard.defaultVariant!.id);
+      if (!alreadyInCart) {
+        next = addToCart(next, {
+          productId: postcard.id,
+          variantId: postcard.defaultVariant.id,
+          quantity: 1,
+          productName: postcard.name,
+          productSlug: postcard.slug,
+          variantName: postcard.defaultVariant.name,
+          unitPriceMinor: postcard.defaultVariant.priceMinor,
+          primaryImageUrl: postcard.primaryImageUrl,
+        });
+      }
+    }
     writeCart(next);
     trackEvent('add_to_cart', {
       productId: product.id,
       variantId: selected.id,
       quantity: qty,
     });
-    setFeedback('Добавлено в корзину');
+    setFeedback(postcard ? 'Букет и открытка добавлены в корзину' : 'Добавлено в корзину');
     window.setTimeout(() => setFeedback(null), 2800);
   }
 
-  function onQuickOrder(event: React.FormEvent) {
-    event.preventDefault();
-    if (!phone) return;
-    const digits = quickPhone.replace(/\D/g, '');
-    if (digits.length < 7) {
-      setFeedback('Укажите телефон для быстрого заказа');
-      return;
-    }
-    window.location.href = `tel:${phone.replace(/\s+/g, '')}`;
+  const value: PurchaseState = {
+    product,
+    selected,
+    setSelectedId,
+    qty,
+    setQty: (n) => setQty(Math.min(MAX_LINE_QTY, Math.max(1, n))),
+    hydrated,
+    blocked,
+    priceLabel,
+    originalLabel,
+    cardEnabled,
+    setCardEnabled,
+    cardMessage,
+    setCardMessage,
+    postcardId,
+    setPostcardId,
+    postcards,
+    feedback,
+    cartCount,
+    onAdd,
+  };
+
+  return <PurchaseContext.Provider value={value}>{children}</PurchaseContext.Provider>;
+}
+
+function availabilityBadge(availability: ProductPublicDto['availability']) {
+  switch (availability) {
+    case 'AVAILABLE':
+      return { label: 'В наличии', tone: 'ok' };
+    case 'PREORDER':
+      return { label: 'Под заказ', tone: 'muted' };
+    case 'SEASONAL':
+      return { label: 'Сезонный', tone: 'muted' };
+    default:
+      return { label: 'Временно нет', tone: 'muted' };
   }
+}
+
+function telHref(phone: string) {
+  return `tel:${phone.replace(/[^\d+]/g, '')}`;
+}
+
+export function ProductBuyCard({
+  whatsappUrl,
+  telegramUrl,
+  phone,
+  children,
+}: {
+  whatsappUrl: string | null;
+  telegramUrl: string | null;
+  phone: string | null;
+  /** Rendered under the variant picker (e.g. family switcher). */
+  children?: ReactNode;
+}) {
+  const {
+    product,
+    selected,
+    setSelectedId,
+    qty,
+    setQty,
+    hydrated,
+    blocked,
+    priceLabel,
+    originalLabel,
+    feedback,
+    cartCount,
+    onAdd,
+  } = usePurchase();
+  const sorted = [...product.variants].sort((a, b) => a.sortOrder - b.sortOrder);
+  const availability = availabilityBadge(product.availability);
+  const percentOff = product.promotion?.percentOff ?? null;
+  const badgeLabel = product.badgeLabel?.trim() || null;
+  const messengers = [
+    whatsappUrl
+      ? { key: 'wa', href: whatsappUrl, label: 'WhatsApp', icon: <WhatsAppIcon /> }
+      : null,
+    telegramUrl
+      ? { key: 'tg', href: telegramUrl, label: 'Telegram', icon: <TelegramIcon /> }
+      : null,
+  ].filter((item) => item != null);
 
   return (
-    <div className="sf-pdp-buy" data-purchase-ready={hydrated ? 'true' : 'false'}>
-      <div className="sf-pdp-buy__meta">
-        {product.availability === 'AVAILABLE' ? (
-          <span className="sf-pdp-badge sf-pdp-badge--ok">В наличии</span>
-        ) : product.availability === 'PREORDER' ? (
-          <span className="sf-pdp-badge">Под заказ</span>
-        ) : product.availability === 'SEASONAL' ? (
-          <span className="sf-pdp-badge">Сезонный</span>
-        ) : (
-          <span className="sf-pdp-badge">Временно нет</span>
-        )}
+    <div className="sf-pdp-card sf-pdp-buy" data-purchase-ready={hydrated ? 'true' : 'false'}>
+      <div className="sf-pdp-buy__badges">
+        <span className={`sf-pdp-badge sf-pdp-badge--${availability.tone}`}>
+          {availability.label}
+        </span>
+        {badgeLabel ? (
+          <span className="sf-pdp-badge sf-pdp-badge--accent">{badgeLabel}</span>
+        ) : null}
+        {percentOff != null ? (
+          <span className="sf-pdp-badge sf-pdp-badge--sale">−{percentOff}%</span>
+        ) : null}
       </div>
+
+      <h1 className="sf-pdp-buy__title">{product.name}</h1>
+      {product.shortDescription ? (
+        <p className="sf-pdp-buy__lead">{product.shortDescription}</p>
+      ) : null}
 
       {sorted.length > 1 ? (
         <div className="sf-pdp-buy__block">
-          <p className="sf-label mb-2.5">Размер</p>
+          <p className="sf-pdp-buy__label">Размер</p>
           <div className="sf-pdp-variants" role="listbox" aria-label="Размер букета">
             {sorted.map((variant) => {
               const active = variant.id === selected?.id;
-              const compact = variant.name.trim().length <= 3;
               return (
                 <button
                   key={variant.id}
                   type="button"
                   role="option"
                   aria-selected={active}
-                  className={`sf-pdp-variant ${compact ? 'sf-pdp-variant--round' : ''} ${
-                    active ? 'sf-pdp-variant--active' : ''
-                  }`}
+                  className={`sf-pdp-variant ${active ? 'sf-pdp-variant--active' : ''}`}
                   onClick={() => setSelectedId(variant.id)}
                 >
                   <span className="sf-pdp-variant__name">{variant.name}</span>
-                  {!compact ? (
-                    <span className="sf-pdp-variant__price">
-                      {formatPriceFromMinor(variant.effectivePriceMinor, product.currency)}
-                    </span>
-                  ) : null}
+                  <span className="sf-pdp-variant__price">
+                    {formatPriceFromMinor(variant.effectivePriceMinor, product.currency)}
+                  </span>
                 </button>
               );
             })}
@@ -131,40 +289,22 @@ export function ProductPurchasePanel({ product, variants, phone }: Props) {
         </div>
       ) : null}
 
-      <div className="sf-pdp-buy__price" aria-live="polite">
-        <p className={`sf-price sf-pdp-buy__amount ${discounted ? 'sf-price--sale' : ''}`}>
-          {priceLabel}
-        </p>
-        {originalLabel ? (
-          <p className="sf-price-was">
-            <span className="sr-only">Обычная цена </span>
-            {originalLabel}
-          </p>
-        ) : null}
-        {percentOff != null ? <span className="sf-sale-chip">−{percentOff}%</span> : null}
-      </div>
+      {children}
 
-      <div className="sf-pdp-buy__qty">
-        <span className="sf-label">Кол-во</span>
-        <div className="sf-stepper">
-          <button
-            type="button"
-            aria-label="Меньше"
-            disabled={blocked || qty <= 1}
-            onClick={() => setQty((n) => Math.max(1, n - 1))}
-          >
-            −
-          </button>
-          <span aria-live="polite">{qty}</span>
-          <button
-            type="button"
-            aria-label="Больше"
-            disabled={blocked || qty >= 20}
-            onClick={() => setQty((n) => Math.min(20, n + 1))}
-          >
-            +
-          </button>
+      <div className="sf-pdp-buy__row">
+        <div className="sf-pdp-buy__price" aria-live="polite">
+          <p className="sf-pdp-buy__amount" data-sale={originalLabel ? 'true' : 'false'}>
+            {priceLabel}
+            {originalLabel ? (
+              <s className="sf-pdp-buy__was">
+                <span className="sr-only">Обычная цена </span>
+                {originalLabel}
+              </s>
+            ) : null}
+          </p>
+          <p className="sf-pdp-buy__unit">Цена за 1 шт.</p>
         </div>
+        <QtyStepper qty={qty} setQty={setQty} disabled={blocked} />
       </div>
 
       <button
@@ -172,63 +312,309 @@ export function ProductPurchasePanel({ product, variants, phone }: Props) {
         disabled={blocked || !hydrated}
         onClick={onAdd}
         data-testid="add-to-cart"
-        className="sf-cta-block w-full disabled:cursor-not-allowed disabled:opacity-50"
+        className="sf-pdp-add"
       >
+        <CartIcon />
         Добавить в корзину
       </button>
 
-      {phone ? (
-        <form className="sf-pdp-quick" onSubmit={onQuickOrder}>
-          <span className="sf-label">Быстрый заказ</span>
-          <div className="sf-pdp-quick__row">
-            <input
-              type="tel"
-              inputMode="tel"
-              placeholder="+375 …"
-              value={quickPhone}
-              onChange={(e) => setQuickPhone(e.target.value)}
-              className="sf-pdp-quick__input"
-              aria-label="Телефон для быстрого заказа"
-            />
-            <button type="submit" className="sf-pdp-quick__go" aria-label="Позвонить">
-              →
-            </button>
-          </div>
-          <a href={`tel:${phone.replace(/\s+/g, '')}`} className="sf-pdp-buy__call">
-            или {phone}
-          </a>
-        </form>
+      {messengers.length > 0 ? (
+        <div className="sf-pdp-messengers" data-count={messengers.length}>
+          {messengers.map((item) => (
+            <a
+              key={item.key}
+              href={item.href}
+              target="_blank"
+              rel="noopener noreferrer"
+              className={`sf-pdp-messenger sf-pdp-messenger--${item.key}`}
+            >
+              {item.icon}
+              <span>
+                <span className="sf-pdp-messenger__long">Заказать в </span>
+                {item.label}
+              </span>
+            </a>
+          ))}
+        </div>
+      ) : phone ? (
+        <a href={telHref(phone)} className="sf-pdp-call">
+          Заказать по телефону {phone}
+        </a>
       ) : null}
 
       {feedback ? (
-        <p className="sf-small text-brand" role="status" data-testid="add-to-cart-status">
+        <p className="sf-pdp-buy__status" role="status" data-testid="add-to-cart-status">
           {feedback}
           {cartCount > 0 ? (
             <>
               {' · '}
-              <a href="/cart" className="underline-offset-2 hover:underline">
-                Корзина ({cartCount})
-              </a>
+              <a href="/cart">Корзина ({cartCount})</a>
             </>
           ) : null}
         </p>
       ) : null}
+    </div>
+  );
+}
 
-      <div className="pointer-events-none fixed inset-x-0 bottom-0 z-30 p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] lg:hidden">
-        <div className="pointer-events-auto mx-auto flex max-w-lg items-center gap-3 rounded-2xl border border-border/80 bg-white/95 p-2.5 shadow-[var(--shadow-soft)] backdrop-blur">
-          <div className="min-w-0 flex-1 pl-1">
-            <p className={`sf-price text-base ${discounted ? 'sf-price--sale' : ''}`}>{priceLabel}</p>
-          </div>
-          <button
-            type="button"
-            disabled={blocked || !hydrated}
-            onClick={onAdd}
-            className="sf-cta shrink-0 px-4 py-2.5 text-[0.7rem] disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            В корзину
-          </button>
+function QtyStepper({
+  qty,
+  setQty,
+  disabled,
+}: {
+  qty: number;
+  setQty: (n: number) => void;
+  disabled: boolean;
+}) {
+  return (
+    <div className="sf-pdp-stepper" role="group" aria-label="Количество">
+      <button
+        type="button"
+        aria-label="Меньше"
+        disabled={disabled || qty <= 1}
+        onClick={() => setQty(qty - 1)}
+      >
+        −
+      </button>
+      <span aria-live="polite">{qty}</span>
+      <button
+        type="button"
+        aria-label="Больше"
+        disabled={disabled || qty >= MAX_LINE_QTY}
+        onClick={() => setQty(qty + 1)}
+      >
+        +
+      </button>
+    </div>
+  );
+}
+
+export function ProductPostcardCard() {
+  const {
+    product,
+    cardEnabled,
+    setCardEnabled,
+    cardMessage,
+    setCardMessage,
+    postcardId,
+    setPostcardId,
+    postcards,
+  } = usePurchase();
+  const [scroller, setScroller] = useState<HTMLUListElement | null>(null);
+  const options = postcards.filter((p) => p.id !== product.id && p.defaultVariant);
+
+  function scrollBy(dir: 1 | -1) {
+    scroller?.scrollBy({ left: dir * scroller.clientWidth * 0.8, behavior: 'smooth' });
+  }
+
+  return (
+    <section className="sf-pdp-card sf-pdp-postcard" aria-labelledby="pdp-postcard-title">
+      <div className="sf-pdp-postcard__head">
+        <GiftIcon />
+        <div className="sf-pdp-postcard__heading">
+          <h2 id="pdp-postcard-title" className="sf-pdp-postcard__title">
+            Добавить открытку
+          </h2>
+          <p className="sf-pdp-postcard__hint">
+            {options.length > 0
+              ? 'Выберите открытку и добавьте пожелание — мы напишем его от вашего имени'
+              : 'Добавьте пожелание — мы напишем его на открытке от вашего имени'}
+          </p>
         </div>
+        <button
+          type="button"
+          role="switch"
+          aria-checked={cardEnabled}
+          aria-labelledby="pdp-postcard-title"
+          className="sf-pdp-switch"
+          onClick={() => setCardEnabled(!cardEnabled)}
+        >
+          <span className="sf-pdp-switch__knob" />
+        </button>
+      </div>
+
+      {cardEnabled ? (
+        <div className="sf-pdp-postcard__body">
+          {options.length > 0 ? (
+            <div className="sf-pdp-postcard__picker">
+              <button
+                type="button"
+                className="sf-pdp-round-nav"
+                aria-label="Прокрутить назад"
+                onClick={() => scrollBy(-1)}
+              >
+                ‹
+              </button>
+              <ul
+                ref={setScroller}
+                className="sf-pdp-postcard__list"
+                role="radiogroup"
+                aria-label="Дизайн открытки"
+              >
+                <li>
+                  <button
+                    type="button"
+                    role="radio"
+                    aria-checked={postcardId === null}
+                    className="sf-pdp-postcard__option sf-pdp-postcard__option--none"
+                    onClick={() => setPostcardId(null)}
+                  >
+                    <span aria-hidden className="sf-pdp-postcard__plus">
+                      +
+                    </span>
+                    <span className="sf-pdp-postcard__none-label">Без открытки</span>
+                  </button>
+                </li>
+                {options.map((option) => {
+                  const priceLabel = option.defaultVariant
+                    ? formatPriceFromMinor(option.defaultVariant.priceMinor, product.currency)
+                    : (option.price?.label ?? '');
+                  return (
+                    <li key={option.id}>
+                      <button
+                        type="button"
+                        role="radio"
+                        aria-checked={postcardId === option.id}
+                        className="sf-pdp-postcard__option"
+                        onClick={() => setPostcardId(option.id)}
+                        title={`${option.name} — ${priceLabel}`}
+                      >
+                        {option.primaryImageUrl ? (
+                          <Image
+                            src={option.primaryImageUrl}
+                            alt={option.name}
+                            fill
+                            sizes="96px"
+                            className="object-cover"
+                          />
+                        ) : (
+                          <span className="sf-pdp-postcard__name">{option.name}</span>
+                        )}
+                        <span className="sf-pdp-postcard__price">{priceLabel}</span>
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>
+              <button
+                type="button"
+                className="sf-pdp-round-nav"
+                aria-label="Прокрутить вперёд"
+                onClick={() => scrollBy(1)}
+              >
+                ›
+              </button>
+            </div>
+          ) : null}
+
+          <label className="sf-pdp-postcard__text">
+            <span className="sr-only">Текст для открытки</span>
+            <textarea
+              rows={2}
+              maxLength={CARD_MESSAGE_MAX}
+              placeholder="Ваш текст для открытки..."
+              value={cardMessage}
+              onChange={(event) => setCardMessage(event.target.value)}
+            />
+            <span className="sf-pdp-postcard__count" aria-hidden>
+              {cardMessage.length}/{CARD_MESSAGE_MAX}
+            </span>
+          </label>
+          <p className="sf-pdp-postcard__note">Текст подставится в оформление заказа.</p>
+        </div>
+      ) : null}
+    </section>
+  );
+}
+
+/** Mobile sticky bar: photo, price, name, «В корзину». */
+export function ProductStickyBar() {
+  const { product, priceLabel, originalLabel, blocked, hydrated, onAdd } = usePurchase();
+  const primary = sortProductMedia(product.media)[0];
+  const thumb = primary ? (pickDerivativeUrl(primary, 200) ?? primary.url) : null;
+
+  return (
+    <div className="sf-pdp-sticky" aria-label="Быстрая покупка">
+      <div className="sf-pdp-sticky__inner">
+        {thumb ? (
+          <span className="sf-pdp-sticky__thumb">
+            <Image src={thumb} alt="" fill sizes="48px" className="object-cover" />
+          </span>
+        ) : null}
+        <span className="sf-pdp-sticky__text">
+          <span className="sf-pdp-sticky__price" data-sale={originalLabel ? 'true' : 'false'}>
+            {priceLabel}
+          </span>
+          <span className="sf-pdp-sticky__name">{product.name}</span>
+        </span>
+        <button
+          type="button"
+          disabled={blocked || !hydrated}
+          onClick={onAdd}
+          className="sf-pdp-sticky__btn"
+        >
+          В корзину
+        </button>
       </div>
     </div>
+  );
+}
+
+function CartIcon() {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      width="18"
+      height="18"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.7"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden
+    >
+      <path d="M3 4h2l2.2 10.2a1.5 1.5 0 0 0 1.5 1.2h8.6a1.5 1.5 0 0 0 1.5-1.1L20.5 8H6.2" />
+      <circle cx="9.5" cy="19.5" r="1.2" />
+      <circle cx="17" cy="19.5" r="1.2" />
+    </svg>
+  );
+}
+
+function GiftIcon() {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      className="sf-pdp-postcard__icon"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.6"
+      strokeLinejoin="round"
+      aria-hidden
+    >
+      <path d="M4 11h16v9H4zM3 8h18v3H3zM12 8v12M12 8c-2 0-3.5-1.3-3.5-2.8S10 3 12 5.5C14 3 15.5 3.7 15.5 5.2S14 8 12 8Z" />
+    </svg>
+  );
+}
+
+function WhatsAppIcon() {
+  return (
+    <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden>
+      <path fill="#25D366" d="M12 2a10 10 0 0 0-8.6 15.1L2 22l5-1.3A10 10 0 1 0 12 2Z" />
+      <path
+        fill="#fff"
+        d="M17.3 14.6c-.3-.1-1.7-.8-1.9-.9-.3-.1-.5-.1-.7.1l-.9 1.1c-.2.2-.3.2-.6.1a7 7 0 0 1-3.4-3c-.3-.4.3-.4.8-1.3.1-.2 0-.3 0-.5l-.9-2.1c-.2-.5-.4-.5-.6-.5h-.5c-.2 0-.5.1-.7.3-.3.3-1 .9-1 2.3s1 2.7 1.1 2.9c.1.2 2 3.1 5 4.3 1.8.7 2.5.8 3.4.7.6-.1 1.7-.7 1.9-1.4.2-.7.2-1.2.2-1.4-.1-.1-.3-.2-.6-.3Z"
+      />
+    </svg>
+  );
+}
+
+function TelegramIcon() {
+  return (
+    <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden>
+      <path
+        fill="#1f4f3a"
+        d="M21.7 3.3 2.9 10.6c-1.3.5-1.3 1.2-.2 1.6l4.8 1.5 1.8 5.6c.2.6.4.8.9.8.4 0 .6-.2.9-.4l2.3-2.2 4.7 3.5c.9.5 1.5.2 1.7-.8l3.1-14.6c.3-1.3-.5-1.9-1.2-1.6ZM9 13.4l9.4-5.9c.4-.3.8-.1.5.2l-7.6 6.9-.3 3.3L9 13.4Z"
+      />
+    </svg>
   );
 }

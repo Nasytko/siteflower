@@ -87,6 +87,36 @@ export class UpdateStorefrontSettingsDto {
   @IsString()
   @MaxLength(1000)
   substitutionNote?: string | null;
+
+  @IsOptional()
+  @ValidateIf((_, value) => value !== null)
+  @IsString()
+  @MaxLength(500)
+  whatsappUrl?: string | null;
+
+  @IsOptional()
+  @ValidateIf((_, value) => value !== null)
+  @IsString()
+  @MaxLength(300)
+  outOfCityDeliveryNote?: string | null;
+
+  @IsOptional()
+  @ValidateIf((_, value) => value !== null)
+  @IsString()
+  @MaxLength(300)
+  photoReportNote?: string | null;
+
+  @IsOptional()
+  @ValidateIf((_, value) => value !== null)
+  @IsString()
+  @MaxLength(500)
+  packagingNote?: string | null;
+
+  @IsOptional()
+  @ValidateIf((_, value) => value !== null)
+  @IsString()
+  @MaxLength(500)
+  packagingImageUrl?: string | null;
 }
 
 export class HomepageHeroInputDto {

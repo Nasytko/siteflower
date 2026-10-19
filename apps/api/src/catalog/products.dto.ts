@@ -151,6 +151,12 @@ export class SaveProductEditorDto extends ExpectedVersionDto {
   @IsOptional()
   @ValidateIf((_, value) => value !== null)
   @IsString()
+  @MaxLength(40)
+  badgeLabel?: string | null;
+
+  @IsOptional()
+  @ValidateIf((_, value) => value !== null)
+  @IsString()
   @MaxLength(20_000)
   description?: string | null;
 
@@ -417,6 +423,12 @@ export class UpdateProductDto extends ExpectedVersionDto {
   @IsString()
   @MaxLength(500)
   shortDescription?: string | null;
+
+  @IsOptional()
+  @ValidateIf((_, value) => value !== null)
+  @IsString()
+  @MaxLength(40)
+  badgeLabel?: string | null;
 
   @IsOptional()
   @ValidateIf((_, value) => value !== null)

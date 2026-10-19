@@ -37,6 +37,7 @@ type Props = {
     name: string;
     slug: string;
     shortDescription: string;
+    badgeLabel: string;
     description: string;
     heightCm: string;
   };
@@ -45,6 +46,7 @@ type Props = {
       name: string;
       slug: string;
       shortDescription: string;
+      badgeLabel: string;
       description: string;
       heightCm: string;
     }>

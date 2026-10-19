@@ -120,3 +120,27 @@ export function removeFromCart(state: CartState, variantId: string): CartState {
 export function clearCart(): CartState {
   return emptyCart();
 }
+
+/** Postcard text typed on the product page; prefilled into checkout `cardMessage`. */
+export const CARD_DRAFT_STORAGE_KEY = 'bouquet-one:card-draft:v1';
+export const CARD_MESSAGE_MAX = 200;
+
+export function readCardDraft(): string {
+  if (typeof window === 'undefined') return '';
+  try {
+    return (window.localStorage.getItem(CARD_DRAFT_STORAGE_KEY) ?? '').slice(0, CARD_MESSAGE_MAX);
+  } catch {
+    return '';
+  }
+}
+
+export function writeCardDraft(message: string): void {
+  if (typeof window === 'undefined') return;
+  try {
+    const value = message.slice(0, CARD_MESSAGE_MAX);
+    if (value.trim()) window.localStorage.setItem(CARD_DRAFT_STORAGE_KEY, value);
+    else window.localStorage.removeItem(CARD_DRAFT_STORAGE_KEY);
+  } catch {
+    /* ignore */
+  }
+}

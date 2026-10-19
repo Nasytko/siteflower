@@ -12,7 +12,14 @@ import type {
 } from '@bouquet-one/contracts';
 import { formatPriceFromMinor } from '@/lib/media';
 import { trackEvent } from '@/lib/analytics';
-import { clearCart, readCart, writeCart, type CartState } from '@/lib/cart';
+import {
+  clearCart,
+  readCardDraft,
+  readCart,
+  writeCardDraft,
+  writeCart,
+  type CartState,
+} from '@/lib/cart';
 
 const IDEMPOTENCY_STORAGE_KEY = 'bouquet-one:checkout-idempotency';
 
@@ -80,6 +87,14 @@ export function CheckoutForm() {
   const [cardMessage, setCardMessage] = useState('');
   const [anonymousCard, setAnonymousCard] = useState(false);
   const [customerComment, setCustomerComment] = useState('');
+
+  useEffect(() => {
+    const draft = readCardDraft();
+    if (draft.trim()) {
+      setWantCard(true);
+      setCardMessage(draft);
+    }
+  }, []);
 
   useEffect(() => {
     const c = readCart();
@@ -210,6 +225,7 @@ export function CheckoutForm() {
         fulfillmentType: created.fulfillmentType,
       });
       writeCart(clearCart());
+      writeCardDraft('');
       clearCheckoutIdempotencyKey();
 
       try {

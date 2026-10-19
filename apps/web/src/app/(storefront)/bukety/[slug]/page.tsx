@@ -1,34 +1,46 @@
 import type { Metadata } from 'next';
 import { notFound, permanentRedirect } from 'next/navigation';
 import { Breadcrumbs } from '@/components/storefront/breadcrumbs';
-import { FavoriteButton } from '@/components/storefront/favorite-button';
+import { HomeSectionHead } from '@/components/storefront/home-section-head';
 import { ProductDetailInfo } from '@/components/storefront/product-detail-info';
 import { ProductGallery } from '@/components/storefront/product-gallery';
-import { ProductGrid } from '@/components/storefront/product-grid';
 import { ProductFamilySwitcher } from '@/components/storefront/product-family-switcher';
-import { ProductPurchasePanel } from '@/components/storefront/product-purchase-panel';
-import { SectionRail } from '@/components/storefront/section-rail';
+import { ProductPerks } from '@/components/storefront/product-perks';
 import {
+  ProductBuyCard,
+  ProductPostcardCard,
+  ProductPurchaseProvider,
+  ProductStickyBar,
+  type PostcardOption,
+} from '@/components/storefront/product-purchase-panel';
+import { ProductRow } from '@/components/storefront/product-row';
+import {
+  EMPTY_PRODUCT_PAGE,
   getFulfillmentOptions,
+  getLegalSeller,
   getProductBySlug,
   getStorefrontSettings,
+  listProducts,
   listRelatedProducts,
   PublicApiError,
 } from '@/lib/public-api';
 import { serializeJsonLd } from '@/lib/seo/json-ld';
 import { buildPageMetadata } from '@/lib/seo/metadata';
 import { buildBreadcrumbJsonLd, buildProductJsonLd } from '@/lib/seo/product-json-ld';
-import { pickDerivativeUrl } from '@/lib/media';
+import { pickDerivativeUrl, sortProductMedia } from '@/lib/media';
 import { categoryNavHref } from '@/lib/storefront-nav';
 
 type Params = Promise<{ slug: string }>;
+
+/** Catalog category whose products are offered as postcard designs on the product page. */
+const POSTCARD_CATEGORY_SLUG = 'otkrytki';
 
 export async function generateMetadata({ params }: { params: Params }): Promise<Metadata> {
   const { slug } = await params;
   try {
     const resolved = await getProductBySlug(slug);
     const product = resolved.product;
-    const primary = product.media.find((m) => m.isPrimary) ?? product.media[0];
+    const primary = sortProductMedia(product.media)[0];
     const image = primary ? pickDerivativeUrl(primary, 1200) ?? primary.url : undefined;
     return buildPageMetadata({
       title: product.seo.resolvedTitle,
@@ -65,11 +77,27 @@ export default async function ProductPage({ params }: { params: Params }) {
   }
 
   const product = resolved.product;
-  const [related, settings, fulfillment] = await Promise.all([
+  const [related, settings, fulfillment, seller, postcardPage] = await Promise.all([
     listRelatedProducts(product.slug, 8).catch(() => []),
     getStorefrontSettings().catch(() => null),
     getFulfillmentOptions().catch(() => null),
+    getLegalSeller().catch(() => null),
+    listProducts({ categorySlug: POSTCARD_CATEGORY_SLUG, pageSize: 12 }).catch(
+      () => EMPTY_PRODUCT_PAGE,
+    ),
   ]);
+
+  const postcards: PostcardOption[] = postcardPage.items
+    .filter((item) => item.availability !== 'TEMPORARILY_UNAVAILABLE' && item.defaultVariant)
+    .map((item) => ({
+      id: item.id,
+      slug: item.slug,
+      name: item.name,
+      primaryImageUrl: item.primaryImageUrl,
+      defaultVariant: item.defaultVariant,
+      availability: item.availability,
+      price: item.price,
+    }));
 
   const productLd = buildProductJsonLd(product);
   const catalogCrumb = product.catalogCategory
@@ -91,10 +119,21 @@ export default async function ProductPage({ params }: { params: Params }) {
     { name: product.name, path: `/bukety/${product.slug}` },
   ]);
 
-  const phone = settings?.phone ?? null;
   const city = settings?.city ?? null;
-  const substitutionNote = settings?.substitutionNote ?? null;
-  const deliverySummary = settings?.deliverySummary ?? null;
+  const outOfCityDeliveryNote = settings?.outOfCityDeliveryNote ?? null;
+  const purchaseProduct = {
+    id: product.id,
+    name: product.name,
+    slug: product.slug,
+    currency: product.currency,
+    availability: product.availability,
+    price: product.price,
+    promotion: product.promotion,
+    media: product.media,
+    variants: product.variants,
+    shortDescription: product.shortDescription,
+    badgeLabel: product.badgeLabel ?? null,
+  };
 
   return (
     <main id="main-content" className="sf-pdp">
@@ -107,125 +146,72 @@ export default async function ProductPage({ params }: { params: Params }) {
         dangerouslySetInnerHTML={{ __html: serializeJsonLd(breadcrumbLd) }}
       />
 
-      <div className="sf-container-wide sf-pdp__inner">
-        <Breadcrumbs className="mb-4 text-center" items={breadcrumbItems} />
+      <div className="sf-container-wide">
+        <Breadcrumbs className="sf-pdp-crumbs" items={breadcrumbItems} />
 
-        <article className="sf-pdp-shell">
-          <header className="sf-pdp-shell__head">
-            <h1 className="sf-h1">{product.name}</h1>
-            <div className="sf-pdp-shell__fav">
-              <FavoriteButton productId={product.id} slug={product.slug} />
-            </div>
-          </header>
-
-          <div className="sf-pdp-layout">
-            <div className="sf-pdp-layout__media">
+        <ProductPurchaseProvider product={purchaseProduct} postcards={postcards}>
+          <article className="sf-pdp-top">
+            <div className="sf-pdp-top__gallery">
               <ProductGallery
                 media={product.media}
+                productId={product.id}
+                productSlug={product.slug}
                 productName={product.name}
                 heightCm={product.heightCm}
                 promotionPercent={product.promotion?.percentOff ?? null}
               />
             </div>
 
-            <div className="sf-pdp-layout__buy pb-24 lg:pb-0">
-              <ProductPurchasePanel
-                product={product}
-                variants={product.variants}
-                phone={phone}
-              />
+            <div className="sf-pdp-top__buy">
+              <ProductBuyCard
+                whatsappUrl={settings?.whatsappUrl ?? null}
+                telegramUrl={settings?.telegramUrl ?? null}
+                phone={settings?.phone ?? null}
+              >
+                {product.family ? (
+                  <ProductFamilySwitcher family={product.family} currentSlug={product.slug} />
+                ) : null}
+              </ProductBuyCard>
+            </div>
 
-              {product.family ? (
-                <ProductFamilySwitcher family={product.family} currentSlug={product.slug} />
-              ) : null}
-
-              <ProductDetailInfo
-                product={product}
+            <div className="sf-pdp-top__perks">
+              <ProductPerks
                 fulfillment={fulfillment}
-                deliverySummary={deliverySummary}
-                substitutionNote={substitutionNote}
                 city={city}
+                pickupAddress={seller?.pickupAddress ?? settings?.address ?? null}
+                workingHours={settings?.workingHours ?? null}
+                outOfCityDeliveryNote={outOfCityDeliveryNote}
+                photoReportNote={settings?.photoReportNote ?? null}
               />
             </div>
-          </div>
-        </article>
 
-        <section className="sf-pdp-perks-bar" aria-label="Преимущества">
-          <ul className="sf-pdp-perks">
-            <li>
-              <TruckIcon />
-              <span>
-                <strong>Доставка</strong>
-                <em>курьером по городу</em>
-              </span>
-            </li>
-            <li>
-              <GiftIcon />
-              <span>
-                <strong>Подарок</strong>
-                <em>открытка по запросу</em>
-              </span>
-            </li>
-            <li>
-              <StoreIcon />
-              <span>
-                <strong>Магазин</strong>
-                <em>{city ? `в ${city}` : 'самовывоз'}</em>
-              </span>
-            </li>
-            <li>
-              <CameraIcon />
-              <span>
-                <strong>Фото</strong>
-                <em>до отправки по запросу</em>
-              </span>
-            </li>
-          </ul>
-        </section>
+            <div className="sf-pdp-top__card">
+              <ProductPostcardCard />
+            </div>
+          </article>
+
+          <ProductDetailInfo
+            product={product}
+            fulfillment={fulfillment}
+            deliverySummary={settings?.deliverySummary ?? null}
+            substitutionNote={settings?.substitutionNote ?? null}
+            outOfCityDeliveryNote={outOfCityDeliveryNote}
+            paymentDescription={seller?.actualOfflinePaymentDescription ?? null}
+            packagingNote={settings?.packagingNote ?? null}
+            packagingImageUrl={settings?.packagingImageUrl ?? null}
+            city={city}
+          />
+
+          <ProductStickyBar />
+        </ProductPurchaseProvider>
 
         {related.length > 0 ? (
-          <section className="sf-pdp-related">
-            <SectionRail title="Похожие букеты" href="/bukety" linkLabel="Смотреть все" />
-            <ProductGrid products={related} priorityCount={0} />
+          <section className="sf-pdp-related" aria-label="Похожие букеты">
+            <HomeSectionHead title="Похожие букеты" href={catalogCrumb.path} />
+            <ProductRow products={related.slice(0, 5)} priorityCount={0} tone="shelf" />
           </section>
         ) : null}
       </div>
     </main>
-  );
-}
-
-function TruckIcon() {
-  return (
-    <svg viewBox="0 0 24 24" className="sf-pdp-perks__icon" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden>
-      <path d="M3 7h11v8H3zM14 10h4l3 3v2h-7V10Z" strokeLinejoin="round" />
-      <circle cx="7" cy="17" r="1.5" />
-      <circle cx="17" cy="17" r="1.5" />
-    </svg>
-  );
-}
-
-function GiftIcon() {
-  return (
-    <svg viewBox="0 0 24 24" className="sf-pdp-perks__icon" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden>
-      <path d="M4 11h16v9H4zM4 11V8h16v3M12 8v12M12 8c-2 0-3.5-1.5-3.5-3S10 3 12 5c2-2 3.5-.5 3.5 1S14 8 12 8Z" strokeLinejoin="round" />
-    </svg>
-  );
-}
-
-function StoreIcon() {
-  return (
-    <svg viewBox="0 0 24 24" className="sf-pdp-perks__icon" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden>
-      <path d="M4 10 6 5h12l2 5v9H4v-9Z" strokeLinejoin="round" />
-      <path d="M9 19v-5h6v5" strokeLinejoin="round" />
-    </svg>
-  );
-}
-
-function CameraIcon() {
-  return (
-    <svg viewBox="0 0 24 24" className="sf-pdp-perks__icon" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden>
-      <path d="M4 8h3l2-2h6l2 2h3v11H4V8Z" strokeLinejoin="round" />
-      <circle cx="12" cy="13" r="3.5" />
-    </svg>
   );
 }

@@ -1562,6 +1562,8 @@ export type ProductAdminDto = {
   name: string;
   shortDescription: string | null;
   description: string | null;
+  /** Product page badge next to availability (e.g. «Хит сезона»). */
+  badgeLabel: string | null;
   lifecycle: ProductLifecycle;
   availability: CommercialAvailability;
   heightCm: number | null;
@@ -1605,6 +1607,7 @@ export type ProductPublicDto = {
   name: string;
   shortDescription: string | null;
   description: string | null;
+  badgeLabel: string | null;
   availability: CommercialAvailability;
   heightCm: number | null;
   productKind: ProductKind;

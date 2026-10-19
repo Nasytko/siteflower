@@ -39,6 +39,16 @@ export function pickDerivativeUrl(
   return sorted.find((d) => d.width >= targetWidth)?.url ?? sorted.at(-1)?.url ?? media.url;
 }
 
+/** Primary photo first, then admin sort order. */
+export function sortProductMedia<T extends { isPrimary: boolean; sortOrder: number }>(
+  media: T[],
+): T[] {
+  return [...media].sort((a, b) => {
+    if (a.isPrimary !== b.isPrimary) return a.isPrimary ? -1 : 1;
+    return a.sortOrder - b.sortOrder;
+  });
+}
+
 /** Meaningful alt for product photos — never SEO-spam keywords. */
 export function productImageAlt(productName: string, alt: string | null | undefined): string {
   const trimmed = alt?.trim();
