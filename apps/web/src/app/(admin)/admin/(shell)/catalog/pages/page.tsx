@@ -10,7 +10,7 @@ export default async function AdminCatalogPagesPage() {
     <main id="main-content" className="space-y-6">
       <AdminPageHeader
         title="Страницы каталога"
-        lead="Основные разделы и тематические подборки в одном месте. Товары попадают сюда автоматически по типу и правилам состава."
+        lead="Основные разделы заполняются сами по типу товара. Тематические страницы — по правилам состава (например «с розами» или «из роз»). Черновики на сайте не видны."
       />
       <CatalogPagesManager
         canCreate={roleHasPermission(me.user.role, 'CATALOG_CREATE')}

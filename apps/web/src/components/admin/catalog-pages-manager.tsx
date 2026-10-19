@@ -1,10 +1,19 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import type { CatalogPageDto, CatalogPageKind } from '@bouquet-one/contracts';
+import {
+  PRIMARY_PRODUCT_KINDS,
+  type CatalogPageDto,
+  type CatalogPageKind,
+  type FlowerTypeAdminDto,
+  type ProductKind,
+  type ProductTraitDefinitionDto,
+} from '@bouquet-one/contracts';
+import { FormSaveStatus, type FormSavePhase } from '@/components/admin/form-status';
 import { adminGet, adminPatch, adminPost, errorMessage } from '@/lib/admin-client';
 import { adminEndpoints, withQuery } from '@/lib/admin-endpoints';
-import { FormSaveStatus, type FormSavePhase } from '@/components/admin/form-status';
+import { productKindLabel } from '@/lib/admin-labels';
+import { isMajorInputValid, majorInputToMinor, minorToMajorInput } from '@/lib/admin-money';
 
 type Props = {
   canCreate: boolean;
@@ -12,7 +21,214 @@ type Props = {
   canPublish: boolean;
 };
 
-type EditorMode = 'closed' | 'create' | 'edit';
+type EditorMode = 'closed' | 'create' | 'edit' | 'view-system';
+
+/** How flower type participates — manager-facing labels. */
+type FlowerMatchMode = '' | 'contains' | 'only';
+
+type RulesDraft = {
+  productKind: '' | ProductKind;
+  flowerTypeId: string;
+  flowerMatchMode: FlowerMatchMode;
+  compositionKind: '' | 'MONO' | 'MIXED';
+  authorial: boolean;
+  minMajor: string;
+  maxMajor: string;
+};
+
+type PageDraft = {
+  name: string;
+  slug: string;
+  h1: string;
+  seoTitle: string;
+  seoDescription: string;
+  body: string;
+  rules: RulesDraft;
+};
+
+function emptyRules(): RulesDraft {
+  return {
+    productKind: 'BOUQUET',
+    flowerTypeId: '',
+    flowerMatchMode: '',
+    compositionKind: '',
+    authorial: false,
+    minMajor: '',
+    maxMajor: '',
+  };
+}
+
+function emptyDraft(): PageDraft {
+  return {
+    name: '',
+    slug: '',
+    h1: '',
+    seoTitle: '',
+    seoDescription: '',
+    body: '',
+    rules: emptyRules(),
+  };
+}
+
+function firstString(value: unknown): string {
+  if (typeof value === 'string' && value.trim()) return value.trim();
+  if (Array.isArray(value) && typeof value[0] === 'string') return value[0].trim();
+  return '';
+}
+
+function rulesFromPage(page: CatalogPageDto, flowerTypes: FlowerTypeAdminDto[]): RulesDraft {
+  const rules = page.rules ?? {};
+  const productKinds = Array.isArray(rules.productKinds) ? rules.productKinds : [];
+  const firstKind = typeof productKinds[0] === 'string' ? productKinds[0] : '';
+  const composition = Array.isArray(rules.compositionKinds) ? rules.compositionKinds : [];
+  const compositionType =
+    typeof rules.compositionType === 'string' ? rules.compositionType : '';
+  const compositionKindRaw = firstString(composition[0] ?? compositionType);
+  const compositionKind =
+    compositionKindRaw === 'MONO' || compositionKindRaw === 'MIXED' ? compositionKindRaw : '';
+
+  const traitKeys = Array.isArray(rules.traitKeys) ? rules.traitKeys : [];
+  const authorial = traitKeys.includes('AUTHORIAL');
+
+  const onlySlug =
+    firstString(rules.onlyFlowerType) || firstString(rules.onlyFlowerTypeSlugs);
+  const onlyId = firstString(rules.onlyFlowerTypeIds);
+  const containsSlug =
+    firstString(rules.containsFlowerType) ||
+    firstString(rules.containsFlowerTypeSlugs) ||
+    firstString(rules.flowerTypeSlugs);
+  const containsId = firstString(rules.flowerTypeIds);
+
+  let flowerTypeId = '';
+  let flowerMatchMode: FlowerMatchMode = '';
+  if (onlyId || onlySlug) {
+    flowerMatchMode = 'only';
+    flowerTypeId =
+      onlyId ||
+      flowerTypes.find((t) => t.slug === onlySlug)?.id ||
+      '';
+  } else if (containsId || containsSlug) {
+    flowerMatchMode = 'contains';
+    flowerTypeId =
+      containsId ||
+      flowerTypes.find((t) => t.slug === containsSlug)?.id ||
+      '';
+  }
+
+  return {
+    productKind: (PRIMARY_PRODUCT_KINDS as readonly string[]).includes(firstKind)
+      ? (firstKind as ProductKind)
+      : firstKind
+        ? (firstKind as ProductKind)
+        : '',
+    flowerTypeId,
+    flowerMatchMode,
+    compositionKind,
+    authorial,
+    minMajor: minorToMajorInput(
+      typeof rules.minPriceMinor === 'string' ? rules.minPriceMinor : null,
+    ),
+    maxMajor: minorToMajorInput(
+      typeof rules.maxPriceMinor === 'string' ? rules.maxPriceMinor : null,
+    ),
+  };
+}
+
+function draftFromPage(page: CatalogPageDto, flowerTypes: FlowerTypeAdminDto[]): PageDraft {
+  return {
+    name: page.name,
+    slug: page.slug,
+    h1: page.h1 ?? page.name,
+    seoTitle: page.seoTitle ?? '',
+    seoDescription: page.seoDescription ?? '',
+    body: page.body ?? '',
+    rules: rulesFromPage(page, flowerTypes),
+  };
+}
+
+function buildRulesPayload(
+  rules: RulesDraft,
+  flowerTypes: FlowerTypeAdminDto[],
+): Record<string, unknown> {
+  if (!isMajorInputValid(rules.minMajor) || !isMajorInputValid(rules.maxMajor)) {
+    throw new Error('Цена указывается в BYN, например 150 или 150,50');
+  }
+  const payload: Record<string, unknown> = {};
+  if (rules.productKind) payload.productKinds = [rules.productKind];
+
+  const flowerType = flowerTypes.find((row) => row.id === rules.flowerTypeId);
+  if (rules.flowerTypeId && flowerType) {
+    if (rules.flowerMatchMode === 'only') {
+      payload.onlyFlowerType = flowerType.slug;
+    } else if (rules.flowerMatchMode === 'contains') {
+      payload.containsFlowerType = flowerType.slug;
+    }
+  }
+
+  if (rules.compositionKind) {
+    payload.compositionKinds = [rules.compositionKind];
+  }
+  if (rules.authorial) {
+    payload.traitKeys = ['AUTHORIAL'];
+  }
+
+  const minMinor = majorInputToMinor(rules.minMajor);
+  const maxMinor = majorInputToMinor(rules.maxMajor);
+  if (minMinor) payload.minPriceMinor = minMinor;
+  if (maxMinor) payload.maxPriceMinor = maxMinor;
+  return payload;
+}
+
+/** Live human sentence for the rule constructor. */
+function describeRulesDraft(
+  rules: RulesDraft,
+  flowerTypes: FlowerTypeAdminDto[],
+): string {
+  const parts: string[] = ['Показывать опубликованные'];
+  if (rules.productKind) {
+    const label = productKindLabel(rules.productKind).toLowerCase();
+    if (rules.productKind === 'BOUQUET') parts.push('букеты');
+    else if (rules.productKind === 'COMPOSITION') parts.push('композиции');
+    else if (rules.productKind === 'STEM') parts.push('цветы поштучно');
+    else if (rules.productKind === 'GIFT') parts.push('подарки');
+    else parts.push(label);
+  } else {
+    parts.push('товары');
+  }
+
+  const flower = flowerTypes.find((t) => t.id === rules.flowerTypeId);
+  if (flower && rules.flowerMatchMode === 'only') {
+    parts.push(`, состоящие только из «${flower.name}»`);
+    parts.push(' (другие основные цветы не допускаются, зелень — можно)');
+  } else if (flower && rules.flowerMatchMode === 'contains') {
+    parts.push(`, в составе которых есть «${flower.name}»`);
+  }
+
+  if (rules.compositionKind === 'MONO') {
+    parts.push(', монобукеты (один основной вид)');
+  } else if (rules.compositionKind === 'MIXED') {
+    parts.push(', смешанные (два и более основных вида)');
+  }
+
+  if (rules.authorial) parts.push(', с признаком «Авторский»');
+  if (rules.minMajor.trim()) parts.push(`, цена от ${rules.minMajor.trim()} BYN`);
+  if (rules.maxMajor.trim()) parts.push(`, цена до ${rules.maxMajor.trim()} BYN`);
+
+  return parts.join('').replace(/\s+,/g, ',') + '.';
+}
+
+function humanRulesSummary(
+  page: CatalogPageDto,
+  flowerTypes: FlowerTypeAdminDto[],
+): string {
+  if (page.pageKind === 'SYSTEM_HUB') {
+    return `Все товары типа «${page.name}»`;
+  }
+  if (page.pageKind === 'GIFT_SUBTYPE') {
+    return 'Подтип подарка — выбирается в карточке товара';
+  }
+  return describeRulesDraft(rulesFromPage(page, flowerTypes), flowerTypes);
+}
 
 function kindLabel(kind: CatalogPageKind): string {
   switch (kind) {
@@ -36,21 +252,19 @@ function statusLabel(page: CatalogPageDto): string {
 
 export function CatalogPagesManager({ canCreate, canUpdate, canPublish }: Props) {
   const [pages, setPages] = useState<CatalogPageDto[]>([]);
+  const [flowerTypes, setFlowerTypes] = useState<FlowerTypeAdminDto[]>([]);
+  const [traits, setTraits] = useState<ProductTraitDefinitionDto[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [phase, setPhase] = useState<FormSavePhase>('idle');
   const [q, setQ] = useState('');
   const [kindFilter, setKindFilter] = useState<'' | CatalogPageKind>('');
+  const [statusFilter, setStatusFilter] = useState<'' | 'PUBLISHED' | 'DRAFT'>('');
   const [mode, setMode] = useState<EditorMode>('closed');
   const [editing, setEditing] = useState<CatalogPageDto | null>(null);
-  const [draft, setDraft] = useState({
-    name: '',
-    slug: '',
-    h1: '',
-    rulesJson: '{\n  "productKinds": ["BOUQUET"]\n}',
-  });
+  const [draft, setDraft] = useState<PageDraft>(emptyDraft);
 
-  async function load() {
+  async function loadPages() {
     setLoading(true);
     setError(null);
     try {
@@ -70,85 +284,139 @@ export function CatalogPagesManager({ canCreate, canUpdate, canPublish }: Props)
   }
 
   useEffect(() => {
-    void load();
+    void loadPages();
+    // reload when type filter changes
   }, [kindFilter]);
+
+  useEffect(() => {
+    let cancelled = false;
+    void Promise.all([
+      adminGet<FlowerTypeAdminDto[]>(adminEndpoints.flowerTypes),
+      adminGet<ProductTraitDefinitionDto[]>(adminEndpoints.catalogPageTraits),
+    ])
+      .then(([types, traitDefs]) => {
+        if (cancelled) return;
+        setFlowerTypes(types);
+        setTraits(traitDefs);
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setFlowerTypes([]);
+          setTraits([]);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const hubs = useMemo(
     () => pages.filter((p) => p.pageKind === 'SYSTEM_HUB'),
     [pages],
   );
-  const thematic = useMemo(
-    () => pages.filter((p) => p.pageKind !== 'SYSTEM_HUB'),
-    [pages],
+  const thematic = useMemo(() => {
+    return pages.filter((p) => {
+      if (p.pageKind === 'SYSTEM_HUB') return false;
+      if (statusFilter === 'PUBLISHED') {
+        return p.status === 'PUBLISHED' || p.status === 'LIVE';
+      }
+      if (statusFilter === 'DRAFT') {
+        return p.status !== 'PUBLISHED' && p.status !== 'LIVE' && p.status !== 'ARCHIVED';
+      }
+      return true;
+    });
+  }, [pages, statusFilter]);
+
+  const rulesPreview = useMemo(
+    () => describeRulesDraft(draft.rules, flowerTypes),
+    [draft.rules, flowerTypes],
   );
 
   function openCreate() {
     setMode('create');
     setEditing(null);
-    setDraft({
-      name: '',
-      slug: '',
-      h1: '',
-      rulesJson: '{\n  "productKinds": ["BOUQUET"],\n  "containsFlowerType": "roza"\n}',
-    });
+    setDraft(emptyDraft());
+    setPhase('idle');
   }
 
   function openEdit(page: CatalogPageDto) {
+    if (page.isSystem || page.pageKind === 'SYSTEM_HUB') {
+      setMode('view-system');
+      setEditing(page);
+      setDraft(draftFromPage(page, flowerTypes));
+      setPhase('idle');
+      return;
+    }
     setMode('edit');
     setEditing(page);
-    setDraft({
-      name: page.name,
-      slug: page.slug,
-      h1: page.h1 ?? page.name,
-      rulesJson: JSON.stringify(page.rules ?? {}, null, 2),
-    });
+    setDraft(draftFromPage(page, flowerTypes));
+    setPhase('idle');
   }
 
   function closeEditor() {
     setMode('closed');
     setEditing(null);
+    setDraft(emptyDraft());
+  }
+
+  function setRules(patch: Partial<RulesDraft>) {
+    setDraft((prev) => ({ ...prev, rules: { ...prev.rules, ...patch } }));
   }
 
   async function save() {
-    if (!canUpdate && !canCreate) return;
-    let rules: Record<string, unknown> = {};
-    try {
-      rules = JSON.parse(draft.rulesJson) as Record<string, unknown>;
-    } catch {
-      setError('Правила должны быть корректным JSON');
+    if (!canUpdate && mode !== 'create') return;
+    if (mode === 'create' && !canCreate) return;
+    if (!draft.name.trim()) {
+      setError('Укажите название страницы');
       setPhase('validation');
       return;
     }
+    let rules: Record<string, unknown>;
+    try {
+      rules = buildRulesPayload(draft.rules, flowerTypes);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Проверьте правила');
+      setPhase('validation');
+      return;
+    }
+    if (Object.keys(rules).length === 0) {
+      setError('Укажите хотя бы тип товара или другое условие подбора');
+      setPhase('validation');
+      return;
+    }
+
     setPhase('saving');
     setError(null);
     try {
       if (mode === 'edit' && editing) {
-        if (editing.isSystem) {
-          setError('Системный раздел нельзя редактировать здесь');
-          setPhase('server');
-          return;
-        }
         const updated = await adminPatch<CatalogPageDto>(adminEndpoints.catalogPage(editing.id), {
           expectedVersion: editing.version,
-          name: draft.name,
-          slug: draft.slug,
-          h1: draft.h1,
+          name: draft.name.trim(),
+          slug: draft.slug.trim() || undefined,
+          h1: draft.h1.trim() || draft.name.trim(),
+          seoTitle: draft.seoTitle.trim() || null,
+          seoDescription: draft.seoDescription.trim() || null,
+          body: draft.body.trim() || null,
           rules,
         });
         setEditing(updated);
+        setDraft(draftFromPage(updated, flowerTypes));
       } else {
-        if (!canCreate) return;
         const created = await adminPost<CatalogPageDto>(adminEndpoints.catalogPages, {
-          name: draft.name,
-          slug: draft.slug || undefined,
-          h1: draft.h1 || undefined,
+          name: draft.name.trim(),
+          slug: draft.slug.trim() || undefined,
+          h1: draft.h1.trim() || draft.name.trim(),
+          seoTitle: draft.seoTitle.trim() || null,
+          seoDescription: draft.seoDescription.trim() || null,
+          body: draft.body.trim() || null,
           rules,
         });
         setEditing(created);
+        setDraft(draftFromPage(created, flowerTypes));
         setMode('edit');
       }
       setPhase('saved');
-      await load();
+      await loadPages();
     } catch (err) {
       setError(errorMessage(err, 'Не удалось сохранить'));
       setPhase('server');
@@ -158,14 +426,16 @@ export function CatalogPagesManager({ canCreate, canUpdate, canPublish }: Props)
   async function publish() {
     if (!editing || !canPublish || editing.isSystem) return;
     setPhase('saving');
+    setError(null);
     try {
       const updated = await adminPost<CatalogPageDto>(
         adminEndpoints.catalogPagePublish(editing.id),
         { expectedVersion: editing.version },
       );
       setEditing(updated);
+      setDraft(draftFromPage(updated, flowerTypes));
       setPhase('saved');
-      await load();
+      await loadPages();
     } catch (err) {
       setError(errorMessage(err, 'Не удалось опубликовать'));
       setPhase('server');
@@ -173,6 +443,8 @@ export function CatalogPagesManager({ canCreate, canUpdate, canPublish }: Props)
   }
 
   const showEditor = mode !== 'closed';
+  const editable = mode === 'create' || (mode === 'edit' && !editing?.isSystem);
+  const authorialTrait = traits.find((t) => t.key === 'AUTHORIAL');
 
   return (
     <div className="space-y-6">
@@ -187,7 +459,7 @@ export function CatalogPagesManager({ canCreate, canUpdate, canPublish }: Props)
             placeholder="Название или URL…"
             onChange={(e) => setQ(e.target.value)}
             onKeyDown={(e) => {
-              if (e.key === 'Enter') void load();
+              if (e.key === 'Enter') void loadPages();
             }}
           />
         </label>
@@ -204,78 +476,289 @@ export function CatalogPagesManager({ canCreate, canUpdate, canPublish }: Props)
             <option value="GIFT_SUBTYPE">Подарки</option>
           </select>
         </label>
-        <button type="button" className="admin-btn-ghost" onClick={() => void load()}>
+        <label className="admin-field">
+          <span>Статус</span>
+          <select
+            className="admin-select"
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value as '' | 'PUBLISHED' | 'DRAFT')}
+          >
+            <option value="">Все</option>
+            <option value="PUBLISHED">Опубликовано</option>
+            <option value="DRAFT">Черновики</option>
+          </select>
+        </label>
+        <button type="button" className="admin-btn-ghost" onClick={() => void loadPages()}>
           Найти
         </button>
         {canCreate ? (
           <button type="button" className="admin-btn" onClick={openCreate}>
-            + Страница
+            + Тематическая страница
           </button>
         ) : null}
       </div>
 
       {showEditor ? (
-        <div className="admin-panel max-w-xl space-y-3 p-4">
-          <h2 className="text-base font-semibold">
-            {editing ? `Изменить: ${editing.name}` : 'Новая тематическая страница'}
-          </h2>
-          {editing?.isSystem ? (
-            <p className="text-sm text-[var(--admin-muted)]">
-              Системный раздел определяется типом товара. Редактирование правил недоступно.
-            </p>
+        <div className="admin-panel max-w-2xl space-y-5 p-5">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <h2 className="text-base font-semibold">
+                {mode === 'create'
+                  ? 'Новая тематическая страница'
+                  : mode === 'view-system'
+                    ? `Основной раздел: ${editing?.name}`
+                    : `Изменить: ${editing?.name}`}
+              </h2>
+              {mode === 'view-system' ? (
+                <p className="mt-1 text-sm text-[var(--admin-muted)]">
+                  Заполняется автоматически по типу товара. Правила здесь не настраиваются.
+                </p>
+              ) : (
+                <p className="mt-1 text-sm text-[var(--admin-muted)]">
+                  Сохраните черновик, проверьте товары, затем опубликуйте — страница появится на
+                  сайте.
+                </p>
+              )}
+            </div>
+            <button type="button" className="admin-btn-ghost" onClick={closeEditor}>
+              К списку
+            </button>
+          </div>
+
+          {mode === 'view-system' && editing ? (
+            <div className="space-y-2 text-sm">
+              <p>
+                <span className="text-[var(--admin-muted)]">URL: </span>
+                <a href={editing.publicPath} className="admin-link" target="_blank" rel="noreferrer">
+                  {editing.publicPath}
+                </a>
+              </p>
+              <p>
+                <span className="text-[var(--admin-muted)]">Товаров: </span>
+                {editing.productsCount ?? '—'}
+              </p>
+              <p className="text-[var(--admin-muted)]">{humanRulesSummary(editing, flowerTypes)}</p>
+            </div>
           ) : (
             <>
-              <label className="admin-field">
-                <span>Название</span>
-                <input
-                  className="admin-input"
-                  value={draft.name}
-                  disabled={!canUpdate && mode !== 'create'}
-                  onChange={(e) => setDraft((p) => ({ ...p, name: e.target.value }))}
-                />
-              </label>
-              <label className="admin-field">
-                <span>URL (slug)</span>
-                <input
-                  className="admin-input"
-                  value={draft.slug}
-                  disabled={!canUpdate && mode !== 'create'}
-                  onChange={(e) => setDraft((p) => ({ ...p, slug: e.target.value }))}
-                />
-              </label>
-              <label className="admin-field">
-                <span>H1</span>
-                <input
-                  className="admin-input"
-                  value={draft.h1}
-                  disabled={!canUpdate && mode !== 'create'}
-                  onChange={(e) => setDraft((p) => ({ ...p, h1: e.target.value }))}
-                />
-              </label>
-              <label className="admin-field">
-                <span>Какие товары показывать</span>
-                <textarea
-                  className="admin-input font-mono text-xs"
-                  rows={8}
-                  value={draft.rulesJson}
-                  disabled={!canUpdate && mode !== 'create'}
-                  onChange={(e) => setDraft((p) => ({ ...p, rulesJson: e.target.value }))}
-                />
-                <span className="admin-field__hint">
-                  Примеры: containsFlowerType (с розами), onlyFlowerType (из роз),
-                  compositionKinds MONO/MIXED, traitKeys AUTHORIAL
-                </span>
-              </label>
-              <div className="flex flex-wrap gap-2">
-                <button
-                  type="button"
-                  className="admin-btn"
-                  disabled={phase === 'saving'}
-                  onClick={() => void save()}
-                >
-                  Сохранить
-                </button>
-                {editing && canPublish && editing.status !== 'PUBLISHED' ? (
+              <section className="space-y-3">
+                <h3 className="text-xs font-semibold uppercase tracking-wide text-[var(--admin-muted)]">
+                  Основное
+                </h3>
+                <label className="admin-field">
+                  <span>Название</span>
+                  <input
+                    className="admin-input"
+                    value={draft.name}
+                    disabled={!editable || (!canUpdate && mode !== 'create')}
+                    onChange={(e) => setDraft((p) => ({ ...p, name: e.target.value }))}
+                  />
+                </label>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <label className="admin-field">
+                    <span>Адрес страницы</span>
+                    <input
+                      className="admin-input"
+                      value={draft.slug}
+                      placeholder="bukety-s-rozami"
+                      disabled={!editable || (!canUpdate && mode !== 'create')}
+                      onChange={(e) => setDraft((p) => ({ ...p, slug: e.target.value }))}
+                    />
+                    <span className="admin-field__hint">Будет /katalog/…</span>
+                  </label>
+                  <label className="admin-field">
+                    <span>Заголовок H1</span>
+                    <input
+                      className="admin-input"
+                      value={draft.h1}
+                      disabled={!editable || (!canUpdate && mode !== 'create')}
+                      onChange={(e) => setDraft((p) => ({ ...p, h1: e.target.value }))}
+                    />
+                  </label>
+                </div>
+              </section>
+
+              <section className="space-y-3 rounded-md border border-[var(--admin-border)] p-4">
+                <h3 className="text-xs font-semibold uppercase tracking-wide text-[var(--admin-muted)]">
+                  Какие товары показывать
+                </h3>
+                <p className="rounded-md bg-[var(--admin-surface-muted,rgba(0,0,0,0.04))] px-3 py-2 text-sm">
+                  {rulesPreview}
+                </p>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <label className="admin-field">
+                    <span>Тип товара</span>
+                    <select
+                      className="admin-select"
+                      value={draft.rules.productKind}
+                      disabled={!editable || (!canUpdate && mode !== 'create')}
+                      onChange={(e) =>
+                        setRules({
+                          productKind: e.target.value as RulesDraft['productKind'],
+                        })
+                      }
+                    >
+                      <option value="">Любой</option>
+                      {PRIMARY_PRODUCT_KINDS.map((kind) => (
+                        <option key={kind} value={kind}>
+                          {productKindLabel(kind)}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="admin-field">
+                    <span>Вид цветка</span>
+                    <select
+                      className="admin-select"
+                      value={draft.rules.flowerTypeId}
+                      disabled={!editable || (!canUpdate && mode !== 'create')}
+                      onChange={(e) => {
+                        const id = e.target.value;
+                        setRules({
+                          flowerTypeId: id,
+                          flowerMatchMode: id
+                            ? draft.rules.flowerMatchMode || 'contains'
+                            : '',
+                        });
+                      }}
+                    >
+                      <option value="">Не важно</option>
+                      {flowerTypes.map((type) => (
+                        <option key={type.id} value={type.id}>
+                          {type.name}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="admin-field sm:col-span-2">
+                    <span>Как учитывать цветок</span>
+                    <select
+                      className="admin-select"
+                      value={draft.rules.flowerMatchMode}
+                      disabled={
+                        !draft.rules.flowerTypeId ||
+                        !editable ||
+                        (!canUpdate && mode !== 'create')
+                      }
+                      onChange={(e) =>
+                        setRules({
+                          flowerMatchMode: e.target.value as FlowerMatchMode,
+                        })
+                      }
+                    >
+                      <option value="contains">С этим цветком (могут быть и другие)</option>
+                      <option value="only">
+                        Только из этого цветка («из роз» — зелень допускается)
+                      </option>
+                    </select>
+                  </label>
+                  <label className="admin-field">
+                    <span>Состав букета</span>
+                    <select
+                      className="admin-select"
+                      value={draft.rules.compositionKind}
+                      disabled={!editable || (!canUpdate && mode !== 'create')}
+                      onChange={(e) =>
+                        setRules({
+                          compositionKind: e.target.value as RulesDraft['compositionKind'],
+                        })
+                      }
+                    >
+                      <option value="">Не важно</option>
+                      <option value="MONO">Только монобукеты</option>
+                      <option value="MIXED">Только смешанные</option>
+                    </select>
+                  </label>
+                  <label className="admin-field">
+                    <span className="inline-flex items-center gap-2 pt-6">
+                      <input
+                        type="checkbox"
+                        checked={draft.rules.authorial}
+                        disabled={!editable || (!canUpdate && mode !== 'create')}
+                        onChange={(e) => setRules({ authorial: e.target.checked })}
+                      />
+                      {authorialTrait?.name ?? 'Авторский'}
+                    </span>
+                    {authorialTrait?.description ? (
+                      <span className="admin-field__hint">{authorialTrait.description}</span>
+                    ) : null}
+                  </label>
+                  <label className="admin-field">
+                    <span>Цена от, BYN</span>
+                    <input
+                      className="admin-input"
+                      value={draft.rules.minMajor}
+                      placeholder="0"
+                      disabled={!editable || (!canUpdate && mode !== 'create')}
+                      onChange={(e) => setRules({ minMajor: e.target.value })}
+                    />
+                  </label>
+                  <label className="admin-field">
+                    <span>Цена до, BYN</span>
+                    <input
+                      className="admin-input"
+                      value={draft.rules.maxMajor}
+                      placeholder="100"
+                      disabled={!editable || (!canUpdate && mode !== 'create')}
+                      onChange={(e) => setRules({ maxMajor: e.target.value })}
+                    />
+                  </label>
+                </div>
+              </section>
+
+              <section className="space-y-3">
+                <h3 className="text-xs font-semibold uppercase tracking-wide text-[var(--admin-muted)]">
+                  SEO
+                </h3>
+                <label className="admin-field">
+                  <span>Title</span>
+                  <input
+                    className="admin-input"
+                    value={draft.seoTitle}
+                    disabled={!editable || (!canUpdate && mode !== 'create')}
+                    onChange={(e) => setDraft((p) => ({ ...p, seoTitle: e.target.value }))}
+                  />
+                </label>
+                <label className="admin-field">
+                  <span>Description</span>
+                  <textarea
+                    className="admin-input"
+                    rows={2}
+                    value={draft.seoDescription}
+                    disabled={!editable || (!canUpdate && mode !== 'create')}
+                    onChange={(e) =>
+                      setDraft((p) => ({ ...p, seoDescription: e.target.value }))
+                    }
+                  />
+                </label>
+                <label className="admin-field">
+                  <span>Текст на странице</span>
+                  <textarea
+                    className="admin-input"
+                    rows={4}
+                    value={draft.body}
+                    disabled={!editable || (!canUpdate && mode !== 'create')}
+                    onChange={(e) => setDraft((p) => ({ ...p, body: e.target.value }))}
+                  />
+                </label>
+              </section>
+
+              <div className="flex flex-wrap items-center gap-2">
+                {(canUpdate || (mode === 'create' && canCreate)) && editable ? (
+                  <button
+                    type="button"
+                    className="admin-btn"
+                    disabled={phase === 'saving'}
+                    onClick={() => void save()}
+                  >
+                    Сохранить
+                  </button>
+                ) : null}
+                {editing &&
+                canPublish &&
+                editable &&
+                editing.status !== 'PUBLISHED' &&
+                editing.status !== 'LIVE' ? (
                   <button
                     type="button"
                     className="admin-btn-ghost"
@@ -285,17 +768,17 @@ export function CatalogPagesManager({ canCreate, canUpdate, canPublish }: Props)
                     Опубликовать
                   </button>
                 ) : null}
-                <button type="button" className="admin-btn-ghost" onClick={closeEditor}>
-                  Закрыть
-                </button>
+                {editing?.status === 'PUBLISHED' || editing?.status === 'LIVE' ? (
+                  <span className="text-sm text-emerald-700">Уже на сайте</span>
+                ) : null}
+                {editing?.productsCount != null ? (
+                  <span className="text-sm text-[var(--admin-muted)]">
+                    Сейчас подходит товаров: {editing.productsCount}
+                  </span>
+                ) : null}
               </div>
             </>
           )}
-          {editing?.isSystem ? (
-            <button type="button" className="admin-btn-ghost" onClick={closeEditor}>
-              Закрыть
-            </button>
-          ) : null}
         </div>
       ) : null}
 
@@ -305,8 +788,8 @@ export function CatalogPagesManager({ canCreate, canUpdate, canPublish }: Props)
         <div className="admin-panel space-y-3 p-6">
           <p className="font-medium">Пока нет страниц каталога</p>
           <p className="text-sm text-[var(--admin-muted)]">
-            Основные разделы появятся после миграции. Тематическую страницу можно создать кнопкой
-            выше — например «Букеты с розами».
+            Основные разделы появятся после миграции. Создайте тематическую страницу — например
+            «Букеты с розами».
           </p>
           {canCreate ? (
             <button type="button" className="admin-btn" onClick={openCreate}>
@@ -316,20 +799,31 @@ export function CatalogPagesManager({ canCreate, canUpdate, canPublish }: Props)
         </div>
       ) : (
         <div className="space-y-6">
-          {hubs.length > 0 ? (
+          {hubs.length > 0 && !statusFilter ? (
             <section className="space-y-2">
               <h3 className="text-xs font-semibold uppercase tracking-wide text-[var(--admin-muted)]">
                 Основные разделы
               </h3>
-              <PageTable pages={hubs} onEdit={openEdit} />
+              <p className="text-sm text-[var(--admin-muted)]">
+                Задаются типом товара в карточке. Редактировать правила не нужно.
+              </p>
+              <PageTable
+                pages={hubs}
+                flowerTypes={flowerTypes}
+                onEdit={openEdit}
+                systemOnly
+              />
             </section>
           ) : null}
           {thematic.length > 0 ? (
             <section className="space-y-2">
               <h3 className="text-xs font-semibold uppercase tracking-wide text-[var(--admin-muted)]">
-                Тематические и прочие
+                Тематические страницы
               </h3>
-              <PageTable pages={thematic} onEdit={openEdit} />
+              <p className="text-sm text-[var(--admin-muted)]">
+                Черновики не видны покупателям. Опубликуйте страницу, когда правила и SEO готовы.
+              </p>
+              <PageTable pages={thematic} flowerTypes={flowerTypes} onEdit={openEdit} />
             </section>
           ) : null}
         </div>
@@ -340,10 +834,14 @@ export function CatalogPagesManager({ canCreate, canUpdate, canPublish }: Props)
 
 function PageTable({
   pages,
+  flowerTypes,
   onEdit,
+  systemOnly,
 }: {
   pages: CatalogPageDto[];
+  flowerTypes: FlowerTypeAdminDto[];
   onEdit: (page: CatalogPageDto) => void;
+  systemOnly?: boolean;
 }) {
   return (
     <div className="admin-panel overflow-x-auto">
@@ -364,8 +862,8 @@ function PageTable({
             <tr key={page.id}>
               <td className="font-medium">{page.name}</td>
               <td className="text-sm">{kindLabel(page.pageKind)}</td>
-              <td className="max-w-[14rem] truncate text-xs text-[var(--admin-muted)]">
-                {page.rulesSummary}
+              <td className="max-w-[16rem] text-xs text-[var(--admin-muted)]">
+                {humanRulesSummary(page, flowerTypes)}
               </td>
               <td className="text-sm tabular-nums">
                 {page.productsCount == null ? '—' : page.productsCount}
@@ -377,8 +875,12 @@ function PageTable({
                 </a>
               </td>
               <td>
-                <button type="button" className="admin-btn-ghost text-xs" onClick={() => onEdit(page)}>
-                  Изменить
+                <button
+                  type="button"
+                  className="admin-btn-ghost text-xs"
+                  onClick={() => onEdit(page)}
+                >
+                  {systemOnly ? 'Подробнее' : 'Изменить'}
                 </button>
               </td>
             </tr>
