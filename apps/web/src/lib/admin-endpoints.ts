@@ -104,6 +104,11 @@ export const adminEndpoints = {
   catalogCategoryFilters: (id: string) => `${ADMIN}/catalog/categories/${id}/filters`,
   catalogCategoryFiltersPreset: (id: string) =>
     `${ADMIN}/catalog/categories/${id}/filters/apply-preset`,
+  /** Unified «Страницы каталога». */
+  catalogPages: `${ADMIN}/catalog/pages`,
+  catalogPage: (id: string) => `${ADMIN}/catalog/pages/${id}`,
+  catalogPagePublish: (id: string) => `${ADMIN}/catalog/pages/${id}/publish`,
+  catalogPageTraits: `${ADMIN}/catalog/pages/traits`,
 
   flowerTypes: `${ADMIN}/catalog/flower-refs/types`,
   flowerType: (id: string) => `${ADMIN}/catalog/flower-refs/types/${id}`,

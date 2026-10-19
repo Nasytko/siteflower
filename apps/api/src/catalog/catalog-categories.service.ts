@@ -190,17 +190,29 @@ export class CatalogCategoriesService {
     if (!row || row.visibility !== 'VISIBLE') {
       throw new NotFoundException('Category not found');
     }
+    const rules =
+      row.rules && typeof row.rules === 'object' && !Array.isArray(row.rules)
+        ? (row.rules as Record<string, unknown>)
+        : null;
+    // THEMATIC drafts are not public PLPs.
+    if (row.pageKind === 'THEMATIC' && row.pageStatus !== 'PUBLISHED') {
+      throw new NotFoundException('Category not found');
+    }
     return {
       id: row.id,
       parentId: row.parentId,
       slug: row.slug,
       name: row.name,
       listingKind: listingKindOf(row.listingKind),
+      pageKind: row.pageKind,
+      rules,
       sortOrder: row.sortOrder,
       visibility: row.visibility,
       seoTitle: row.seoTitle,
       seoDescription: row.seoDescription,
       noIndex: row.noIndex,
+      h1: row.h1,
+      body: row.body,
     };
   }
 

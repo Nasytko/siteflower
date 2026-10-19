@@ -80,6 +80,8 @@ export type ProductListFilters = {
   includeProductIds?: string[];
   /** When set, restricts to effectively published products at that instant. */
   publishedAt?: Date;
+  /** ProductTraitDefinition.key values (e.g. AUTHORIAL). */
+  traitKeys?: string[];
 };
 
 const SLUG_LIST_MAX = 16;
@@ -586,6 +588,19 @@ export class ProductsRepository {
       });
     }
   }
+
+  async replaceTraits(
+    productId: string,
+    traitIds: string[],
+    tx: Prisma.TransactionClient,
+  ): Promise<void> {
+    await tx.productTrait.deleteMany({ where: { productId } });
+    if (traitIds.length > 0) {
+      await tx.productTrait.createMany({
+        data: traitIds.map((traitId) => ({ productId, traitId })),
+      });
+    }
+  }
 }
 
 export function buildProductWhere(
@@ -791,6 +806,13 @@ export function buildProductWhere(
   const includeProductIds = nonEmpty(filters.includeProductIds);
   if (includeProductIds) {
     and.push({ id: { in: includeProductIds } });
+  }
+
+  const traitKeys = nonEmpty(filters.traitKeys);
+  if (traitKeys) {
+    and.push({
+      traits: { some: { trait: { key: { in: traitKeys } } } },
+    });
   }
 
   if (filters.bouquetHeightCm) {

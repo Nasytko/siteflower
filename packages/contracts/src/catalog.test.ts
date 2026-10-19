@@ -243,6 +243,28 @@ test('resolveCategoryListingScope: otkrytki/svechi stay category-tree merchandis
   );
 });
 
+test('resolveCategoryListingScope: SYSTEM_HUB and THEMATIC do not use category tree', () => {
+  assert.deepEqual(
+    resolveCategoryListingScope({
+      slug: 'bukety',
+      parentId: null,
+      listingKind: 'BOUQUETS',
+      pageKind: 'SYSTEM_HUB',
+    }),
+    { useCategoryTree: false, productKinds: ['BOUQUET'] },
+  );
+  assert.deepEqual(
+    resolveCategoryListingScope({
+      slug: 'bukety-iz-roz',
+      parentId: 'bukety-id',
+      listingKind: 'BOUQUETS',
+      pageKind: 'THEMATIC',
+      rules: { productKinds: ['BOUQUET'], onlyFlowerType: 'roza' },
+    }),
+    { useCategoryTree: false },
+  );
+});
+
 test('deriveCompositionKind: two rose varieties stay mono', () => {
   assert.equal(
     deriveCompositionKind([

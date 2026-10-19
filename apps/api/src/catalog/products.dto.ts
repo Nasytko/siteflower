@@ -262,6 +262,13 @@ export class SaveProductEditorDto extends ExpectedVersionDto {
   @IsUUID(undefined, { each: true })
   colorIds!: string[];
 
+  /** ProductTraitDefinition.key values (e.g. AUTHORIAL). */
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(20)
+  @IsString({ each: true })
+  traitKeys?: string[];
+
   @ValidateNested()
   @Type(() => EditorPromotionInputDto)
   promotion!: EditorPromotionInputDto;

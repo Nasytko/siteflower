@@ -26,6 +26,7 @@ const DICTIONARY_PATHS = [
   '/admin/catalog/dictionaries',
   '/admin/catalog/flower-structure',
   '/admin/catalog/categories',
+  '/admin/catalog/pages',
   ...TAXONOMY_KINDS.map((kind) => `/admin/catalog/${kind}`),
 ];
 
@@ -90,17 +91,22 @@ const NAV_GROUPS: NavGroup[] = [
         isActive: isStorefrontHomePath,
       },
       {
+        href: '/admin/catalog/pages',
+        label: 'Страницы каталога',
+        permission: 'CATALOG_READ',
+        isActive: (pathname) =>
+          pathname === '/admin/catalog/pages' ||
+          pathname.startsWith('/admin/catalog/pages/') ||
+          pathname === '/admin/seo/landings' ||
+          pathname.startsWith('/admin/seo/landings/'),
+      },
+      {
         href: '/admin/seo',
         label: 'Диагностика SEO',
         permission: 'SEO_READ',
         isActive: (pathname) =>
           pathname === '/admin/seo' ||
           (pathname.startsWith('/admin/seo/') && !pathname.startsWith('/admin/seo/landings')),
-      },
-      {
-        href: '/admin/seo/landings',
-        label: 'SEO-подборки',
-        permission: 'SEO_READ',
       },
     ],
   },

@@ -693,6 +693,9 @@ export class ProductsService {
       await this.products.replaceOccasions(id, input.occasionIds, tx);
       await this.products.replaceRecipients(id, input.recipientIds, tx);
       await this.products.replaceColors(id, input.colorIds, tx);
+      if (input.traitKeys !== undefined) {
+        await this.replaceTraitsByKeys(tx, id, input.traitKeys);
+      }
 
       await this.promotions.applyPromotionUpsertInTx(tx, id, {
         enabled: input.promotion.enabled,
@@ -1271,8 +1274,7 @@ export class ProductsService {
 
   /**
    * Storefront placements for the admin editor («Где отображается товар»).
-   * Hub + gift subtype + SEO landings that actually match the product (same filter engine).
-   * Recommendations only when a PRIMARY flower type has no matching landing page at all.
+   * Hub + gift subtype + thematic catalog pages (same filter engine as public listing).
    */
   async getPlacement(id: string): Promise<ProductPlacementDto> {
     const product = await this.products.findById(id);
@@ -1338,41 +1340,65 @@ export class ProductsService {
       }
     }
 
-    const landings = await this.prisma.client.seoLandingPage.findMany({
+    const needsComposition = productKindNeedsComposition(product.productKind);
+    const primaryComponents = product.components.filter(
+      (c) => c.role === 'PRIMARY' && (c.quantity == null || c.quantity > 0),
+    );
+    if (needsComposition && primaryComponents.length === 0) {
+      entries.push({
+        kind: 'INSUFFICIENT_DATA',
+        section: 'insufficient',
+        title: 'Недостаточно данных для тематических страниц',
+        path: null,
+        status: 'MISSING',
+        matchReason: 'Добавьте основные цветы в состав',
+        note: 'Без состава нельзя определить «с розами» / «из роз» / моно',
+      });
+    }
+
+    const pages = await this.prisma.client.catalogCategory.findMany({
+      where: {
+        pageKind: 'THEMATIC',
+        visibility: 'VISIBLE',
+        OR: [{ pageStatus: 'PUBLISHED' }, { pageStatus: 'DRAFT' }, { pageStatus: null }],
+      },
       include: {
         pinnedProducts: { select: { productId: true } },
         excludedProducts: { select: { productId: true } },
       },
-      orderBy: { title: 'asc' },
+      orderBy: { name: 'asc' },
     });
 
     const now = new Date();
     const coveredTypeSlugs = new Set<string>();
-    const landingEntries = await Promise.all(
-      landings.map(async (landing): Promise<ProductPlacementEntryDto | null> => {
-        const path = `/p/${landing.slug}`;
-        const matchReason = describeSeoLandingRules(landing.rules);
-        const ruleTypeSlugs = flowerTypeSlugsFromRules(landing.rules);
-        const excluded = landing.excludedProducts.some((row) => row.productId === id);
+    const pageEntries = await Promise.all(
+      pages.map(async (page): Promise<ProductPlacementEntryDto | null> => {
+        const path = categoryPublicHref(page.slug);
+        const rules = (page.rules ?? {}) as Prisma.JsonValue;
+        const matchReason = describeSeoLandingRules(rules);
+        const ruleTypeSlugs = flowerTypeSlugsFromRules(rules);
+        const excluded = page.excludedProducts.some((row) => row.productId === id);
         if (excluded) {
           return {
-            kind: 'SEO_LANDING',
+            kind: 'CATALOG_PAGE',
             section: 'draft',
-            title: landing.title,
+            title: page.name,
             path,
             status: 'EXCLUDED',
             matchReason,
-            landingId: landing.id,
-            note: 'Товар исключён из этой подборки',
+            landingId: page.id,
+            note: 'Товар исключён из этой страницы',
           };
         }
 
-        const pinned = landing.pinnedProducts.some((row) => row.productId === id);
+        const pinned = page.pinnedProducts.some((row) => row.productId === id);
         let matches = pinned;
         if (!matches) {
+          const filters = rulesToFilters(rules);
+          if (Object.keys(filters).length === 0 && !pinned) return null;
           const { total } = await this.products.list({
             filters: {
-              ...rulesToFilters(landing.rules),
+              ...filters,
               includeProductIds: [id],
             },
             skip: 0,
@@ -1386,68 +1412,67 @@ export class ProductsService {
 
         for (const slug of ruleTypeSlugs) coveredTypeSlugs.add(slug);
 
-        const landingPublished = landing.status === 'PUBLISHED';
-        if (!landingPublished) {
+        const pagePublished = page.pageStatus === 'PUBLISHED';
+        if (!pagePublished) {
           return {
-            kind: 'SEO_LANDING',
+            kind: 'CATALOG_PAGE',
             section: 'draft',
-            title: landing.title,
+            title: page.name,
             path,
             status: 'DRAFT_LANDING',
             matchReason: pinned ? `${matchReason} · закреплён` : matchReason,
-            landingId: landing.id,
+            landingId: page.id,
             note: 'Не опубликовано',
           };
         }
         if (!productLive) {
           return {
-            kind: 'SEO_LANDING',
+            kind: 'CATALOG_PAGE',
             section: 'draft',
-            title: landing.title,
+            title: page.name,
             path,
             status: 'DRAFT_PRODUCT',
             matchReason: pinned ? `${matchReason} · закреплён` : matchReason,
-            landingId: landing.id,
+            landingId: page.id,
             note: 'Товар ещё не опубликован',
           };
         }
         return {
-          kind: 'SEO_LANDING',
+          kind: 'CATALOG_PAGE',
           section: 'published',
-          title: landing.title,
+          title: page.name,
           path,
           status: 'LIVE',
           matchReason: pinned ? `${matchReason} · закреплён` : matchReason,
-          landingId: landing.id,
+          landingId: page.id,
           note: 'На сайте',
         };
       }),
     );
-    for (const entry of landingEntries) {
+    for (const entry of pageEntries) {
       if (entry) entries.push(entry);
     }
 
-    // Reliable recommendations only: PRIMARY flower types with no landing covering that slug.
+    // Reliable recommendations: PRIMARY flower types with no thematic page covering that slug.
     if (
-      product.productKind === 'BOUQUET' ||
-      product.productKind === 'COMPOSITION'
+      (product.productKind === 'BOUQUET' || product.productKind === 'COMPOSITION') &&
+      primaryComponents.length > 0
     ) {
       const primaryTypes = new Map<string, string>();
-      for (const component of product.components) {
-        if (component.role !== 'PRIMARY') continue;
+      for (const component of primaryComponents) {
         const type = component.flowerItem?.flowerType;
         if (type?.slug && type.name) primaryTypes.set(type.slug, type.name);
       }
       for (const [slug, name] of primaryTypes) {
         if (coveredTypeSlugs.has(slug)) continue;
-        const title = `Букеты с ${name.toLowerCase()}`;
+        const genitive = name.toLowerCase();
         entries.push({
           kind: 'RECOMMENDED',
           section: 'recommended',
-          title,
+          title: `Страница «с ${genitive}»`,
           path: null,
           status: 'MISSING',
-          matchReason: `В составе есть «${name}», но SEO-подборки с этим видом ещё нет`,
+          matchReason: `В составе есть «${name}», но опубликованной страницы с этим видом ещё нет`,
           note: 'Страница не создана',
         });
       }
@@ -1458,6 +1483,32 @@ export class ProductsService {
       productKind: product.productKind,
       entries,
     };
+  }
+
+  private async replaceTraitsByKeys(
+    tx: Prisma.TransactionClient,
+    productId: string,
+    traitKeys: string[],
+  ): Promise<void> {
+    const unique = [...new Set(traitKeys.map((k) => k.trim()).filter(Boolean))];
+    if (unique.length === 0) {
+      await this.products.replaceTraits(productId, [], tx);
+      return;
+    }
+    const defs = await tx.productTraitDefinition.findMany({
+      where: { key: { in: unique }, visibility: 'VISIBLE' },
+      select: { id: true, key: true },
+    });
+    if (defs.length !== unique.length) {
+      const found = new Set(defs.map((d) => d.key));
+      const missing = unique.filter((k) => !found.has(k));
+      throw new BadRequestException(`Неизвестный признак: ${missing.join(', ')}`);
+    }
+    await this.products.replaceTraits(
+      productId,
+      defs.map((d) => d.id),
+      tx,
+    );
   }
 
   private async assertReferencesExist(

@@ -36,7 +36,7 @@ import { ProductFamiliesService } from './product-families.service';
 import type { PublicProductListQueryDto } from './products.dto';
 import { effectivelyPublishedWhere, ProductsRepository } from './products.repository';
 import { PromotionsService } from './promotions.service';
-import { SeoLandingsService } from './seo-landings.service';
+import { rulesToFilters, SeoLandingsService } from './seo-landings.service';
 import { SlugRedirectsService } from './slug-redirects.service';
 
 /** Public landing-page taxonomies (flower types use /cvety via listFlowerTypes). */
@@ -76,9 +76,11 @@ export class PublicCatalogService {
     let scopeCompositionKinds: CompositionKind[] | undefined;
     /** Category-scope flower type (e.g. /katalog/rozy) — not Filter Pool gated. */
     let scopeFlowerTypeSlugs: string[] | undefined;
+    /** Thematic page rules merged into list filters (same engine as SEO landings). */
+    let pageRules: ReturnType<typeof rulesToFilters> | undefined;
+    let excludeProductIds: string[] | undefined;
 
     if (query.catalogCategoryId) {
-      // Direct id (admin/internal): category tree only.
       catalogCategoryIds = await this.categories.expandCategoryIds(query.catalogCategoryId, {
         visibleOnly: true,
       });
@@ -93,6 +95,18 @@ export class PublicCatalogService {
           catalogCategoryIds = await this.categories.expandCategoryIds(category.id, {
             visibleOnly: true,
           });
+        }
+        if (
+          category.pageKind === 'THEMATIC' &&
+          category.rules &&
+          Object.keys(category.rules).length > 0
+        ) {
+          pageRules = rulesToFilters(category.rules as Prisma.JsonValue);
+          const excludes = await this.prisma.client.catalogPageExclude.findMany({
+            where: { pageId: category.id },
+            select: { productId: true },
+          });
+          excludeProductIds = excludes.map((p) => p.productId);
         }
       } catch {
         catalogCategoryIds = ['00000000-0000-0000-0000-000000000000'];
@@ -115,6 +129,8 @@ export class PublicCatalogService {
       flowerOriginSlugs: query.flowerOriginSlug,
       heightCm: heightCm ?? undefined,
       familyId: query.familyId,
+      pageRules,
+      excludeProductIds,
     };
   }
 
@@ -173,6 +189,18 @@ export class PublicCatalogService {
     const mergedCompositionKinds =
       gatedFacet.compositionKinds ?? catalogFilters.scopeCompositionKinds;
 
+    const pageRules = catalogFilters.pageRules ?? {};
+    const ruleFlowerSlugs = [
+      ...new Set([
+        ...mergedFlowerTypeSlugs,
+        ...(pageRules.flowerTypeSlugs ?? []),
+      ]),
+    ];
+    const ruleProductKinds =
+      catalogFilters.productKinds ?? pageRules.productKinds;
+    const ruleCompositionKinds =
+      mergedCompositionKinds ?? pageRules.compositionKinds;
+
     const { items, total } = await this.products.list({
       filters: {
         publishedAt: now,
@@ -181,11 +209,20 @@ export class PublicCatalogService {
         flowerSlugs: query.flowerSlugs,
         budgetRanges,
         catalogCategoryIds: catalogFilters.catalogCategoryIds,
-        productKinds: catalogFilters.productKinds,
+        productKinds: ruleProductKinds,
         familyId: catalogFilters.familyId,
         ...gatedFacet,
-        flowerTypeSlugs: mergedFlowerTypeSlugs.length > 0 ? mergedFlowerTypeSlugs : undefined,
-        compositionKinds: mergedCompositionKinds,
+        ...pageRules,
+        flowerTypeSlugs: ruleFlowerSlugs.length > 0 ? ruleFlowerSlugs : undefined,
+        compositionKinds: ruleCompositionKinds,
+        excludeProductIds: catalogFilters.excludeProductIds,
+        onlyFlowerTypeSlugs: pageRules.onlyFlowerTypeSlugs,
+        onlyFlowerTypeIds: pageRules.onlyFlowerTypeIds,
+        traitKeys: pageRules.traitKeys,
+        flowerFormSlugs: pageRules.flowerFormSlugs,
+        flowerFormIds: pageRules.flowerFormIds,
+        componentColorIds: pageRules.componentColorIds ?? gatedFacet.componentColorIds,
+        componentColorSlugs: pageRules.componentColorSlugs ?? gatedFacet.componentColorSlugs,
       },
       skip: (page - 1) * pageSize,
       take: pageSize,

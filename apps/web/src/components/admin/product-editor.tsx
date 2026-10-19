@@ -218,13 +218,33 @@ export function ProductEditor({
     });
   }, [options.occasions, options.recipients, options.colors]);
 
+  useEffect(() => {
+    let cancelled = false;
+    void adminGet<Array<{ key: string; name: string; description: string | null }>>(
+      adminEndpoints.catalogPageTraits,
+    )
+      .then((rows) => {
+        if (!cancelled) setTraitOptions(rows);
+      })
+      .catch(() => {
+        if (!cancelled) setTraitOptions([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   const [variants, setVariants] = useState<VariantDraft[]>(() => toVariantDrafts(product));
   const [components, setComponents] = useState<ComponentDraft[]>(() => toComponentDrafts(product));
   const [discovery, setDiscovery] = useState({
     occasionIds: product.occasions.map((item) => item.id),
     recipientIds: product.recipients.map((item) => item.id),
     colorIds: product.colors.map((item) => item.id),
+    traitKeys: product.traitKeys ?? [],
   });
+  const [traitOptions, setTraitOptions] = useState<
+    Array<{ key: string; name: string; description: string | null }>
+  >([]);
   const needsComposition = productKindNeedsComposition(productKind);
   const [promotion, setPromotion] = useState<PromotionDraft>(() => toPromotionDraft(product));
   const [groupIds, setGroupIds] = useState<string[]>(product.bestsellerGroupIds);
@@ -275,6 +295,7 @@ export function ProductEditor({
       occasionIds: updated.occasions.map((item) => item.id),
       recipientIds: updated.recipients.map((item) => item.id),
       colorIds: updated.colors.map((item) => item.id),
+      traitKeys: updated.traitKeys ?? [],
     });
     setPromotion(toPromotionDraft(updated));
     setGroupIds(updated.bestsellerGroupIds);
@@ -721,6 +742,7 @@ export function ProductEditor({
         occasionIds: discovery.occasionIds,
         recipientIds: discovery.recipientIds,
         colorIds: discovery.colorIds,
+        traitKeys: discovery.traitKeys,
         promotion: {
           enabled: promotion.enabled,
           type: promotionType,
@@ -1289,6 +1311,7 @@ export function ProductEditor({
           occasions={taxonomyOptions.occasions}
           recipients={taxonomyOptions.recipients}
           colors={taxonomyOptions.colors}
+          traitOptions={traitOptions}
           onTaxonomyCreated={onTaxonomyCreated}
           publication={publication}
           setPublication={setPublication}

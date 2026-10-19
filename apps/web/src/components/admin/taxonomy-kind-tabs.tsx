@@ -12,9 +12,13 @@ const EXTRA_TABS = [
     match: (p: string) => p === '/admin/catalog/flower-structure' || p.startsWith('/admin/catalog/flower-structure/'),
   },
   {
-    href: '/admin/catalog/categories',
-    title: 'Категории',
-    match: (p: string) => p === '/admin/catalog/categories' || p.startsWith('/admin/catalog/categories/'),
+    href: '/admin/catalog/pages',
+    title: 'Страницы каталога',
+    match: (p: string) =>
+      p === '/admin/catalog/pages' ||
+      p.startsWith('/admin/catalog/pages/') ||
+      p === '/admin/catalog/categories' ||
+      p.startsWith('/admin/catalog/categories/'),
   },
 ] as const;
 

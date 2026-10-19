@@ -204,6 +204,20 @@ enum SlugEntityType {
   SEO_LANDING
 }
 
+/// Unified catalog page role (hubs + thematic + gift subtypes).
+enum CatalogPageKind {
+  SYSTEM_HUB
+  THEMATIC
+  GIFT_SUBTYPE
+  LEGACY
+}
+
+enum SeoLandingStatus {
+  DRAFT
+  PUBLISHED
+  ARCHIVED
+}
+
 enum CatalogFilterType {
   SELECT
   MULTI_SELECT
@@ -338,6 +352,7 @@ model BudgetRange {
 
 /// Storefront navigation / PLP tree (Цветы → Розы, Букеты → …).
 /// Not sellable. Not ProductFamily. Not a ProductVariant.
+/// Unified «Страница каталога»: hubs, thematic rule pages, gift subtypes.
 model CatalogCategory {
   id             String             @id @default(uuid()) @db.Uuid
   parentId       String?            @map("parent_id") @db.Uuid
@@ -345,6 +360,18 @@ model CatalogCategory {
   name           String             @db.VarChar(120)
   /// Optional UI hint: FLOWERS | BOUQUETS | COMPOSITIONS | GIFTS | OTHER
   listingKind    String?            @map("listing_kind") @db.VarChar(32)
+  /// SYSTEM_HUB | THEMATIC | GIFT_SUBTYPE | LEGACY
+  pageKind       CatalogPageKind    @default(LEGACY) @map("page_kind")
+  /// System hubs cannot be deleted from admin.
+  isSystem       Boolean            @default(false) @map("is_system")
+  /// Typed product selection rules (same shape as former SeoLandingPage.rules).
+  rules          Json?
+  h1             String?            @db.VarChar(200)
+  body           String?            @db.Text
+  /// THEMATIC publish state; hubs/gift subtypes use visibility instead when null.
+  pageStatus     SeoLandingStatus?  @map("page_status")
+  publishedAt    DateTime?          @map("published_at") @db.Timestamptz(3)
+  navVisible     Boolean            @default(false) @map("nav_visible")
   sortOrder      Int                @default(0) @map("sort_order")
   visibility     TaxonomyVisibility @default(VISIBLE)
   version        Int                @default(1)
@@ -354,14 +381,42 @@ model CatalogCategory {
   createdAt      DateTime           @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt      DateTime           @updatedAt @map("updated_at") @db.Timestamptz(3)
 
-  parent   CatalogCategory?  @relation("CatalogCategoryTree", fields: [parentId], references: [id], onDelete: Restrict)
-  children CatalogCategory[] @relation("CatalogCategoryTree")
-  products Product[]
-  filters  CatalogCategoryFilter[]
+  parent           CatalogCategory?        @relation("CatalogCategoryTree", fields: [parentId], references: [id], onDelete: Restrict)
+  children         CatalogCategory[]       @relation("CatalogCategoryTree")
+  products         Product[]
+  filters          CatalogCategoryFilter[]
+  pinnedProducts   CatalogPageProduct[]
+  excludedProducts CatalogPageExclude[]
 
   @@index([parentId, sortOrder])
   @@index([visibility, sortOrder])
+  @@index([pageKind, pageStatus, sortOrder])
   @@map("catalog_categories")
+}
+
+model CatalogPageProduct {
+  pageId    String @map("page_id") @db.Uuid
+  productId String @map("product_id") @db.Uuid
+  sortOrder Int    @default(0) @map("sort_order")
+
+  page    CatalogCategory @relation(fields: [pageId], references: [id], onDelete: Cascade)
+  product Product         @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@id([pageId, productId])
+  @@index([productId])
+  @@map("catalog_page_products")
+}
+
+model CatalogPageExclude {
+  pageId    String @map("page_id") @db.Uuid
+  productId String @map("product_id") @db.Uuid
+
+  page    CatalogCategory @relation(fields: [pageId], references: [id], onDelete: Cascade)
+  product Product         @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@id([pageId, productId])
+  @@index([productId])
+  @@map("catalog_page_excludes")
 }
 
 /// Global pool of catalog filter definitions (not category-specific options).
@@ -600,6 +655,9 @@ model Product {
   bestsellerLinks  BestsellerGroupProduct[]
   seoLandingPins   SeoLandingPageProduct[]
   seoLandingExcludes SeoLandingPageExclude[]
+  catalogPagePins  CatalogPageProduct[]
+  catalogPageExcludes CatalogPageExclude[]
+  traits           ProductTrait[]
 
   @@index([lifecycle, publishAt])
   @@index([lifecycle, availability])
@@ -844,14 +902,38 @@ model SlugRedirect {
 // Managed SEO landing pages (rules-based product selection)
 // ---------------------------------------------------------------------------
 
-enum SeoLandingStatus {
-  DRAFT
-  PUBLISHED
-  ARCHIVED
+/// Managed product attributes that cannot be derived from composition (e.g. Авторский).
+model ProductTraitDefinition {
+  id          String             @id @default(uuid()) @db.Uuid
+  key         String             @unique @db.VarChar(64)
+  name        String             @db.VarChar(120)
+  description String?            @db.VarChar(500)
+  sortOrder   Int                @default(0) @map("sort_order")
+  visibility  TaxonomyVisibility @default(VISIBLE)
+  version     Int                @default(1)
+  createdAt   DateTime           @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt   DateTime           @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  products ProductTrait[]
+
+  @@index([visibility, sortOrder])
+  @@map("product_trait_definitions")
 }
 
-/// Indexable commercial landing with automatic product selection rules.
-/// Separate from CatalogCategory (navigation) and filter querystrings (noindex).
+model ProductTrait {
+  productId String @map("product_id") @db.Uuid
+  traitId   String @map("trait_id") @db.Uuid
+
+  product Product               @relation(fields: [productId], references: [id], onDelete: Cascade)
+  trait   ProductTraitDefinition @relation(fields: [traitId], references: [id], onDelete: Restrict)
+
+  @@id([productId, traitId])
+  @@index([traitId])
+  @@map("product_traits")
+}
+
+/// @deprecated Prefer CatalogCategory with pageKind=THEMATIC (unified catalog pages).
+/// Kept for dual-read until cutover completes; new writes go to CatalogCategory.
 model SeoLandingPage {
   id             String           @id @default(uuid()) @db.Uuid
   slug           String           @unique @db.VarChar(160)

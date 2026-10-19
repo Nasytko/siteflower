@@ -15,9 +15,9 @@ const HUB_LINKS = [
     lead: TAXONOMY_KIND_META[kind].lead,
   })),
   {
-    href: '/admin/catalog/categories',
-    title: 'Категории',
-    lead: 'Разделы витрины и подтипы подарков. Тип товара (букет, цветок, подарок) задаётся в карточке, не здесь.',
+    href: '/admin/catalog/pages',
+    title: 'Страницы каталога',
+    lead: 'Основные разделы и тематические подборки. Товары попадают по типу и правилам состава автоматически.',
   },
 ] as const;
 
@@ -29,8 +29,8 @@ export default async function AdminCatalogDictionariesPage() {
       <header>
         <h1 className="admin-page-title">Справочники</h1>
         <p className="admin-page-lead">
-          Виды цветов, цвета, поводы и получатели. Категории — только разделы сайта и подтипы
-          подарков.
+          Виды цветов, цвета, поводы и получатели. Страницы каталога — разделы витрины и
+          тематические подборки.
         </p>
       </header>
 

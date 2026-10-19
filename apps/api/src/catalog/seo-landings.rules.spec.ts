@@ -72,6 +72,14 @@ describe('SEO landing rules → ProductListFilters', () => {
     expect(filters.flowerFormSlugs).toEqual(['kustovaya']);
     expect(filters.flowerTypeSlugs).toEqual(['roza']);
   });
+
+  it('maps traitKeys for authorial and similar managed traits', () => {
+    const filters = rulesToFilters({
+      productKinds: ['BOUQUET'],
+      traitKeys: ['AUTHORIAL'],
+    });
+    expect(filters.traitKeys).toEqual(['AUTHORIAL']);
+  });
 });
 
 describe('isDominantFlowerType', () => {

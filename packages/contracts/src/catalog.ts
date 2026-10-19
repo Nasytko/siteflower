@@ -147,13 +147,21 @@ export type ProductPlacementStatus =
   | 'EXCLUDED'
   | 'MISSING';
 
-export type ProductPlacementKind = 'HUB' | 'GIFT_SUBTYPE' | 'SEO_LANDING' | 'RECOMMENDED';
+export type ProductPlacementKind =
+  | 'HUB'
+  | 'GIFT_SUBTYPE'
+  | 'CATALOG_PAGE'
+  /** @deprecated Use CATALOG_PAGE */
+  | 'SEO_LANDING'
+  | 'RECOMMENDED'
+  | 'INSUFFICIENT_DATA';
 
 export type ProductPlacementSection =
   | 'main'
   | 'published'
   | 'draft'
-  | 'recommended';
+  | 'recommended'
+  | 'insufficient';
 
 export type ProductPlacementEntryDto = {
   kind: ProductPlacementKind;
@@ -166,7 +174,7 @@ export type ProductPlacementEntryDto = {
   note?: string;
   /** Human-readable why this product matches (rules summary). */
   matchReason?: string;
-  /** SeoLandingPage id when kind is SEO_LANDING (admin deep-link). */
+  /** Catalog page / legacy SEO landing id for admin deep-link. */
   landingId?: string;
 };
 
@@ -237,13 +245,25 @@ export function resolveCategoryListingScope(category: {
   slug: string;
   parentId: string | null;
   listingKind: CatalogListingKind | null | undefined;
+  pageKind?: string | null;
+  rules?: Record<string, unknown> | null;
 }): CategoryListingScope {
-  if (isCanonicalListingHub(category)) {
+  if (isCanonicalListingHub(category) || category.pageKind === 'SYSTEM_HUB') {
     const kinds = productKindsForListingKind(category.listingKind);
     return {
       useCategoryTree: false,
       productKinds: kinds.length > 0 ? kinds : undefined,
     };
+  }
+
+  // Thematic pages with typed rules — product selection via rulesToFilters, not tree.
+  if (
+    category.pageKind === 'THEMATIC' &&
+    category.rules &&
+    typeof category.rules === 'object' &&
+    Object.keys(category.rules).length > 0
+  ) {
+    return { useCategoryTree: false };
   }
 
   if (category.listingKind === 'FLOWERS' && category.parentId) {
@@ -1359,7 +1379,59 @@ export type ProductComponentDto = {
   sortOrder: number;
 };
 
-/** Managed SEO landing page (Admin + public). */
+export const CATALOG_PAGE_KINDS = [
+  'SYSTEM_HUB',
+  'THEMATIC',
+  'GIFT_SUBTYPE',
+  'LEGACY',
+] as const;
+export type CatalogPageKind = (typeof CATALOG_PAGE_KINDS)[number];
+
+export function isCatalogPageKind(value: string): value is CatalogPageKind {
+  return (CATALOG_PAGE_KINDS as readonly string[]).includes(value);
+}
+
+/** Unified catalog page (admin «Страницы каталога»). */
+export type CatalogPageDto = {
+  id: string;
+  slug: string;
+  name: string;
+  h1: string | null;
+  pageKind: CatalogPageKind;
+  isSystem: boolean;
+  listingKind: CatalogListingKind | null;
+  parentId: string | null;
+  rules: Record<string, unknown>;
+  status: SeoLandingStatus | 'LIVE';
+  visibility: TaxonomyVisibility;
+  noIndex: boolean;
+  navVisible: boolean;
+  sortOrder: number;
+  version: number;
+  seoTitle: string | null;
+  seoDescription: string | null;
+  body: string | null;
+  publishedAt: string | null;
+  publicPath: string;
+  /** Matching published products (when requested). */
+  productsCount?: number;
+  pinnedProductIds: string[];
+  excludedProductIds: string[];
+  /** Human summary of rules for list UI. */
+  rulesSummary: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type ProductTraitDefinitionDto = {
+  id: string;
+  key: string;
+  name: string;
+  description: string | null;
+  sortOrder: number;
+};
+
+/** Managed SEO landing page (Admin + public). @deprecated Prefer CatalogPageDto. */
 export type SeoLandingPageDto = {
   id: string;
   slug: string;
@@ -1519,6 +1591,8 @@ export type ProductAdminDto = {
   recipients: TaxonomyRefDto[];
   /** Visual palette of the bouquet (not per-component color). */
   colors: TaxonomyRefDto[];
+  /** Managed traits (e.g. AUTHORIAL) — keys from ProductTraitDefinition. */
+  traitKeys: string[];
   bestsellerGroupIds: string[];
   createdAt: string;
   updatedAt: string;

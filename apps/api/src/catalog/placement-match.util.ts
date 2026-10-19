@@ -70,6 +70,28 @@ export function describeSeoLandingRules(rules: Prisma.JsonValue): string {
     );
   }
 
+  const traits = asList(record.traitKeys);
+  if (traits?.length) {
+    parts.push(
+      traits
+        .map((k) => (k === 'AUTHORIAL' ? 'авторский' : k))
+        .join(', '),
+    );
+  }
+
+  if (typeof record.minPriceMinor === 'string' || typeof record.minPriceMinor === 'number') {
+    parts.push(`от ${record.minPriceMinor} коп.`);
+  }
+  if (typeof record.maxPriceMinor === 'string' || typeof record.maxPriceMinor === 'number') {
+    parts.push(`до ${record.maxPriceMinor} коп.`);
+  }
+
+  const occasions = asList(record.occasionSlugs) ?? asList(record.occasionIds);
+  if (occasions?.length) parts.push(`повод «${occasions.join(', ')}»`);
+
+  const recipients = asList(record.recipientSlugs) ?? asList(record.recipientIds);
+  if (recipients?.length) parts.push(`получатель «${recipients.join(', ')}»`);
+
   return parts.length > 0 ? parts.join(' · ') : 'правила подборки';
 }
 

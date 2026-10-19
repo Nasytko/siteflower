@@ -70,6 +70,7 @@ export const PRODUCT_INCLUDE = {
   occasions: { include: { occasion: true } },
   recipients: { include: { recipient: true } },
   colors: { include: { color: true } },
+  traits: { include: { trait: { select: { key: true } } } },
   promotion: { include: { variantPrices: true } },
   bestsellerLinks: { select: { groupId: true, sortOrder: true } },
 } satisfies Prisma.ProductInclude;
@@ -385,6 +386,7 @@ export function toProductAdminDto(
     occasions: product.occasions.map((link) => toTaxonomyRef(link.occasion)),
     recipients: product.recipients.map((link) => toTaxonomyRef(link.recipient)),
     colors: product.colors.map((link) => toTaxonomyRef(link.color)),
+    traitKeys: product.traits.map((link) => link.trait.key),
     bestsellerGroupIds: product.bestsellerLinks.map((link) => link.groupId),
     createdAt: product.createdAt.toISOString(),
     updatedAt: product.updatedAt.toISOString(),

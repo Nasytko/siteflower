@@ -63,17 +63,20 @@ type Props = {
     occasionIds: string[];
     recipientIds: string[];
     colorIds: string[];
+    traitKeys: string[];
   };
   setDiscovery: React.Dispatch<
     React.SetStateAction<{
       occasionIds: string[];
       recipientIds: string[];
       colorIds: string[];
+      traitKeys: string[];
     }>
   >;
   occasions: PickerOption[];
   recipients: PickerOption[];
   colors: ColorOption[];
+  traitOptions: Array<{ key: string; name: string; description: string | null }>;
   onTaxonomyCreated: (
     kind: 'occasions' | 'recipients' | 'colors',
     item: ColorOption,
@@ -123,6 +126,7 @@ export function ProductEditorMainTab(props: Props) {
     occasions,
     recipients,
     colors,
+    traitOptions,
     onTaxonomyCreated,
     publication,
     setPublication,
@@ -372,6 +376,52 @@ export function ProductEditorMainTab(props: Props) {
             }}
             onCreated={(item) => onTaxonomyCreated('recipients', item)}
           />
+        </div>
+
+        <div className="admin-subsection space-y-3" data-section="traits">
+          <h3 className="admin-subsection__title">Особенности</h3>
+          <p className="text-xs text-[var(--admin-muted)]">
+            Признаки, которые нельзя вывести из состава. Отметьте один раз — товар попадёт на
+            все опубликованные страницы с этим правилом.
+          </p>
+          {traitOptions.length === 0 ? (
+            <p className="text-sm text-[var(--admin-muted)]">Справочник признаков пока пуст.</p>
+          ) : (
+            <ul className="space-y-2">
+              {traitOptions.map((trait) => {
+                const checked = discovery.traitKeys.includes(trait.key);
+                return (
+                  <li key={trait.key}>
+                    <label className="flex cursor-pointer items-start gap-2 text-sm">
+                      <input
+                        type="checkbox"
+                        className="mt-0.5"
+                        checked={checked}
+                        disabled={!canUpdate}
+                        onChange={() => {
+                          setDiscovery((prev) => ({
+                            ...prev,
+                            traitKeys: checked
+                              ? prev.traitKeys.filter((k) => k !== trait.key)
+                              : [...prev.traitKeys, trait.key],
+                          }));
+                          touch();
+                        }}
+                      />
+                      <span>
+                        <span className="font-medium">{trait.name}</span>
+                        {trait.description ? (
+                          <span className="block text-xs text-[var(--admin-muted)]">
+                            {trait.description}
+                          </span>
+                        ) : null}
+                      </span>
+                    </label>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
         </div>
 
         <details className="admin-subsection space-y-3">

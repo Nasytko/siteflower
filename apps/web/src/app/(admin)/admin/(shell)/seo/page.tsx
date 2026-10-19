@@ -19,8 +19,8 @@ export default async function AdminSeoPage() {
         <p className="admin-page-lead">
           Проверка названий, описаний и фото для поиска. Технические детали (sitemap, canonical)
           скрыты ниже списка страниц.{' '}
-          <a href="/admin/seo/landings" className="underline underline-offset-2">
-            SEO-подборки /p/…
+          <a href="/admin/catalog/pages" className="underline underline-offset-2">
+            Страницы каталога
           </a>
         </p>
       </header>

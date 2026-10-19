@@ -6,7 +6,9 @@ import { MediaModule } from '../media/media.module';
 import { AdminBestsellersController } from './admin-bestsellers.controller';
 import { AdminBudgetRangesController } from './admin-budget-ranges.controller';
 import { AdminCatalogCategoriesController } from './admin-catalog-categories.controller';
+import { AdminCatalogPagesController } from './admin-catalog-pages.controller';
 import { AdminFlowerRefsController } from './admin-flower-refs.controller';
+import { CatalogPagesService } from './catalog-pages.service';
 import { AdminProductFamiliesController } from './admin-product-families.controller';
 import { AdminProductsController } from './admin-products.controller';
 import { AdminPromotionsController } from './admin-promotions.controller';
@@ -42,6 +44,7 @@ import { TaxonomyService } from './taxonomy.service';
     AdminBestsellersController,
     AdminBudgetRangesController,
     AdminCatalogCategoriesController,
+    AdminCatalogPagesController,
     AdminFlowerRefsController,
     AdminProductFamiliesController,
     AdminSeoController,
@@ -57,6 +60,7 @@ import { TaxonomyService } from './taxonomy.service';
     BestsellersService,
     BudgetRangesService,
     CatalogCategoriesService,
+    CatalogPagesService,
     CatalogFiltersService,
     FlowerRefsService,
     ProductFamiliesService,

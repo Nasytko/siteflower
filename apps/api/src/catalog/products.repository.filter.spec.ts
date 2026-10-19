@@ -194,4 +194,12 @@ describe('buildProductWhere composition facets', () => {
       },
     });
   });
+
+  it('filters by managed trait keys (AUTHORIAL)', () => {
+    const where = buildProductWhere({ traitKeys: ['AUTHORIAL'] });
+    const and = (where.AND ?? []) as Array<Record<string, unknown>>;
+    expect(and).toContainEqual({
+      traits: { some: { trait: { key: { in: ['AUTHORIAL'] } } } },
+    });
+  });
 });

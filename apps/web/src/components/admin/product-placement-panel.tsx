@@ -20,6 +20,7 @@ const SECTION_ORDER: ProductPlacementSection[] = [
   'main',
   'published',
   'draft',
+  'insufficient',
   'recommended',
 ];
 
@@ -28,9 +29,11 @@ function sectionTitle(section: ProductPlacementSection): string {
     case 'main':
       return 'Основной раздел';
     case 'published':
-      return 'Опубликованные SEO-подборки';
+      return 'Опубликованные страницы';
     case 'draft':
       return 'Подходящие черновики и исключения';
+    case 'insufficient':
+      return 'Недостаточно данных';
     case 'recommended':
       return 'Рекомендуемые страницы';
     default:
@@ -86,8 +89,8 @@ function PlacementRow({ entry }: { entry: ProductPlacementEntryDto }) {
             {entry.landingId ? (
               <>
                 {' · '}
-                <a href="/admin/seo/landings" className="admin-link">
-                  Открыть SEO-подборки
+                <a href="/admin/catalog/pages" className="admin-link">
+                  Страницы каталога
                 </a>
               </>
             ) : null}
@@ -109,8 +112,8 @@ function PlacementRow({ entry }: { entry: ProductPlacementEntryDto }) {
 }
 
 /**
- * «Где отображается товар» — hub, matching SEO landings, draft matches,
- * and reliable missing-page recommendations only.
+ * «Где отображается товар» — hub, matching catalog pages, draft matches,
+ * insufficient-data hints, and reliable missing-page recommendations.
  */
 export function ProductPlacementPanel({ productId, refreshKey }: Props) {
   const [data, setData] = useState<ProductPlacementDto | null>(null);
@@ -158,8 +161,8 @@ export function ProductPlacementPanel({ productId, refreshKey }: Props) {
       <div>
         <h3 className="admin-subsection__title">Где отображается товар</h3>
         <p className="text-sm text-[var(--admin-muted)]">
-          Основной раздел — по типу товара. SEO-подборки — по правилам состава. Рекомендации не
-          означают, что товар уже размещён.
+          Основной раздел — по типу товара. Тематические страницы — по правилам состава и
+          признаков. Рекомендации не означают, что товар уже размещён.
         </p>
       </div>
 

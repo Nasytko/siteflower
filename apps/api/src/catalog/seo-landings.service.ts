@@ -74,6 +74,7 @@ const RULE_KEYS = [
   'minFlowerTypeQuantity',
   'flowerTypeQuantitySlug',
   'dominantFlowerTypeSlug',
+  'traitKeys',
 ] as const;
 
 const COMPOSITION_KINDS = new Set(['MONO', 'MIXED', 'UNKNOWN']);
@@ -506,6 +507,29 @@ export class SeoLandingsService {
           canonicalSlug: row.slug,
         };
       }
+      // Dual-read: thematic CatalogCategory pages (unified «Страницы каталога»).
+      const page = await this.prisma.client.catalogCategory.findFirst({
+        where: {
+          slug: candidate,
+          pageKind: 'THEMATIC',
+          pageStatus: 'PUBLISHED',
+          visibility: 'VISIBLE',
+        },
+      });
+      if (page) {
+        return {
+          id: page.id,
+          slug: page.slug,
+          title: page.name,
+          h1: page.h1 ?? page.name,
+          seoTitle: page.seoTitle,
+          seoDescription: page.seoDescription,
+          body: page.body,
+          noIndex: page.noIndex,
+          redirectedFrom: slug !== page.slug ? slug : null,
+          canonicalSlug: page.slug,
+        };
+      }
     }
     throw new NotFoundException('SEO landing page not found');
   }
@@ -523,20 +547,64 @@ export class SeoLandingsService {
       if (row && row.status === 'PUBLISHED') {
         return this.listProducts(row, { ...query, publishedOnly: true });
       }
+      const page = await this.prisma.client.catalogCategory.findFirst({
+        where: {
+          slug: candidate,
+          pageKind: 'THEMATIC',
+          pageStatus: 'PUBLISHED',
+          visibility: 'VISIBLE',
+        },
+        include: {
+          pinnedProducts: { orderBy: { sortOrder: 'asc' } },
+          excludedProducts: true,
+        },
+      });
+      if (page) {
+        const synthetic = {
+          rules: page.rules ?? {},
+          pinnedProducts: page.pinnedProducts.map((p) => ({
+            productId: p.productId,
+            sortOrder: p.sortOrder,
+          })),
+          excludedProducts: page.excludedProducts.map((p) => ({ productId: p.productId })),
+        } as LandingRow;
+        return this.listProducts(synthetic, { ...query, publishedOnly: true });
+      }
     }
     throw new NotFoundException('SEO landing page not found');
   }
 
   async listSitemapEntries(): Promise<Array<{ path: string; updatedAt: string }>> {
-    const rows = await this.prisma.client.seoLandingPage.findMany({
-      where: { status: 'PUBLISHED', noIndex: false },
-      select: { slug: true, updatedAt: true },
-      orderBy: { updatedAt: 'desc' },
-    });
-    return rows.map((row) => ({
-      path: `/p/${row.slug}`,
-      updatedAt: row.updatedAt.toISOString(),
-    }));
+    const [legacy, pages] = await Promise.all([
+      this.prisma.client.seoLandingPage.findMany({
+        where: { status: 'PUBLISHED', noIndex: false },
+        select: { slug: true, updatedAt: true },
+      }),
+      this.prisma.client.catalogCategory.findMany({
+        where: {
+          pageKind: 'THEMATIC',
+          pageStatus: 'PUBLISHED',
+          visibility: 'VISIBLE',
+          noIndex: false,
+        },
+        select: { slug: true, updatedAt: true },
+      }),
+    ]);
+    const bySlug = new Map<string, { path: string; updatedAt: string }>();
+    for (const row of legacy) {
+      bySlug.set(row.slug, {
+        path: `/p/${row.slug}`,
+        updatedAt: row.updatedAt.toISOString(),
+      });
+    }
+    for (const row of pages) {
+      // Prefer /katalog/[slug] for unified thematic pages (canonical storefront path).
+      bySlug.set(row.slug, {
+        path: `/katalog/${row.slug}`,
+        updatedAt: row.updatedAt.toISOString(),
+      });
+    }
+    return [...bySlug.values()].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
   }
 
   private async findOrThrow(id: string): Promise<LandingRow> {
@@ -815,6 +883,9 @@ export function rulesToFilters(rules: Prisma.JsonValue): ProductListFilters {
   ) {
     filters.dominantFlowerTypeSlug = record.dominantFlowerTypeSlug.trim();
   }
+
+  const traitKeys = asStringArray(record.traitKeys);
+  if (traitKeys) filters.traitKeys = traitKeys;
 
   return filters;
 }
