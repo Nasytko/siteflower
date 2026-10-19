@@ -1,15 +1,15 @@
-import Link from 'next/link';
 import type { Metadata } from 'next';
 import { Breadcrumbs } from '@/components/storefront/breadcrumbs';
 import {
   CatalogActiveFilters,
   CatalogEmptyState,
   CatalogFilters,
+  CatalogPager,
+  CatalogToolbar,
   type CatalogFilterOptions,
 } from '@/components/storefront/catalog-filters';
 import { ProductGrid } from '@/components/storefront/product-grid';
 import {
-  bouquetCountLabel,
   catalogHasActiveFilters,
   catalogStateToListParams,
   catalogStateToQuery,
@@ -74,7 +74,6 @@ export default async function CatalogPage({ searchParams }: { searchParams: Sear
 
   const totalPages =
     products.pageSize > 0 ? Math.max(1, Math.ceil(products.total / products.pageSize)) : 1;
-
   return (
     <main id="main-content" className="sf-container-wide py-5 sm:py-7">
       <Breadcrumbs className="mb-3" items={[{ name: 'Главная', href: '/' }, { name: 'Букеты' }]} />
@@ -86,42 +85,42 @@ export default async function CatalogPage({ searchParams }: { searchParams: Sear
         </p>
       </header>
 
-      <div className="mb-5 space-y-3">
-        <CatalogFilters state={state} options={options} total={products.total} />
-        <CatalogActiveFilters state={state} options={options} />
+      <div className="sf-catalog-layout">
+        <aside className="sf-catalog-aside">
+          <CatalogFilters
+            variant="sidebar"
+            state={state}
+            options={options}
+            total={products.total}
+          />
+        </aside>
+
+        <div className="sf-catalog-main">
+          <CatalogToolbar state={state} total={products.total} />
+          <CatalogActiveFilters state={state} options={options} />
+
+          {products.items.length === 0 ? (
+            <CatalogEmptyState state={state} />
+          ) : (
+            <ProductGrid products={products.items} />
+          )}
+
+          <CatalogPager
+            page={state.page}
+            totalPages={totalPages}
+            prevHref={
+              state.page > 1
+                ? `/bukety${catalogStateToQuery({ ...state, page: state.page - 1 })}`
+                : null
+            }
+            nextHref={
+              state.page < totalPages
+                ? `/bukety${catalogStateToQuery({ ...state, page: state.page + 1 })}`
+                : null
+            }
+          />
+        </div>
       </div>
-
-      {products.items.length === 0 ? (
-        <CatalogEmptyState state={state} />
-      ) : (
-        <ProductGrid products={products.items} />
-      )}
-
-      {totalPages > 1 ? (
-        <nav className="mt-12 flex items-center justify-center gap-5" aria-label="Страницы каталога">
-          {state.page > 1 ? (
-            <Link
-              href={`/bukety${catalogStateToQuery({ ...state, page: state.page - 1 })}`}
-              className="sf-cta-ghost"
-              rel="prev"
-            >
-              Назад
-            </Link>
-          ) : null}
-          <span className="sf-small text-muted">
-            Страница {state.page} из {totalPages} · {bouquetCountLabel(products.total)}
-          </span>
-          {state.page < totalPages ? (
-            <Link
-              href={`/bukety${catalogStateToQuery({ ...state, page: state.page + 1 })}`}
-              className="sf-cta-ghost"
-              rel="next"
-            >
-              Далее
-            </Link>
-          ) : null}
-        </nav>
-      ) : null}
     </main>
   );
 }

@@ -2,17 +2,19 @@ import Link from 'next/link';
 import type { Metadata } from 'next';
 import { notFound, permanentRedirect } from 'next/navigation';
 import { Breadcrumbs } from '@/components/storefront/breadcrumbs';
-import { KatalogFiltersPanel } from '@/components/storefront/katalog-filters-panel';
+import { CatalogPager } from '@/components/storefront/catalog-filters';
+import {
+  KatalogFiltersPanel,
+  KatalogToolbar,
+} from '@/components/storefront/katalog-filters-panel';
 import { ProductGrid } from '@/components/storefront/product-grid';
 import {
-  catalogCountLabel,
   gateKatalogSearchState,
   katalogHasActiveFilters,
   katalogHref,
   katalogStateToListParams,
   parseKatalogSearchParams,
 } from '@/lib/katalog-search-params';
-import { SORT_OPTIONS } from '@/lib/catalog-search-params';
 import {
   EMPTY_PRODUCT_PAGE,
   getCatalogCategory,
@@ -112,7 +114,6 @@ export default async function KatalogCategoryPage({
   }
   breadcrumbItems.push({ name: category.name });
 
-  const countLabel = catalogCountLabel(products.total, category.listingKind);
   const hasFilters = filters.length > 0;
 
   return (
@@ -136,15 +137,9 @@ export default async function KatalogCategoryPage({
         </nav>
       ) : null}
 
-      <div
-        className={
-          hasFilters
-            ? 'grid gap-6 md:grid-cols-[minmax(12rem,16rem)_minmax(0,1fr)] md:items-start md:gap-8'
-            : undefined
-        }
-      >
+      <div className={hasFilters ? 'sf-catalog-layout' : undefined}>
         {hasFilters ? (
-          <aside className="md:sticky md:top-24">
+          <aside className="sf-catalog-aside">
             <KatalogFiltersPanel
               categorySlug={slug}
               state={state}
@@ -156,25 +151,13 @@ export default async function KatalogCategoryPage({
           </aside>
         ) : null}
 
-        <div className="min-w-0">
-          <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
-            <p className="sf-small text-muted">{countLabel}</p>
-            {hasFilters ? (
-              <div className="flex flex-wrap gap-1.5">
-                {SORT_OPTIONS.map((option) => (
-                  <Link
-                    key={option.value}
-                    href={katalogHref(slug, state, { sort: option.value })}
-                    className="sf-filter-pill text-xs"
-                    data-active={state.sort === option.value ? 'true' : 'false'}
-                    aria-pressed={state.sort === option.value}
-                  >
-                    {option.label}
-                  </Link>
-                ))}
-              </div>
-            ) : null}
-          </div>
+        <div className="sf-catalog-main">
+          <KatalogToolbar
+            categorySlug={slug}
+            state={state}
+            total={products.total}
+            listingKind={category.listingKind}
+          />
 
           {products.items.length === 0 ? (
             <p className="sf-body text-muted">По выбранным фильтрам ничего не найдено.</p>
@@ -182,31 +165,16 @@ export default async function KatalogCategoryPage({
             <ProductGrid products={products.items} />
           )}
 
-          {totalPages > 1 ? (
-            <nav className="mt-12 flex items-center justify-center gap-5" aria-label="Страницы каталога">
-              {state.page > 1 ? (
-                <Link
-                  href={katalogHref(slug, state, { page: state.page - 1 })}
-                  className="sf-cta-ghost"
-                  rel="prev"
-                >
-                  Назад
-                </Link>
-              ) : null}
-              <span className="sf-small text-muted">
-                Страница {state.page} из {totalPages} · {countLabel}
-              </span>
-              {state.page < totalPages ? (
-                <Link
-                  href={katalogHref(slug, state, { page: state.page + 1 })}
-                  className="sf-cta-ghost"
-                  rel="next"
-                >
-                  Далее
-                </Link>
-              ) : null}
-            </nav>
-          ) : null}
+          <CatalogPager
+            page={state.page}
+            totalPages={totalPages}
+            prevHref={
+              state.page > 1 ? katalogHref(slug, state, { page: state.page - 1 }) : null
+            }
+            nextHref={
+              state.page < totalPages ? katalogHref(slug, state, { page: state.page + 1 }) : null
+            }
+          />
         </div>
       </div>
     </main>

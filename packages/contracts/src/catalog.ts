@@ -545,10 +545,7 @@ export function gateListingFiltersByEnabledKeys<T extends GatedListingFilterFiel
   if (!keys.has('promo')) {
     delete next.promotionalOnly;
   }
-  if (!keys.has('price')) {
-    delete next.minPriceMinor;
-    delete next.maxPriceMinor;
-  }
+  // Price window is always allowed (storefront dual-thumb slider).
   if (!keys.has('composition_kind')) {
     delete next.compositionKinds;
   }

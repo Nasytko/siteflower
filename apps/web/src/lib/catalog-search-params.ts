@@ -20,6 +20,9 @@ export type CatalogSearchState = {
   colors: string[];
   /** FlowerType slugs. */
   flowers: string[];
+  /** Free-form price window in minor units (slider / inputs). */
+  minPriceMinor?: string;
+  maxPriceMinor?: string;
   sort: ProductSort;
   search?: string;
   page: number;
@@ -103,6 +106,8 @@ export function parseCatalogSearchParams(
     recipients: parseSlugListParam(raw[CATALOG_DIMENSION_PARAMS.recipients]),
     colors: parseSlugListParam(raw[CATALOG_DIMENSION_PARAMS.colors]),
     flowers: parseSlugListParam(raw[CATALOG_DIMENSION_PARAMS.flowers]),
+    minPriceMinor: firstParam(raw.min),
+    maxPriceMinor: firstParam(raw.max),
     sort,
     search: firstParam(raw.q) ?? firstParam(raw.search),
     page: pageNum > 0 ? pageNum : 1,
@@ -121,19 +126,26 @@ export function catalogStateToListParams(state: CatalogSearchState): CatalogList
     recipient: joinSlugList(state.recipients),
     color: joinSlugList(state.colors),
     flower: joinSlugList(state.flowers),
+    minPriceMinor: state.minPriceMinor,
+    maxPriceMinor: state.maxPriceMinor,
     sort: state.sort,
   };
 }
 
 export function catalogHasActiveFilters(state: CatalogSearchState): boolean {
   return (
-    CATALOG_DIMENSIONS.some((dimension) => state[dimension].length > 0) || Boolean(state.search)
+    CATALOG_DIMENSIONS.some((dimension) => state[dimension].length > 0) ||
+    Boolean(state.search) ||
+    Boolean(state.minPriceMinor) ||
+    Boolean(state.maxPriceMinor)
   );
 }
 
 export function catalogActiveFilterCount(state: CatalogSearchState): number {
   let count = CATALOG_DIMENSIONS.reduce((sum, dimension) => sum + state[dimension].length, 0);
   if (state.search) count += 1;
+  if (state.minPriceMinor) count += 1;
+  if (state.maxPriceMinor) count += 1;
   return count;
 }
 
@@ -144,6 +156,9 @@ export function catalogStateToQuery(state: Partial<CatalogSearchState>): string 
     const joined = joinSlugList(state[dimension]);
     if (joined) params.set(CATALOG_DIMENSION_PARAMS[dimension], joined);
   }
+
+  if (state.minPriceMinor) params.set('min', state.minPriceMinor);
+  if (state.maxPriceMinor) params.set('max', state.maxPriceMinor);
 
   const entries: Array<[string, string | undefined]> = [
     ['sort', state.sort && state.sort !== DEFAULT_PRODUCT_SORT ? state.sort : undefined],

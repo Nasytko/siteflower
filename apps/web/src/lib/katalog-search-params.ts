@@ -135,8 +135,9 @@ export function gateKatalogSearchState(
     occasions: keys.has('occasion') ? state.occasions : [],
     recipients: keys.has('recipient') ? state.recipients : [],
     promo: keys.has('promo') ? state.promo : false,
-    minPriceMinor: keys.has('price') ? state.minPriceMinor : undefined,
-    maxPriceMinor: keys.has('price') ? state.maxPriceMinor : undefined,
+    // Price window is always available on category PLPs (slider UX).
+    minPriceMinor: state.minPriceMinor,
+    maxPriceMinor: state.maxPriceMinor,
     minQty: keys.has('quantity') ? state.minQty : undefined,
   };
 }

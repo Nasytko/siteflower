@@ -17,6 +17,7 @@ import type {
   TaxonomyRefDto,
 } from '@bouquet-one/contracts';
 import { trackEvent } from '@/lib/analytics';
+import { PriceRangeFilter } from '@/components/storefront/price-range-filter';
 import {
   bouquetCountLabel,
   catalogActiveFilterCount,
@@ -33,17 +34,18 @@ export type CatalogFilterOptions = {
   occasions: TaxonomyRefDto[];
   recipients: TaxonomyRefDto[];
   colors: TaxonomyRefDto[];
-  /** FlowerType options for the «Цветок» facet. */
+  /** FlowerType options for the «Цветы» facet. */
   flowers: Array<Pick<FlowerTypeDto, 'slug' | 'name'> | TaxonomyRefDto>;
 };
 
 type Option = { value: string; label: string };
 
-/** One visible control; "Повод / Кому" intentionally holds two dimensions. */
+/** One accordion section = one filter dimension. */
 type Control = {
   id: string;
   label: string;
-  groups: Array<{ dimension: CatalogDimension; heading?: string; options: Option[] }>;
+  dimension: CatalogDimension;
+  options: Option[];
 };
 
 function asOptions(items: Array<{ slug: string; name: string }>): Option[] {
@@ -52,51 +54,48 @@ function asOptions(items: Array<{ slug: string; name: string }>): Option[] {
 
 function buildControls(options: CatalogFilterOptions): Control[] {
   const controls: Control[] = [
-    {
-      id: 'budget',
-      label: 'Бюджет',
-      groups: [
-        {
-          dimension: 'budgets',
-          options: options.budgets.map((range) => ({ value: range.id, label: range.label })),
-        },
-      ],
-    },
-    {
-      id: 'occasion-recipient',
-      label: 'Повод / Кому',
-      groups: [
-        { dimension: 'occasions', heading: 'Повод', options: asOptions(options.occasions) },
-        { dimension: 'recipients', heading: 'Кому', options: asOptions(options.recipients) },
-      ],
-    },
-    { id: 'color', label: 'Цвет', groups: [{ dimension: 'colors', options: asOptions(options.colors) }] },
+    { id: 'color', label: 'Цвет', dimension: 'colors', options: asOptions(options.colors) },
     {
       id: 'flower',
-      label: 'Цветок',
-      groups: [{ dimension: 'flowers', options: asOptions(options.flowers) }],
+      label: 'Цветы',
+      dimension: 'flowers',
+      options: asOptions(options.flowers),
+    },
+    {
+      id: 'occasion',
+      label: 'Повод',
+      dimension: 'occasions',
+      options: asOptions(options.occasions),
+    },
+    {
+      id: 'recipient',
+      label: 'Кому',
+      dimension: 'recipients',
+      options: asOptions(options.recipients),
     },
   ];
 
-  return controls.filter((control) => control.groups.some((group) => group.options.length > 0));
+  return controls.filter((control) => control.options.length > 0);
 }
 
-function selectedCount(state: CatalogSearchState, control: Control): number {
-  return control.groups.reduce((sum, group) => sum + state[group.dimension].length, 0);
-}
-
-/** Short, quiet summary next to the pill label: first selection + "+N". */
-function selectionSummary(state: CatalogSearchState, control: Control): string | null {
-  const labels: string[] = [];
-  for (const group of control.groups) {
-    for (const value of state[group.dimension]) {
-      const option = group.options.find((item) => item.value === value);
-      labels.push(option?.label ?? value);
+/** Derive slider bounds from admin budget ranges (fallback 0–500 BYN). */
+function priceBoundsFromBudgets(budgets: BudgetRangePublicDto[]): {
+  boundMinMajor: number;
+  boundMaxMajor: number;
+} {
+  let min = Number.POSITIVE_INFINITY;
+  let max = 0;
+  for (const range of budgets) {
+    if (range.minMinor && /^\d+$/.test(range.minMinor)) {
+      min = Math.min(min, Number(range.minMinor) / 100);
+    }
+    if (range.maxMinor && /^\d+$/.test(range.maxMinor)) {
+      max = Math.max(max, Number(range.maxMinor) / 100);
     }
   }
-  if (labels.length === 0) return null;
-  if (labels.length === 1) return labels[0]!;
-  return `${labels[0]} +${labels.length - 1}`;
+  if (!Number.isFinite(min) || min === Number.POSITIVE_INFINITY) min = 0;
+  if (max <= min) max = Math.max(min + 100, 500);
+  return { boundMinMajor: Math.floor(min), boundMaxMajor: Math.ceil(max) };
 }
 
 function CheckIcon() {
@@ -147,129 +146,58 @@ function OptionRow({
   );
 }
 
-function OptionGroups({
-  control,
-  draft,
-  onToggle,
-}: {
-  control: Control;
-  draft: CatalogSearchState;
-  onToggle: (dimension: CatalogDimension, value: string) => void;
-}) {
-  return (
-    <div className="space-y-4">
-      {control.groups
-        .filter((group) => group.options.length > 0)
-        .map((group) => (
-          <fieldset key={group.dimension}>
-            {group.heading ? (
-              <legend className="sf-label mb-1.5">{group.heading}</legend>
-            ) : (
-              <legend className="sr-only">{control.label}</legend>
-            )}
-            <div className="max-h-64 overflow-y-auto pr-0.5">
-              {group.options.map((option) => (
-                <OptionRow
-                  key={option.value}
-                  option={option}
-                  checked={draft[group.dimension].includes(option.value)}
-                  onToggle={() => onToggle(group.dimension, option.value)}
-                />
-              ))}
-            </div>
-          </fieldset>
-        ))}
-    </div>
-  );
-}
-
-/**
- * Desktop filter pill + popover. Multi-select keeps the popover open;
- * Esc / outside click / «Готово» close it and return focus to the trigger.
- */
-function FilterPill({
+function FilterAccordion({
   control,
   state,
   onApply,
+  defaultOpen = false,
 }: {
   control: Control;
   state: CatalogSearchState;
   onApply: (next: CatalogSearchState) => void;
+  defaultOpen?: boolean;
 }) {
-  const [open, setOpen] = useState(false);
-  const rootRef = useRef<HTMLDivElement>(null);
-  const triggerRef = useRef<HTMLButtonElement>(null);
+  const selected = state[control.dimension];
+  const [open, setOpen] = useState(defaultOpen || selected.length > 0);
   const panelId = useId();
 
-  const count = selectedCount(state, control);
-  const summary = selectionSummary(state, control);
-
-  const close = useCallback((restoreFocus = true) => {
-    setOpen(false);
-    if (restoreFocus) triggerRef.current?.focus();
-  }, []);
-
-  useEffect(() => {
-    if (!open) return;
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
-        event.stopPropagation();
-        close();
-      }
-    };
-    const onPointer = (event: MouseEvent) => {
-      if (!rootRef.current?.contains(event.target as Node)) close(false);
-    };
-    window.addEventListener('keydown', onKey);
-    window.addEventListener('mousedown', onPointer);
-    return () => {
-      window.removeEventListener('keydown', onKey);
-      window.removeEventListener('mousedown', onPointer);
-    };
-  }, [open, close]);
-
-  const toggle = (dimension: CatalogDimension, value: string) => {
-    trackEvent('select_filter', { key: dimension, value });
-    onApply({ ...state, [dimension]: toggleSlug(state[dimension], value), page: 1 });
-  };
-
-  const clearControl = () => {
-    const cleared: Partial<CatalogSearchState> = {};
-    for (const group of control.groups) cleared[group.dimension] = [];
-    onApply({ ...state, ...cleared, page: 1 });
+  const toggle = (value: string) => {
+    trackEvent('select_filter', { key: control.dimension, value });
+    onApply({
+      ...state,
+      [control.dimension]: toggleSlug(selected, value),
+      page: 1,
+    });
   };
 
   return (
-    <div ref={rootRef} className="relative">
+    <div className="sf-filter-accordion" data-open={open ? 'true' : 'false'}>
       <button
-        ref={triggerRef}
         type="button"
-        className="sf-filter-pill"
-        data-active={count > 0}
+        className="sf-filter-accordion__trigger"
         aria-expanded={open}
         aria-controls={panelId}
         onClick={() => setOpen((value) => !value)}
       >
-        <span className="shrink-0">{control.label}</span>
-        {summary ? <span className="sf-filter-pill__summary">· {summary}</span> : null}
+        <span className="flex min-w-0 items-center gap-2">
+          <span className="truncate">{control.label}</span>
+          {selected.length > 0 ? (
+            <span className="sf-filter-accordion__badge">{selected.length}</span>
+          ) : null}
+        </span>
         <ChevronIcon open={open} />
       </button>
-
       {open ? (
-        <div id={panelId} className="sf-popover sf-popover-in" role="group" aria-label={control.label}>
-          <OptionGroups control={control} draft={state} onToggle={toggle} />
-          <div className="mt-3 flex items-center justify-between gap-3 border-t border-border pt-3">
-            <button
-              type="button"
-              className="sf-small text-muted underline-offset-2 hover:text-brand hover:underline disabled:opacity-40"
-              disabled={count === 0}
-              onClick={clearControl}
-            >
-              Очистить
-            </button>
-            <button type="button" className="sf-cta px-5" onClick={() => close()}>
-              Готово
-            </button>
+        <div id={panelId} className="sf-filter-accordion__body" role="group" aria-label={control.label}>
+          <div className="max-h-56 overflow-y-auto pr-0.5">
+            {control.options.map((option) => (
+              <OptionRow
+                key={option.value}
+                option={option}
+                checked={selected.includes(option.value)}
+                onToggle={() => toggle(option.value)}
+              />
+            ))}
           </div>
         </div>
       ) : null}
@@ -277,91 +205,60 @@ function FilterPill({
   );
 }
 
-function SortControl({
+function FiltersPanelBody({
+  controls,
   state,
   onApply,
-  align = 'right',
+  clearHref = '/bukety',
+  priceBounds,
 }: {
+  controls: Control[];
   state: CatalogSearchState;
   onApply: (next: CatalogSearchState) => void;
-  align?: 'left' | 'right';
+  clearHref?: string;
+  priceBounds: { boundMinMajor: number; boundMaxMajor: number };
 }) {
-  const [open, setOpen] = useState(false);
-  const rootRef = useRef<HTMLDivElement>(null);
-  const triggerRef = useRef<HTMLButtonElement>(null);
-  const panelId = useId();
-  const current = SORT_OPTIONS.find((option) => option.value === state.sort) ?? SORT_OPTIONS[0]!;
-
-  useEffect(() => {
-    if (!open) return;
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
-        setOpen(false);
-        triggerRef.current?.focus();
-      }
-    };
-    const onPointer = (event: MouseEvent) => {
-      if (!rootRef.current?.contains(event.target as Node)) setOpen(false);
-    };
-    window.addEventListener('keydown', onKey);
-    window.addEventListener('mousedown', onPointer);
-    return () => {
-      window.removeEventListener('keydown', onKey);
-      window.removeEventListener('mousedown', onPointer);
-    };
-  }, [open]);
+  const hasFilters = catalogHasActiveFilters(state);
 
   return (
-    <div ref={rootRef} className="relative">
-      <button
-        ref={triggerRef}
-        type="button"
-        className="sf-filter-pill"
-        aria-expanded={open}
-        aria-controls={panelId}
-        onClick={() => setOpen((value) => !value)}
-      >
-        <span className="sr-only">Сортировка: </span>
-        <span className="shrink-0 text-muted">Сортировка</span>
-        <span className="sf-filter-pill__summary !text-foreground">· {current.label}</span>
-        <ChevronIcon open={open} />
-      </button>
-
-      {open ? (
-        <div
-          id={panelId}
-          className={`sf-popover sf-popover-in ${align === 'right' ? 'sf-popover--right' : ''} w-64`}
-          role="radiogroup"
-          aria-label="Сортировка"
-        >
-          {SORT_OPTIONS.map((option) => (
-            <button
-              key={option.value}
-              type="button"
-              role="radio"
-              aria-checked={option.value === state.sort}
-              className="sf-option"
-              onClick={() => {
-                setOpen(false);
-                triggerRef.current?.focus();
-                if (option.value !== state.sort) {
-                  onApply({ ...state, sort: option.value, page: 1 });
-                }
-              }}
-            >
-              <span className="sf-option__box" aria-hidden>
-                <CheckIcon />
-              </span>
-              <span>{option.label}</span>
-            </button>
-          ))}
-        </div>
+    <div>
+      <p className="sf-filters-panel__title">Фильтры</p>
+      <div className="sf-filter-price-block">
+        <PriceRangeFilter
+          minMinor={state.minPriceMinor}
+          maxMinor={state.maxPriceMinor}
+          boundMinMajor={priceBounds.boundMinMajor}
+          boundMaxMajor={priceBounds.boundMaxMajor}
+          onApply={(next) =>
+            onApply({
+              ...state,
+              minPriceMinor: next.minPriceMinor,
+              maxPriceMinor: next.maxPriceMinor,
+              budgets: [],
+              page: 1,
+            })
+          }
+        />
+      </div>
+      {controls.map((control, index) => (
+        <FilterAccordion
+          key={control.id}
+          control={control}
+          state={state}
+          onApply={onApply}
+          defaultOpen={index === 0}
+        />
+      ))}
+      {hasFilters ? (
+        <Link href={clearHref} className="sf-filter-clear" scroll={false}>
+          Очистить фильтры
+        </Link>
       ) : null}
     </div>
   );
 }
 
-/** Mobile bottom sheet — every dimension as its own section, draft applied on «Показать». */
+/** Mobile bottom sheet — draft applied on «Показать». */
 function FilterSheet({
   controls,
   state,
@@ -464,17 +361,22 @@ function FilterSheet({
               {controls.map((control) => (
                 <section key={control.id} className="border-b border-border py-4 last:border-b-0">
                   <p className="sf-h3 mb-2">{control.label}</p>
-                  <OptionGroups
-                    control={control}
-                    draft={draft}
-                    onToggle={(dimension, value) =>
-                      setDraft((current) => ({
-                        ...current,
-                        [dimension]: toggleSlug(current[dimension], value),
-                        page: 1,
-                      }))
-                    }
-                  />
+                  <div className="max-h-64 overflow-y-auto pr-0.5">
+                    {control.options.map((option) => (
+                      <OptionRow
+                        key={option.value}
+                        option={option}
+                        checked={draft[control.dimension].includes(option.value)}
+                        onToggle={() =>
+                          setDraft((current) => ({
+                            ...current,
+                            [control.dimension]: toggleSlug(current[control.dimension], option.value),
+                            page: 1,
+                          }))
+                        }
+                      />
+                    ))}
+                  </div>
                 </section>
               ))}
             </div>
@@ -484,7 +386,16 @@ function FilterSheet({
                 type="button"
                 className="sf-cta-ghost flex-1"
                 onClick={() => {
-                  setDraft({ ...draft, budgets: [], occasions: [], recipients: [], colors: [], flowers: [] });
+                  setDraft({
+                    ...draft,
+                    budgets: [],
+                    occasions: [],
+                    recipients: [],
+                    colors: [],
+                    flowers: [],
+                    minPriceMinor: undefined,
+                    maxPriceMinor: undefined,
+                  });
                 }}
               >
                 Сбросить
@@ -508,21 +419,104 @@ function FilterSheet({
   );
 }
 
+function SortControl({
+  state,
+  onApply,
+}: {
+  state: CatalogSearchState;
+  onApply: (next: CatalogSearchState) => void;
+}) {
+  const current = SORT_OPTIONS.find((option) => option.value === state.sort) ?? SORT_OPTIONS[0]!;
+  const [open, setOpen] = useState(false);
+  const rootRef = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const panelId = useId();
+
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setOpen(false);
+        triggerRef.current?.focus();
+      }
+    };
+    const onPointer = (event: MouseEvent) => {
+      if (!rootRef.current?.contains(event.target as Node)) setOpen(false);
+    };
+    window.addEventListener('keydown', onKey);
+    window.addEventListener('mousedown', onPointer);
+    return () => {
+      window.removeEventListener('keydown', onKey);
+      window.removeEventListener('mousedown', onPointer);
+    };
+  }, [open]);
+
+  return (
+    <div ref={rootRef} className="sf-catalog-toolbar__sort relative">
+      <span className="sf-catalog-toolbar__sort-label">Сортировать по:</span>
+      <button
+        ref={triggerRef}
+        type="button"
+        className="sf-sort-link"
+        data-active="true"
+        aria-expanded={open}
+        aria-controls={panelId}
+        onClick={() => setOpen((value) => !value)}
+      >
+        {current.label}
+        <ChevronIcon open={open} />
+      </button>
+      {open ? (
+        <div
+          id={panelId}
+          className="sf-popover sf-popover-in sf-popover--right w-56"
+          role="radiogroup"
+          aria-label="Сортировка"
+        >
+          {SORT_OPTIONS.map((option) => (
+            <button
+              key={option.value}
+              type="button"
+              role="radio"
+              aria-checked={option.value === state.sort}
+              className="sf-option"
+              onClick={() => {
+                setOpen(false);
+                triggerRef.current?.focus();
+                if (option.value !== state.sort) {
+                  onApply({ ...state, sort: option.value, page: 1 });
+                }
+              }}
+            >
+              <span className="sf-option__box" aria-hidden>
+                <CheckIcon />
+              </span>
+              <span>{option.label}</span>
+            </button>
+          ))}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 type Props = {
   state: CatalogSearchState;
   options: CatalogFilterOptions;
   /** Applied result count — powers «Показать N букетов» on mobile. */
   total: number;
+  /** `sidebar` for desktop sticky column; `mobile` for the sheet trigger. */
+  variant?: 'sidebar' | 'mobile';
 };
 
 /**
- * Horizontal pill row (desktop) / single «Фильтры» sheet trigger (mobile).
- * Deliberately never squeezes five pills into a 390px row.
+ * Desktop sidebar (`variant="sidebar"`) or mobile sheet trigger (`variant="mobile"`).
  */
-export function CatalogFilters({ state, options, total }: Props) {
+export function CatalogFilters({ state, options, total, variant = 'sidebar' }: Props) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const controls = useMemo(() => buildControls(options), [options]);
+  const priceBounds = useMemo(() => priceBoundsFromBudgets(options.budgets), [options.budgets]);
 
   const apply = useCallback(
     (next: CatalogSearchState) => {
@@ -533,46 +527,48 @@ export function CatalogFilters({ state, options, total }: Props) {
     [router],
   );
 
-  if (controls.length === 0) {
-    return (
-      <div className="flex items-center justify-between gap-3">
-        <p className="sf-small text-muted" aria-live="polite">
-          Найдено {bouquetCountLabel(total)}
-        </p>
-        <SortControl state={state} onApply={apply} />
-      </div>
-    );
-  }
-
   return (
     <div data-pending={pending ? 'true' : 'false'}>
-      {/* Mobile: one trigger + sort */}
-      <div className="flex flex-col gap-2 lg:hidden">
+      {variant === 'mobile' ? (
         <FilterSheet controls={controls} state={state} total={total} onApply={apply} />
-        <div className="flex items-center justify-between gap-3">
-          <p className="sf-small text-muted" aria-live="polite">
-            Найдено {bouquetCountLabel(total)}
-          </p>
-          <SortControl state={state} onApply={apply} />
-        </div>
-      </div>
+      ) : (
+        <FiltersPanelBody
+          controls={controls}
+          state={state}
+          onApply={apply}
+          priceBounds={priceBounds}
+        />
+      )}
+    </div>
+  );
+}
 
-      {/* Desktop: pill row + sort on the right */}
-      <div className="hidden lg:block">
-        <div className="flex flex-wrap items-center gap-2">
-          <div className="flex flex-wrap items-center gap-2">
-            {controls.map((control) => (
-              <FilterPill key={control.id} control={control} state={state} onApply={apply} />
-            ))}
-          </div>
-          <div className="ml-auto">
-            <SortControl state={state} onApply={apply} />
-          </div>
-        </div>
-        <p className="sf-small mt-3 text-muted" aria-live="polite">
-          Найдено {bouquetCountLabel(total)}
-        </p>
-      </div>
+/** Count + «Сортировать по:» for the main catalog column. */
+export function CatalogToolbar({
+  state,
+  total,
+  countLabel,
+}: {
+  state: CatalogSearchState;
+  total: number;
+  countLabel?: string;
+}) {
+  const router = useRouter();
+  const [, startTransition] = useTransition();
+
+  return (
+    <div className="sf-catalog-toolbar">
+      <p className="sf-catalog-toolbar__count" aria-live="polite">
+        {countLabel ?? bouquetCountLabel(total)}
+      </p>
+      <SortControl
+        state={state}
+        onApply={(next) => {
+          startTransition(() => {
+            router.push(catalogHref(next), { scroll: false });
+          });
+        }}
+      />
     </div>
   );
 }
@@ -636,7 +632,7 @@ export function CatalogActiveFilters({
   if (chips.length === 0) return null;
 
   return (
-    <div className="flex flex-wrap items-center gap-2" aria-label="Выбранные фильтры">
+    <div className="mb-4 flex flex-wrap items-center gap-2 lg:hidden" aria-label="Выбранные фильтры">
       {chips.map((chip) => (
         <Link key={chip.id} href={chip.href} className="sf-chip" scroll={false}>
           <span>{chip.label}</span>
@@ -696,5 +692,49 @@ export function CatalogSortSelect({ state }: { state: CatalogSearchState }) {
         });
       }}
     />
+  );
+}
+
+/** Compact pager: Назад · ●1 · Вперед */
+export function CatalogPager({
+  page,
+  totalPages,
+  prevHref,
+  nextHref,
+}: {
+  page: number;
+  totalPages: number;
+  prevHref: string | null;
+  nextHref: string | null;
+}) {
+  if (totalPages <= 1) return null;
+
+  return (
+    <nav className="sf-pager" aria-label="Страницы каталога">
+      {prevHref ? (
+        <Link href={prevHref} className="sf-pager__nav" rel="prev">
+          Назад
+        </Link>
+      ) : (
+        <span className="sf-pager__nav opacity-40" aria-disabled>
+          Назад
+        </span>
+      )}
+      <span className="sf-pager__page" data-active="true" aria-current="page">
+        {page}
+      </span>
+      {totalPages > 1 ? (
+        <span className="sf-small text-muted">из {totalPages}</span>
+      ) : null}
+      {nextHref ? (
+        <Link href={nextHref} className="sf-pager__nav" rel="next">
+          Вперед
+        </Link>
+      ) : (
+        <span className="sf-pager__nav opacity-40" aria-disabled>
+          Вперед
+        </span>
+      )}
+    </nav>
   );
 }

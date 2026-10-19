@@ -50,13 +50,13 @@ describe('gateListingFiltersByEnabledKeys', () => {
     expect(gated.heightCm).toBeUndefined();
   });
 
-  it('clears price bounds when price is not enabled', () => {
+  it('keeps price bounds even when price key is not in the pool', () => {
     const gated = gateListingFiltersByEnabledKeys(
       { minPriceMinor: '1000', maxPriceMinor: '5000', colorSlugs: ['red'] },
       ['color'],
     );
-    expect(gated.minPriceMinor).toBeUndefined();
-    expect(gated.maxPriceMinor).toBeUndefined();
+    expect(gated.minPriceMinor).toBe('1000');
+    expect(gated.maxPriceMinor).toBe('5000');
     expect(gated.colorSlugs).toEqual(['red']);
   });
 });
