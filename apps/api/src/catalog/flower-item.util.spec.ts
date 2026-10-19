@@ -3,7 +3,7 @@ import {
   flowerItemIdentityKey,
   suggestProductNameFromComposition,
 } from '@bouquet-one/contracts';
-import { buildFlowerItemFields } from './flower-item.util';
+import { buildFlowerItemFields, toFlowerItemDto, type FlowerItemRow } from './flower-item.util';
 
 describe('flowerItem helpers', () => {
   it('builds stable identity keys with null parts as _ (includes form)', () => {
@@ -63,5 +63,36 @@ describe('flowerItem helpers', () => {
     expect(fields.identityKey).toBe('t1|f1|v1|o1|60');
     expect(fields.name).toBe('Роза Мондиаль 60 см Эквадор');
     expect(fields.slug.length).toBeGreaterThan(0);
+  });
+
+  it('maps dictionary color onto FlowerItemDto without inventing swatch', () => {
+    const row = {
+      id: 'fi1',
+      flowerTypeId: 't1',
+      flowerFormId: null,
+      flowerVarietyId: 'v1',
+      flowerOriginId: null,
+      colorId: 'c1',
+      stemLengthCm: 60,
+      identityKey: 't1|_|v1|_|60',
+      slug: 'roza-mondial',
+      name: 'Роза Мондиаль 60 см',
+      sortOrder: 0,
+      visibility: 'VISIBLE' as const,
+      version: 1,
+      flowerType: { id: 't1', slug: 'roza', name: 'Роза' },
+      flowerForm: null,
+      flowerVariety: { id: 'v1', slug: 'mondial', name: 'Мондиаль' },
+      flowerOrigin: null,
+      color: { id: 'c1', slug: 'belyj', name: 'Белый', swatch: '#f5f5f5' },
+    } satisfies FlowerItemRow;
+    const dto = toFlowerItemDto(row);
+    expect(dto.colorId).toBe('c1');
+    expect(dto.color?.name).toBe('Белый');
+    expect(dto.color?.swatch).toBe('#f5f5f5');
+
+    const unknown = toFlowerItemDto({ ...row, colorId: null, color: null });
+    expect(unknown.colorId).toBeNull();
+    expect(unknown.color).toBeNull();
   });
 });

@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import {
   flowerItemDisplayName,
+  type ColorAdminDto,
   type FlowerFormAdminDto,
   type FlowerItemAdminDto,
   type FlowerOriginAdminDto,
@@ -21,6 +22,7 @@ import {
   errorMessage,
 } from '@/lib/admin-client';
 import { adminEndpoints, withQuery } from '@/lib/admin-endpoints';
+import { AdminColorSwatch } from '@/components/admin/admin-color-swatch';
 import { FormSaveStatus, phaseFromAdminError, type FormSavePhase } from '@/components/admin/form-status';
 
 type Props = {
@@ -28,6 +30,7 @@ type Props = {
   initialVarieties: FlowerVarietyAdminDto[];
   initialOrigins: FlowerOriginAdminDto[];
   initialForms: FlowerFormAdminDto[];
+  initialColors: ColorAdminDto[];
   initialPage: PaginatedResponse<FlowerItemAdminDto>;
   canCreate: boolean;
   canUpdate: boolean;
@@ -38,6 +41,7 @@ type Draft = {
   flowerFormId: string;
   flowerVarietyId: string;
   flowerOriginId: string;
+  colorId: string;
   stemLengthCm: string;
 };
 
@@ -48,6 +52,7 @@ const EMPTY_DRAFT: Draft = {
   flowerFormId: '',
   flowerVarietyId: '',
   flowerOriginId: '',
+  colorId: '',
   stemLengthCm: '',
 };
 
@@ -86,6 +91,7 @@ function draftFromItem(item: FlowerItemAdminDto): Draft {
     flowerFormId: item.flowerFormId ?? '',
     flowerVarietyId: item.flowerVarietyId ?? '',
     flowerOriginId: item.flowerOriginId ?? '',
+    colorId: item.colorId ?? '',
     stemLengthCm: item.stemLengthCm == null ? '' : String(item.stemLengthCm),
   };
 }
@@ -95,6 +101,7 @@ export function FlowerStructureManager({
   initialVarieties,
   initialOrigins,
   initialForms,
+  initialColors,
   initialPage,
   canCreate,
   canUpdate,
@@ -104,6 +111,7 @@ export function FlowerStructureManager({
   const [varieties, setVarieties] = useState(initialVarieties);
   const [origins, setOrigins] = useState(initialOrigins);
   const [forms, setForms] = useState(initialForms);
+  const [colors] = useState(initialColors);
   const [items, setItems] = useState(initialPage.items);
   const [total, setTotal] = useState(initialPage.total);
   const [page, setPage] = useState(initialPage.page);
@@ -318,6 +326,7 @@ export function FlowerStructureManager({
       flowerFormId: draft.flowerFormId || null,
       flowerVarietyId: draft.flowerVarietyId || null,
       flowerOriginId: draft.flowerOriginId || null,
+      colorId: draft.colorId || null,
       stemLengthCm,
     };
 
@@ -551,6 +560,36 @@ export function FlowerStructureManager({
               >
                 + Добавить происхождение
               </button>
+            ) : null}
+          </label>
+
+          <label className="admin-field">
+            <span>Цвет</span>
+            <select
+              className="admin-select"
+              value={draft.colorId}
+              disabled={pending}
+              onChange={(e) => setDraft((prev) => ({ ...prev, colorId: e.target.value }))}
+            >
+              <option value="">Не указан</option>
+              {colors
+                .filter((c) => c.visibility === 'VISIBLE' || c.id === draft.colorId)
+                .map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name}
+                  </option>
+                ))}
+            </select>
+            <span className="admin-field__hint">
+              Цвет этой позиции справочника. Подставляется в состав товара автоматически.
+            </span>
+            {draft.colorId ? (
+              <span className="mt-1 block text-sm">
+                <AdminColorSwatch
+                  name={colors.find((c) => c.id === draft.colorId)?.name}
+                  swatch={colors.find((c) => c.id === draft.colorId)?.swatch}
+                />
+              </span>
             ) : null}
           </label>
 
@@ -849,6 +888,7 @@ export function FlowerStructureManager({
               <th>Вид</th>
               <th>Форма</th>
               <th>Сорт</th>
+              <th>Цвет</th>
               <th>Происхождение</th>
               <th>Высота</th>
               <th>Товаров</th>
@@ -858,7 +898,7 @@ export function FlowerStructureManager({
           <tbody>
             {items.length === 0 ? (
               <tr>
-                <td colSpan={8}>
+                <td colSpan={9}>
                   <p className="admin-empty">
                     {listLoading
                       ? 'Загрузка…'
@@ -883,6 +923,13 @@ export function FlowerStructureManager({
                   <td className="text-sm">{item.flowerType.name}</td>
                   <td className="text-sm">{item.flowerForm?.name ?? '—'}</td>
                   <td className="text-sm">{item.flowerVariety?.name ?? '—'}</td>
+                  <td className="text-sm">
+                    {item.color?.name ? (
+                      <AdminColorSwatch name={item.color.name} swatch={item.color.swatch} />
+                    ) : (
+                      '—'
+                    )}
+                  </td>
                   <td className="text-sm">{item.flowerOrigin?.name ?? '—'}</td>
                   <td className="text-sm tabular-nums">
                     {item.stemLengthCm != null ? `${item.stemLengthCm} см` : '—'}

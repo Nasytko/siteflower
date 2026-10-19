@@ -306,8 +306,9 @@ model Color {
   createdAt      DateTime           @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt      DateTime           @updatedAt @map("updated_at") @db.Timestamptz(3)
 
-  products   ProductColor[]
-  components ProductComponent[]
+  products    ProductColor[]
+  components  ProductComponent[]
+  flowerItems FlowerItem[]
 
   @@index([visibility, sortOrder])
   @@map("colors")
@@ -495,9 +496,11 @@ model FlowerItem {
   flowerFormId    String?            @map("flower_form_id") @db.Uuid
   flowerVarietyId String?            @map("flower_variety_id") @db.Uuid
   flowerOriginId  String?            @map("flower_origin_id") @db.Uuid
+  /// Dictionary color for this concrete stem/SKU (not bouquet palette).
+  colorId         String?            @map("color_id") @db.Uuid
   /// Stem / flower height in cm (NOT bouquet height — that is Product.bouquetHeightCm).
   stemLengthCm    Int?               @map("height_cm")
-  /// Stable uniqueness: type|form|_|variety|_|origin|_|stem|_
+  /// Stable uniqueness: type|form|_|variety|_|origin|_|stem|_ (color is attribute, not identity).
   identityKey     String             @unique @map("identity_key") @db.VarChar(200)
   slug            String             @unique @db.VarChar(160)
   /// Canonical label, e.g. "Роза Мондиаль 60 см Эквадор"
@@ -512,12 +515,14 @@ model FlowerItem {
   flowerForm    FlowerForm?    @relation(fields: [flowerFormId], references: [id], onDelete: Restrict)
   flowerVariety FlowerVariety? @relation(fields: [flowerVarietyId], references: [id], onDelete: Restrict)
   flowerOrigin  FlowerOrigin?  @relation(fields: [flowerOriginId], references: [id], onDelete: Restrict)
+  color         Color?         @relation(fields: [colorId], references: [id], onDelete: SetNull)
   components    ProductComponent[]
 
   @@index([flowerTypeId, sortOrder])
   @@index([flowerFormId])
   @@index([flowerVarietyId])
   @@index([flowerOriginId])
+  @@index([colorId])
   @@index([stemLengthCm])
   @@index([visibility, sortOrder])
   @@map("flower_items")

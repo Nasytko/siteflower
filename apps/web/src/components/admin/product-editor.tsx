@@ -61,6 +61,7 @@ import { ProductEditorMainTab } from '@/components/admin/product-editor-main-tab
 import { ProductEditorCompositionTab } from '@/components/admin/product-editor-composition-tab';
 import { ProductEditorExtraTab } from '@/components/admin/product-editor-extra-tab';
 import {
+  compositionHitMeta,
   emptyComponentDraft,
   nextEditorKey,
   toComponentDrafts,
@@ -89,10 +90,11 @@ type Props = {
   canPublish: boolean;
 };
 
-type SectionId = 'main' | 'composition' | 'extra' | 'photos';
+type SectionId = 'main' | 'photos' | 'composition' | 'extra';
 
-const SECTIONS: Array<[Exclude<SectionId, 'photos'>, string]> = [
+const SECTIONS: Array<[SectionId, string]> = [
   ['main', 'Основное'],
+  ['photos', 'Фото'],
   ['composition', 'Состав'],
   ['extra', 'Дополнительно'],
 ];
@@ -387,16 +389,18 @@ export function ProductEditor({
 
   const [compositionSearch, setCompositionSearch] = useState('');
   const [compositionAddQty, setCompositionAddQty] = useState('1');
-  const [compositionPickerOpen, setCompositionPickerOpen] = useState(justCreated);
   const [compositionReplaceKey, setCompositionReplaceKey] = useState<string | null>(null);
   const [compositionHits, setCompositionHits] = useState<CompositionHit[]>([]);
   const [compositionSearchPending, setCompositionSearchPending] = useState(false);
+  const [compositionSearchError, setCompositionSearchError] = useState<string | null>(null);
+  const compositionBrowseMode = compositionSearch.trim().length === 0;
 
   useEffect(() => {
-    if (!compositionPickerOpen) return;
+    if (section !== 'composition') return;
     const q = compositionSearch.trim();
     const timer = window.setTimeout(() => {
       setCompositionSearchPending(true);
+      setCompositionSearchError(null);
       const assigned = new Set(components.map((c) => c.flowerItemId).filter(Boolean));
       if (compositionReplaceKey) {
         const replacing = components.find((row) => row.key === compositionReplaceKey);
@@ -416,25 +420,18 @@ export function ProductEditor({
             ),
           );
         })
-        .catch(() => setCompositionHits([]))
+        .catch(() => {
+          setCompositionHits([]);
+          setCompositionSearchError('Не удалось загрузить справочник цветов');
+        })
         .finally(() => setCompositionSearchPending(false));
     }, 250);
     return () => window.clearTimeout(timer);
-  }, [compositionSearch, compositionPickerOpen, components, compositionReplaceKey]);
-
-  function flowerMetaFromHit(hit: CompositionHit | undefined, fallbackName: string) {
-    return {
-      displayName: hit?.name ?? fallbackName,
-      typeName: hit?.flowerType?.name ?? '',
-      varietyName: hit?.flowerVariety?.name ?? '',
-      originName: hit?.flowerOrigin?.name ?? '',
-      stemLengthCm: hit?.stemLengthCm ?? null,
-    };
-  }
+  }, [compositionSearch, section, components, compositionReplaceKey]);
 
   function addFlowerItemToComposition(itemId: string, itemName?: string) {
     const fromHits = compositionHits.find((row) => row.id === itemId);
-    const meta = flowerMetaFromHit(fromHits, itemName ?? '');
+    const meta = compositionHitMeta(fromHits, itemName ?? '');
     if (!meta.displayName) return;
     const qty = compositionAddQty.trim() || '1';
 
@@ -453,6 +450,10 @@ export function ProductEditor({
       );
       setCompositionReplaceKey(null);
     } else {
+      if (components.some((row) => row.flowerItemId === itemId)) {
+        setError('Этот цветок уже есть в составе — измените количество или замените позицию');
+        return;
+      }
       setComponents((prev) => [
         ...prev,
         emptyComponentDraft({
@@ -467,12 +468,6 @@ export function ProductEditor({
     setCompositionSearch('');
     setCompositionAddQty('1');
     touch();
-  }
-
-  function openCompositionReplace(componentKey: string) {
-    setCompositionReplaceKey(componentKey);
-    setCompositionPickerOpen(true);
-    setCompositionSearch('');
   }
 
   function applySuggestedPalette(colorIds: string[]) {
@@ -1137,7 +1132,7 @@ export function ProductEditor({
   return (
     <div className="space-y-6">
       <div className="admin-editor-header">
-        <div className="space-y-2">
+        <div className="space-y-2 min-w-0">
           <a
             href="/admin/catalog/products"
             className="admin-link text-sm"
@@ -1151,6 +1146,9 @@ export function ProductEditor({
           >
             ← Все товары
           </a>
+          <h1 className="truncate text-xl font-semibold text-[var(--admin-ink)]">
+            {basic.name.trim() || server.name || 'Без названия'}
+          </h1>
           <div className="admin-status-row">
             <span className={lifecycleChipClass(server.lifecycle)}>
               {lifecycleLabel(server.lifecycle)}
@@ -1159,8 +1157,17 @@ export function ProductEditor({
               {availabilityLabel(publication.availability)}
             </span>
           </div>
+          <ProductReadinessPanel
+            compact
+            readyToPublish={readiness.readyToPublish}
+            issues={readiness.issues}
+            recommendations={readiness.items
+              .filter((item) => !item.requiredForPublish && !item.ok)
+              .map((item) => ({ id: item.id, label: item.label }))}
+            onJump={jumpToReadinessIssue}
+          />
           <FormSaveStatus
-            phase={statusPhase}
+            phase={savePending || mediaPending ? 'saving' : statusPhase}
             savedLabel={savedAt ? `Товар сохранён · ${savedAt}` : 'Все изменения сохранены'}
             errorMessage={error}
             requestId={requestId}
@@ -1199,17 +1206,16 @@ export function ProductEditor({
               {savePending ? 'Сохранение…' : 'Сохранить'}
             </button>
           ) : null}
-          <a
-            className="admin-btn-ghost"
-            href={`/admin/catalog/products/${server.id}/preview`}
-          >
-            Предпросмотр
-          </a>
           {canPublish && server.lifecycle !== 'PUBLISHED' ? (
             <button
               type="button"
               className="admin-btn-ghost"
-              disabled={pending}
+              disabled={pending || !readiness.readyToPublish}
+              title={
+                readiness.readyToPublish
+                  ? undefined
+                  : `Не готово: ${readiness.blockingLabels.join(', ')}`
+              }
               onClick={() => void runLifecycle('publish')}
             >
               Опубликовать
@@ -1241,19 +1247,13 @@ export function ProductEditor({
           <button
             key={id}
             type="button"
-            className={`admin-seg__btn ${section === id || (section === 'photos' && id === 'main') ? 'admin-seg__btn--active' : ''}`}
+            className={`admin-seg__btn ${section === id ? 'admin-seg__btn--active' : ''}`}
             onClick={() => setSection(id)}
           >
             {label}
           </button>
         ))}
       </div>
-
-      <ProductReadinessPanel
-        readyToPublish={readiness.readyToPublish}
-        issues={readiness.issues}
-        onJump={jumpToReadinessIssue}
-      />
 
       {justCreated ? (
         <p className="text-sm text-[var(--admin-muted)]">
@@ -1305,11 +1305,6 @@ export function ProductEditor({
           productKind={productKind}
           components={components}
           setComponents={setComponents}
-          compositionPrecision={compositionPrecision}
-          setCompositionPrecision={setCompositionPrecision}
-          colors={taxonomyOptions.colors}
-          compositionPickerOpen={compositionPickerOpen}
-          setCompositionPickerOpen={setCompositionPickerOpen}
           compositionReplaceKey={compositionReplaceKey}
           setCompositionReplaceKey={setCompositionReplaceKey}
           compositionSearch={compositionSearch}
@@ -1318,8 +1313,9 @@ export function ProductEditor({
           setCompositionAddQty={setCompositionAddQty}
           compositionHits={compositionHits}
           compositionSearchPending={compositionSearchPending}
+          compositionSearchError={compositionSearchError}
+          compositionBrowseMode={compositionBrowseMode}
           onAddFlower={addFlowerItemToComposition}
-          onOpenReplace={openCompositionReplace}
           onSuggestPalette={applySuggestedPalette}
           touch={touch}
           nextComponentKey={() => nextEditorKey('component')}
@@ -1332,6 +1328,9 @@ export function ProductEditor({
           canUpdate={canUpdate}
           canPublish={canPublish}
           pending={pending}
+          productKind={productKind}
+          compositionPrecision={compositionPrecision}
+          setCompositionPrecision={setCompositionPrecision}
           basic={basic}
           setBasic={setBasic}
           setSlugManual={setSlugManual}
@@ -1380,11 +1379,6 @@ export function ProductEditor({
 
       {section === 'photos' ? (
         <section className="admin-section" data-section="photo">
-          <div className="mb-4 flex flex-wrap items-center gap-3">
-            <button type="button" className="admin-link text-sm" onClick={() => setSection('main')}>
-              ← К основному
-            </button>
-          </div>
           <h2 className="admin-section__title">Фотографии</h2>
           <p className="admin-section__lead">
             Добавьте до 12 фотографий товара. {server.media.length} из 12 уже загружено. Главное фото

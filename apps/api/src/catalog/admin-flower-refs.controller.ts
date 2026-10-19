@@ -177,6 +177,12 @@ class CreateFlowerItemDto {
   @IsUUID()
   flowerOriginId?: string | null;
 
+  /** Dictionary color for this stem/SKU (nullable). Not part of identityKey. */
+  @IsOptional()
+  @ValidateIf((_, value) => value !== null)
+  @IsUUID()
+  colorId?: string | null;
+
   @IsOptional()
   @ValidateIf((_, value) => value !== null)
   @Type(() => Number)
@@ -242,6 +248,11 @@ class UpdateFlowerItemDto extends ExpectedVersionDto {
   @ValidateIf((_, value) => value !== null)
   @IsUUID()
   flowerOriginId?: string | null;
+
+  @IsOptional()
+  @ValidateIf((_, value) => value !== null)
+  @IsUUID()
+  colorId?: string | null;
 
   @IsOptional()
   @ValidateIf((_, value) => value !== null)

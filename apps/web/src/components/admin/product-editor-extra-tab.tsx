@@ -5,10 +5,13 @@ import {
   PROMOTION_TYPES,
   defaultProductSeoDescription,
   defaultProductSeoTitle,
+  productKindUsesBouquetCompositionKind,
   seoStatusEmoji,
   seoStatusLabel,
+  type CompositionPrecision,
   type ProductAdminDto,
   type ProductFamilyMemberDto,
+  type ProductKind,
   type PromotionType,
   type SeoHealthStatus,
   type VariantStatus,
@@ -27,6 +30,9 @@ type Props = {
   canUpdate: boolean;
   canPublish: boolean;
   pending: boolean;
+  productKind: ProductKind;
+  compositionPrecision: CompositionPrecision;
+  setCompositionPrecision: (value: CompositionPrecision) => void;
   basic: {
     name: string;
     slug: string;
@@ -120,6 +126,9 @@ export function ProductEditorExtraTab(props: Props) {
     canUpdate,
     canPublish,
     pending,
+    productKind,
+    compositionPrecision,
+    setCompositionPrecision,
     basic,
     setBasic,
     setSlugManual,
@@ -439,8 +448,34 @@ export function ProductEditorExtraTab(props: Props) {
         )}
       </div>
 
+      {productKindUsesBouquetCompositionKind(productKind) ? (
+        <div className="admin-subsection space-y-2">
+          <h3 className="admin-subsection__title">Состав и замены</h3>
+          <p className="text-xs text-[var(--admin-muted)]">
+            По умолчанию возможна сезонная замена с сохранением характера букета (см. настройки
+            магазина и политику замен). Включите исключение только если состав должен быть строго
+            фиксированным.
+          </p>
+          <label className="admin-check">
+            <input
+              type="checkbox"
+              disabled={!canUpdate}
+              checked={compositionPrecision === 'EXACT'}
+              onChange={(event) => {
+                setCompositionPrecision(event.target.checked ? 'EXACT' : 'APPROXIMATE');
+                touch();
+              }}
+            />
+            Строгий состав без замен
+          </label>
+        </div>
+      ) : null}
+
       <div className="admin-subsection space-y-3">
-        <h3 className="admin-subsection__title">Акция и витрины</h3>
+        <h3 className="admin-subsection__title">Акция</h3>
+        <p className="text-xs text-[var(--admin-muted)]">
+          Управление скидкой на этот товар. Основные цены — во вкладке «Основное».
+        </p>
         <label className="admin-check">
           <input
             type="checkbox"
@@ -533,7 +568,14 @@ export function ProductEditorExtraTab(props: Props) {
             ))}
           </ul>
         ) : null}
-        {bestsellerGroups.length > 0 ? (
+      </div>
+
+      {bestsellerGroups.length > 0 ? (
+        <div className="admin-subsection space-y-3">
+          <h3 className="admin-subsection__title">Подборки бестселлеров</h3>
+          <p className="text-xs text-[var(--admin-muted)]">
+            Ручные витрины на главной. Не путать с типом товара и SEO-подборками.
+          </p>
           <div className="admin-checks">
             {bestsellerGroups.map((group) => (
               <label key={group.id} className="admin-check">
@@ -550,8 +592,8 @@ export function ProductEditorExtraTab(props: Props) {
               </label>
             ))}
           </div>
-        ) : null}
-      </div>
+        </div>
+      ) : null}
 
       <div className="admin-subsection space-y-3">
         <h3 className="admin-subsection__title">Поиск (SEO)</h3>

@@ -91,8 +91,8 @@ export function ProductPlacementPanel({ productId, refreshKey }: Props) {
     <div className="admin-subsection max-w-2xl space-y-3" data-section="placement">
       <h3 className="admin-subsection__title">Где отображается товар</h3>
       <p className="text-sm text-[var(--admin-muted)]">
-        Автоматически: раздел по типу товара, подтип подарка и SEO-подборки, в которые товар уже
-        входит. Потенциальные совпадения не показываются.
+        Основной раздел — по типу товара (ProductKind). SEO-подборки — только те, куда товар уже
+        попадает по правилам. Тип товара, категории и подборки здесь не смешиваются.
       </p>
 
       {loading ? (

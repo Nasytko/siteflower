@@ -2,6 +2,7 @@ import {
   flowerItemDisplayName,
   flowerItemIdentityKey,
   normalizeSlug,
+  type ColorRefDto,
   type FlowerItemAdminDto,
   type FlowerItemDto,
   type TaxonomyRefDto,
@@ -14,6 +15,7 @@ export type FlowerItemRow = {
   flowerFormId: string | null;
   flowerVarietyId: string | null;
   flowerOriginId: string | null;
+  colorId: string | null;
   stemLengthCm: number | null;
   identityKey: string;
   slug: string;
@@ -25,11 +27,19 @@ export type FlowerItemRow = {
   flowerForm: { id: string; slug: string; name: string } | null;
   flowerVariety: { id: string; slug: string; name: string } | null;
   flowerOrigin: { id: string; slug: string; name: string } | null;
+  color: { id: string; slug: string; name: string; swatch: string | null } | null;
   _count?: { components: number };
 };
 
 function toRef(row: { id: string; slug: string; name: string }): TaxonomyRefDto {
   return { id: row.id, slug: row.slug, name: row.name };
+}
+
+function toColorRef(
+  row: { id: string; slug: string; name: string; swatch: string | null } | null,
+): ColorRefDto | null {
+  if (!row) return null;
+  return { id: row.id, slug: row.slug, name: row.name, swatch: row.swatch };
 }
 
 export function toFlowerItemDto(row: FlowerItemRow): FlowerItemDto {
@@ -39,6 +49,7 @@ export function toFlowerItemDto(row: FlowerItemRow): FlowerItemDto {
     flowerFormId: row.flowerFormId,
     flowerVarietyId: row.flowerVarietyId,
     flowerOriginId: row.flowerOriginId,
+    colorId: row.colorId,
     stemLengthCm: row.stemLengthCm,
     slug: row.slug,
     name: row.name,
@@ -48,6 +59,7 @@ export function toFlowerItemDto(row: FlowerItemRow): FlowerItemDto {
     flowerForm: row.flowerForm ? toRef(row.flowerForm) : null,
     flowerVariety: row.flowerVariety ? toRef(row.flowerVariety) : null,
     flowerOrigin: row.flowerOrigin ? toRef(row.flowerOrigin) : null,
+    color: toColorRef(row.color),
   };
 }
 
@@ -109,4 +121,5 @@ export const FLOWER_ITEM_INCLUDE = {
   flowerForm: { select: { id: true, slug: true, name: true } },
   flowerVariety: { select: { id: true, slug: true, name: true } },
   flowerOrigin: { select: { id: true, slug: true, name: true } },
+  color: { select: { id: true, slug: true, name: true, swatch: true } },
 } as const;

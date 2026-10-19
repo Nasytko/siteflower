@@ -948,6 +948,7 @@ export class FlowerRefsService {
       flowerFormId?: string | null;
       flowerVarietyId?: string | null;
       flowerOriginId?: string | null;
+      colorId?: string | null;
       stemLengthCm?: number | null;
       /** @deprecated Use stemLengthCm */
       heightCm?: number | null;
@@ -986,6 +987,11 @@ export class FlowerRefsService {
       });
       if (!origin) throw new BadRequestException('Flower origin not found');
       originName = origin.name;
+    }
+    const colorId = input.colorId ?? null;
+    if (colorId) {
+      const color = await this.prisma.client.color.findUnique({ where: { id: colorId } });
+      if (!color) throw new BadRequestException('Color not found');
     }
     const stem = input.stemLengthCm ?? input.heightCm ?? null;
     if (stem != null && (stem < 1 || stem > 300)) {
@@ -1030,6 +1036,7 @@ export class FlowerRefsService {
             flowerFormId: input.flowerFormId ?? null,
             flowerVarietyId: input.flowerVarietyId ?? null,
             flowerOriginId: input.flowerOriginId ?? null,
+            colorId,
             stemLengthCm: stem,
             identityKey: fields.identityKey,
             slug: fields.slug,
@@ -1111,6 +1118,7 @@ export class FlowerRefsService {
       flowerVarietyId?: string | null;
       flowerOriginId?: string | null;
       flowerFormId?: string | null;
+      colorId?: string | null;
       stemLengthCm?: number | null;
       heightCm?: number | null;
     },
@@ -1132,6 +1140,7 @@ export class FlowerRefsService {
       input.flowerVarietyId === undefined ? existing.flowerVarietyId : input.flowerVarietyId;
     const nextOriginId =
       input.flowerOriginId === undefined ? existing.flowerOriginId : input.flowerOriginId;
+    const nextColorId = input.colorId === undefined ? existing.colorId : input.colorId;
     const nextHeight =
       input.stemLengthCm !== undefined
         ? input.stemLengthCm
@@ -1158,6 +1167,10 @@ export class FlowerRefsService {
         where: { id: nextOriginId },
       });
       if (!origin) throw new BadRequestException('Flower origin not found');
+    }
+    if (nextColorId) {
+      const color = await this.prisma.client.color.findUnique({ where: { id: nextColorId } });
+      if (!color) throw new BadRequestException('Color not found');
     }
     if (nextHeight != null && (nextHeight < 1 || nextHeight > 300)) {
       throw new BadRequestException('stemLengthCm must be between 1 and 300');
@@ -1219,6 +1232,7 @@ export class FlowerRefsService {
             flowerFormId: nextFormId,
             flowerVarietyId: nextVarietyId,
             flowerOriginId: nextOriginId,
+            colorId: nextColorId,
             stemLengthCm: nextHeight,
             identityKey: fields.identityKey,
             slug: fields.slug,

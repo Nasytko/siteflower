@@ -51,13 +51,14 @@ export const PRODUCT_INCLUDE = {
   components: {
     orderBy: { sortOrder: 'asc' },
     include: {
-      color: { select: { id: true, slug: true, name: true } },
+      color: { select: { id: true, slug: true, name: true, swatch: true } },
       flowerItem: {
         include: {
           flowerType: { select: { id: true, slug: true, name: true } },
           flowerForm: { select: { id: true, slug: true, name: true } },
           flowerVariety: { select: { id: true, slug: true, name: true } },
           flowerOrigin: { select: { id: true, slug: true, name: true } },
+          color: { select: { id: true, slug: true, name: true, swatch: true } },
         },
       },
     },
@@ -368,7 +369,12 @@ export function toProductAdminDto(
         ? toFlowerItemDto(component.flowerItem as FlowerItemRow)
         : null,
       colorId: component.colorId ?? null,
-      color: component.color ? toTaxonomyRef(component.color) : null,
+      color: component.color
+        ? {
+            ...toTaxonomyRef(component.color),
+            swatch: 'swatch' in component.color ? (component.color.swatch ?? null) : null,
+          }
+        : null,
       role: component.role,
       displayName: component.displayName,
       quantity: component.quantity,

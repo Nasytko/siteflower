@@ -459,6 +459,24 @@ test('deriveCompositionManagerSummary', () => {
   assert.equal(summary.stemLengthLabel, '60 см');
 });
 
+test('FlowerItemDto color is optional attribute (not identity)', () => {
+  // Identity ignores color — same stem can gain/lose color without forking SKU.
+  const keyA = flowerItemIdentityKey({
+    flowerTypeId: 't',
+    flowerVarietyId: 'v',
+    flowerOriginId: 'o',
+    stemLengthCm: 60,
+  });
+  const keyB = flowerItemIdentityKey({
+    flowerTypeId: 't',
+    flowerVarietyId: 'v',
+    flowerOriginId: 'o',
+    stemLengthCm: 60,
+  });
+  assert.equal(keyA, keyB);
+  assert.match(keyA, /^t\|/);
+});
+
 test('deriveProductEditorReadiness', () => {
   const ready = deriveProductEditorReadiness({
     name: 'Букет',

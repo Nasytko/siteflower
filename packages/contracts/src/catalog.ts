@@ -735,9 +735,17 @@ export type FlowerFormAdminDto = FlowerFormDto & {
   itemsCount: number;
 };
 
+/** Color reference with optional UI swatch (never invent a hex). */
+export type ColorRefDto = TaxonomyRefDto & {
+  swatch: string | null;
+};
+
 /**
- * Concrete reusable stem/SKU: Type + optional Form + Variety + Origin + stem length.
+ * Concrete reusable stem/SKU: Type + optional Form + Variety + Origin + stem length + color.
  * Quantity is NEVER on FlowerItem — only on ProductComponent.
+ * Color is an attribute of the dictionary item (SSoT); ProductComponent.colorId is a
+ * catalog snapshot copied on add/save — changing FlowerItem.colorId does not rewrite
+ * historical order lines or silently cascade to existing components.
  */
 export type FlowerItemDto = {
   id: string;
@@ -745,6 +753,7 @@ export type FlowerItemDto = {
   flowerFormId: string | null;
   flowerVarietyId: string | null;
   flowerOriginId: string | null;
+  colorId: string | null;
   /** Stem length in cm (FlowerItem). Not bouquet height. */
   stemLengthCm: number | null;
   slug: string;
@@ -755,6 +764,7 @@ export type FlowerItemDto = {
   flowerForm: TaxonomyRefDto | null;
   flowerVariety: TaxonomyRefDto | null;
   flowerOrigin: TaxonomyRefDto | null;
+  color: ColorRefDto | null;
 };
 
 export type FlowerItemAdminDto = FlowerItemDto & {
@@ -1321,8 +1331,9 @@ export type ProductComponentDto = {
   id: string;
   flowerItemId: string;
   flowerItem: FlowerItemDto | null;
+  /** Snapshot of FlowerItem color at last product save (orders use order-line snapshots). */
   colorId: string | null;
-  color: TaxonomyRefDto | null;
+  color: ColorRefDto | null;
   role: ComponentRole;
   displayName: string;
   quantity: number | null;

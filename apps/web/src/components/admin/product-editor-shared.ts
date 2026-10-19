@@ -14,9 +14,12 @@ export type CompositionHit = {
   name: string;
   visibility?: string;
   flowerType?: { name: string };
+  flowerForm?: { name: string } | null;
   flowerVariety?: { name: string } | null;
   flowerOrigin?: { name: string } | null;
   stemLengthCm?: number | null;
+  colorId?: string | null;
+  color?: { id: string; name: string; swatch?: string | null } | null;
 };
 
 export type ComponentDraft = {
@@ -26,12 +29,15 @@ export type ComponentDraft = {
   unit: ComponentUnit;
   flowerItemId: string;
   typeName: string;
+  formName: string;
   varietyName: string;
   originName: string;
   stemLengthCm: number | null;
   role: ComponentRole;
+  /** Snapshot from FlowerItem at add time; not edited manually in composition UI. */
   colorId: string;
   colorName: string;
+  colorSwatch: string | null;
 };
 
 export type VariantDraft = {
@@ -85,20 +91,29 @@ export function toVariantDrafts(product: ProductAdminDto): VariantDraft[] {
 export function toComponentDrafts(product: ProductAdminDto): ComponentDraft[] {
   return [...product.components]
     .sort((a, b) => a.sortOrder - b.sortOrder)
-    .map((component) => ({
-      key: nextEditorKey('component'),
-      displayName: component.displayName,
-      quantity: component.quantity === null ? '' : String(component.quantity),
-      unit: component.unit,
-      flowerItemId: component.flowerItemId ?? '',
-      typeName: component.flowerItem?.flowerType?.name ?? '',
-      varietyName: component.flowerItem?.flowerVariety?.name ?? '',
-      originName: component.flowerItem?.flowerOrigin?.name ?? '',
-      stemLengthCm: component.flowerItem?.stemLengthCm ?? null,
-      role: component.role ?? 'PRIMARY',
-      colorId: component.colorId ?? '',
-      colorName: component.color?.name ?? '',
-    }));
+    .map((component) => {
+      const fromItem = component.flowerItem?.color;
+      // Prefer component snapshot; fall back to dictionary color when historical row has none.
+      const colorId = component.colorId ?? component.flowerItem?.colorId ?? '';
+      const colorName = component.color?.name ?? fromItem?.name ?? '';
+      const colorSwatch = component.color?.swatch ?? fromItem?.swatch ?? null;
+      return {
+        key: nextEditorKey('component'),
+        displayName: component.displayName,
+        quantity: component.quantity === null ? '' : String(component.quantity),
+        unit: component.unit,
+        flowerItemId: component.flowerItemId ?? '',
+        typeName: component.flowerItem?.flowerType?.name ?? '',
+        formName: component.flowerItem?.flowerForm?.name ?? '',
+        varietyName: component.flowerItem?.flowerVariety?.name ?? '',
+        originName: component.flowerItem?.flowerOrigin?.name ?? '',
+        stemLengthCm: component.flowerItem?.stemLengthCm ?? null,
+        role: component.role ?? 'PRIMARY',
+        colorId,
+        colorName,
+        colorSwatch,
+      };
+    });
 }
 
 export function emptyComponentDraft(
@@ -112,12 +127,39 @@ export function emptyComponentDraft(
     unit: 'STEM',
     flowerItemId: '',
     typeName: '',
+    formName: '',
     varietyName: '',
     originName: '',
     stemLengthCm: null,
     role: 'PRIMARY',
     colorId: '',
     colorName: '',
+    colorSwatch: null,
     ...rest,
   };
+}
+
+export function compositionHitMeta(hit: CompositionHit | undefined, fallbackName: string) {
+  return {
+    displayName: hit?.name ?? fallbackName,
+    typeName: hit?.flowerType?.name ?? '',
+    formName: hit?.flowerForm?.name ?? '',
+    varietyName: hit?.flowerVariety?.name ?? '',
+    originName: hit?.flowerOrigin?.name ?? '',
+    stemLengthCm: hit?.stemLengthCm ?? null,
+    colorId: hit?.color?.id ?? hit?.colorId ?? '',
+    colorName: hit?.color?.name ?? '',
+    colorSwatch: hit?.color?.swatch ?? null,
+  };
+}
+
+export function formatCompositionHitSubtitle(hit: CompositionHit): string {
+  return [
+    hit.flowerType?.name,
+    hit.flowerForm?.name,
+    hit.flowerVariety?.name,
+    hit.color?.name,
+  ]
+    .filter(Boolean)
+    .join(' · ');
 }

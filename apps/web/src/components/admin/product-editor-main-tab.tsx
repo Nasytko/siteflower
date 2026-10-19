@@ -374,19 +374,28 @@ export function ProductEditorMainTab(props: Props) {
           />
         </div>
 
-        <TaxonomyQuickPick
-          kind="colors"
-          legend="Цвета"
-          options={colors}
-          selectedIds={discovery.colorIds}
-          canCreate={canCreate}
-          canUpdate={canUpdate}
-          onChange={(ids) => {
-            setDiscovery((prev) => ({ ...prev, colorIds: ids }));
-            touch();
-          }}
-          onCreated={(item) => onTaxonomyCreated('colors', item)}
-        />
+        <details className="admin-subsection space-y-3">
+          <summary className="cursor-pointer text-sm font-medium text-[var(--admin-ink)]">
+            Цветовая гамма букета (необязательно)
+          </summary>
+          <p className="text-xs text-[var(--admin-muted)]">
+            Основной цвет задаётся у каждого цветка в справочнике и составе. Здесь — только
+            расширенная гамма для SEO-фильтров и подборок, если нужна точнее.
+          </p>
+          <TaxonomyQuickPick
+            kind="colors"
+            legend="Гамма для фильтров"
+            options={colors}
+            selectedIds={discovery.colorIds}
+            canCreate={canCreate}
+            canUpdate={canUpdate}
+            onChange={(ids) => {
+              setDiscovery((prev) => ({ ...prev, colorIds: ids }));
+              touch();
+            }}
+            onCreated={(item) => onTaxonomyCreated('colors', item)}
+          />
+        </details>
 
         <div className="admin-subsection space-y-3">
           <h3 className="admin-subsection__title">Статус</h3>

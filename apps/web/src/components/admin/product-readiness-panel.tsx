@@ -4,26 +4,68 @@ type ReadinessIssue = { id: string; label: string };
 
 type Props = {
   readyToPublish: boolean;
+  /** Blocking issues (required for publish). */
   issues: ReadinessIssue[];
+  /** Non-blocking recommendations (optional). */
+  recommendations?: ReadinessIssue[];
   onJump?: (issueId: string) => void;
+  /** Compact chips for the editor header. */
+  compact?: boolean;
 };
 
-export function ProductReadinessPanel({ readyToPublish, issues, onJump }: Props) {
-  if (readyToPublish) {
+export function ProductReadinessPanel({
+  readyToPublish,
+  issues,
+  recommendations = [],
+  onJump,
+  compact = false,
+}: Props) {
+  if (compact) {
+    const missing = issues.length;
     return (
-      <div className="admin-card admin-verdict--ok !px-3 !py-2">
-        <p className="text-sm font-semibold text-[var(--admin-ink)]">Готово к публикации</p>
+      <div className="flex flex-wrap items-center gap-2 text-xs">
+        {readyToPublish ? (
+          <span className="rounded-full bg-emerald-50 px-2 py-0.5 font-medium text-emerald-800">
+            Готов к публикации
+          </span>
+        ) : (
+          <span className="rounded-full bg-amber-50 px-2 py-0.5 font-medium text-amber-900">
+            Не хватает: {missing}
+          </span>
+        )}
+        {issues.slice(0, 3).map((issue) => (
+          <button
+            key={issue.id}
+            type="button"
+            className="admin-link"
+            onClick={() => onJump?.(issue.id)}
+          >
+            {issue.label}
+          </button>
+        ))}
+        {issues.length > 3 ? (
+          <span className="text-[var(--admin-muted)]">+{issues.length - 3}</span>
+        ) : null}
+        {recommendations.length > 0 ? (
+          <span className="text-[var(--admin-muted)]" title={recommendations.map((r) => r.label).join(', ')}>
+            · рекомендации: {recommendations.length}
+          </span>
+        ) : null}
       </div>
     );
   }
 
   return (
-    <div className="admin-card !px-3 !py-2">
-      <p className="text-sm font-semibold text-[var(--admin-ink)]">Готовность товара</p>
+    <div className="space-y-2 text-sm">
+      {readyToPublish ? (
+        <p className="font-medium text-emerald-800">Обязательные поля заполнены</p>
+      ) : (
+        <p className="font-medium text-amber-900">Для публикации нужно:</p>
+      )}
       {issues.length > 0 ? (
-        <ul className="mt-2 space-y-1 text-sm">
+        <ul className="space-y-1">
           {issues.map((issue) => (
-            <li key={issue.id} className="font-medium text-amber-900">
+            <li key={issue.id} className="text-amber-900">
               ○ {issue.label}
               {onJump ? (
                 <>
@@ -40,9 +82,17 @@ export function ProductReadinessPanel({ readyToPublish, issues, onJump }: Props)
             </li>
           ))}
         </ul>
-      ) : (
-        <p className="mt-1 text-xs text-[var(--admin-muted)]">Проверьте обязательные поля.</p>
-      )}
+      ) : null}
+      {recommendations.length > 0 ? (
+        <div className="pt-1">
+          <p className="text-xs font-medium text-[var(--admin-muted)]">Рекомендации (не блокируют)</p>
+          <ul className="mt-1 space-y-1 text-[var(--admin-muted)]">
+            {recommendations.map((item) => (
+              <li key={item.id}>○ {item.label}</li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
     </div>
   );
 }
