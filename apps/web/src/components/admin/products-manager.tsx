@@ -6,11 +6,15 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import {
   BULK_PRODUCTS_MAX_ITEMS,
   COMMERCIAL_AVAILABILITIES,
+  COMPOSITION_KINDS,
+  PRIMARY_PRODUCT_KINDS,
   PRODUCT_LIFECYCLES,
   type BulkProductOperation,
   type BulkProductOperationResultDto,
   type CommercialAvailability,
+  type CompositionKind,
   type PaginatedResponse,
+  type ProductKind,
   type ProductListItemDto,
 } from '@bouquet-one/contracts';
 import { adminPatch, adminPost, AdminRequestError, errorMessage } from '@/lib/admin-client';
@@ -19,19 +23,27 @@ import {
   buildProductsBulkBody,
 } from '@/lib/admin-catalog-contract';
 import { adminEndpoints } from '@/lib/admin-endpoints';
-import { availabilityLabel, formatAdminDateTime, lifecycleLabel } from '@/lib/admin-labels';
+import {
+  availabilityLabel,
+  compositionKindLabel,
+  lifecycleLabel,
+  productKindLabel,
+} from '@/lib/admin-labels';
 import { availabilityChipClass, lifecycleChipClass } from '@/lib/admin-status';
 import { toSameOriginMediaUrl } from '@/lib/media';
 
 export type ProductFilters = {
   search: string;
+  productKind: string;
+  flowerTypeId: string;
+  compositionKind: string;
   lifecycle: string;
   availability: string;
   /** Empty or "true" — maps to API promotionalOnly. */
   promotionalOnly: string;
-  bestsellerGroupIds: string;
+  /** Gift subtype only (when productKind=GIFT). */
   catalogCategoryId: string;
-  familyId: string;
+  bestsellerGroupIds: string;
   sort: string;
   page: number;
 };
@@ -39,9 +51,9 @@ export type ProductFilters = {
 type Props = {
   data: PaginatedResponse<ProductListItemDto>;
   filters: ProductFilters;
+  flowerTypes: Array<{ id: string; name: string }>;
+  giftSubtypes: Array<{ id: string; name: string }>;
   bestsellerGroups: Array<{ id: string; name: string }>;
-  catalogCategories: Array<{ id: string; name: string }>;
-  families: Array<{ id: string; name: string }>;
   canCreate: boolean;
   canUpdate: boolean;
   canPublish: boolean;
@@ -66,12 +78,16 @@ const SORTS: Array<[string, string]> = [
   ['newest', 'Сначала новые'],
 ];
 
+const COMPOSITION_FILTER_KINDS = COMPOSITION_KINDS.filter(
+  (value): value is Exclude<CompositionKind, 'UNKNOWN'> => value !== 'UNKNOWN',
+);
+
 export function ProductsManager({
   data,
   filters,
+  flowerTypes,
+  giftSubtypes,
   bestsellerGroups,
-  catalogCategories,
-  families,
   canCreate,
   canUpdate,
   canPublish,
@@ -83,6 +99,7 @@ export function ProductsManager({
   const [requestId, setRequestId] = useState<string | null>(null);
   const [retryable, setRetryable] = useState(false);
   const [creating, setCreating] = useState(false);
+  const [createKind, setCreateKind] = useState<ProductKind>('BOUQUET');
   const [duplicateTarget, setDuplicateTarget] = useState<ProductListItemDto | null>(null);
   const [duplicating, setDuplicating] = useState(false);
   const [duplicateSuccessId, setDuplicateSuccessId] = useState<string | null>(null);
@@ -111,17 +128,39 @@ export function ProductsManager({
   const canBulk = canPublish || canUpdate;
   const selectedRows = rows.filter((row) => selectedIds.has(row.id));
   const allVisibleSelected = rows.length > 0 && rows.every((row) => selectedIds.has(row.id));
+  const showGiftSubtype = filters.productKind === 'GIFT' && giftSubtypes.length > 0;
+  const showCompositionKind =
+    filters.productKind === 'BOUQUET' ||
+    filters.productKind === 'COMPOSITION' ||
+    filters.productKind === '';
 
-  const groupNames = new Map(bestsellerGroups.map((group) => [group.id, group.name]));
-
-  function setFilter(key: string, value: string) {
+  function pushFilters(patch: Record<string, string | null>) {
     const params = new URLSearchParams(searchParams.toString());
-    if (value.length === 0) params.delete(key);
-    else params.set(key, value);
+    for (const [key, value] of Object.entries(patch)) {
+      if (value == null || value.length === 0) params.delete(key);
+      else params.set(key, value);
+    }
     params.delete('page');
     startTransition(() => {
       router.push(`/admin/catalog/products?${params.toString()}`);
     });
+  }
+
+  function setFilter(key: string, value: string) {
+    if (key === 'productKind') {
+      pushFilters({
+        productKind: value,
+        // Gift subtype only applies to gifts; clear when leaving GIFT.
+        catalogCategoryId: value === 'GIFT' ? filters.catalogCategoryId : null,
+        // Composition kind is bouquet/composition-only.
+        compositionKind:
+          value === 'BOUQUET' || value === 'COMPOSITION' || value === ''
+            ? filters.compositionKind
+            : null,
+      });
+      return;
+    }
+    pushFilters({ [key]: value });
   }
 
   function pageHref(page: number): string {
@@ -140,7 +179,10 @@ export function ProductsManager({
     setError(null);
     setRequestId(null);
     try {
-      const created = await adminPost<{ id: string }>(adminEndpoints.products, { name });
+      const created = await adminPost<{ id: string }>(adminEndpoints.products, {
+        name,
+        productKind: createKind,
+      });
       router.push(`/admin/catalog/products/${created.id}?created=1`);
     } catch (err) {
       setError(errorMessage(err, 'Не удалось создать товар'));
@@ -158,10 +200,12 @@ export function ProductsManager({
     setRetryable(false);
     setDuplicateSuccessId(null);
     try {
-      const created = await adminPost<{ id: string; slug: string; lifecycle: string; version: number }>(
-        adminEndpoints.productDuplicate(duplicateTarget.id),
-        {},
-      );
+      const created = await adminPost<{
+        id: string;
+        slug: string;
+        lifecycle: string;
+        version: number;
+      }>(adminEndpoints.productDuplicate(duplicateTarget.id), {});
       setDuplicateTarget(null);
       setDuplicateSuccessId(created.id);
       router.push(`/admin/catalog/products/${created.id}`);
@@ -338,12 +382,15 @@ export function ProductsManager({
   const pages = Math.max(1, Math.ceil(data.total / Math.max(1, data.pageSize)));
   const hasFilters =
     filters.search.length > 0 ||
+    filters.productKind.length > 0 ||
+    filters.flowerTypeId.length > 0 ||
+    filters.compositionKind.length > 0 ||
     filters.lifecycle.length > 0 ||
     filters.availability.length > 0 ||
     filters.promotionalOnly === 'true' ||
-    filters.bestsellerGroupIds.length > 0 ||
     filters.catalogCategoryId.length > 0 ||
-    filters.familyId.length > 0;
+    filters.bestsellerGroupIds.length > 0;
+  const colCount = 8 + (canBulk ? 1 : 0);
 
   return (
     <div className={`space-y-5 ${navigating ? 'opacity-70' : ''}`}>
@@ -519,7 +566,10 @@ export function ProductsManager({
       {duplicateSuccessId ? (
         <p role="status" className="admin-notice admin-notice--success">
           Товар создан как черновик.{' '}
-          <Link href={`/admin/catalog/products/${duplicateSuccessId}`} className="admin-link font-semibold">
+          <Link
+            href={`/admin/catalog/products/${duplicateSuccessId}`}
+            className="admin-link font-semibold"
+          >
             Открыть товар
           </Link>
         </p>
@@ -563,19 +613,33 @@ export function ProductsManager({
       {canCreate ? (
         <form id="create-product" onSubmit={onCreate} className="admin-toolbar">
           <label className="admin-field">
-            <span>Новый букет</span>
+            <span>Тип</span>
+            <select
+              className="admin-select"
+              value={createKind}
+              onChange={(event) => setCreateKind(event.target.value as ProductKind)}
+            >
+              {PRIMARY_PRODUCT_KINDS.map((value) => (
+                <option key={value} value={value}>
+                  {productKindLabel(value)}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="admin-field">
+            <span>Название</span>
             <input
               name="name"
               required
               className="admin-input w-64"
-              placeholder="Название, например «Амели»"
+              placeholder="Например «Амели» или «Роза Жизель»"
             />
           </label>
           <button type="submit" disabled={creating} className="admin-btn">
-            {creating ? 'Создаём…' : 'Создать черновик'}
+            {creating ? 'Создаём…' : 'Добавить товар'}
           </button>
           <p className="admin-toolbar__hint">
-            Адрес в ссылке и цену заполните в карточке товара.
+            Черновик откроется сразу — фото, цену и состав заполните в карточке.
           </p>
         </form>
       ) : null}
@@ -594,7 +658,7 @@ export function ProductsManager({
             <input
               name="search"
               defaultValue={filters.search}
-              className="admin-input w-56"
+              className="admin-input w-52"
               placeholder="Название или адрес"
             />
           </label>
@@ -602,6 +666,76 @@ export function ProductsManager({
             Найти
           </button>
         </form>
+
+        <label className="admin-field">
+          <span>Тип товара</span>
+          <select
+            className="admin-select"
+            value={filters.productKind}
+            onChange={(event) => setFilter('productKind', event.target.value)}
+          >
+            <option value="">Любой</option>
+            {PRIMARY_PRODUCT_KINDS.map((value) => (
+              <option key={value} value={value}>
+                {productKindLabel(value)}
+              </option>
+            ))}
+          </select>
+        </label>
+
+        {flowerTypes.length > 0 ? (
+          <label className="admin-field">
+            <span>Вид цветка</span>
+            <select
+              className="admin-select"
+              value={filters.flowerTypeId}
+              onChange={(event) => setFilter('flowerTypeId', event.target.value)}
+            >
+              <option value="">Любой</option>
+              {flowerTypes.map((option) => (
+                <option key={option.id} value={option.id}>
+                  {option.name}
+                </option>
+              ))}
+            </select>
+          </label>
+        ) : null}
+
+        {showCompositionKind ? (
+          <label className="admin-field">
+            <span>Тип состава</span>
+            <select
+              className="admin-select"
+              value={filters.compositionKind}
+              onChange={(event) => setFilter('compositionKind', event.target.value)}
+            >
+              <option value="">Любой</option>
+              {COMPOSITION_FILTER_KINDS.map((value) => (
+                <option key={value} value={value}>
+                  {compositionKindLabel(value)}
+                </option>
+              ))}
+            </select>
+          </label>
+        ) : null}
+
+        {showGiftSubtype ? (
+          <label className="admin-field">
+            <span>Подтип подарка</span>
+            <select
+              className="admin-select"
+              value={filters.catalogCategoryId}
+              onChange={(event) => setFilter('catalogCategoryId', event.target.value)}
+            >
+              <option value="">Любой</option>
+              {giftSubtypes.map((option) => (
+                <option key={option.id} value={option.id}>
+                  {option.name}
+                </option>
+              ))}
+            </select>
+          </label>
+        ) : null}
 
         <label className="admin-field">
           <span>Публикация</span>
@@ -647,42 +781,6 @@ export function ProductsManager({
           </select>
         </label>
 
-        {catalogCategories.length > 0 ? (
-          <label className="admin-field">
-            <span>Категория</span>
-            <select
-              className="admin-select"
-              value={filters.catalogCategoryId}
-              onChange={(event) => setFilter('catalogCategoryId', event.target.value)}
-            >
-              <option value="">Любая</option>
-              {catalogCategories.map((option) => (
-                <option key={option.id} value={option.id}>
-                  {option.name}
-                </option>
-              ))}
-            </select>
-          </label>
-        ) : null}
-
-        {families.length > 0 ? (
-          <label className="admin-field">
-            <span>Линейка</span>
-            <select
-              className="admin-select"
-              value={filters.familyId}
-              onChange={(event) => setFilter('familyId', event.target.value)}
-            >
-              <option value="">Любая</option>
-              {families.map((option) => (
-                <option key={option.id} value={option.id}>
-                  {option.name}
-                </option>
-              ))}
-            </select>
-          </label>
-        ) : null}
-
         {bestsellerGroups.length > 0 ? (
           <label className="admin-field">
             <span>Бестселлеры</span>
@@ -709,7 +807,7 @@ export function ProductsManager({
             onChange={(event) => setFilter('sort', event.target.value)}
           >
             {SORTS.map(([value, label]) => (
-              <option key={value} value={value}>
+              <option key={value || 'default'} value={value}>
                 {label}
               </option>
             ))}
@@ -724,7 +822,7 @@ export function ProductsManager({
       </div>
 
       <div className="admin-panel overflow-x-auto">
-        <table className="admin-table min-w-[900px]">
+        <table className="admin-table min-w-[720px]">
           <thead>
             <tr>
               {canBulk ? (
@@ -741,24 +839,20 @@ export function ProductsManager({
                   </label>
                 </th>
               ) : null}
-              <th className="w-16">Фото</th>
-              <th>Товар</th>
-              <th className="w-36">Категория</th>
-              <th className="w-32">Сорт</th>
-              <th className="w-32">Линейка</th>
-              <th className="w-36">Цена</th>
-              <th className="w-32">Публикация</th>
-              <th className="w-44">Наличие</th>
-              <th className="w-36">Акция</th>
-              <th className="w-40">Бестселлеры</th>
-              <th className="w-40">Изменён</th>
-              {canCreate ? <th className="w-28">Действия</th> : null}
+              <th className="w-14">Фото</th>
+              <th>Название</th>
+              <th className="w-36">Тип</th>
+              <th>Состав</th>
+              <th className="w-28">Цена</th>
+              <th className="w-28">Публикация</th>
+              <th className="w-40">Наличие</th>
+              <th className="w-36">Действия</th>
             </tr>
           </thead>
           <tbody>
             {rows.length === 0 ? (
               <tr>
-                <td colSpan={(canCreate ? 12 : 11) + (canBulk ? 1 : 0)}>
+                <td colSpan={colCount}>
                   {hasFilters ? (
                     <div className="admin-empty admin-empty--action">
                       <p>Ничего не найдено по текущим фильтрам.</p>
@@ -773,23 +867,17 @@ export function ProductsManager({
                     <div className="admin-empty admin-empty--action">
                       <p>Товаров пока нет.</p>
                       <p className="text-sm text-[var(--admin-muted)]">
-                        Создайте первый товар, чтобы он появился в каталоге.
+                        Добавьте первый товар — выберите тип и название выше.
                       </p>
-                      {canCreate ? (
-                        <p className="text-sm text-[var(--admin-muted)]">
-                          Введите название в поле «Новый букет» выше и нажмите «Создать черновик».
-                        </p>
-                      ) : null}
                     </div>
                   )}
                 </td>
               </tr>
             ) : (
               rows.map((item) => {
-                const groups = (item.bestsellerGroupIds ?? [])
-                  .map((id) => groupNames.get(id) ?? null)
-                  .filter((name): name is string => Boolean(name));
                 const savingAvailability = savingAvailabilityId === item.id;
+                const kind = item.productKind ?? 'BOUQUET';
+                const summary = item.compositionSummary?.trim() || 'Состав не указан';
                 return (
                   <tr key={item.id}>
                     {canBulk ? (
@@ -822,15 +910,19 @@ export function ProductsManager({
                         {item.name}
                       </Link>
                       <p className="text-xs text-[var(--admin-muted)]">/{item.slug}</p>
+                      {item.promotion ? (
+                        <span className="admin-chip admin-chip--sale mt-1 inline-flex">
+                          {item.promotion.percentOff
+                            ? `−${item.promotion.percentOff}%`
+                            : 'Акция'}
+                        </span>
+                      ) : null}
                     </td>
-                    <td className="text-sm text-[var(--admin-muted)]">
-                      {item.catalogCategory?.name ?? '—'}
-                    </td>
-                    <td className="text-sm text-[var(--admin-muted)]">
-                      {item.cardSubtitle ?? '—'}
-                    </td>
-                    <td className="text-sm text-[var(--admin-muted)]">
-                      {item.family?.name ?? '—'}
+                    <td className="text-sm text-[var(--admin-ink)]">{productKindLabel(kind)}</td>
+                    <td className="max-w-[14rem] text-sm text-[var(--admin-muted)]">
+                      <span className="line-clamp-2" title={summary}>
+                        {summary}
+                      </span>
                     </td>
                     <td className="tabular-nums">
                       {item.promotion ? (
@@ -890,43 +982,34 @@ export function ProductsManager({
                       )}
                     </td>
                     <td>
-                      {item.promotion ? (
-                        <span className="admin-chip admin-chip--sale">
-                          {item.promotion.percentOff ? `−${item.promotion.percentOff}%` : 'Акция'}
-                        </span>
-                      ) : (
-                        <span className="text-[var(--admin-muted)]">—</span>
-                      )}
-                    </td>
-                    <td>
-                      {groups.length > 0 ? (
-                        <span className="text-sm text-[var(--admin-ink)]">
-                          {groups.join(', ')}
-                        </span>
-                      ) : (item.bestsellerGroupIds?.length ?? 0) > 0 ? (
-                        <span className="admin-chip admin-chip--muted">В подборках</span>
-                      ) : (
-                        <span className="text-[var(--admin-muted)]">—</span>
-                      )}
-                    </td>
-                    <td className="text-[var(--admin-muted)]">
-                      {formatAdminDateTime(item.updatedAt)}
-                    </td>
-                    {canCreate ? (
-                      <td>
-                        <button
-                          type="button"
+                      <div className="flex flex-col items-start gap-1">
+                        <Link
+                          href={`/admin/catalog/products/${item.id}`}
                           className="admin-link text-sm"
-                          disabled={duplicating}
-                          onClick={() => {
-                            setDuplicateSuccessId(null);
-                            setDuplicateTarget(item);
-                          }}
                         >
-                          Дублировать
-                        </button>
-                      </td>
-                    ) : null}
+                          Открыть
+                        </Link>
+                        <Link
+                          href={`/admin/catalog/products/${item.id}/preview`}
+                          className="admin-link text-sm"
+                        >
+                          Предпросмотр
+                        </Link>
+                        {canCreate ? (
+                          <button
+                            type="button"
+                            className="admin-link text-sm"
+                            disabled={duplicating}
+                            onClick={() => {
+                              setDuplicateSuccessId(null);
+                              setDuplicateTarget(item);
+                            }}
+                          >
+                            Дублировать
+                          </button>
+                        ) : null}
+                      </div>
+                    </td>
                   </tr>
                 );
               })

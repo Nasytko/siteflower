@@ -19,13 +19,16 @@ export default async function AdminHomepageDiscoveryPage() {
             Категории под героем: можно переименовать, сменить фото и ссылку.
           </p>
         </div>
-        {canReadNavigation ? (
-          <div className="admin-page-header__actions">
+        <div className="admin-page-header__actions flex flex-wrap gap-2">
+          {canReadNavigation ? (
             <Link href="/admin/storefront/navigation" className="admin-btn-ghost">
-              Навигация сайта
+              Меню сайта
             </Link>
-          </div>
-        ) : null}
+          ) : null}
+          <Link href="/admin/storefront/instagram" className="admin-btn-ghost">
+            Лента Instagram
+          </Link>
+        </div>
       </header>
       <DiscoveryTilesEditor
         initial={initial}

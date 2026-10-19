@@ -364,6 +364,10 @@ export class CreateProductDto {
   noIndex?: boolean;
 
   @IsOptional()
+  @IsIn(PRODUCT_KINDS)
+  productKind?: ProductKind;
+
+  @IsOptional()
   @IsArray()
   @ArrayMaxSize(50)
   @ValidateNested({ each: true })
@@ -801,6 +805,11 @@ class ProductFacetQueryDto {
   @IsOptional()
   @IsUUID()
   familyId?: string;
+
+  /** Admin list filter — single commercial kind. Public hubs use categorySlug. */
+  @IsOptional()
+  @IsIn(PRODUCT_KINDS)
+  productKind?: ProductKind;
 }
 
 export class ProductListQueryDto extends ProductFacetQueryDto {

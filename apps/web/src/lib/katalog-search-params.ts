@@ -18,7 +18,11 @@ import {
   parseSlugListParam,
 } from '@/lib/catalog-search-params';
 
-export { toggleSlug, bouquetCountLabel } from '@/lib/catalog-search-params';
+export {
+  toggleSlug,
+  bouquetCountLabel,
+  catalogCountLabel,
+} from '@/lib/catalog-search-params';
 
 export const KATALOG_PAGE_SIZE = 24;
 

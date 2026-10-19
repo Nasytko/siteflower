@@ -17,7 +17,7 @@ const HUB_LINKS = [
   {
     href: '/admin/catalog/categories',
     title: 'Категории',
-    lead: 'Дерево каталога на витрине: структура разделов и привязка товаров.',
+    lead: 'Разделы витрины и подтипы подарков. Тип товара (букет, цветок, подарок) задаётся в карточке, не здесь.',
   },
 ] as const;
 
@@ -29,7 +29,8 @@ export default async function AdminCatalogDictionariesPage() {
       <header>
         <h1 className="admin-page-title">Справочники</h1>
         <p className="admin-page-lead">
-          Цветы, цвета, поводы, получатели и категории — всё, чем наполняется каталог.
+          Виды цветов, цвета, поводы и получатели. Категории — только разделы сайта и подтипы
+          подарков.
         </p>
       </header>
 

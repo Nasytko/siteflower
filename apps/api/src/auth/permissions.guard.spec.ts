@@ -13,12 +13,15 @@ describe('PermissionsGuard', () => {
 
   const guard = new PermissionsGuard(reflector);
 
-  function contextWithAdmin(admin: { role: string } | undefined): ExecutionContext {
+  function contextWithAdmin(
+    admin: { role: string } | undefined,
+    path = '/api/v1/admin/catalog/products',
+  ): ExecutionContext {
     return {
       getHandler: () => ({}),
       getClass: () => ({}),
       switchToHttp: () => ({
-        getRequest: () => ({ admin }),
+        getRequest: () => ({ admin, path }),
       }),
     } as unknown as ExecutionContext;
   }
@@ -48,5 +51,31 @@ describe('PermissionsGuard', () => {
 
     expect(guard.canActivate(contextWithAdmin({ role: 'CONTENT_MANAGER' }))).toBe(true);
     expect(guard.canActivate(contextWithAdmin({ role: 'MANAGER' }))).toBe(true);
+  });
+
+  it('denies admin routes that omit @RequirePermissions', () => {
+    jest.mocked(reflector.getAllAndOverride).mockImplementation((key: unknown) => {
+      if (key === IS_PUBLIC_KEY) return false;
+      if (key === REQUIRED_PERMISSIONS_KEY) return undefined;
+      return undefined;
+    });
+
+    expect(() =>
+      guard.canActivate(contextWithAdmin({ role: 'SUPER_ADMIN' })),
+    ).toThrow(ForbiddenException);
+  });
+
+  it('allows public catalog routes without a permission decorator', () => {
+    jest.mocked(reflector.getAllAndOverride).mockImplementation((key: unknown) => {
+      if (key === IS_PUBLIC_KEY) return false;
+      if (key === REQUIRED_PERMISSIONS_KEY) return undefined;
+      return undefined;
+    });
+
+    expect(
+      guard.canActivate(
+        contextWithAdmin(undefined, '/api/v1/catalog/products'),
+      ),
+    ).toBe(true);
   });
 });

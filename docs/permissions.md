@@ -2,7 +2,7 @@
 
 Permissions live in `@bouquet-one/contracts` (`PERMISSIONS`, `ROLE_PERMISSIONS`).
 
-**Deny by default.** `@RequirePermissions(A, B)` means **AND** (both required).
+**Deny by default.** `@RequirePermissions(A, B)` means **AND** (both required). Admin routes without `@RequirePermissions` (and without `@Public()`) are rejected. Session endpoints (`/admin/auth/me`, logout) require `ADMIN_ACCESS`.
 
 ## System roles
 

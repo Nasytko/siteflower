@@ -774,9 +774,11 @@ select:focus-visible,
 
 .sf-product-card {
   display: flex;
-  height: 100%;
+  /* auto — not height:100% + overflow:hidden, which clipped title/price/CTA
+     when the grid row resolved shorter than the full card content. */
+  height: auto;
+  min-height: 100%;
   flex-direction: column;
-  overflow: hidden;
   border-radius: var(--radius-lg);
   background: var(--color-surface);
   box-shadow: var(--shadow-soft);
@@ -797,14 +799,16 @@ select:focus-visible,
   isolation: isolate;
   aspect-ratio: 1 / 1.05;
   overflow: hidden;
+  border-radius: var(--radius-lg) var(--radius-lg) 0 0;
   background: var(--color-surface-muted);
 }
 
 .sf-product-card__body {
   display: flex;
-  flex: 1;
+  flex: 1 1 auto;
   flex-direction: column;
   gap: 0.45rem;
+  min-height: min-content;
   padding: 0.85rem 0.95rem 1rem;
 }
 

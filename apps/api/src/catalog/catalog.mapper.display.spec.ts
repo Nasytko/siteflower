@@ -1,4 +1,8 @@
-import { productDisplayFlowerAttrs, type ProductWithRelations } from './catalog.mapper';
+import {
+  productDisplayFlowerAttrs,
+  toProductListItemDto,
+  type ProductWithRelations,
+} from './catalog.mapper';
 
 function baseProduct(
   overrides: Partial<ProductWithRelations> = {},
@@ -10,7 +14,11 @@ function baseProduct(
     shortDescription: null,
     description: null,
     bouquetHeightCm: 45,
+    diameterCm: null,
     catalogCategoryId: null,
+    productKind: 'BOUQUET',
+    compositionKind: 'UNKNOWN',
+    compositionPrecision: 'UNKNOWN',
     lifecycle: 'PUBLISHED',
     availability: 'AVAILABLE',
     currency: 'BYN',
@@ -90,5 +98,98 @@ describe('productDisplayFlowerAttrs', () => {
     expect(attrs.flowerOrigin).toBeNull();
     expect(attrs.stemHeightCm).toBeNull();
     expect(attrs.heightCm).toBe(45);
+  });
+});
+
+describe('toProductListItemDto composition summary', () => {
+  const urlFor = (key: string) => `https://cdn.test/${key}`;
+
+  it('maps bouquet mixed PRIMARY quantities and ignores greenery', () => {
+    const dto = toProductListItemDto(
+      baseProduct({
+        productKind: 'BOUQUET',
+        components: [
+          {
+            id: 'c1',
+            productId: 'p1',
+            flowerItemId: 'fi1',
+            role: 'PRIMARY',
+            quantity: 7,
+            flowerItem: {
+              flowerType: { id: 't1', slug: 'roza', name: 'Роза' },
+              flowerVariety: null,
+            },
+          },
+          {
+            id: 'c2',
+            productId: 'p1',
+            flowerItemId: 'fi2',
+            role: 'PRIMARY',
+            quantity: 5,
+            flowerItem: {
+              flowerType: { id: 't2', slug: 'eustoma', name: 'Эустома' },
+              flowerVariety: null,
+            },
+          },
+          {
+            id: 'c3',
+            productId: 'p1',
+            flowerItemId: 'fi3',
+            role: 'GREENERY',
+            quantity: 4,
+            flowerItem: {
+              flowerType: { id: 't3', slug: 'evkalipt', name: 'Эвкалипт' },
+              flowerVariety: null,
+            },
+          },
+        ],
+      } as unknown as Partial<ProductWithRelations>),
+      urlFor,
+    );
+    expect(dto.productKind).toBe('BOUQUET');
+    expect(dto.compositionSummary).toBe('Розы × 7, Эустомы × 5');
+  });
+
+  it('maps stem as type · variety', () => {
+    const dto = toProductListItemDto(
+      baseProduct({
+        productKind: 'STEM',
+        components: [
+          {
+            id: 'c1',
+            productId: 'p1',
+            flowerItemId: 'fi1',
+            role: 'PRIMARY',
+            quantity: 1,
+            flowerItem: {
+              flowerType: { id: 't1', slug: 'roza', name: 'Роза' },
+              flowerVariety: { id: 'v1', slug: 'gisel', name: 'Жизель' },
+            },
+          },
+        ],
+      } as unknown as Partial<ProductWithRelations>),
+      urlFor,
+    );
+    expect(dto.productKind).toBe('STEM');
+    expect(dto.compositionSummary).toBe('Роза · Жизель');
+  });
+
+  it('maps gift subtype from category name', () => {
+    const dto = toProductListItemDto(
+      baseProduct({
+        productKind: 'GIFT',
+        catalogCategory: { id: 'cat1', slug: 'otkrytki', name: 'Открытки' },
+        components: [],
+      } as unknown as Partial<ProductWithRelations>),
+      urlFor,
+    );
+    expect(dto.productKind).toBe('GIFT');
+    expect(dto.compositionSummary).toBe('Открытки');
+  });
+
+  it('maps empty composition to fallback copy', () => {
+    const dto = toProductListItemDto(baseProduct({ productKind: 'COMPOSITION' }), urlFor);
+    expect(dto.productKind).toBe('COMPOSITION');
+    expect(dto.compositionSummary).toBe('Состав не указан');
   });
 });

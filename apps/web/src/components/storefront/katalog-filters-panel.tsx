@@ -2,10 +2,11 @@ import Link from 'next/link';
 import type {
   CatalogCategoryFilterPublicDto,
   CatalogFilterKey,
+  CatalogListingKind,
   CompositionKind,
 } from '@bouquet-one/contracts';
 import {
-  bouquetCountLabel,
+  catalogCountLabel,
   katalogHasActiveFilters,
   katalogHref,
   toggleSlug,
@@ -18,6 +19,10 @@ type Props = {
   state: KatalogSearchState;
   total: number;
   filters: CatalogCategoryFilterPublicDto[];
+  /** Drives «N товаров» vs «N букетов» — never «букета» on Цветы. */
+  listingKind?: CatalogListingKind | null;
+  /** When true, omit the count+sort row (parent renders it in the main column). */
+  hideToolbar?: boolean;
 };
 
 function FilterChip({
@@ -113,28 +118,36 @@ function patchForKey(
  * Runtime filter strip driven by CatalogCategoryFilter + contextual options.
  * Unknown / disabled filter keys from the URL are ignored by the panel.
  */
-export function KatalogFiltersPanel({ categorySlug, state, total, filters }: Props) {
+export function KatalogFiltersPanel({
+  categorySlug,
+  state,
+  total,
+  filters,
+  listingKind = null,
+  hideToolbar = false,
+}: Props) {
   const hasFilters = katalogHasActiveFilters(state);
-  const enabledKeys = new Set(filters.map((row) => row.key));
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <p className="sf-small text-muted">{bouquetCountLabel(total)}</p>
-        <div className="flex flex-wrap gap-1.5">
-          {SORT_OPTIONS.map((option) => (
-            <Link
-              key={option.value}
-              href={katalogHref(categorySlug, state, { sort: option.value })}
-              className="sf-filter-pill text-xs"
-              data-active={state.sort === option.value ? 'true' : 'false'}
-              aria-pressed={state.sort === option.value}
-            >
-              {option.label}
-            </Link>
-          ))}
+      {hideToolbar ? null : (
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <p className="sf-small text-muted">{catalogCountLabel(total, listingKind)}</p>
+          <div className="flex flex-wrap gap-1.5">
+            {SORT_OPTIONS.map((option) => (
+              <Link
+                key={option.value}
+                href={katalogHref(categorySlug, state, { sort: option.value })}
+                className="sf-filter-pill text-xs"
+                data-active={state.sort === option.value ? 'true' : 'false'}
+                aria-pressed={state.sort === option.value}
+              >
+                {option.label}
+              </Link>
+            ))}
+          </div>
         </div>
-      </div>
+      )}
 
       {filters.map((filter) => {
         if (filter.key === 'promo') {
@@ -214,7 +227,6 @@ export function KatalogFiltersPanel({ categorySlug, state, total, filters }: Pro
       {hasFilters ? (
         <Link href={`/katalog/${encodeURIComponent(categorySlug)}`} className="sf-cta-ghost text-sm">
           Сбросить фильтры
-          {enabledKeys.size === 0 ? '' : ''}
         </Link>
       ) : null}
     </div>

@@ -5,6 +5,7 @@
  */
 import type { Prisma } from '@bouquet-one/database';
 import {
+  adminProductCompositionSummary,
   defaultProductSeoDescription,
   defaultProductSeoTitle,
   derivePriceRange,
@@ -486,6 +487,26 @@ export function toProductListItemDto(
     availability: product.availability,
     version: product.version,
     heightCm: product.bouquetHeightCm ?? null,
+    productKind: product.productKind ?? 'BOUQUET',
+    compositionKind: product.compositionKind ?? 'UNKNOWN',
+    compositionSummary: adminProductCompositionSummary({
+      productKind: product.productKind,
+      catalogCategoryName: product.catalogCategory?.name ?? null,
+      components: product.components.map((row) => ({
+        role: row.role,
+        quantity: row.quantity,
+        flowerItem: row.flowerItem
+          ? {
+              flowerType: row.flowerItem.flowerType
+                ? { name: row.flowerItem.flowerType.name }
+                : null,
+              flowerVariety: row.flowerItem.flowerVariety
+                ? { name: row.flowerItem.flowerVariety.name }
+                : null,
+            }
+          : null,
+      })),
+    }),
     catalogCategory: product.catalogCategory ? toTaxonomyRef(product.catalogCategory) : null,
     family: product.familyMember
       ? { id: product.familyMember.family.id, name: product.familyMember.family.name }

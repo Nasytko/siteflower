@@ -24,6 +24,8 @@ import {
   deriveCompositionManagerSummary,
   deriveCompositionKind,
   formatCompositionSummaryLine,
+  adminProductCompositionSummary,
+  COMPOSITION_SUMMARY_EMPTY,
   isCanonicalListingHub,
   isDominantFlowerType,
   productKindsForListingKind,
@@ -220,6 +222,61 @@ test('isDominantFlowerType: chrysanthemum majority vs mixed units', () => {
       'hrizantema',
     ),
     false,
+  );
+});
+
+test('adminProductCompositionSummary covers commercial kinds', () => {
+  assert.equal(
+    adminProductCompositionSummary({
+      productKind: 'BOUQUET',
+      components: [
+        { role: 'PRIMARY', typeName: 'Роза', quantity: 7 },
+        { role: 'PRIMARY', typeName: 'Эустома', quantity: 5 },
+        { role: 'GREENERY', typeName: 'Эвкалипт', quantity: 3 },
+      ],
+    }),
+    'Розы × 7, Эустомы × 5',
+  );
+  assert.equal(
+    adminProductCompositionSummary({
+      productKind: 'COMPOSITION',
+      components: [
+        { role: 'PRIMARY', typeName: 'Роза', quantity: 3 },
+        { role: 'PRIMARY', typeName: 'Хризантема', quantity: 5 },
+      ],
+    }),
+    'Розы × 3, Хризантемы × 5',
+  );
+  assert.equal(
+    adminProductCompositionSummary({
+      productKind: 'STEM',
+      components: [
+        {
+          role: 'PRIMARY',
+          flowerItem: {
+            flowerType: { name: 'Роза' },
+            flowerVariety: { name: 'Жизель' },
+          },
+        },
+      ],
+    }),
+    'Роза · Жизель',
+  );
+  assert.equal(
+    adminProductCompositionSummary({
+      productKind: 'GIFT',
+      catalogCategoryName: 'Открытки',
+      components: [],
+    }),
+    'Открытки',
+  );
+  assert.equal(
+    adminProductCompositionSummary({ productKind: 'BOUQUET', components: [] }),
+    COMPOSITION_SUMMARY_EMPTY,
+  );
+  assert.equal(
+    adminProductCompositionSummary({ productKind: 'GIFT', components: [] }),
+    COMPOSITION_SUMMARY_EMPTY,
   );
 });
 

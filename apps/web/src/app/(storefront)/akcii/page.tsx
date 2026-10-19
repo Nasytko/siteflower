@@ -32,6 +32,7 @@ export default async function PromotionsPage() {
           pageSize: promoList.length,
         }
       : await listProducts({
+          categorySlug: 'bukety',
           promotion: true,
           pageSize: PAGE_SIZE,
           sort: 'recommended',

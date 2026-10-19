@@ -1,3 +1,4 @@
+import Link from 'next/link';
 import { roleHasPermission, type FulfillmentSettingsAdminDto } from '@bouquet-one/contracts';
 import { redirect } from 'next/navigation';
 import { adminFetch, fetchAdminMe } from '@/lib/admin-api';
@@ -18,7 +19,12 @@ export default async function AdminFulfillmentPage() {
       <header>
         <h1 className="admin-page-title">Доставка и самовывоз</h1>
         <p className="admin-page-lead">
-          Курьер, самовывоз и окна времени получения — по времени Минска.
+          Курьер, самовывоз и окна времени — по часовому поясу Минска. Адрес магазина и часы работы
+          задаются в{' '}
+          <Link href="/admin/storefront/settings" className="underline underline-offset-2">
+            настройках магазина
+          </Link>
+          .
         </p>
       </header>
       <FulfillmentSettingsEditor

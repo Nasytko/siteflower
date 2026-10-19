@@ -40,7 +40,9 @@ function isStorefrontHomePath(pathname: string): boolean {
     pathname === '/admin/storefront/homepage' ||
     pathname.startsWith('/admin/storefront/homepage/') ||
     pathname === '/admin/storefront/navigation' ||
-    pathname.startsWith('/admin/storefront/navigation/')
+    pathname.startsWith('/admin/storefront/navigation/') ||
+    pathname === '/admin/storefront/instagram' ||
+    pathname.startsWith('/admin/storefront/instagram/')
   );
 }
 
@@ -89,8 +91,11 @@ const NAV_GROUPS: NavGroup[] = [
       },
       {
         href: '/admin/seo',
-        label: 'Страницы каталога и SEO',
+        label: 'Диагностика SEO',
         permission: 'SEO_READ',
+        isActive: (pathname) =>
+          pathname === '/admin/seo' ||
+          (pathname.startsWith('/admin/seo/') && !pathname.startsWith('/admin/seo/landings')),
       },
       {
         href: '/admin/seo/landings',
@@ -112,6 +117,13 @@ const NAV_GROUPS: NavGroup[] = [
         href: '/admin/storefront/settings',
         label: 'Настройки магазина',
         permission: 'SETTINGS_READ',
+      },
+      {
+        href: '/admin/legal',
+        label: 'Юридическая информация',
+        permission: 'LEGAL_READ',
+        isActive: (pathname) =>
+          pathname === '/admin/legal' || pathname.startsWith('/admin/legal/'),
       },
       { href: '/admin/users', label: 'Пользователи', permission: 'USERS_READ' },
     ],

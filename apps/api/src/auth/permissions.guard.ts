@@ -7,6 +7,7 @@ import {
 import { Reflector } from '@nestjs/core';
 import type { Permission } from '@bouquet-one/contracts';
 import { roleHasAllPermissions } from '@bouquet-one/contracts';
+import { isAdminApiPath } from './admin-path.util';
 import { IS_PUBLIC_KEY, REQUIRED_PERMISSIONS_KEY } from './decorators';
 import type { AuthenticatedAdmin } from './current-admin.decorator';
 
@@ -27,11 +28,19 @@ export class PermissionsGuard implements CanActivate {
       REQUIRED_PERMISSIONS_KEY,
       [context.getHandler(), context.getClass()],
     );
+    const request = context.switchToHttp().getRequest<{
+      admin?: AuthenticatedAdmin;
+      path?: string;
+      url?: string;
+    }>();
     if (!required || required.length === 0) {
+      const path = request.path ?? request.url ?? '';
+      if (isAdminApiPath(path)) {
+        throw new ForbiddenException('Insufficient permissions');
+      }
       return true;
     }
 
-    const request = context.switchToHttp().getRequest<{ admin?: AuthenticatedAdmin }>();
     const admin = request.admin;
     if (!admin) {
       throw new ForbiddenException('Insufficient permissions');

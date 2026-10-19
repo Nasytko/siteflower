@@ -66,6 +66,7 @@ export async function TaxonomyLandingPage({
   }
 
   const products = await listProducts({
+    categorySlug: 'bukety',
     [meta.filterKey]: taxonomy.slug,
     pageSize: 24,
     sort: 'recommended',

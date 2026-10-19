@@ -114,6 +114,8 @@ export function catalogStateToListParams(state: CatalogSearchState): CatalogList
     page: state.page,
     pageSize: CATALOG_PAGE_SIZE,
     search: state.search,
+    /** Same hub resolver as /katalog/bukety — ProductKind BOUQUET only. */
+    categorySlug: 'bukety',
     budget: joinSlugList(state.budgets),
     occasion: joinSlugList(state.occasions),
     recipient: joinSlugList(state.recipients),
@@ -171,12 +173,37 @@ export const SORT_OPTIONS: Array<{ value: ProductSort; label: string }> = [
   { value: 'newest', label: 'Новинки' },
 ];
 
-/** "Найдено 12 букетов" — Russian plural agreement. */
-export function bouquetCountLabel(total: number): string {
+/** Russian plural helper: 1 X, 2–4 Xа, 5+ Xов (and 11–14 Xов). */
+function ruCountLabel(total: number, one: string, few: string, many: string): string {
   const mod100 = total % 100;
   const mod10 = total % 10;
-  if (mod100 >= 11 && mod100 <= 14) return `${total} букетов`;
-  if (mod10 === 1) return `${total} букет`;
-  if (mod10 >= 2 && mod10 <= 4) return `${total} букета`;
-  return `${total} букетов`;
+  if (mod100 >= 11 && mod100 <= 14) return `${total} ${many}`;
+  if (mod10 === 1) return `${total} ${one}`;
+  if (mod10 >= 2 && mod10 <= 4) return `${total} ${few}`;
+  return `${total} ${many}`;
+}
+
+/** "12 букетов" — for bouquet hubs (/bukety, SEO landings about bouquets). */
+export function bouquetCountLabel(total: number): string {
+  return ruCountLabel(total, 'букет', 'букета', 'букетов');
+}
+
+/**
+ * Catalog count label by listing kind — never say «букета» on Цветы/Подарки.
+ * FLOWERS → товара/ов; BOUQUETS → букет/а/ов; default → товар/а/ов.
+ */
+export function catalogCountLabel(
+  total: number,
+  listingKind?: string | null,
+): string {
+  switch (listingKind) {
+    case 'BOUQUETS':
+      return bouquetCountLabel(total);
+    case 'COMPOSITIONS':
+      return ruCountLabel(total, 'композиция', 'композиции', 'композиций');
+    case 'FLOWERS':
+    case 'GIFTS':
+    default:
+      return ruCountLabel(total, 'товар', 'товара', 'товаров');
+  }
 }

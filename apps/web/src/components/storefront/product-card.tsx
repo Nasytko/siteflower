@@ -45,6 +45,7 @@ export function ProductCard({ product, priority = false, sizes = DEFAULT_SIZES }
   const priceLabel = promotion?.salePrice.label ?? product.price?.label ?? null;
   const originalLabel = promotion ? promotion.originalPrice.label : null;
   const percentOff = promotion?.percentOff ?? null;
+  const displayName = product.name?.trim() || 'Без названия';
 
   function onAddToCart(event: MouseEvent) {
     event.preventDefault();
@@ -54,7 +55,7 @@ export function ProductCard({ product, priority = false, sizes = DEFAULT_SIZES }
       productId: product.id,
       variantId: product.defaultVariant.id,
       quantity: 1,
-      productName: product.name,
+      productName: displayName,
       productSlug: product.slug,
       variantName: product.defaultVariant.name,
       unitPriceMinor: product.defaultVariant.priceMinor,
@@ -71,12 +72,12 @@ export function ProductCard({ product, priority = false, sizes = DEFAULT_SIZES }
         <Link
           href={`/bukety/${product.slug}`}
           className="absolute inset-0 block outline-offset-4"
-          aria-label={`${product.name}${priceLabel ? `, ${priceLabel}` : ''}`}
+          aria-label={`${displayName}${priceLabel ? `, ${priceLabel}` : ''}`}
         >
           {product.primaryImageUrl ? (
             <Image
               src={product.primaryImageUrl}
-              alt={product.name}
+              alt={displayName}
               fill
               sizes={sizes}
               className="object-cover transition-transform duration-500 ease-out group-hover:scale-[1.03] motion-reduce:transition-none motion-reduce:group-hover:scale-100"
@@ -128,24 +129,28 @@ export function ProductCard({ product, priority = false, sizes = DEFAULT_SIZES }
         ) : null}
 
         <h3 className="sf-product-card__title">
-          <Link href={`/bukety/${product.slug}`}>{product.name}</Link>
+          <Link href={`/bukety/${product.slug}`}>{displayName}</Link>
         </h3>
 
         {product.cardSubtitle ? (
           <p className="sf-small mt-0.5 text-muted">{product.cardSubtitle}</p>
         ) : null}
 
-        {priceLabel ? (
-          <p className="sf-product-card__price">
-            <span className={`sf-price ${promotion ? 'sf-price--sale' : ''}`}>{priceLabel}</span>
-            {originalLabel ? (
-              <span className="sf-price-was">
-                <span className="sr-only">Обычная цена </span>
-                {originalLabel}
-              </span>
-            ) : null}
-          </p>
-        ) : null}
+        <p className="sf-product-card__price">
+          {priceLabel ? (
+            <>
+              <span className={`sf-price ${promotion ? 'sf-price--sale' : ''}`}>{priceLabel}</span>
+              {originalLabel ? (
+                <span className="sf-price-was">
+                  <span className="sr-only">Обычная цена </span>
+                  {originalLabel}
+                </span>
+              ) : null}
+            </>
+          ) : (
+            <span className="sf-small text-muted">Цена уточняется</span>
+          )}
+        </p>
 
         {canQuickAdd ? (
           <button

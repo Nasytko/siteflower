@@ -249,6 +249,102 @@ export function formatCompositionSummaryLine(input: {
   return [kindLabel, types, palette].filter(Boolean).join(' · ');
 }
 
+export const COMPOSITION_SUMMARY_EMPTY = 'Состав не указан';
+
+/** Nominative plural for compact admin list lines («Розы × 7»). */
+const FLOWER_TYPE_LIST_PLURAL: Record<string, string> = {
+  роза: 'Розы',
+  эустома: 'Эустомы',
+  эвкалипт: 'Эвкалипт',
+  хризантема: 'Хризантемы',
+  гипсофила: 'Гипсофила',
+  тюльпан: 'Тюльпаны',
+  лилия: 'Лилии',
+  пион: 'Пионы',
+  орхидея: 'Орхидеи',
+  гербера: 'Герберы',
+};
+
+function flowerTypeListLabel(typeName: string): string {
+  const trimmed = typeName.trim();
+  if (!trimmed) return '';
+  return FLOWER_TYPE_LIST_PLURAL[trimmed.toLowerCase()] ?? trimmed;
+}
+
+function compositionRowTypeName(row: {
+  typeName?: string | null;
+  flowerItem?: { flowerType?: { name: string } | null } | null;
+}): string {
+  return row.typeName?.trim() || row.flowerItem?.flowerType?.name?.trim() || '';
+}
+
+function compositionRowVarietyName(row: {
+  varietyName?: string | null;
+  flowerItem?: { flowerVariety?: { name: string } | null } | null;
+}): string {
+  return row.varietyName?.trim() || row.flowerItem?.flowerVariety?.name?.trim() || '';
+}
+
+/**
+ * Compact composition line for the admin products table.
+ * PRIMARY lines only — greenery does not appear. Empty → «Состав не указан».
+ */
+export function adminProductCompositionSummary(input: {
+  productKind?: ProductKind | null;
+  catalogCategoryName?: string | null;
+  components: Array<{
+    role?: string | null;
+    quantity?: number | null;
+    typeName?: string | null;
+    varietyName?: string | null;
+    flowerItem?: {
+      flowerType?: { name: string } | null;
+      flowerVariety?: { name: string } | null;
+    } | null;
+  }>;
+}): string {
+  const kind = input.productKind ?? 'BOUQUET';
+  if (kind === 'GIFT' || kind === 'PLANT' || kind === 'OTHER') {
+    const subtype = input.catalogCategoryName?.trim();
+    return subtype || COMPOSITION_SUMMARY_EMPTY;
+  }
+
+  const primary = input.components.filter((row) => {
+    const role = row.role ?? 'PRIMARY';
+    return role === 'PRIMARY';
+  });
+  const rows = primary.length > 0 ? primary : input.components;
+
+  if (kind === 'STEM') {
+    const row = rows[0];
+    if (!row) return COMPOSITION_SUMMARY_EMPTY;
+    const type = compositionRowTypeName(row);
+    const variety = compositionRowVarietyName(row);
+    if (type && variety) return `${type} · ${variety}`;
+    if (type) return type;
+    if (variety) return variety;
+    return COMPOSITION_SUMMARY_EMPTY;
+  }
+
+  const totals = new Map<string, number>();
+  const order: string[] = [];
+  for (const row of rows) {
+    const type = compositionRowTypeName(row);
+    if (!type) continue;
+    if (!totals.has(type)) order.push(type);
+    const qty = row.quantity && row.quantity > 0 ? row.quantity : 0;
+    totals.set(type, (totals.get(type) ?? 0) + qty);
+  }
+  if (order.length === 0) return COMPOSITION_SUMMARY_EMPTY;
+  return order
+    .map((type) => {
+      const qty = totals.get(type) ?? 0;
+      const label = flowerTypeListLabel(type);
+      return qty > 0 ? `${label} × ${qty}` : label;
+    })
+    .join(', ');
+}
+
 export const SEO_LANDING_STATUSES = ['DRAFT', 'PUBLISHED', 'ARCHIVED'] as const;
 export type SeoLandingStatus = (typeof SEO_LANDING_STATUSES)[number];
 
@@ -1301,6 +1397,10 @@ export type ProductListItemDto = {
   version: number;
   /** Bouquet/card height in cm (Product.heightCm). Stem height lives on FlowerItem. */
   heightCm: number | null;
+  productKind: ProductKind;
+  compositionKind: CompositionKind;
+  /** Compact composition / gift subtype line for admin list. */
+  compositionSummary: string;
   catalogCategory: TaxonomyRefDto | null;
   family: { id: string; name: string } | null;
   /** Presentation helper for storefront cards. */

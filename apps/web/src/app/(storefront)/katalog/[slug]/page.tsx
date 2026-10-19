@@ -5,13 +5,14 @@ import { Breadcrumbs } from '@/components/storefront/breadcrumbs';
 import { KatalogFiltersPanel } from '@/components/storefront/katalog-filters-panel';
 import { ProductGrid } from '@/components/storefront/product-grid';
 import {
-  bouquetCountLabel,
+  catalogCountLabel,
   gateKatalogSearchState,
   katalogHasActiveFilters,
   katalogHref,
   katalogStateToListParams,
   parseKatalogSearchParams,
 } from '@/lib/katalog-search-params';
+import { SORT_OPTIONS } from '@/lib/catalog-search-params';
 import {
   EMPTY_PRODUCT_PAGE,
   getCatalogCategory,
@@ -111,6 +112,9 @@ export default async function KatalogCategoryPage({
   }
   breadcrumbItems.push({ name: category.name });
 
+  const countLabel = catalogCountLabel(products.total, category.listingKind);
+  const hasFilters = filters.length > 0;
+
   return (
     <main id="main-content" className="sf-container-wide py-5 sm:py-7">
       <Breadcrumbs className="mb-3" items={breadcrumbItems} />
@@ -132,50 +136,79 @@ export default async function KatalogCategoryPage({
         </nav>
       ) : null}
 
-      {filters.length > 0 ? (
-        <div className="mb-5">
-          <KatalogFiltersPanel
-            categorySlug={slug}
-            state={state}
-            total={products.total}
-            filters={filters}
-          />
+      <div
+        className={
+          hasFilters
+            ? 'grid gap-6 md:grid-cols-[minmax(12rem,16rem)_minmax(0,1fr)] md:items-start md:gap-8'
+            : undefined
+        }
+      >
+        {hasFilters ? (
+          <aside className="md:sticky md:top-24">
+            <KatalogFiltersPanel
+              categorySlug={slug}
+              state={state}
+              total={products.total}
+              filters={filters}
+              listingKind={category.listingKind}
+              hideToolbar
+            />
+          </aside>
+        ) : null}
+
+        <div className="min-w-0">
+          <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
+            <p className="sf-small text-muted">{countLabel}</p>
+            {hasFilters ? (
+              <div className="flex flex-wrap gap-1.5">
+                {SORT_OPTIONS.map((option) => (
+                  <Link
+                    key={option.value}
+                    href={katalogHref(slug, state, { sort: option.value })}
+                    className="sf-filter-pill text-xs"
+                    data-active={state.sort === option.value ? 'true' : 'false'}
+                    aria-pressed={state.sort === option.value}
+                  >
+                    {option.label}
+                  </Link>
+                ))}
+              </div>
+            ) : null}
+          </div>
+
+          {products.items.length === 0 ? (
+            <p className="sf-body text-muted">По выбранным фильтрам ничего не найдено.</p>
+          ) : (
+            <ProductGrid products={products.items} />
+          )}
+
+          {totalPages > 1 ? (
+            <nav className="mt-12 flex items-center justify-center gap-5" aria-label="Страницы каталога">
+              {state.page > 1 ? (
+                <Link
+                  href={katalogHref(slug, state, { page: state.page - 1 })}
+                  className="sf-cta-ghost"
+                  rel="prev"
+                >
+                  Назад
+                </Link>
+              ) : null}
+              <span className="sf-small text-muted">
+                Страница {state.page} из {totalPages} · {countLabel}
+              </span>
+              {state.page < totalPages ? (
+                <Link
+                  href={katalogHref(slug, state, { page: state.page + 1 })}
+                  className="sf-cta-ghost"
+                  rel="next"
+                >
+                  Далее
+                </Link>
+              ) : null}
+            </nav>
+          ) : null}
         </div>
-      ) : (
-        <p className="sf-small mb-5 text-muted">{bouquetCountLabel(products.total)}</p>
-      )}
-
-      {products.items.length === 0 ? (
-        <p className="sf-body text-muted">По выбранным фильтрам ничего не найдено.</p>
-      ) : (
-        <ProductGrid products={products.items} />
-      )}
-
-      {totalPages > 1 ? (
-        <nav className="mt-12 flex items-center justify-center gap-5" aria-label="Страницы каталога">
-          {state.page > 1 ? (
-            <Link
-              href={katalogHref(slug, state, { page: state.page - 1 })}
-              className="sf-cta-ghost"
-              rel="prev"
-            >
-              Назад
-            </Link>
-          ) : null}
-          <span className="sf-small text-muted">
-            Страница {state.page} из {totalPages} · {bouquetCountLabel(products.total)}
-          </span>
-          {state.page < totalPages ? (
-            <Link
-              href={katalogHref(slug, state, { page: state.page + 1 })}
-              className="sf-cta-ghost"
-              rel="next"
-            >
-              Далее
-            </Link>
-          ) : null}
-        </nav>
-      ) : null}
+      </div>
     </main>
   );
 }

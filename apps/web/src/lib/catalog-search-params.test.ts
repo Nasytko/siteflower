@@ -3,6 +3,7 @@ import test from 'node:test';
 import {
   bouquetCountLabel,
   catalogActiveFilterCount,
+  catalogCountLabel,
   catalogHasActiveFilters,
   catalogHref,
   catalogStateToListParams,
@@ -84,6 +85,7 @@ test('catalogStateToListParams joins each dimension with the API vocabulary', ()
   assert.equal(params.occasion, undefined);
   assert.equal(params.page, 3);
   assert.equal(params.sort, 'recommended');
+  assert.equal(params.categorySlug, 'bukety');
 });
 
 test('catalogStateToQuery omits default sort and page 1', () => {
@@ -117,4 +119,13 @@ test('bouquetCountLabel agrees with Russian plurals', () => {
   assert.equal(bouquetCountLabel(11), '11 букетов');
   assert.equal(bouquetCountLabel(21), '21 букет');
   assert.equal(bouquetCountLabel(0), '0 букетов');
+});
+
+test('catalogCountLabel follows listingKind', () => {
+  assert.equal(catalogCountLabel(2, 'FLOWERS'), '2 товара');
+  assert.equal(catalogCountLabel(1, 'FLOWERS'), '1 товар');
+  assert.equal(catalogCountLabel(5, 'GIFTS'), '5 товаров');
+  assert.equal(catalogCountLabel(2, 'BOUQUETS'), '2 букета');
+  assert.equal(catalogCountLabel(3, 'COMPOSITIONS'), '3 композиции');
+  assert.equal(catalogCountLabel(2, null), '2 товара');
 });

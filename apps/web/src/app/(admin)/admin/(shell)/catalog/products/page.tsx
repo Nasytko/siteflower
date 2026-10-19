@@ -5,7 +5,10 @@ import {
   fetchCatalogStructurePickers,
   fetchProductsPage,
 } from '@/lib/admin-catalog-api';
-import { categoryPickerOptions } from '@/lib/admin-catalog-picker-labels';
+import {
+  categoryPickerOptions,
+  giftSubtypeOptions,
+} from '@/lib/admin-catalog-picker-labels';
 import { requireAdminPermission } from '@/lib/admin-page-auth';
 import { AdminPageHeader } from '@/components/admin/admin-page-header';
 import { ProductsManager, type ProductFilters } from '@/components/admin/products-manager';
@@ -36,15 +39,21 @@ export default async function AdminProductsPage({
     (readParam(sp, 'promotion') === 'active' ? 'true' : '');
   const bestsellerGroupIds =
     readParam(sp, 'bestsellerGroupIds') || readParam(sp, 'bestsellerGroupId');
+  const productKind = readParam(sp, 'productKind');
+  // Gift subtype uses catalogCategoryId — only meaningful with productKind=GIFT.
+  const catalogCategoryId =
+    productKind === 'GIFT' ? readParam(sp, 'catalogCategoryId') : '';
 
   const filters: ProductFilters = {
     search,
+    productKind,
+    flowerTypeId: readParam(sp, 'flowerTypeId'),
+    compositionKind: readParam(sp, 'compositionKind'),
     lifecycle: readParam(sp, 'lifecycle'),
     availability: readParam(sp, 'availability'),
     promotionalOnly: promotionalOnlyRaw === 'true' ? 'true' : '',
+    catalogCategoryId,
     bestsellerGroupIds,
-    catalogCategoryId: readParam(sp, 'catalogCategoryId'),
-    familyId: readParam(sp, 'familyId'),
     sort: readParam(sp, 'sort'),
     page: Math.max(1, Number(readParam(sp, 'page', '1')) || 1),
   };
@@ -52,12 +61,14 @@ export default async function AdminProductsPage({
   const [data, bestsellerGroups, structure] = await Promise.all([
     fetchProductsPage({
       search: filters.search || undefined,
+      productKind: filters.productKind || undefined,
+      flowerTypeId: filters.flowerTypeId || undefined,
+      compositionKind: filters.compositionKind || undefined,
       lifecycle: filters.lifecycle || undefined,
       availability: filters.availability || undefined,
       promotionalOnly: filters.promotionalOnly === 'true' ? true : undefined,
-      bestsellerGroupIds: filters.bestsellerGroupIds || undefined,
       catalogCategoryId: filters.catalogCategoryId || undefined,
-      familyId: filters.familyId || undefined,
+      bestsellerGroupIds: filters.bestsellerGroupIds || undefined,
       sort: filters.sort || undefined,
       page: filters.page,
       pageSize: 25,
@@ -67,16 +78,17 @@ export default async function AdminProductsPage({
   ]);
 
   const canCreate = roleHasPermission(me.user.role, 'CATALOG_CREATE');
+  const categories = categoryPickerOptions(structure.categories);
 
   return (
     <main id="main-content" className="space-y-6">
       <AdminPageHeader
         title="Товары"
-        lead="Найдите товар, измените наличие или откройте карточку для фото, цены и публикации."
+        lead="Найдите товар по типу и составу, измените наличие или откройте карточку."
         actions={
           canCreate ? (
             <a href="#create-product" className="admin-btn">
-              Новый товар
+              Добавить товар
             </a>
           ) : undefined
         }
@@ -85,9 +97,15 @@ export default async function AdminProductsPage({
         <ProductsManager
           data={data}
           filters={filters}
-          bestsellerGroups={bestsellerGroups.map((group) => ({ id: group.id, name: group.name }))}
-          catalogCategories={categoryPickerOptions(structure.categories)}
-          families={structure.families.map((family) => ({ id: family.id, name: family.name }))}
+          flowerTypes={structure.flowerTypes.map((row) => ({ id: row.id, name: row.name }))}
+          giftSubtypes={giftSubtypeOptions(categories).map((row) => ({
+            id: row.id,
+            name: row.name,
+          }))}
+          bestsellerGroups={bestsellerGroups.map((group) => ({
+            id: group.id,
+            name: group.name,
+          }))}
           canCreate={canCreate}
           canUpdate={roleHasPermission(me.user.role, 'CATALOG_UPDATE')}
           canPublish={roleHasPermission(me.user.role, 'CATALOG_PUBLISH')}

@@ -15,10 +15,13 @@ export type ProductListQuery = {
   availability?: string;
   /** When true, only products with an effectively active promotion. */
   promotionalOnly?: boolean;
+  productKind?: string;
+  compositionKind?: string;
   bestsellerGroupIds?: string | readonly string[];
   occasionIds?: string | readonly string[];
   recipientIds?: string | readonly string[];
   colorIds?: string | readonly string[];
+  /** Kept for gift subtype / legacy bookmarks — not primary IA. */
   catalogCategoryId?: string;
   flowerTypeId?: string;
   flowerVarietyId?: string;
@@ -44,6 +47,8 @@ export function buildProductListQueryParams(
     lifecycle: query.lifecycle,
     availability: query.availability,
     promotionalOnly: query.promotionalOnly === true ? true : undefined,
+    productKind: query.productKind || undefined,
+    compositionKind: query.compositionKind || undefined,
     bestsellerGroupIds: query.bestsellerGroupIds,
     occasionIds: query.occasionIds,
     recipientIds: query.recipientIds,

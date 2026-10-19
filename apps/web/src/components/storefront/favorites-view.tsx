@@ -31,6 +31,9 @@ async function fetchProductBySlug(slug: string): Promise<ProductListItemDto | nu
       availability: product.availability,
       version: 0,
       heightCm: product.heightCm ?? null,
+      productKind: product.productKind,
+      compositionKind: product.compositionKind,
+      compositionSummary: product.cardSubtitle?.trim() || 'Состав не указан',
       catalogCategory: product.catalogCategory,
       family: product.family
         ? { id: product.family.id, name: product.family.name }

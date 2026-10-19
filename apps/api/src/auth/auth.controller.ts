@@ -8,7 +8,7 @@ import { AppConfigService } from '../config/app-config.service';
 import { AuthService } from './auth.service';
 import { clearSessionCookie, setSessionCookie } from './cookie.util';
 import { CurrentAdmin, type AuthenticatedAdmin } from './current-admin.decorator';
-import { Public } from './decorators';
+import { Public, RequirePermissions } from './decorators';
 import { LOGIN_THROTTLE } from './login-throttle';
 
 @ApiTags('admin-auth')
@@ -48,6 +48,7 @@ export class AuthController {
   }
 
   @Post('logout')
+  @RequirePermissions('ADMIN_ACCESS')
   async logout(
     @CurrentAdmin() admin: AuthenticatedAdmin,
     @Req() req: Request,
@@ -65,6 +66,7 @@ export class AuthController {
   }
 
   @Post('logout-all')
+  @RequirePermissions('ADMIN_ACCESS')
   async logoutAll(
     @CurrentAdmin() admin: AuthenticatedAdmin,
     @Req() req: Request,
@@ -82,6 +84,7 @@ export class AuthController {
 
   @SkipThrottle()
   @Get('me')
+  @RequirePermissions('ADMIN_ACCESS')
   async me(@CurrentAdmin() admin: AuthenticatedAdmin) {
     const user = await this.auth.getMe(admin.id);
     return {

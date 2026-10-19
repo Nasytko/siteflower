@@ -142,7 +142,7 @@ export default async function AdminDashboardPage() {
             <Metric
               label="Товары на витрине"
               value={publishedProducts}
-              hint="Опубликованные букеты"
+              hint="Опубликованные товары"
               href="/admin/catalog/products?lifecycle=PUBLISHED"
             />
             <Metric

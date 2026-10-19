@@ -55,6 +55,7 @@ export async function FlowerTypeLandingPage({ slug }: { slug: string }) {
   if (!flowerType) notFound();
 
   const products = await listProducts({
+    categorySlug: 'bukety',
     flowerTypeSlug: flowerType.slug,
     pageSize: 24,
     sort: 'recommended',

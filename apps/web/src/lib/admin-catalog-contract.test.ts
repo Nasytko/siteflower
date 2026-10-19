@@ -100,6 +100,34 @@ test('product list query uses search / promotionalOnly / bestsellerGroupIds', ()
   assert.doesNotMatch(url, /bestsellerGroupId=/);
 });
 
+test('product list query includes productKind / compositionKind / flowerTypeId', () => {
+  const params = buildProductListQueryParams({
+    productKind: 'STEM',
+    compositionKind: 'MONO',
+    flowerTypeId: '11111111-1111-4111-8111-111111111111',
+    catalogCategoryId: '22222222-2222-4222-8222-222222222222',
+  });
+  assert.equal(params.productKind, 'STEM');
+  assert.equal(params.compositionKind, 'MONO');
+  assert.equal(params.flowerTypeId, '11111111-1111-4111-8111-111111111111');
+  assert.equal(params.catalogCategoryId, '22222222-2222-4222-8222-222222222222');
+
+  const url = withQuery(adminEndpoints.products, params);
+  assert.match(url, /productKind=STEM/);
+  assert.match(url, /compositionKind=MONO/);
+  assert.match(url, /flowerTypeId=/);
+});
+
+test('product list query omits empty productKind and compositionKind', () => {
+  const params = buildProductListQueryParams({
+    productKind: '',
+    compositionKind: '',
+    search: 'тест',
+  });
+  assert.equal(params.productKind, undefined);
+  assert.equal(params.compositionKind, undefined);
+});
+
 test('product list query omits promotionalOnly unless true', () => {
   const params = buildProductListQueryParams({ promotionalOnly: false, search: '' });
   assert.equal(params.promotionalOnly, undefined);
