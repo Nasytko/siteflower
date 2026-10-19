@@ -952,6 +952,7 @@ export class FlowerRefsService {
       stemLengthCm?: number | null;
       /** @deprecated Use stemLengthCm */
       heightCm?: number | null;
+      imageUrl?: string | null;
       name?: string;
       slug?: string;
       sortOrder?: number;
@@ -1038,6 +1039,7 @@ export class FlowerRefsService {
             flowerOriginId: input.flowerOriginId ?? null,
             colorId,
             stemLengthCm: stem,
+            imageUrl: input.imageUrl?.trim() || null,
             identityKey: fields.identityKey,
             slug: fields.slug,
             name: fields.name,
@@ -1121,6 +1123,7 @@ export class FlowerRefsService {
       colorId?: string | null;
       stemLengthCm?: number | null;
       heightCm?: number | null;
+      imageUrl?: string | null;
     },
     actor?: ActorContext,
   ): Promise<FlowerItemAdminDto> {
@@ -1234,6 +1237,9 @@ export class FlowerRefsService {
             flowerOriginId: nextOriginId,
             colorId: nextColorId,
             stemLengthCm: nextHeight,
+            ...(input.imageUrl !== undefined
+              ? { imageUrl: input.imageUrl?.trim() || null }
+              : {}),
             identityKey: fields.identityKey,
             slug: fields.slug,
             name: fields.name,

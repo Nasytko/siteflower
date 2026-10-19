@@ -463,6 +463,7 @@ export function toProductPublicDto(
       role: component.role,
       flowerSlug: component.flowerItem?.flowerType?.slug ?? null,
       colorSlug: component.color?.slug ?? null,
+      imageUrl: component.flowerItem?.imageUrl ?? null,
     })),
     media: product.media.map((media) => {
       const dto = toProductMediaDto(media, urlFor);

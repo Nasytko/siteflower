@@ -555,6 +555,8 @@ model FlowerItem {
   colorId         String?            @map("color_id") @db.Uuid
   /// Stem / flower height in cm (NOT bouquet height — that is Product.bouquetHeightCm).
   stemLengthCm    Int?               @map("height_cm")
+  /// Small photo shown next to this flower in the product page «Состав».
+  imageUrl        String?            @map("image_url") @db.VarChar(500)
   /// Stable uniqueness: type|form|_|variety|_|origin|_|stem|_ (color is attribute, not identity).
   identityKey     String             @unique @map("identity_key") @db.VarChar(200)
   slug            String             @unique @db.VarChar(160)

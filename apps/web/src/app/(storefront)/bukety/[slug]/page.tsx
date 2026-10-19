@@ -151,42 +151,46 @@ export default async function ProductPage({ params }: { params: Params }) {
 
         <ProductPurchaseProvider product={purchaseProduct} postcards={postcards}>
           <article className="sf-pdp-top">
-            <div className="sf-pdp-top__gallery">
-              <ProductGallery
-                media={product.media}
-                productId={product.id}
-                productSlug={product.slug}
-                productName={product.name}
-                heightCm={product.heightCm}
-                promotionPercent={product.promotion?.percentOff ?? null}
-              />
+            <div className="sf-pdp-top__col">
+              <div className="sf-pdp-top__gallery">
+                <ProductGallery
+                  media={product.media}
+                  productId={product.id}
+                  productSlug={product.slug}
+                  productName={product.name}
+                  heightCm={product.heightCm}
+                  promotionPercent={product.promotion?.percentOff ?? null}
+                />
+              </div>
+
+              <div className="sf-pdp-top__perks">
+                <ProductPerks
+                  fulfillment={fulfillment}
+                  city={city}
+                  pickupAddress={seller?.pickupAddress ?? settings?.address ?? null}
+                  workingHours={settings?.workingHours ?? null}
+                  outOfCityDeliveryNote={outOfCityDeliveryNote}
+                  photoReportNote={settings?.photoReportNote ?? null}
+                />
+              </div>
             </div>
 
-            <div className="sf-pdp-top__buy">
-              <ProductBuyCard
-                whatsappUrl={settings?.whatsappUrl ?? null}
-                telegramUrl={settings?.telegramUrl ?? null}
-                phone={settings?.phone ?? null}
-              >
-                {product.family ? (
-                  <ProductFamilySwitcher family={product.family} currentSlug={product.slug} />
-                ) : null}
-              </ProductBuyCard>
-            </div>
+            <div className="sf-pdp-top__col">
+              <div className="sf-pdp-top__buy">
+                <ProductBuyCard
+                  whatsappUrl={settings?.whatsappUrl ?? null}
+                  telegramUrl={settings?.telegramUrl ?? null}
+                  phone={settings?.phone ?? null}
+                >
+                  {product.family ? (
+                    <ProductFamilySwitcher family={product.family} currentSlug={product.slug} />
+                  ) : null}
+                </ProductBuyCard>
+              </div>
 
-            <div className="sf-pdp-top__perks">
-              <ProductPerks
-                fulfillment={fulfillment}
-                city={city}
-                pickupAddress={seller?.pickupAddress ?? settings?.address ?? null}
-                workingHours={settings?.workingHours ?? null}
-                outOfCityDeliveryNote={outOfCityDeliveryNote}
-                photoReportNote={settings?.photoReportNote ?? null}
-              />
-            </div>
-
-            <div className="sf-pdp-top__card">
-              <ProductPostcardCard />
+              <div className="sf-pdp-top__card">
+                <ProductPostcardCard />
+              </div>
             </div>
           </article>
 

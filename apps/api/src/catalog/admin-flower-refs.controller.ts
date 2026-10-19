@@ -201,6 +201,12 @@ class CreateFlowerItemDto {
   heightCm?: number | null;
 
   @IsOptional()
+  @ValidateIf((_, value) => value !== null)
+  @IsString()
+  @MaxLength(500)
+  imageUrl?: string | null;
+
+  @IsOptional()
   @IsString()
   @MaxLength(200)
   name?: string;
@@ -270,6 +276,12 @@ class UpdateFlowerItemDto extends ExpectedVersionDto {
   @Min(1)
   @Max(300)
   heightCm?: number | null;
+
+  @IsOptional()
+  @ValidateIf((_, value) => value !== null)
+  @IsString()
+  @MaxLength(500)
+  imageUrl?: string | null;
 
   @IsOptional()
   @Type(() => Number)

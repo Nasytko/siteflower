@@ -87,7 +87,18 @@ function CompositionPanel({
             {product.components.map((item, index) => (
               <li key={`${item.displayName}-${item.flowerSlug ?? index}`}>
                 <span className="sf-pdp-composition__icon" aria-hidden>
-                  <FlowerIcon />
+                  {item.imageUrl ? (
+                    <Image
+                      src={item.imageUrl}
+                      alt=""
+                      fill
+                      sizes="40px"
+                      className="object-cover"
+                      unoptimized={!item.imageUrl.startsWith('/')}
+                    />
+                  ) : (
+                    <FlowerIcon />
+                  )}
                 </span>
                 <span className="sf-pdp-composition__name">{item.displayName}</span>
                 {item.quantity != null ? (

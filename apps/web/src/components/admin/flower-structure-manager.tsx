@@ -43,6 +43,7 @@ type Draft = {
   flowerOriginId: string;
   colorId: string;
   stemLengthCm: string;
+  imageUrl: string;
 };
 
 type InlineKind = 'type' | 'form' | 'variety' | 'origin';
@@ -54,6 +55,7 @@ const EMPTY_DRAFT: Draft = {
   flowerOriginId: '',
   colorId: '',
   stemLengthCm: '',
+  imageUrl: '',
 };
 
 function countLabel(n: number): string {
@@ -93,6 +95,7 @@ function draftFromItem(item: FlowerItemAdminDto): Draft {
     flowerOriginId: item.flowerOriginId ?? '',
     colorId: item.colorId ?? '',
     stemLengthCm: item.stemLengthCm == null ? '' : String(item.stemLengthCm),
+    imageUrl: item.imageUrl ?? '',
   };
 }
 
@@ -328,6 +331,7 @@ export function FlowerStructureManager({
       flowerOriginId: draft.flowerOriginId || null,
       colorId: draft.colorId || null,
       stemLengthCm,
+      imageUrl: draft.imageUrl.trim() || null,
     };
 
     if (mode === 'create') {
@@ -608,6 +612,30 @@ export function FlowerStructureManager({
               />
               <span className="text-sm text-[var(--admin-muted)]">см</span>
             </div>
+          </label>
+
+          <label className="admin-field">
+            <span>Фото для состава (URL)</span>
+            <div className="flex items-center gap-3">
+              {draft.imageUrl.trim() ? (
+                <img
+                  src={draft.imageUrl.trim()}
+                  alt=""
+                  className="h-10 w-10 shrink-0 rounded-full border border-[var(--admin-border)] object-cover"
+                />
+              ) : null}
+              <input
+                className="admin-input"
+                value={draft.imageUrl}
+                maxLength={500}
+                disabled={pending}
+                placeholder="https://… или /flowers/roza.jpg"
+                onChange={(e) => setDraft((prev) => ({ ...prev, imageUrl: e.target.value }))}
+              />
+            </div>
+            <small className="admin-help">
+              Круглая миниатюра рядом с цветком во вкладке «Состав» карточки товара.
+            </small>
           </label>
 
           {inlineKind ? (

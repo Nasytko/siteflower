@@ -74,6 +74,7 @@ describe('flowerItem helpers', () => {
       flowerOriginId: null,
       colorId: 'c1',
       stemLengthCm: 60,
+      imageUrl: null,
       identityKey: 't1|_|v1|_|60',
       slug: 'roza-mondial',
       name: 'Роза Мондиаль 60 см',

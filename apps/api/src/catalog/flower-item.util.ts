@@ -17,6 +17,7 @@ export type FlowerItemRow = {
   flowerOriginId: string | null;
   colorId: string | null;
   stemLengthCm: number | null;
+  imageUrl: string | null;
   identityKey: string;
   slug: string;
   name: string;
@@ -51,6 +52,7 @@ export function toFlowerItemDto(row: FlowerItemRow): FlowerItemDto {
     flowerOriginId: row.flowerOriginId,
     colorId: row.colorId,
     stemLengthCm: row.stemLengthCm,
+    imageUrl: row.imageUrl ?? null,
     slug: row.slug,
     name: row.name,
     sortOrder: row.sortOrder,

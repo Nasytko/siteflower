@@ -794,6 +794,8 @@ export type FlowerItemDto = {
   colorId: string | null;
   /** Stem length in cm (FlowerItem). Not bouquet height. */
   stemLengthCm: number | null;
+  /** Composition photo on the product page. */
+  imageUrl: string | null;
   slug: string;
   name: string;
   sortOrder: number;
@@ -1634,6 +1636,8 @@ export type ProductPublicDto = {
     role: ComponentRole;
     flowerSlug: string | null;
     colorSlug: string | null;
+    /** Flower dictionary photo for «Состав». */
+    imageUrl?: string | null;
   }>;
   media: Array<{
     url: string;

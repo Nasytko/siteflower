@@ -413,7 +413,8 @@ export function ProductPostcardCard() {
         <GiftIcon />
         <div className="sf-pdp-postcard__heading">
           <h2 id="pdp-postcard-title" className="sf-pdp-postcard__title">
-            Добавить открытку
+            <span className="sf-pdp-postcard__title-desktop">Добавить открытку</span>
+            <span className="sf-pdp-postcard__title-mobile">Открытка к букету</span>
           </h2>
           <p className="sf-pdp-postcard__hint">
             {options.length > 0
