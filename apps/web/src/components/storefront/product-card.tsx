@@ -113,16 +113,7 @@ export function ProductCard({ product, priority = false, sizes = DEFAULT_SIZES }
             }`}
           >
             {availability.tone === 'ok' ? (
-              <svg viewBox="0 0 12 12" className="size-3.5 shrink-0" fill="none" aria-hidden>
-                <circle cx="6" cy="6" r="5.25" stroke="currentColor" strokeWidth="1.2" />
-                <path
-                  d="M3.4 6.2 5.1 7.9 8.6 4.2"
-                  stroke="currentColor"
-                  strokeWidth="1.3"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                />
-              </svg>
+              <span className="sf-product-card__stock-dot" aria-hidden />
             ) : null}
             {availability.text}
           </p>
@@ -136,52 +127,58 @@ export function ProductCard({ product, priority = false, sizes = DEFAULT_SIZES }
           <p className="sf-small mt-0.5 text-muted">{product.cardSubtitle}</p>
         ) : null}
 
-        <p className="sf-product-card__price">
-          {priceLabel ? (
-            <>
-              <span className={`sf-price ${promotion ? 'sf-price--sale' : ''}`}>{priceLabel}</span>
-              {originalLabel ? (
-                <span className="sf-price-was">
-                  <span className="sr-only">Обычная цена </span>
-                  {originalLabel}
-                </span>
-              ) : null}
-            </>
-          ) : (
-            <span className="sf-small text-muted">Цена уточняется</span>
-          )}
-        </p>
+        <div className="sf-product-card__buy">
+          <p className="sf-product-card__price">
+            {priceLabel ? (
+              <>
+                <span className={`sf-price ${promotion ? 'sf-price--sale' : ''}`}>{priceLabel}</span>
+                {originalLabel ? (
+                  <span className="sf-price-was">
+                    <span className="sr-only">Обычная цена </span>
+                    {originalLabel}
+                  </span>
+                ) : null}
+              </>
+            ) : (
+              <span className="sf-small text-muted">Цена уточняется</span>
+            )}
+          </p>
 
-        {canQuickAdd ? (
-          <button
-            type="button"
-            className="sf-cta-block"
-            onClick={onAddToCart}
-            aria-live="polite"
-          >
-            <svg
-              viewBox="0 0 24 24"
-              className="size-4 shrink-0 opacity-90"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="1.8"
-              aria-hidden
+          {canQuickAdd ? (
+            <button
+              type="button"
+              className="sf-product-card__cart"
+              onClick={onAddToCart}
+              aria-live="polite"
+              aria-label={added ? 'Добавлено в корзину' : 'В корзину'}
             >
-              <path
-                d="M6 7h15l-1.4 8.2a2 2 0 0 1-2 1.6H9.2a2 2 0 0 1-2-1.6L5.2 4H3"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
-              <circle cx="10" cy="20" r="1.2" fill="currentColor" stroke="none" />
-              <circle cx="17" cy="20" r="1.2" fill="currentColor" stroke="none" />
-            </svg>
-            {added ? 'Добавлено' : 'В корзину'}
-          </button>
-        ) : (
-          <Link href={`/bukety/${product.slug}`} className="sf-cta-block">
-            Смотреть
-          </Link>
-        )}
+              <svg
+                viewBox="0 0 24 24"
+                className="size-4 shrink-0"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.8"
+                aria-hidden
+              >
+                <path
+                  d="M6 7h15l-1.4 8.2a2 2 0 0 1-2 1.6H9.2a2 2 0 0 1-2-1.6L5.2 4H3"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+                <circle cx="10" cy="20" r="1.2" fill="currentColor" stroke="none" />
+                <circle cx="17" cy="20" r="1.2" fill="currentColor" stroke="none" />
+              </svg>
+            </button>
+          ) : (
+            <Link
+              href={`/bukety/${product.slug}`}
+              className="sf-product-card__cart"
+              aria-label="Смотреть товар"
+            >
+              →
+            </Link>
+          )}
+        </div>
       </div>
     </article>
   );

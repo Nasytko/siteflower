@@ -1113,6 +1113,46 @@ select:focus-visible,
   color: var(--color-success);
 }
 
+.sf-product-card__stock-dot {
+  width: 0.4rem;
+  height: 0.4rem;
+  border-radius: 999px;
+  background: currentColor;
+}
+
+.sf-product-card__buy {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.65rem;
+  margin-top: auto;
+}
+
+.sf-product-card__buy .sf-product-card__price {
+  margin: 0;
+}
+
+.sf-product-card__cart {
+  display: inline-flex;
+  flex-shrink: 0;
+  width: 2.45rem;
+  height: 2.45rem;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: 0.65rem;
+  background: var(--color-brand);
+  color: var(--color-brand-foreground);
+  font-size: 0.95rem;
+  font-weight: 600;
+  transition: background-color 0.2s ease;
+}
+
+.sf-product-card__cart:hover {
+  background: var(--color-brand-mid);
+  color: var(--color-brand-foreground);
+}
+
 .sf-product-card__title {
   margin: 0;
   font-family: var(--font-sans);
@@ -1139,34 +1179,30 @@ select:focus-visible,
   margin: 0.15rem 0 0.35rem;
 }
 
-/* Circular discount badge — restrained, sits on photography. */
+/* Soft pink discount pill on photography (mockup). */
 .sf-sale-badge {
   position: absolute;
-  left: 0.7rem;
-  top: 0.7rem;
+  left: 0.65rem;
+  top: 0.65rem;
   z-index: 2;
   display: inline-flex;
-  min-width: 2.5rem;
-  height: 2.5rem;
+  min-width: 0;
+  height: auto;
   align-items: center;
   justify-content: center;
-  padding: 0 0.35rem;
-  border: 1.5px solid var(--color-brand);
+  padding: 0.28rem 0.55rem;
+  border: 0;
   border-radius: 999px;
-  background: var(--color-surface);
-  color: var(--color-brand);
+  background: color-mix(in srgb, #e8a0a8 72%, white);
+  color: #8f2f3a;
   font-size: 0.6875rem;
   font-weight: 700;
   font-variant-numeric: tabular-nums;
   letter-spacing: 0.01em;
-  box-shadow: var(--shadow-soft);
+  box-shadow: 0 1px 4px rgb(23 22 20 / 0.12);
 }
 
 .sf-sale-badge--text {
-  min-width: 0;
-  height: auto;
-  padding: 0.35rem 0.55rem;
-  border-radius: 999px;
   font-size: 0.625rem;
   letter-spacing: 0.04em;
   text-transform: uppercase;
@@ -2920,12 +2956,13 @@ a.sf-instagram__handle:hover {
   line-height: 1.3;
 }
 
-/* Homepage atmosphere — warm cream wash, not flat white */
+/* Homepage atmosphere — warm cream wash over paper grain */
 .sf-home {
   background:
-    radial-gradient(ellipse 90% 55% at 50% -8%, rgb(232 238 234 / 0.9), transparent 58%),
-    radial-gradient(ellipse 50% 40% at 100% 18%, rgb(244 232 220 / 0.45), transparent 55%),
-    var(--color-background);
+    radial-gradient(ellipse 90% 55% at 50% -8%, rgb(232 238 234 / 0.85), transparent 58%),
+    radial-gradient(ellipse 55% 42% at 100% 16%, rgb(244 232 220 / 0.5), transparent 55%),
+    radial-gradient(ellipse 45% 35% at 0% 40%, rgb(236 228 216 / 0.4), transparent 50%),
+    transparent;
 }
 
 /* ——— Contained homepage hero (mockup) ——— */
@@ -3028,15 +3065,15 @@ a.sf-instagram__handle:hover {
   align-items: center;
   gap: 0.45rem;
   margin: 0;
-  padding: 0.55rem 0.8rem;
+  padding: 0.55rem 0.85rem;
   border-radius: var(--radius-md);
-  background: rgb(255 255 255 / 0.92);
-  color: var(--color-ink);
+  background: rgb(18 36 28 / 0.72);
+  color: #fff;
   font-size: 0.75rem;
   font-weight: 550;
   line-height: 1.25;
-  max-width: 12rem;
-  box-shadow: var(--shadow-soft);
+  max-width: 12.5rem;
+  backdrop-filter: blur(6px);
 }
 
 @media (min-width: 768px) {
@@ -3062,19 +3099,19 @@ a.sf-instagram__handle:hover {
   top: 50%;
   z-index: 3;
   display: none;
-  width: 2.5rem;
-  height: 2.5rem;
+  width: 2.65rem;
+  height: 2.65rem;
   transform: translateY(-50%);
   align-items: center;
   justify-content: center;
   border: 0;
   border-radius: 999px;
-  background: rgb(255 255 255 / 0.92);
+  background: rgb(255 255 255 / 0.88);
   color: var(--color-brand);
-  font-size: 1.5rem;
+  font-size: 1.35rem;
   line-height: 1;
   cursor: pointer;
-  box-shadow: var(--shadow-soft);
+  box-shadow: 0 2px 10px rgb(18 36 28 / 0.18);
 }
 
 @media (min-width: 768px) {
@@ -3084,11 +3121,11 @@ a.sf-instagram__handle:hover {
 }
 
 .sf-hero__nav--prev {
-  left: 0.85rem;
+  left: 0.95rem;
 }
 
 .sf-hero__nav--next {
-  right: 0.85rem;
+  right: 0.95rem;
 }
 
 .sf-hero__nav:hover {
@@ -3099,26 +3136,27 @@ a.sf-instagram__handle:hover {
   position: absolute;
   left: 0;
   right: 0;
-  bottom: 0.95rem;
+  bottom: 1rem;
   z-index: 3;
   display: flex;
   justify-content: center;
-  gap: 0.4rem;
+  gap: 0.45rem;
 }
 
 .sf-hero__dot {
-  width: 0.45rem;
-  height: 0.45rem;
+  width: 0.42rem;
+  height: 0.42rem;
   padding: 0;
   border: 0;
   border-radius: 999px;
-  background: rgb(255 255 255 / 0.45);
+  background: rgb(255 255 255 / 0.4);
   cursor: pointer;
+  transition: width 0.2s ease, background-color 0.2s ease;
 }
 
 .sf-hero__dot--active {
   background: #fff;
-  width: 1rem;
+  width: 1.15rem;
 }
 
 /* Product shelves — 5-up on desktop */
@@ -3173,8 +3211,8 @@ a.sf-instagram__handle:hover {
 
 /* Perks strip */
 .sf-perks {
-  border-block: 1px solid color-mix(in srgb, var(--color-border) 80%, transparent);
-  background: color-mix(in srgb, var(--color-surface) 70%, var(--color-background));
+  border-block: 1px solid color-mix(in srgb, var(--color-border) 70%, transparent);
+  background: color-mix(in srgb, var(--color-surface) 55%, transparent);
 }
 
 .sf-perks__list {
@@ -3208,23 +3246,28 @@ a.sf-instagram__handle:hover {
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  width: 2.35rem;
-  height: 2.35rem;
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--color-brand-soft) 70%, white);
+  width: 1.75rem;
+  height: 1.75rem;
   color: var(--color-brand);
 }
 
 /* Autumn shelf */
 .sf-autumn {
-  --autumn-wash: #f4ebe3;
+  --autumn-wash: #efe2d4;
   --autumn-ink: #3a2a22;
   padding: clamp(1.5rem, 3vw, 2.5rem) 0;
-  background: linear-gradient(
-    180deg,
-    color-mix(in srgb, var(--autumn-wash) 55%, var(--color-background)) 0%,
-    var(--color-background) 100%
-  );
+}
+
+.sf-autumn .sf-container-wide {
+  position: relative;
+  overflow: hidden;
+  border-radius: var(--radius-xl);
+  padding-block: clamp(1.25rem, 2.5vw, 1.85rem);
+  padding-inline: clamp(1rem, 2vw, 1.5rem);
+  background:
+    radial-gradient(ellipse 55% 80% at -5% 0%, rgb(196 120 42 / 0.2), transparent 60%),
+    radial-gradient(ellipse 45% 70% at 105% 100%, rgb(168 90 48 / 0.14), transparent 55%),
+    linear-gradient(115deg, #f3e6d8 0%, #e8d5c2 48%, #f6ebe1 100%);
 }
 
 .sf-autumn__layout {
@@ -3234,35 +3277,27 @@ a.sf-instagram__handle:hover {
 
 @media (min-width: 960px) {
   .sf-autumn__layout {
-    grid-template-columns: minmax(13rem, 0.78fr) minmax(0, 2.35fr);
-    align-items: stretch;
+    grid-template-columns: minmax(12rem, 0.7fr) minmax(0, 2.45fr);
+    align-items: center;
     gap: 1.5rem;
   }
 }
 
 .sf-autumn__intro {
   position: relative;
-  overflow: hidden;
+  z-index: 1;
   display: flex;
   flex-direction: column;
   justify-content: center;
   color: var(--autumn-ink);
-  padding: 1.5rem 1.35rem;
-  border-radius: var(--radius-xl);
-  background:
-    radial-gradient(ellipse 90% 70% at 10% 20%, rgb(196 120 42 / 0.16), transparent 55%),
-    linear-gradient(160deg, #f8efe6 0%, #edd9c6 100%);
-  min-height: 12rem;
+  padding: 0.35rem 0.25rem;
+  min-height: auto;
+  background: none;
+  border-radius: 0;
 }
 
 .sf-autumn__intro::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  opacity: 0.18;
-  pointer-events: none;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120' viewBox='0 0 120 120'%3E%3Cpath fill='%23a85a2a' d='M62 18c8 10 10 24 4 36-8 4-18 4-26-2 2-14 10-26 22-34zm20 38c12 2 22 12 24 24-10 8-24 10-36 4 0-10 4-20 12-28z'/%3E%3C/svg%3E");
-  background-size: 7.5rem;
+  display: none;
 }
 
 .sf-autumn__title {
@@ -3320,13 +3355,22 @@ a.sf-instagram__handle:hover {
 
 .sf-help-band__media {
   position: relative;
-  min-height: 11rem;
+  min-height: 12rem;
+  margin: 0.85rem auto;
+  width: min(100% - 2rem, 14rem);
+  aspect-ratio: 1;
+  overflow: hidden;
+  border-radius: 999px;
   background: #e8efe9;
+  box-shadow: var(--shadow-soft);
 }
 
 @media (min-width: 900px) {
   .sf-help-band__media {
-    min-height: 100%;
+    margin: 1.25rem auto;
+    width: min(100%, 15rem);
+    min-height: unset;
+    align-self: center;
   }
 }
 
@@ -3369,9 +3413,7 @@ a.sf-instagram__handle:hover {
 /* ——— Discovery row (illustrated category tiles) ——— */
 
 .sf-discovery-row {
-  background:
-    radial-gradient(ellipse 80% 60% at 50% 0%, rgb(233 239 234 / 0.7), transparent 55%),
-    var(--color-background);
+  background: transparent;
 }
 
 .sf-discovery-scroller {
@@ -3415,53 +3457,107 @@ a.sf-instagram__handle:hover {
   text-align: center;
   text-decoration: none;
   color: var(--color-ink);
-  padding-inline: 0.15rem;
+  padding: 0.85rem 0.65rem 0.75rem;
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-soft);
+  border: 1px solid color-mix(in srgb, var(--color-border) 70%, transparent);
+  transition:
+    box-shadow 0.2s ease,
+    border-color 0.2s ease;
 }
 
 .sf-discovery-tile:hover {
   color: var(--color-brand);
+  border-color: color-mix(in srgb, var(--color-brand) 22%, var(--color-border));
+  box-shadow: var(--shadow-lift);
 }
 
 .sf-discovery-tile__media {
   position: relative;
   display: block;
-  width: min(100%, 7.75rem);
+  width: min(100%, 6.5rem);
   aspect-ratio: 1;
   overflow: hidden;
   border-radius: 999px;
-  background: var(--color-surface);
-  box-shadow: var(--shadow-soft);
-  border: 3px solid color-mix(in srgb, white 70%, var(--color-brand-soft));
+  background: var(--color-surface-muted);
+}
+
+.sf-discovery-tile__footer {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.35rem;
+  padding-inline: 0.15rem;
+}
+
+.sf-discovery-tile__label {
+  flex: 1 1 auto;
+  margin: 0;
+  font-family: var(--font-sans);
+  font-size: 0.75rem;
+  font-weight: 600;
+  line-height: 1.25;
+  text-align: left;
+}
+
+.sf-discovery-tile__arrow {
+  display: inline-flex;
+  flex-shrink: 0;
+  width: 1.55rem;
+  height: 1.55rem;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  background: var(--color-surface-muted);
+  color: var(--color-muted);
+  font-size: 0.7rem;
+  transition:
+    background-color 0.2s ease,
+    color 0.2s ease,
+    transform 0.2s ease;
+}
+
+.sf-discovery-tile:hover .sf-discovery-tile__arrow {
+  background: var(--color-brand-soft);
+  color: var(--color-brand);
+  transform: translateX(1px);
 }
 
 .sf-popular-head {
   display: grid;
-  gap: 0.85rem;
-  margin-bottom: 0.35rem;
+  gap: 0.65rem;
+  margin-bottom: 0.5rem;
 }
 
 .sf-popular-tabs {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.4rem;
+  gap: 0.15rem 1rem;
+  border-bottom: 1px solid var(--color-border);
 }
 
 .sf-popular-tab {
-  border: 1px solid var(--color-border);
+  border: 0;
+  border-bottom: 2px solid transparent;
   background: transparent;
   color: var(--color-muted);
-  border-radius: 999px;
-  padding: 0.4rem 0.85rem;
+  border-radius: 0;
+  margin-bottom: -1px;
+  padding: 0.45rem 0.1rem 0.55rem;
   font-size: 0.8125rem;
   font-weight: 550;
   cursor: pointer;
 }
 
-.sf-popular-tab--active,
+.sf-popular-tab--active {
+  color: var(--color-ink);
+  border-bottom-color: var(--color-brand);
+}
+
 .sf-popular-tab:hover {
-  border-color: color-mix(in srgb, var(--color-brand) 35%, var(--color-border));
   color: var(--color-brand);
-  background: color-mix(in srgb, var(--color-brand-soft) 55%, white);
 }
 
 .sf-section-rail-wrap {
@@ -3495,32 +3591,6 @@ a.sf-instagram__handle:hover {
   margin: -0.35rem 0 0;
   font-size: 0.9rem;
   color: var(--color-muted);
-}
-
-.sf-discovery-tile__label {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 0.35rem;
-  margin-top: 0.15rem;
-  font-family: var(--font-sans);
-  font-size: 0.8125rem;
-  font-weight: 600;
-  line-height: 1.3;
-  max-width: 11rem;
-  text-align: center;
-}
-
-.sf-discovery-tile__arrow {
-  font-size: 0.75rem;
-  opacity: 0.5;
-  transition: transform 0.25s ease, opacity 0.25s ease;
-}
-
-.sf-discovery-tile:hover .sf-discovery-tile__arrow {
-  opacity: 1;
-  transform: translateX(2px);
-  color: var(--color-brand);
 }
 
 /* ——— Product detail (Dicentra-style sales PDP) ——— */

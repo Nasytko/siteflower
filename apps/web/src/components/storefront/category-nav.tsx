@@ -10,8 +10,7 @@ type Props = {
 };
 
 /**
- * Illustrated discovery row — every href maps to a live storefront destination.
- * Tile copy and images come from HomepageConfig (admin-editable).
+ * Illustrated discovery row — white tiles with circular photo + arrow cue.
  */
 export function CategoryNav({ items }: Props) {
   if (items.length === 0) return null;
@@ -32,8 +31,8 @@ export function CategoryNav({ items }: Props) {
                     className="object-cover transition-transform duration-500 ease-out group-hover:scale-[1.04] motion-reduce:transition-none motion-reduce:group-hover:scale-100"
                   />
                 </span>
-                <span className="sf-discovery-tile__label">
-                  {item.label}
+                <span className="sf-discovery-tile__footer">
+                  <span className="sf-discovery-tile__label">{item.label}</span>
                   <span className="sf-discovery-tile__arrow" aria-hidden>
                     →
                   </span>
