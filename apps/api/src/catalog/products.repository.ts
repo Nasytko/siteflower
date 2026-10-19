@@ -41,8 +41,16 @@ export type ProductListFilters = {
   productKinds?: Array<'BOUQUET' | 'COMPOSITION' | 'STEM' | 'PLANT' | 'GIFT' | 'OTHER'>;
   flowerTypeIds?: string[];
   flowerTypeSlugs?: string[];
+  /**
+   * «Букеты из X» — every PRIMARY line is of this type (MONO + contains type).
+   * Distinct from flowerTypeSlugs («Букеты с X»).
+   */
+  onlyFlowerTypeIds?: string[];
+  onlyFlowerTypeSlugs?: string[];
   flowerVarietyIds?: string[];
   flowerVarietySlugs?: string[];
+  flowerFormIds?: string[];
+  flowerFormSlugs?: string[];
   flowerOriginIds?: string[];
   flowerOriginSlugs?: string[];
   /**
@@ -645,8 +653,9 @@ export function buildProductWhere(
     and.push({ productKind: { in: productKinds } });
   }
 
-  // Composition facets: same-component AND (type ∧ variety ∧ origin ∧ color ∧ stem).
+  // Composition facets: same-component AND (type ∧ form ∧ variety ∧ origin ∧ color ∧ stem).
   // Multi-values within one facet stay OR (`in`).
+  // Color matches ProductComponent.colorId OR FlowerItem.colorId (dictionary SSoT).
   const flowerTypeIds = nonEmpty(filters.flowerTypeIds);
   const flowerTypeSlugs = nonEmpty([
     ...(filters.flowerTypeSlugs ?? []),
@@ -654,6 +663,8 @@ export function buildProductWhere(
   ]);
   const flowerVarietyIds = nonEmpty(filters.flowerVarietyIds);
   const flowerVarietySlugs = nonEmpty(filters.flowerVarietySlugs);
+  const flowerFormIds = nonEmpty(filters.flowerFormIds);
+  const flowerFormSlugs = nonEmpty(filters.flowerFormSlugs);
   const flowerOriginIds = nonEmpty(filters.flowerOriginIds);
   const flowerOriginSlugs = nonEmpty(filters.flowerOriginSlugs);
   const componentColorIds = nonEmpty(filters.componentColorIds);
@@ -664,6 +675,8 @@ export function buildProductWhere(
   else if (flowerTypeSlugs) flowerItemWhere.flowerType = { slug: { in: flowerTypeSlugs } };
   if (flowerVarietyIds) flowerItemWhere.flowerVarietyId = { in: flowerVarietyIds };
   else if (flowerVarietySlugs) flowerItemWhere.flowerVariety = { slug: { in: flowerVarietySlugs } };
+  if (flowerFormIds) flowerItemWhere.flowerFormId = { in: flowerFormIds };
+  else if (flowerFormSlugs) flowerItemWhere.flowerForm = { slug: { in: flowerFormSlugs } };
   if (flowerOriginIds) flowerItemWhere.flowerOriginId = { in: flowerOriginIds };
   else if (flowerOriginSlugs) flowerItemWhere.flowerOrigin = { slug: { in: flowerOriginSlugs } };
   if (filters.heightCm) {
@@ -677,11 +690,54 @@ export function buildProductWhere(
   const hasFlowerItemPredicate = Object.keys(flowerItemWhere).length > 0;
   const hasComponentColor = Boolean(componentColorIds || componentColorSlugs);
   if (hasFlowerItemPredicate || hasComponentColor) {
-    const componentSome: Prisma.ProductComponentWhereInput = {};
-    if (hasFlowerItemPredicate) componentSome.flowerItem = flowerItemWhere;
-    if (componentColorIds) componentSome.colorId = { in: componentColorIds };
-    else if (componentColorSlugs) componentSome.color = { slug: { in: componentColorSlugs } };
-    and.push({ components: { some: componentSome } });
+    const andParts: Prisma.ProductComponentWhereInput[] = [];
+    if (hasFlowerItemPredicate) andParts.push({ flowerItem: flowerItemWhere });
+    if (componentColorIds) {
+      andParts.push({
+        OR: [
+          { colorId: { in: componentColorIds } },
+          { flowerItem: { colorId: { in: componentColorIds } } },
+        ],
+      });
+    } else if (componentColorSlugs) {
+      andParts.push({
+        OR: [
+          { color: { slug: { in: componentColorSlugs } } },
+          { flowerItem: { color: { slug: { in: componentColorSlugs } } } },
+        ],
+      });
+    }
+    and.push({
+      components: {
+        some: andParts.length === 1 ? andParts[0]! : { AND: andParts },
+      },
+    });
+  }
+
+  // onlyFlowerType = contains type + all PRIMARY lines are that type (mono-from-type).
+  const onlyFlowerTypeIds = nonEmpty(filters.onlyFlowerTypeIds);
+  const onlyFlowerTypeSlugs = nonEmpty(filters.onlyFlowerTypeSlugs);
+  if (onlyFlowerTypeIds || onlyFlowerTypeSlugs) {
+    const typeMatch: Prisma.FlowerItemWhereInput = onlyFlowerTypeIds
+      ? { flowerTypeId: { in: onlyFlowerTypeIds } }
+      : { flowerType: { slug: { in: onlyFlowerTypeSlugs! } } };
+    const otherType: Prisma.FlowerItemWhereInput = onlyFlowerTypeIds
+      ? { flowerTypeId: { notIn: onlyFlowerTypeIds } }
+      : { flowerType: { slug: { notIn: onlyFlowerTypeSlugs! } } };
+    and.push({ compositionKind: 'MONO' });
+    and.push({ productKind: { in: ['BOUQUET', 'COMPOSITION'] } });
+    and.push({
+      components: {
+        some: { role: 'PRIMARY', flowerItem: typeMatch },
+      },
+    });
+    and.push({
+      NOT: {
+        components: {
+          some: { role: 'PRIMARY', flowerItem: otherType },
+        },
+      },
+    });
   }
 
   const compositionKinds = nonEmpty(filters.compositionKinds);

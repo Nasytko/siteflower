@@ -134,22 +134,40 @@ export function resolveCatalogCategoryIdForProductKind(input: {
   return input.hubId;
 }
 
-/** Admin «Где отображается товар» — factual storefront placements only. */
+/**
+ * Admin «Где отображается товар».
+ * LIVE / DRAFT_* / HIDDEN / EXCLUDED — factual pages.
+ * MISSING — recommended page that does not exist yet (never claim product is placed there).
+ */
 export type ProductPlacementStatus =
   | 'LIVE'
   | 'DRAFT_LANDING'
   | 'DRAFT_PRODUCT'
   | 'HIDDEN'
-  | 'EXCLUDED';
+  | 'EXCLUDED'
+  | 'MISSING';
 
-export type ProductPlacementKind = 'HUB' | 'GIFT_SUBTYPE' | 'SEO_LANDING';
+export type ProductPlacementKind = 'HUB' | 'GIFT_SUBTYPE' | 'SEO_LANDING' | 'RECOMMENDED';
+
+export type ProductPlacementSection =
+  | 'main'
+  | 'published'
+  | 'draft'
+  | 'recommended';
 
 export type ProductPlacementEntryDto = {
   kind: ProductPlacementKind;
+  /** UI grouping for the placement panel. */
+  section: ProductPlacementSection;
   title: string;
-  path: string;
+  /** Public path when the page exists; null for MISSING recommendations. */
+  path: string | null;
   status: ProductPlacementStatus;
   note?: string;
+  /** Human-readable why this product matches (rules summary). */
+  matchReason?: string;
+  /** SeoLandingPage id when kind is SEO_LANDING (admin deep-link). */
+  landingId?: string;
 };
 
 export type ProductPlacementDto = {

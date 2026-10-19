@@ -571,10 +571,13 @@ export function ProductEditorExtraTab(props: Props) {
       </div>
 
       {bestsellerGroups.length > 0 ? (
-        <div className="admin-subsection space-y-3">
-          <h3 className="admin-subsection__title">Подборки бестселлеров</h3>
+        <details className="admin-subsection space-y-3">
+          <summary className="cursor-pointer text-sm font-medium text-[var(--admin-ink)]">
+            Подборки на главной (бестселлеры)
+          </summary>
           <p className="text-xs text-[var(--admin-muted)]">
-            Ручные витрины на главной. Не путать с типом товара и SEO-подборками.
+            Ручные блоки главной страницы. Не путать с типом товара и SEO-подборками. Управление
+            списками — в разделе «Бестселлеры».
           </p>
           <div className="admin-checks">
             {bestsellerGroups.map((group) => (
@@ -592,7 +595,7 @@ export function ProductEditorExtraTab(props: Props) {
               </label>
             ))}
           </div>
-        </div>
+        </details>
       ) : null}
 
       <div className="admin-subsection space-y-3">
@@ -725,9 +728,6 @@ export function ProductEditorExtraTab(props: Props) {
               </button>
             </>
           ) : null}
-          <a className="admin-btn-ghost" href={`/admin/catalog/products/${server.id}/preview`}>
-            Предпросмотр
-          </a>
         </div>
         <p className="admin-help">
           «Черновик» не виден покупателям. «В архиве» убирает товар из каталога, но сохраняет

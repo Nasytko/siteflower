@@ -11,11 +11,49 @@ describe('buildProductWhere composition facets', () => {
     expect(componentClause).toEqual({
       components: {
         some: {
-          flowerItem: { flowerType: { slug: { in: ['roza'] } } },
-          color: { slug: { in: ['belyy'] } },
+          AND: [
+            { flowerItem: { flowerType: { slug: { in: ['roza'] } } } },
+            {
+              OR: [
+                { color: { slug: { in: ['belyy'] } } },
+                { flowerItem: { color: { slug: { in: ['belyy'] } } } },
+              ],
+            },
+          ],
         },
       },
     });
+  });
+
+  it('onlyFlowerType requires MONO and no other PRIMARY types', () => {
+    const where = buildProductWhere({
+      onlyFlowerTypeSlugs: ['roza'],
+    });
+    const and = (where.AND ?? []) as Array<Record<string, unknown>>;
+    expect(and).toEqual(
+      expect.arrayContaining([
+        { compositionKind: 'MONO' },
+        { productKind: { in: ['BOUQUET', 'COMPOSITION'] } },
+        {
+          components: {
+            some: {
+              role: 'PRIMARY',
+              flowerItem: { flowerType: { slug: { in: ['roza'] } } },
+            },
+          },
+        },
+        {
+          NOT: {
+            components: {
+              some: {
+                role: 'PRIMARY',
+                flowerItem: { flowerType: { slug: { notIn: ['roza'] } } },
+              },
+            },
+          },
+        },
+      ]),
+    );
   });
 
   it('keeps product palette color separate from composition color', () => {

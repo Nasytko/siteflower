@@ -352,6 +352,10 @@ export function ProductEditor({
       );
       if (!ok) return;
     }
+    const hubWarning = window.confirm(
+      'Основной раздел каталога сменится по типу товара (например, «Букеты» → «Цветы поштучно»). Публичный адрес карточки не меняется автоматически. Продолжить?',
+    );
+    if (!hubWarning) return;
     // Non-gifts: clear any leaf; gifts start without subtype until manager picks one.
     // Server assigns the canonical hub on save.
     setCatalogCategoryId('');

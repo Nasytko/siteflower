@@ -43,13 +43,27 @@ type LandingRow = Prisma.SeoLandingPageGetPayload<{ include: typeof LANDING_INCL
 const RULE_KEYS = [
   'flowerTypeIds',
   'flowerTypeSlugs',
+  /** Aliases → flowerTypeSlugs (contains). */
+  'containsFlowerType',
+  'containsFlowerTypeSlugs',
+  'onlyFlowerTypeIds',
+  'onlyFlowerTypeSlugs',
+  /** Alias → onlyFlowerTypeSlugs. */
+  'onlyFlowerType',
+  'flowerFormIds',
+  'flowerFormSlugs',
   'flowerVarietyIds',
   'flowerVarietySlugs',
   'colorIds',
   'colorSlugs',
   'componentColorIds',
   'componentColorSlugs',
+  /** Alias → componentColorSlugs (FlowerItem / component line color). */
+  'flowerColor',
+  'flowerColorSlugs',
   'compositionKinds',
+  /** Alias → compositionKinds. */
+  'compositionType',
   'productKinds',
   'occasionIds',
   'occasionSlugs',
@@ -653,10 +667,10 @@ function sanitizeRules(input: Record<string, unknown>): Prisma.InputJsonValue {
       continue;
     }
 
-    if (key === 'compositionKinds') {
+    if (key === 'compositionKinds' || key === 'compositionType') {
       const list = asStringArray(value);
       if (!list || list.some((item) => !COMPOSITION_KINDS.has(item))) {
-        throw new BadRequestException('compositionKinds содержит недопустимое значение');
+        throw new BadRequestException(`${key} содержит недопустимое значение`);
       }
       if (list.length > 0) out[key] = list;
       continue;
@@ -699,14 +713,40 @@ function asStringArray(value: unknown): string[] | null {
   return null;
 }
 
+/** Merge slug/id aliases into one list (string or string[]). */
+function asStringOrArray(value: unknown): string[] | undefined {
+  if (typeof value === 'string' && value.trim()) return [value.trim()];
+  return asStringArray(value) ?? undefined;
+}
+
 export function rulesToFilters(rules: Prisma.JsonValue): ProductListFilters {
   const record = asRulesRecord(rules);
   const filters: ProductListFilters = {};
 
   const flowerTypeIds = asStringArray(record.flowerTypeIds);
   if (flowerTypeIds) filters.flowerTypeIds = flowerTypeIds;
-  const flowerTypeSlugs = asStringArray(record.flowerTypeSlugs);
-  if (flowerTypeSlugs) filters.flowerTypeSlugs = flowerTypeSlugs;
+  const flowerTypeSlugs = [
+    ...(asStringArray(record.flowerTypeSlugs) ?? []),
+    ...(asStringOrArray(record.containsFlowerType) ?? []),
+    ...(asStringArray(record.containsFlowerTypeSlugs) ?? []),
+  ];
+  if (flowerTypeSlugs.length > 0) filters.flowerTypeSlugs = [...new Set(flowerTypeSlugs)];
+
+  const onlyFlowerTypeIds = asStringArray(record.onlyFlowerTypeIds);
+  if (onlyFlowerTypeIds) filters.onlyFlowerTypeIds = onlyFlowerTypeIds;
+  const onlyFlowerTypeSlugs = [
+    ...(asStringArray(record.onlyFlowerTypeSlugs) ?? []),
+    ...(asStringOrArray(record.onlyFlowerType) ?? []),
+  ];
+  if (onlyFlowerTypeSlugs.length > 0) {
+    filters.onlyFlowerTypeSlugs = [...new Set(onlyFlowerTypeSlugs)];
+  }
+
+  const flowerFormIds = asStringArray(record.flowerFormIds);
+  if (flowerFormIds) filters.flowerFormIds = flowerFormIds;
+  const flowerFormSlugs = asStringArray(record.flowerFormSlugs);
+  if (flowerFormSlugs) filters.flowerFormSlugs = flowerFormSlugs;
+
   const flowerVarietyIds = asStringArray(record.flowerVarietyIds);
   if (flowerVarietyIds) filters.flowerVarietyIds = flowerVarietyIds;
   const flowerVarietySlugs = asStringArray(record.flowerVarietySlugs);
@@ -717,8 +757,14 @@ export function rulesToFilters(rules: Prisma.JsonValue): ProductListFilters {
   if (colorSlugs) filters.colorSlugs = colorSlugs;
   const componentColorIds = asStringArray(record.componentColorIds);
   if (componentColorIds) filters.componentColorIds = componentColorIds;
-  const componentColorSlugs = asStringArray(record.componentColorSlugs);
-  if (componentColorSlugs) filters.componentColorSlugs = componentColorSlugs;
+  const componentColorSlugs = [
+    ...(asStringArray(record.componentColorSlugs) ?? []),
+    ...(asStringOrArray(record.flowerColor) ?? []),
+    ...(asStringArray(record.flowerColorSlugs) ?? []),
+  ];
+  if (componentColorSlugs.length > 0) {
+    filters.componentColorSlugs = [...new Set(componentColorSlugs)];
+  }
   const occasionIds = asStringArray(record.occasionIds);
   if (occasionIds) filters.occasionIds = occasionIds;
   const occasionSlugs = asStringArray(record.occasionSlugs);
@@ -728,7 +774,7 @@ export function rulesToFilters(rules: Prisma.JsonValue): ProductListFilters {
   const recipientSlugs = asStringArray(record.recipientSlugs);
   if (recipientSlugs) filters.recipientSlugs = recipientSlugs;
 
-  const kinds = asStringArray(record.compositionKinds);
+  const kinds = asStringArray(record.compositionKinds) ?? asStringOrArray(record.compositionType);
   if (kinds) {
     filters.compositionKinds = kinds.filter((k): k is 'MONO' | 'MIXED' | 'UNKNOWN' =>
       COMPOSITION_KINDS.has(k),

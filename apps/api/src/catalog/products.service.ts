@@ -24,6 +24,7 @@ import {
   type ProductAdminDto,
   type ProductKind,
   type ProductListItemDto,
+  categoryPublicHref,
   type ProductPlacementDto,
   type ProductPlacementEntryDto,
   type ProductPublicDto,
@@ -70,6 +71,10 @@ import type {
 } from './products.dto';
 import { ProductsRepository } from './products.repository';
 import { mapPromotionPrismaError, PromotionsService } from './promotions.service';
+import {
+  describeSeoLandingRules,
+  flowerTypeSlugsFromRules,
+} from './placement-match.util';
 import { rulesToFilters } from './seo-landings.service';
 import { SlugRedirectsService } from './slug-redirects.service';
 
@@ -1186,8 +1191,25 @@ export class ProductsService {
       await this.flowerRefs.assertFlowerItemsAssignable(flowerItemIds, previous);
     }
 
+    const items =
+      flowerItemIds.length > 0
+        ? await this.prisma.client.flowerItem.findMany({
+            where: { id: { in: flowerItemIds } },
+            select: { id: true, flowerTypeId: true, colorId: true },
+          })
+        : [];
+    const typeByItem = new Map(items.map((item) => [item.id, item.flowerTypeId]));
+    const colorByItem = new Map(items.map((item) => [item.id, item.colorId]));
+
+    // Snapshot dictionary color onto the component when the client omits it
+    // (historical rows / incomplete drafts). Does not rewrite order line items.
+    const rowsWithColor = normalized.map((row) => ({
+      ...row,
+      colorId: row.colorId ?? colorByItem.get(row.flowerItemId) ?? null,
+    }));
+
     const colorIds = [
-      ...new Set(normalized.map((row) => row.colorId).filter((id): id is string => Boolean(id))),
+      ...new Set(rowsWithColor.map((row) => row.colorId).filter((id): id is string => Boolean(id))),
     ];
     if (colorIds.length > 0) {
       const colorCount = await this.prisma.client.color.count({
@@ -1198,23 +1220,14 @@ export class ProductsService {
       }
     }
 
-    const items =
-      flowerItemIds.length > 0
-        ? await this.prisma.client.flowerItem.findMany({
-            where: { id: { in: flowerItemIds } },
-            select: { id: true, flowerTypeId: true },
-          })
-        : [];
-    const typeByItem = new Map(items.map((item) => [item.id, item.flowerTypeId]));
-
     const compositionKind = deriveCompositionKind(
-      normalized.map((row) => ({
+      rowsWithColor.map((row) => ({
         role: row.role,
         typeId: typeByItem.get(row.flowerItemId) ?? null,
       })),
     );
 
-    return { rows: normalized, compositionKind, compositionPrecision: precision };
+    return { rows: rowsWithColor, compositionKind, compositionPrecision: precision };
   }
 
   /**
@@ -1257,8 +1270,9 @@ export class ProductsService {
   }
 
   /**
-   * Factual storefront placements for the admin editor («Где отображается товар»).
-   * Only real hub / gift-subtype / SEO-landing pages; never speculative matches.
+   * Storefront placements for the admin editor («Где отображается товар»).
+   * Hub + gift subtype + SEO landings that actually match the product (same filter engine).
+   * Recommendations only when a PRIMARY flower type has no matching landing page at all.
    */
   async getPlacement(id: string): Promise<ProductPlacementDto> {
     const product = await this.products.findById(id);
@@ -1277,13 +1291,15 @@ export class ProductsService {
         const hubHidden = hub.visibility === 'HIDDEN';
         entries.push({
           kind: 'HUB',
+          section: 'main',
           title: hub.name,
-          path: `/katalog/${hub.slug}`,
+          path: categoryPublicHref(hub.slug),
           status: hubHidden ? 'HIDDEN' : productLive ? 'LIVE' : 'DRAFT_PRODUCT',
+          matchReason: `Тип товара → раздел «${hub.name}»`,
           note: hubHidden
             ? 'Раздел скрыт'
             : productLive
-              ? undefined
+              ? 'На сайте'
               : 'Товар ещё не опубликован',
         });
       }
@@ -1302,19 +1318,21 @@ export class ProductsService {
       if (!isHub && cat.listingKind === 'GIFTS') {
         entries.push({
           kind: 'GIFT_SUBTYPE',
+          section: 'main',
           title: cat.name,
-          path: `/katalog/${cat.slug}`,
+          path: categoryPublicHref(cat.slug),
           status:
             cat.visibility === 'HIDDEN'
               ? 'HIDDEN'
               : productLive
                 ? 'LIVE'
                 : 'DRAFT_PRODUCT',
+          matchReason: 'Подтип подарка',
           note:
             cat.visibility === 'HIDDEN'
               ? 'Подтип скрыт'
               : productLive
-                ? undefined
+                ? 'На сайте'
                 : 'Товар ещё не опубликован',
         });
       }
@@ -1329,16 +1347,22 @@ export class ProductsService {
     });
 
     const now = new Date();
+    const coveredTypeSlugs = new Set<string>();
     const landingEntries = await Promise.all(
       landings.map(async (landing): Promise<ProductPlacementEntryDto | null> => {
         const path = `/p/${landing.slug}`;
+        const matchReason = describeSeoLandingRules(landing.rules);
+        const ruleTypeSlugs = flowerTypeSlugsFromRules(landing.rules);
         const excluded = landing.excludedProducts.some((row) => row.productId === id);
         if (excluded) {
           return {
             kind: 'SEO_LANDING',
+            section: 'draft',
             title: landing.title,
             path,
             status: 'EXCLUDED',
+            matchReason,
+            landingId: landing.id,
             note: 'Товар исключён из этой подборки',
           };
         }
@@ -1360,35 +1384,73 @@ export class ProductsService {
         }
         if (!matches) return null;
 
+        for (const slug of ruleTypeSlugs) coveredTypeSlugs.add(slug);
+
         const landingPublished = landing.status === 'PUBLISHED';
         if (!landingPublished) {
           return {
             kind: 'SEO_LANDING',
+            section: 'draft',
             title: landing.title,
             path,
             status: 'DRAFT_LANDING',
-            note: 'Подборка не опубликована',
+            matchReason: pinned ? `${matchReason} · закреплён` : matchReason,
+            landingId: landing.id,
+            note: 'Не опубликовано',
           };
         }
         if (!productLive) {
           return {
             kind: 'SEO_LANDING',
+            section: 'draft',
             title: landing.title,
             path,
             status: 'DRAFT_PRODUCT',
+            matchReason: pinned ? `${matchReason} · закреплён` : matchReason,
+            landingId: landing.id,
             note: 'Товар ещё не опубликован',
           };
         }
         return {
           kind: 'SEO_LANDING',
+          section: 'published',
           title: landing.title,
           path,
           status: 'LIVE',
+          matchReason: pinned ? `${matchReason} · закреплён` : matchReason,
+          landingId: landing.id,
+          note: 'На сайте',
         };
       }),
     );
     for (const entry of landingEntries) {
       if (entry) entries.push(entry);
+    }
+
+    // Reliable recommendations only: PRIMARY flower types with no landing covering that slug.
+    if (
+      product.productKind === 'BOUQUET' ||
+      product.productKind === 'COMPOSITION'
+    ) {
+      const primaryTypes = new Map<string, string>();
+      for (const component of product.components) {
+        if (component.role !== 'PRIMARY') continue;
+        const type = component.flowerItem?.flowerType;
+        if (type?.slug && type.name) primaryTypes.set(type.slug, type.name);
+      }
+      for (const [slug, name] of primaryTypes) {
+        if (coveredTypeSlugs.has(slug)) continue;
+        const title = `Букеты с ${name.toLowerCase()}`;
+        entries.push({
+          kind: 'RECOMMENDED',
+          section: 'recommended',
+          title,
+          path: null,
+          status: 'MISSING',
+          matchReason: `В составе есть «${name}», но SEO-подборки с этим видом ещё нет`,
+          note: 'Страница не создана',
+        });
+      }
     }
 
     return {
