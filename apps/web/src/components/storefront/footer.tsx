@@ -33,12 +33,13 @@ export function StorefrontFooter({ settings, seller = null }: Props) {
   const year = new Date().getFullYear();
   const legalName = seller?.legalName?.trim() || null;
   const unp = seller?.unp?.trim() || null;
+  const hasSocial = Boolean(settings.instagramUrl || settings.telegramUrl);
 
   return (
     <footer className="sf-footer mt-auto">
       <div className="sf-footer__main">
-        <div className="sf-container-wide grid gap-10 py-12 sm:grid-cols-2 lg:grid-cols-4">
-          <div>
+        <div className="sf-container-wide grid gap-10 py-12 sm:grid-cols-2 lg:grid-cols-12">
+          <div className="lg:col-span-3">
             <div className="sf-footer__brand">
               <BrandLogo alt={settings.brandName} />
             </div>
@@ -46,10 +47,75 @@ export function StorefrontFooter({ settings, seller = null }: Props) {
               {settings.aboutSummary ??
                 `Цветочный магазин в ${settings.city}. Свежие букеты, аккуратная сборка и понятная доставка.`}
             </p>
-            <ul className="mt-5 space-y-1.5 text-sm text-white/90">
+            {hasSocial ? (
+              <ul className="mt-5 flex flex-wrap gap-3 text-sm text-white/90">
+                {settings.instagramUrl ? (
+                  <li>
+                    <a
+                      href={settings.instagramUrl}
+                      rel="noopener noreferrer"
+                      target="_blank"
+                      className="hover:opacity-90"
+                    >
+                      Instagram
+                    </a>
+                  </li>
+                ) : null}
+                {settings.telegramUrl ? (
+                  <li>
+                    <a
+                      href={settings.telegramUrl}
+                      rel="noopener noreferrer"
+                      target="_blank"
+                      className="hover:opacity-90"
+                    >
+                      Telegram
+                    </a>
+                  </li>
+                ) : null}
+              </ul>
+            ) : null}
+          </div>
+
+          <div className="lg:col-span-2">
+            <p className="sf-footer__col-title">Каталог</p>
+            <ul className="sf-footer__links">
+              {CATALOG_LINKS.map((link) => (
+                <li key={link.href}>
+                  <Link href={link.href}>{link.label}</Link>
+                </li>
+              ))}
+            </ul>
+          </div>
+
+          <div className="lg:col-span-2">
+            <p className="sf-footer__col-title">Покупателям</p>
+            <ul className="sf-footer__links">
+              {BUYER_LINKS.map((link) => (
+                <li key={link.href}>
+                  <Link href={link.href}>{link.label}</Link>
+                </li>
+              ))}
+            </ul>
+          </div>
+
+          <div className="lg:col-span-2">
+            <p className="sf-footer__col-title">Компания</p>
+            <ul className="sf-footer__links">
+              {COMPANY_LINKS.map((link) => (
+                <li key={link.href}>
+                  <Link href={link.href}>{link.label}</Link>
+                </li>
+              ))}
+            </ul>
+          </div>
+
+          <div className="lg:col-span-3">
+            <p className="sf-footer__col-title">Контакты</p>
+            <ul className="mt-3 space-y-1.5 text-sm text-white/90">
               {settings.phone ? (
                 <li>
-                  <a href={telHref!} className="font-semibold text-white hover:opacity-90">
+                  <a href={telHref!} className="text-base font-semibold text-white hover:opacity-90">
                     {settings.phone}
                   </a>
                 </li>
@@ -64,69 +130,12 @@ export function StorefrontFooter({ settings, seller = null }: Props) {
                   </a>
                 </li>
               ) : null}
-              {settings.instagramUrl ? (
-                <li>
-                  <a
-                    href={settings.instagramUrl}
-                    rel="noopener noreferrer"
-                    target="_blank"
-                    className="hover:opacity-90"
-                  >
-                    Instagram
-                  </a>
-                </li>
-              ) : null}
-              {settings.telegramUrl ? (
-                <li>
-                  <a
-                    href={settings.telegramUrl}
-                    rel="noopener noreferrer"
-                    target="_blank"
-                    className="hover:opacity-90"
-                  >
-                    Telegram
-                  </a>
-                </li>
-              ) : null}
             </ul>
             {telHref ? (
               <a href={telHref} className="sf-footer__call mt-5 inline-flex">
                 Заказать звонок
               </a>
             ) : null}
-          </div>
-
-          <div>
-            <p className="sf-footer__col-title">Каталог</p>
-            <ul className="sf-footer__links">
-              {CATALOG_LINKS.map((link) => (
-                <li key={link.href}>
-                  <Link href={link.href}>{link.label}</Link>
-                </li>
-              ))}
-            </ul>
-          </div>
-
-          <div>
-            <p className="sf-footer__col-title">Покупателям</p>
-            <ul className="sf-footer__links">
-              {BUYER_LINKS.map((link) => (
-                <li key={link.href}>
-                  <Link href={link.href}>{link.label}</Link>
-                </li>
-              ))}
-            </ul>
-          </div>
-
-          <div>
-            <p className="sf-footer__col-title">Компания</p>
-            <ul className="sf-footer__links">
-              {COMPANY_LINKS.map((link) => (
-                <li key={link.href}>
-                  <Link href={link.href}>{link.label}</Link>
-                </li>
-              ))}
-            </ul>
           </div>
         </div>
 

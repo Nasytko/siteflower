@@ -1,10 +1,15 @@
 import Link from 'next/link';
+import type { ReactNode } from 'react';
 
 type Props = {
   /** Full heading text. First word is emphasized; the rest is muted (Dicentra-style). */
   title: string;
   /** Override the muted part; when set, `title` is the bold lead only. */
   titleRest?: string;
+  /** Optional pill next to the title (e.g. promo badge). */
+  badge?: ReactNode;
+  /** Optional subtitle under the rail. */
+  subtitle?: string | null;
   href?: string;
   linkLabel?: string;
   className?: string;
@@ -27,6 +32,8 @@ function splitTitle(title: string): { lead: string; rest: string | null } {
 export function SectionRail({
   title,
   titleRest,
+  badge,
+  subtitle,
   href,
   linkLabel = 'Смотреть все',
   className = '',
@@ -38,23 +45,27 @@ export function SectionRail({
       : splitTitle(title);
 
   return (
-    <div className={`sf-section-rail ${className}`.trim()}>
-      <Tag className="sf-section-rail__title">
-        <span className="sf-section-rail__lead">{parts.lead}</span>
-        {parts.rest ? (
-          <>
-            {' '}
-            <span className="sf-section-rail__rest">{parts.rest}</span>
-          </>
+    <div className={`sf-section-rail-wrap ${className}`.trim()}>
+      <div className="sf-section-rail">
+        <Tag className="sf-section-rail__title">
+          <span className="sf-section-rail__lead">{parts.lead}</span>
+          {parts.rest ? (
+            <>
+              {' '}
+              <span className="sf-section-rail__rest">{parts.rest}</span>
+            </>
+          ) : null}
+          {badge ? <span className="sf-section-rail__badge">{badge}</span> : null}
+        </Tag>
+        <span className="sf-section-rail__line" aria-hidden />
+        {href ? (
+          <Link href={href} className="sf-section-rail__link">
+            {linkLabel}
+            <ChevronRight />
+          </Link>
         ) : null}
-      </Tag>
-      <span className="sf-section-rail__line" aria-hidden />
-      {href ? (
-        <Link href={href} className="sf-section-rail__link">
-          {linkLabel}
-          <ChevronRight />
-        </Link>
-      ) : null}
+      </div>
+      {subtitle ? <p className="sf-section-rail__subtitle">{subtitle}</p> : null}
     </div>
   );
 }

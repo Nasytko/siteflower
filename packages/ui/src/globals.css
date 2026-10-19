@@ -6,10 +6,10 @@
  * colors derived from them) instead of literal hex values.
  */
 :root {
-  /* Base */
-  --color-background: #fbf9f5;
-  --color-surface: #ffffff;
-  --color-surface-muted: #f3efe8;
+  /* Base — warm cream like the storefront mockup */
+  --color-background: #f9f7f2;
+  --color-surface: #fffcf8;
+  --color-surface-muted: #f1ebe3;
 
   /* Text */
   --color-ink: #171614;
@@ -17,13 +17,13 @@
   --color-muted: #6f6a61;
 
   /* Lines */
-  --color-border: #e7e0d5;
-  --color-border-strong: #d6cdbe;
+  --color-border: #e5ddd2;
+  --color-border-strong: #d4cbbd;
 
-  /* Primary — deep botanical green */
-  --color-brand: #1e4636;
-  --color-brand-mid: #2a5b46;
-  --color-brand-soft: #e9efea;
+  /* Primary — deep forest green */
+  --color-brand: #173026;
+  --color-brand-mid: #1f3a2c;
+  --color-brand-soft: #e7eeea;
   --color-brand-foreground: #ffffff;
 
   /* Accents — used sparingly (sale prices, promo nav) */
@@ -40,15 +40,15 @@
   --radius-sm: 0.5rem;
   --radius-md: 0.875rem;
   --radius-lg: 1.125rem;
-  --radius-xl: 1.75rem;
+  --radius-xl: 1.5rem;
 
   --font-sans: var(--font-body), 'Manrope', 'Segoe UI', ui-sans-serif, system-ui, sans-serif;
-  /* Headings share Manrope — no decorative wedding serif. */
-  --font-display: var(--font-body), 'Manrope', 'Segoe UI', ui-sans-serif, system-ui, sans-serif;
+  /* Display serif for hero / section titles (mockup) */
+  --font-display: var(--font-display-face), 'Literata', Georgia, 'Times New Roman', serif;
 
   /* Restrained elevation */
-  --shadow-soft: 0 2px 10px -6px rgb(23 22 20 / 0.14);
-  --shadow-lift: 0 14px 32px -18px rgb(23 22 20 / 0.28);
+  --shadow-soft: 0 2px 12px -6px rgb(23 22 20 / 0.12);
+  --shadow-lift: 0 14px 32px -18px rgb(23 22 20 / 0.24);
 
   --header-expanded: 8rem;
   --header-collapsed: 4.25rem;

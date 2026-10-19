@@ -30,7 +30,7 @@ export function BrandLogo({ compact = false, alt = 'BUKET №1' }: Props) {
           className={`font-semibold tracking-[0.04em] text-ink ${
             compact ? 'text-[0.95rem]' : 'text-[1.05rem] md:text-[1.15rem]'
           }`}
-          style={{ fontFamily: 'var(--font-display, Georgia, "Times New Roman", serif)' }}
+          style={{ fontFamily: 'var(--font-display)' }}
         >
           BUKET №1
         </span>

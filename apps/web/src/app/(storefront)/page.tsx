@@ -24,6 +24,7 @@ import type { DiscoveryTile } from '@/components/storefront/category-nav-types';
 import { ExpandingHero, type HeroSlide } from '@/components/storefront/expanding-hero';
 import { HomeAnalytics } from '@/components/storefront/home-analytics';
 import { HomePerks } from '@/components/storefront/home-perks';
+import { PopularShelf } from '@/components/storefront/popular-shelf';
 import { ProductRow } from '@/components/storefront/product-row';
 import { SectionRail } from '@/components/storefront/section-rail';
 
@@ -72,6 +73,15 @@ function isSlideLive(slide: HomepageHeroSlideDto, now: Date): boolean {
     if (!Number.isNaN(end.getTime()) && now > end) return false;
   }
   return Boolean(slide.imageUrl || slide.title);
+}
+
+function maxPromoPercent(products: ProductListItemDto[]): number | null {
+  let max = 0;
+  for (const product of products) {
+    const value = product.promotion?.percentOff;
+    if (typeof value === 'number' && value > max) max = value;
+  }
+  return max > 0 ? max : null;
 }
 
 async function loadShelfProducts(opts: {
@@ -199,54 +209,75 @@ export default async function StorefrontHomePage() {
   const popularLimit = popularSection?.limit ?? 10;
   const rosesLimit = rosesSection?.limit ?? 5;
 
-  const [promoProducts, autumnProducts, popularProducts, rosesProducts] = await Promise.all([
-    promoSection?.enabled
-      ? listPromotionalProducts(promoLimit).catch(() => [])
-      : Promise.resolve([] as ProductListItemDto[]),
-    autumnSection?.enabled
-      ? loadShelfProducts({
-          sourceSlug: autumnSection.sourceSlug,
-          limit: autumnLimit,
-          fallback: async () => {
-            const page = await listProducts({ categorySlug: 'bukety', pageSize: autumnLimit });
-            return page.items;
-          },
-        }).catch(() => [])
-      : Promise.resolve([] as ProductListItemDto[]),
-    popularSection?.enabled
-      ? loadShelfProducts({
-          sourceSlug: popularSection.sourceSlug,
-          limit: popularLimit,
-          fallback: async () => {
-            const groups = await listBestsellerGroups().catch(() => []);
-            const first = groups.find((g) => g.slug !== 'podarki' && (g.products?.length ?? 0) > 0);
-            if (first?.products?.length) return first.products.slice(0, popularLimit);
-            const page = await listProducts({ categorySlug: 'bukety', pageSize: popularLimit });
-            return page.items;
-          },
-        }).catch(() => [])
-      : Promise.resolve([] as ProductListItemDto[]),
-    rosesSection?.enabled
-      ? loadShelfProducts({
-          sourceSlug: rosesSection.sourceSlug ?? 'rozy',
-          limit: rosesLimit,
-          fallback: async () => {
-            const page = await listProducts({
-              productKind: 'STEM',
-              flowerTypeSlug: 'roza',
-              pageSize: rosesLimit,
-            });
-            return page.items;
-          },
-        }).catch(() => [])
-      : Promise.resolve([] as ProductListItemDto[]),
-  ]);
+  const [promoProducts, autumnProducts, popularProducts, authorialProducts, rosesProducts] =
+    await Promise.all([
+      promoSection?.enabled
+        ? listPromotionalProducts(promoLimit).catch(() => [])
+        : Promise.resolve([] as ProductListItemDto[]),
+      autumnSection?.enabled
+        ? loadShelfProducts({
+            sourceSlug: autumnSection.sourceSlug,
+            limit: autumnLimit,
+            fallback: async () => {
+              const page = await listProducts({ categorySlug: 'bukety', pageSize: autumnLimit });
+              return page.items;
+            },
+          }).catch(() => [])
+        : Promise.resolve([] as ProductListItemDto[]),
+      popularSection?.enabled
+        ? loadShelfProducts({
+            sourceSlug: popularSection.sourceSlug,
+            limit: popularLimit,
+            fallback: async () => {
+              const groups = await listBestsellerGroups().catch(() => []);
+              const first = groups.find(
+                (g) => g.slug !== 'podarki' && (g.products?.length ?? 0) > 0,
+              );
+              if (first?.products?.length) return first.products.slice(0, popularLimit);
+              const page = await listProducts({ categorySlug: 'bukety', pageSize: popularLimit });
+              return page.items;
+            },
+          }).catch(() => [])
+        : Promise.resolve([] as ProductListItemDto[]),
+      popularSection?.enabled
+        ? listProducts({
+            categorySlug: 'bukety',
+            traitKeys: 'AUTHORIAL',
+            pageSize: popularLimit,
+          })
+            .then((page) => page.items)
+            .catch(() => [] as ProductListItemDto[])
+        : Promise.resolve([] as ProductListItemDto[]),
+      rosesSection?.enabled
+        ? loadShelfProducts({
+            sourceSlug: rosesSection.sourceSlug ?? 'rozy',
+            limit: rosesLimit,
+            fallback: async () => {
+              const page = await listProducts({
+                productKind: 'STEM',
+                flowerTypeSlug: 'roza',
+                pageSize: rosesLimit,
+              });
+              return page.items;
+            },
+          }).catch(() => [])
+        : Promise.resolve([] as ProductListItemDto[]),
+    ]);
+
+  const promoBadgePercent = maxPromoPercent(promoProducts);
 
   return (
-    <main id="main-content">
+    <main id="main-content" className="sf-home">
       <HomeAnalytics />
 
-      <ExpandingHero slides={heroSlides} />
+      <ExpandingHero
+        slides={heroSlides}
+        deliveryNote={
+          settings.deliverySummary?.trim()
+            ? `Доставка по ${settings.city} и области`
+            : null
+        }
+      />
 
       <CategoryNav items={discoveryTiles} />
 
@@ -259,6 +290,9 @@ export default async function StorefrontHomePage() {
               title={promoSection.heading || 'Акционные товары'}
               href={promoSection.viewAllHref || '/akcii'}
               linkLabel="Смотреть все"
+              badge={
+                promoBadgePercent ? `Скидки до −${promoBadgePercent}%` : null
+              }
             />
             <ProductRow products={promoProducts.slice(0, promoLimit)} />
           </div>
@@ -267,9 +301,7 @@ export default async function StorefrontHomePage() {
 
       {autumnSection?.enabled && autumnProducts.length > 0 ? (
         <section
-          className={
-            autumnSection.theme === 'default' ? 'py-10 md:py-14' : 'sf-autumn'
-          }
+          className={autumnSection.theme === 'default' ? 'py-10 md:py-14' : 'sf-autumn'}
         >
           <div className="sf-container-wide">
             <div className="sf-autumn__layout">
@@ -280,7 +312,7 @@ export default async function StorefrontHomePage() {
                 ) : null}
                 {autumnSection.viewAllHref ? (
                   <Link href={autumnSection.viewAllHref} className="sf-cta sf-autumn__cta">
-                    Смотреть все
+                    Смотреть все →
                   </Link>
                 ) : null}
               </div>
@@ -291,19 +323,13 @@ export default async function StorefrontHomePage() {
       ) : null}
 
       {popularSection?.enabled && popularProducts.length > 0 ? (
-        <section className="py-10 md:py-14">
-          <div className="sf-container-wide">
-            <SectionRail
-              title={popularSection.heading || 'Популярные букеты'}
-              href={popularSection.viewAllHref || '/bukety'}
-              linkLabel="Смотреть все"
-            />
-            <ProductRow
-              products={popularProducts.slice(0, popularLimit)}
-              scrollOnMobile={false}
-            />
-          </div>
-        </section>
+        <PopularShelf
+          title={popularSection.heading || 'Популярные букеты'}
+          viewAllHref={popularSection.viewAllHref || '/bukety'}
+          products={popularProducts}
+          authorialProducts={authorialProducts}
+          limit={popularLimit}
+        />
       ) : null}
 
       {rosesSection?.enabled && rosesProducts.length > 0 ? (
@@ -313,6 +339,7 @@ export default async function StorefrontHomePage() {
               title={rosesSection.heading || 'Розы'}
               href={rosesSection.viewAllHref || '/katalog/rozy'}
               linkLabel="Смотреть все"
+              subtitle={rosesSection.body || 'Классика, которая всегда уместна'}
             />
             <ProductRow products={rosesProducts.slice(0, rosesLimit)} />
           </div>
@@ -329,7 +356,7 @@ export default async function StorefrontHomePage() {
                   <p className="sf-body mt-3 text-muted">{helpSection.body}</p>
                 ) : (
                   <p className="sf-body mt-3 text-muted">
-                    Подскажем по поводу, бюджету и сроку — или откройте каталог.
+                    Подскажем по поводу, бюджету и сроку — напишите или позвоните.
                   </p>
                 )}
                 <div className="mt-6 flex flex-wrap gap-2">
@@ -348,15 +375,28 @@ export default async function StorefrontHomePage() {
                   src={helpSection.imageUrl || '/categories/discovery-buket-roz.png'}
                   alt=""
                   fill
-                  sizes="(max-width: 800px) 100vw, 40vw"
+                  sizes="(max-width: 900px) 100vw, 28vw"
                   className="object-cover"
                 />
               </div>
+              <aside className="sf-help-band__aside" aria-label="Как мы помогаем">
+                <p className="sf-help-band__point">
+                  <span className="sf-help-band__point-mark" aria-hidden />
+                  <span>Личная консультация флориста</span>
+                </p>
+                <p className="sf-help-band__point">
+                  <span className="sf-help-band__point-mark" aria-hidden />
+                  <span>Подбор по поводу и бюджету</span>
+                </p>
+                <p className="sf-help-band__point">
+                  <span className="sf-help-band__point-mark" aria-hidden />
+                  <span>Быстрый ответ в мессенджерах</span>
+                </p>
+              </aside>
             </div>
           </div>
         </section>
       ) : null}
-
     </main>
   );
 }

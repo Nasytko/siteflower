@@ -12,17 +12,20 @@ export type HeroSlide = {
   ctaHref: string;
   imageUrl: string;
   mobileImageUrl?: string | null;
+  kicker?: string | null;
 };
 
 type Props = {
   slides: HeroSlide[];
+  /** Delivery note in the corner badge — omit when empty. */
+  deliveryNote?: string | null;
   intervalMs?: number;
 };
 
 /**
- * Full-width homepage hero carousel — photo fills the stage; copy sits on a controlled overlay.
+ * Contained homepage hero — rounded stage, photo fill, controlled copy overlay.
  */
-export function ExpandingHero({ slides, intervalMs = 7000 }: Props) {
+export function ExpandingHero({ slides, deliveryNote = null, intervalMs = 7000 }: Props) {
   const safeSlides = slides.length > 0 ? slides : [];
   const [index, setIndex] = useState(0);
   const [paused, setPaused] = useState(false);
@@ -56,7 +59,7 @@ export function ExpandingHero({ slides, intervalMs = 7000 }: Props) {
 
   return (
     <section
-      className="sf-hero sf-hero--full"
+      className="sf-hero"
       aria-roledescription="carousel"
       aria-label="Главный баннер"
       onMouseEnter={() => setPaused(true)}
@@ -66,7 +69,7 @@ export function ExpandingHero({ slides, intervalMs = 7000 }: Props) {
         if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setPaused(false);
       }}
     >
-      <div className="sf-hero__frame">
+      <div className="sf-container-wide">
         <div
           className="sf-hero__stage"
           onTouchStart={(e) => {
@@ -86,13 +89,14 @@ export function ExpandingHero({ slides, intervalMs = 7000 }: Props) {
         >
           {safeSlides.map((slide, i) => {
             const isActive = i === index;
+            const kicker = slide.kicker?.trim() || 'Сезонная коллекция';
             return (
               <div
                 key={slide.id}
                 className={`sf-hero__slide ${isActive ? 'sf-hero__slide--active' : ''}`}
                 aria-hidden={!isActive}
               >
-                <div className="sf-hero__media sf-hero__media--bleed">
+                <div className="sf-hero__media">
                   {slide.mobileImageUrl ? (
                     <>
                       <Image
@@ -100,7 +104,7 @@ export function ExpandingHero({ slides, intervalMs = 7000 }: Props) {
                         alt=""
                         fill
                         priority={i === 0}
-                        sizes="100vw"
+                        sizes="(max-width: 1100px) 100vw, 80rem"
                         className="object-cover sm:hidden"
                       />
                       <Image
@@ -108,7 +112,7 @@ export function ExpandingHero({ slides, intervalMs = 7000 }: Props) {
                         alt=""
                         fill
                         priority={i === 0}
-                        sizes="100vw"
+                        sizes="(max-width: 1100px) 100vw, 80rem"
                         className="object-cover hidden sm:block"
                       />
                     </>
@@ -118,12 +122,13 @@ export function ExpandingHero({ slides, intervalMs = 7000 }: Props) {
                       alt=""
                       fill
                       priority={i === 0}
-                      sizes="100vw"
+                      sizes="(max-width: 1100px) 100vw, 80rem"
                       className="object-cover"
                     />
                   )}
                 </div>
                 <div className="sf-hero__overlay">
+                  <p className="sf-hero__kicker">{kicker}</p>
                   {i === 0 ? (
                     <h1 className="sf-hero__headline">{slide.title}</h1>
                   ) : (
@@ -134,11 +139,19 @@ export function ExpandingHero({ slides, intervalMs = 7000 }: Props) {
                   ) : null}
                   <Link href={slide.ctaHref} className="sf-cta sf-hero__cta">
                     {slide.ctaLabel}
+                    <span aria-hidden> →</span>
                   </Link>
                 </div>
               </div>
             );
           })}
+
+          {deliveryNote ? (
+            <p className="sf-hero__badge">
+              <TruckIcon />
+              <span>{deliveryNote}</span>
+            </p>
+          ) : null}
 
           {count > 1 ? (
             <>
@@ -176,5 +189,15 @@ export function ExpandingHero({ slides, intervalMs = 7000 }: Props) {
         </div>
       </div>
     </section>
+  );
+}
+
+function TruckIcon() {
+  return (
+    <svg viewBox="0 0 24 24" className="h-4 w-4 shrink-0" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden>
+      <path d="M3 7.5h11v9H3zM14 10.5h4.2L21 14v2.5h-7" strokeLinejoin="round" />
+      <circle cx="7" cy="17.5" r="1.5" />
+      <circle cx="17" cy="17.5" r="1.5" />
+    </svg>
   );
 }

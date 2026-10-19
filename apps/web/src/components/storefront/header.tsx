@@ -17,10 +17,16 @@ type Props = {
 };
 
 /**
- * Sticky 2-row header → collapses to 1 row on scroll.
- * Single DOM tree (no dual panels / spacer / scroll compensation).
+ * Mockup-aligned header: utility bar + single desktop row (logo | nav | actions).
+ * Mobile keeps a compact bar with menu, phone, favorites and cart.
  */
-export function StorefrontHeader({ city, brandName, phone, workingHours, navItems = PRIMARY_NAV }: Props) {
+export function StorefrontHeader({
+  city,
+  brandName,
+  phone,
+  workingHours,
+  navItems = PRIMARY_NAV,
+}: Props) {
   const pathname = usePathname();
   const [menuOpen, setMenuOpen] = useState(false);
   const [compact, setCompact] = useState(false);
@@ -28,6 +34,7 @@ export function StorefrontHeader({ city, brandName, phone, workingHours, navItem
   const menuId = useId();
   const closeRef = useRef<HTMLButtonElement>(null);
   const compactRef = useRef(false);
+  const [openMobileBranch, setOpenMobileBranch] = useState<string | null>(null);
 
   useEffect(() => {
     setMenuOpen(false);
@@ -64,8 +71,6 @@ export function StorefrontHeader({ city, brandName, phone, workingHours, navItem
 
   const telHref = phone ? `tel:${phone.replace(/\s+/g, '')}` : null;
 
-  const [openMobileBranch, setOpenMobileBranch] = useState<string | null>(null);
-
   return (
     <>
       <header
@@ -73,7 +78,6 @@ export function StorefrontHeader({ city, brandName, phone, workingHours, navItem
           compact ? 'sf-site-header--compact border-b border-border' : ''
         }`}
       >
-        {/* Utility bar — city, hours, phone, service links (desktop) */}
         <div className="hidden border-b border-border/70 bg-[color-mix(in_oklab,var(--color-surface-muted)_70%,var(--color-background))] lg:block">
           <div className="sf-container-wide flex h-8 items-center justify-between gap-4 text-[0.7rem] text-muted">
             <span className="truncate">
@@ -84,9 +88,6 @@ export function StorefrontHeader({ city, brandName, phone, workingHours, navItem
               <Link href="/dostavka" className="hover:text-brand">
                 Доставка и оплата
               </Link>
-              <Link href="/kontakty" className="hover:text-brand">
-                Контакты
-              </Link>
               {telHref ? (
                 <a href={telHref} className="font-medium text-ink hover:text-brand">
                   {phone}
@@ -96,8 +97,7 @@ export function StorefrontHeader({ city, brandName, phone, workingHours, navItem
           </div>
         </div>
 
-        {/* Row 1 — brand chrome (always visible) */}
-        <div className="sf-header-row sf-container-wide">
+        <div className="sf-header-row sf-header-row--mockup sf-container-wide">
           <div className="flex min-w-0 items-center gap-1 justify-self-start">
             <button
               type="button"
@@ -110,6 +110,10 @@ export function StorefrontHeader({ city, brandName, phone, workingHours, navItem
               <MenuIcon open={menuOpen} />
             </button>
 
+            <Link href="/" className="hidden hover:opacity-90 lg:block">
+              <BrandLogo compact={compact} alt={brandName} />
+            </Link>
+
             {telHref ? (
               <a
                 href={telHref}
@@ -121,25 +125,15 @@ export function StorefrontHeader({ city, brandName, phone, workingHours, navItem
             ) : null}
           </div>
 
-          <Link href="/" className="justify-self-center text-center hover:opacity-90">
-            <BrandLogo compact={compact} alt={brandName} />
+          <Link href="/" className="justify-self-center hover:opacity-90 lg:hidden">
+            <BrandLogo compact alt={brandName} />
           </Link>
 
-          {/* Compact desktop: nav sits in the single row */}
-          <div className="sf-header-inline-nav hidden min-w-0 flex-1 justify-self-stretch lg:block">
+          <div className="sf-header-inline-nav hidden min-w-0 justify-self-stretch lg:block">
             <PrimaryNav items={navItems} inline />
           </div>
 
           <HeaderActions cartCount={cartCount} showLabels={!compact} />
-        </div>
-
-        {/* Row 2 — primary nav (collapses via grid-template-rows) */}
-        <div className="sf-header-nav" aria-hidden={compact}>
-          <div className="sf-header-nav__inner">
-            <div className="hidden border-t border-border lg:block">
-              <PrimaryNav items={navItems} />
-            </div>
-          </div>
         </div>
       </header>
 
@@ -185,7 +179,7 @@ export function StorefrontHeader({ city, brandName, phone, workingHours, navItem
                         type="button"
                         className="inline-flex h-10 w-10 items-center justify-center text-muted"
                         aria-expanded={branchOpen}
-                        aria-label={branchOpen ? 'Назад' : `Открыть «${item.label}»`}
+                        aria-label={branchOpen ? 'Свернуть' : `Открыть «${item.label}»`}
                         onClick={() =>
                           setOpenMobileBranch((current) => (current === item.id ? null : item.id))
                         }
@@ -220,23 +214,17 @@ export function StorefrontHeader({ city, brandName, phone, workingHours, navItem
                         <Link
                           key={`${item.id}-${child.href}`}
                           href={child.href}
-                          className={`sf-nav-link flex items-center gap-3 py-2 text-sm hover:text-brand ${
-                            item.panelLayout === 'TILES' ? 'text-foreground' : 'text-muted'
-                          }`}
+                          className="sf-nav-link flex items-center gap-3 py-2 text-sm text-foreground hover:text-brand"
                           onClick={() => setMenuOpen(false)}
                         >
-                          {item.panelLayout === 'TILES' ? (
-                            child.imageUrl ? (
-                              <img
-                                src={child.imageUrl}
-                                alt=""
-                                className="h-11 w-11 shrink-0 rounded-lg object-cover"
-                                loading="lazy"
-                                decoding="async"
-                              />
-                            ) : (
-                              <span className="h-11 w-11 shrink-0 rounded-lg bg-[var(--color-surface-muted)]" />
-                            )
+                          {item.panelLayout === 'TILES' && child.imageUrl ? (
+                            <img
+                              src={child.imageUrl}
+                              alt=""
+                              className="h-11 w-11 shrink-0 rounded-lg object-cover"
+                              loading="lazy"
+                              decoding="async"
+                            />
                           ) : null}
                           {child.label}
                         </Link>
@@ -256,13 +244,6 @@ export function StorefrontHeader({ city, brandName, phone, workingHours, navItem
 
             <div className="mt-6 space-y-1 border-t border-border pt-4">
               <Link
-                href="/o-nas"
-                className="block px-2 py-2.5 text-sm text-muted hover:text-brand"
-                onClick={() => setMenuOpen(false)}
-              >
-                О нас
-              </Link>
-              <Link
                 href="/dostavka"
                 className="block px-2 py-2.5 text-sm text-muted hover:text-brand"
                 onClick={() => setMenuOpen(false)}
@@ -276,16 +257,25 @@ export function StorefrontHeader({ city, brandName, phone, workingHours, navItem
               >
                 Контакты
               </Link>
+              <Link
+                href="/o-nas"
+                className="block px-2 py-2.5 text-sm text-muted hover:text-brand"
+                onClick={() => setMenuOpen(false)}
+              >
+                О нас
+              </Link>
             </div>
 
             <div className="mt-6 space-y-2 px-2 text-sm text-muted">
               {telHref ? (
                 <a href={telHref} className="block font-medium text-ink">
-                  ☎ {phone}
+                  {phone}
                 </a>
               ) : null}
-              <p>📍 {city}</p>
-              {workingHours ? <p>🕐 {workingHours}</p> : null}
+              <p>
+                {city}
+                {workingHours ? ` · ${workingHours}` : ''}
+              </p>
             </div>
           </nav>
         </div>
@@ -319,11 +309,9 @@ function HeaderActions({
         aria-label="Корзина"
       >
         <BagIcon />
-        {cartCount > 0 ? (
-          <span className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-brand px-1 text-[0.65rem] font-semibold text-white">
-            {cartCount > 99 ? '99+' : cartCount}
-          </span>
-        ) : null}
+        <span className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-brand px-1 text-[0.65rem] font-semibold text-white">
+          {cartCount > 99 ? '99+' : cartCount}
+        </span>
       </Link>
     </div>
   );

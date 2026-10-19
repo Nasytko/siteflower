@@ -1,16 +1,23 @@
-import { Manrope } from 'next/font/google';
+import { Literata, Manrope } from 'next/font/google';
 import type { Metadata, Viewport } from 'next';
 import type { ReactNode } from 'react';
 import { buildRootMetadata } from '@/lib/seo/metadata';
 import { getSiteUrl } from '@/lib/seo/site-url';
 import './globals.css';
 
-/** Single typeface for body and headings — see --font-sans / --font-display. */
 const sans = Manrope({
   subsets: ['latin', 'cyrillic'],
   display: 'swap',
   weight: ['400', '500', '600', '700', '800'],
   variable: '--font-body',
+});
+
+/** Serif display for hero and section titles — matches storefront mockup. */
+const display = Literata({
+  subsets: ['latin', 'cyrillic'],
+  display: 'swap',
+  weight: ['400', '500', '600', '700'],
+  variable: '--font-display-face',
 });
 
 export const metadata: Metadata = buildRootMetadata();
@@ -19,14 +26,14 @@ export const viewport: Viewport = {
   width: 'device-width',
   initialScale: 1,
   // Keep in sync with --color-brand.
-  themeColor: '#1e4636',
+  themeColor: '#173026',
 };
 
 export default function RootLayout({ children }: { children: ReactNode }) {
   const siteUrl = getSiteUrl();
 
   return (
-    <html lang="ru" className={sans.variable}>
+    <html lang="ru" className={`${sans.variable} ${display.variable}`}>
       <body className="font-sans antialiased">
         <a
           href="#main-content"
