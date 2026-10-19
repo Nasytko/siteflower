@@ -138,6 +138,122 @@ export class HomepageSectionInputDto {
   @Min(0)
   @Max(10_000)
   sortOrder!: number;
+
+  @IsOptional()
+  @ValidateIf((_, value) => value !== null)
+  @IsString()
+  @MaxLength(500)
+  body?: string | null;
+
+  @IsOptional()
+  @ValidateIf((_, value) => value !== null)
+  @IsString()
+  @MaxLength(500)
+  viewAllHref?: string | null;
+
+  @IsOptional()
+  @ValidateIf((_, value) => value !== null)
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(48)
+  limit?: number | null;
+
+  @IsOptional()
+  @ValidateIf((_, value) => value !== null)
+  @IsString()
+  @MaxLength(160)
+  sourceSlug?: string | null;
+
+  @IsOptional()
+  @ValidateIf((_, value) => value !== null)
+  @IsIn(['default', 'autumn'])
+  theme?: 'default' | 'autumn' | null;
+
+  @IsOptional()
+  @ValidateIf((_, value) => value !== null)
+  @IsString()
+  @MaxLength(500)
+  imageUrl?: string | null;
+}
+
+export class HomepageHeroSlideInputDto {
+  @IsString()
+  @MinLength(1)
+  @MaxLength(80)
+  id!: string;
+
+  @IsString()
+  @MinLength(1)
+  @MaxLength(200)
+  title!: string;
+
+  @IsString()
+  @MaxLength(500)
+  subtitle!: string;
+
+  @ValidateIf((_, value) => value !== null)
+  @IsString()
+  @MaxLength(500)
+  imageUrl!: string | null;
+
+  @IsOptional()
+  @ValidateIf((_, value) => value !== null)
+  @IsString()
+  @MaxLength(500)
+  mobileImageUrl?: string | null;
+
+  @IsString()
+  @MinLength(1)
+  @MaxLength(80)
+  ctaLabel!: string;
+
+  @IsString()
+  @MinLength(1)
+  @MaxLength(500)
+  ctaHref!: string;
+
+  @IsBoolean()
+  enabled!: boolean;
+
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  @Max(10_000)
+  sortOrder!: number;
+
+  @IsOptional()
+  @ValidateIf((_, value) => value !== null)
+  @IsString()
+  @MaxLength(40)
+  startsAt?: string | null;
+
+  @IsOptional()
+  @ValidateIf((_, value) => value !== null)
+  @IsString()
+  @MaxLength(40)
+  endsAt?: string | null;
+}
+
+export class HomepagePerkInputDto {
+  @IsString()
+  @MinLength(1)
+  @MaxLength(80)
+  id!: string;
+
+  @IsString()
+  @MinLength(1)
+  @MaxLength(200)
+  title!: string;
+
+  @IsBoolean()
+  enabled!: boolean;
+
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  @Max(10_000)
+  sortOrder!: number;
 }
 
 export class HomepageDiscoveryTileInputDto {
@@ -187,6 +303,12 @@ export class UpdateHomepageConfigDto {
   hero!: HomepageHeroInputDto;
 
   @IsArray()
+  @ArrayMaxSize(12)
+  @ValidateNested({ each: true })
+  @Type(() => HomepageHeroSlideInputDto)
+  heroSlides!: HomepageHeroSlideInputDto[];
+
+  @IsArray()
   @ArrayMaxSize(40)
   @ValidateNested({ each: true })
   @Type(() => HomepageSectionInputDto)
@@ -197,6 +319,12 @@ export class UpdateHomepageConfigDto {
   @ValidateNested({ each: true })
   @Type(() => HomepageDiscoveryTileInputDto)
   discoveryTiles!: HomepageDiscoveryTileInputDto[];
+
+  @IsArray()
+  @ArrayMaxSize(12)
+  @ValidateNested({ each: true })
+  @Type(() => HomepagePerkInputDto)
+  perks!: HomepagePerkInputDto[];
 }
 
 export class CreateInstagramPostDto {

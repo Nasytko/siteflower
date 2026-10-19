@@ -12,7 +12,10 @@ export type TaxonomyLandingKind = (typeof TAXONOMY_LANDING_KINDS)[number];
 
 export const HOMEPAGE_SECTION_KINDS = [
   'promotions',
+  'autumn',
+  'popular',
   'bestsellers',
+  'roses',
   'gifts',
   'instagram',
   'occasions',
@@ -20,6 +23,7 @@ export const HOMEPAGE_SECTION_KINDS = [
   'discovery',
   'help',
   'delivery',
+  'perks',
 ] as const;
 export type HomepageSectionKind = (typeof HOMEPAGE_SECTION_KINDS)[number];
 
@@ -32,12 +36,45 @@ export type HomepageHeroDto = {
   ctaHref: string;
 };
 
+/** Multi-slide hero banner (admin-managed). */
+export type HomepageHeroSlideDto = {
+  id: string;
+  title: string;
+  subtitle: string;
+  imageUrl: string | null;
+  /** Optional tighter crop for small screens. */
+  mobileImageUrl?: string | null;
+  ctaLabel: string;
+  ctaHref: string;
+  enabled: boolean;
+  sortOrder: number;
+  /** ISO date — optional schedule window. */
+  startsAt?: string | null;
+  endsAt?: string | null;
+};
+
+export type HomepageSectionTheme = 'default' | 'autumn';
+
 export type HomepageSectionDto = {
   id: string;
   kind: HomepageSectionKind;
   enabled: boolean;
   heading: string;
   sortOrder: number;
+  /** Short supporting line under the heading. */
+  body?: string | null;
+  /** «Смотреть все» destination. */
+  viewAllHref?: string | null;
+  /** Max products to show (shelf sections). */
+  limit?: number | null;
+  /**
+   * Product source: CatalogCategory / CatalogPage slug, or BestsellerGroup slug
+   * (popular/autumn). Empty = built-in default for the kind.
+   */
+  sourceSlug?: string | null;
+  theme?: HomepageSectionTheme | null;
+  /** Optional media for help / decorative blocks. */
+  imageUrl?: string | null;
 };
 
 /** Illustrated category tiles on the homepage (no section title on the storefront). */
@@ -52,10 +89,20 @@ export type HomepageDiscoveryTileDto = {
   sortOrder: number;
 };
 
+export type HomepagePerkDto = {
+  id: string;
+  title: string;
+  enabled: boolean;
+  sortOrder: number;
+};
+
 export type HomepageConfigDto = {
+  /** @deprecated Prefer heroSlides[0]; kept for migration / single-slide fallback. */
   hero: HomepageHeroDto;
+  heroSlides: HomepageHeroSlideDto[];
   sections: HomepageSectionDto[];
   discoveryTiles: HomepageDiscoveryTileDto[];
+  perks: HomepagePerkDto[];
 };
 
 export type HomepageConfigAdminDto = HomepageConfigDto & {
@@ -89,8 +136,10 @@ export type UpdateStorefrontSettingsDto = Partial<StorefrontSettingsPublicDto> &
 export type UpdateHomepageConfigDto = {
   expectedVersion: number;
   hero: HomepageHeroDto;
+  heroSlides: HomepageHeroSlideDto[];
   sections: HomepageSectionDto[];
   discoveryTiles: HomepageDiscoveryTileDto[];
+  perks: HomepagePerkDto[];
 };
 
 /** Curated Instagram post (admin + public share the same shape). */
@@ -188,7 +237,7 @@ export type ProductResolveDto = {
   canonicalSlug: string;
 };
 
-/** Default illustrated tiles for the homepage category row. */
+/** Default illustrated tiles for the homepage category row (7 tiles). */
 export function defaultHomepageDiscoveryTiles(): HomepageDiscoveryTileDto[] {
   return [
     {
@@ -196,16 +245,16 @@ export function defaultHomepageDiscoveryTiles(): HomepageDiscoveryTileDto[] {
       label: 'Цветы поштучно',
       href: '/cvety',
       imageUrl: '/categories/discovery-roza.png',
-      imageAlt: 'Роза',
+      imageAlt: 'Цветы поштучно',
       enabled: true,
       sortOrder: 10,
     },
     {
-      id: 'rozy',
+      id: 'bukety-iz-roz',
       label: 'Букеты из роз',
-      href: '/cvety/rozy',
+      href: '/katalog/bukety-iz-roz',
       imageUrl: '/categories/discovery-buket-roz.png',
-      imageAlt: 'Букет роз',
+      imageAlt: 'Букеты из роз',
       enabled: true,
       sortOrder: 20,
     },
@@ -214,16 +263,16 @@ export function defaultHomepageDiscoveryTiles(): HomepageDiscoveryTileDto[] {
       label: 'Букеты цветов',
       href: '/bukety',
       imageUrl: '/categories/discovery-sbornye.png',
-      imageAlt: 'Сборный букет',
+      imageAlt: 'Букеты цветов',
       enabled: true,
       sortOrder: 30,
     },
     {
       id: 'kompozicii',
-      label: 'Композиции',
-      href: '/bukety?size=bolshoj',
+      label: 'Композиции из цветов',
+      href: '/katalog/kompozicii',
       imageUrl: '/categories/discovery-kompozicii.png',
-      imageAlt: 'Цветочная композиция',
+      imageAlt: 'Цветочные композиции',
       enabled: true,
       sortOrder: 40,
     },
@@ -232,85 +281,164 @@ export function defaultHomepageDiscoveryTiles(): HomepageDiscoveryTileDto[] {
       label: 'Букет невесты',
       href: '/komu/neveste',
       imageUrl: '/categories/discovery-nevesta.png',
-      imageAlt: 'Свадебный букет',
+      imageAlt: 'Букет невесты',
       enabled: true,
       sortOrder: 50,
     },
     {
-      id: 'den-rozhdeniya',
-      label: 'На день рождения',
-      href: '/povod/den-rozhdeniya',
-      imageUrl: '/categories/discovery-den-rozhdeniya.png',
-      imageAlt: 'Букет на день рождения',
+      id: 'shary',
+      label: 'Воздушные шары',
+      href: '/katalog/podarki',
+      imageUrl: '/categories/discovery-podarki.png',
+      imageAlt: 'Воздушные шары',
       enabled: true,
       sortOrder: 60,
     },
     {
-      id: 'podarki',
-      label: 'Подарки',
-      href: '/bukety',
-      imageUrl: '/categories/discovery-podarki.png',
-      imageAlt: 'Букет в подарок',
+      id: 'otkrytki',
+      label: 'Открытки',
+      href: '/katalog/otkrytki',
+      imageUrl: '/categories/discovery-den-rozhdeniya.png',
+      imageAlt: 'Открытки',
       enabled: true,
       sortOrder: 70,
     },
   ];
 }
 
+export function defaultHomepagePerks(): HomepagePerkDto[] {
+  return [
+    {
+      id: 'fresh',
+      title: 'Свежие цветы каждый день',
+      enabled: true,
+      sortOrder: 10,
+    },
+    {
+      id: 'delivery',
+      title: 'Доставка по Гродно и области',
+      enabled: true,
+      sortOrder: 20,
+    },
+    {
+      id: 'authorial',
+      title: 'Авторские букеты с заботой',
+      enabled: true,
+      sortOrder: 30,
+    },
+    {
+      id: 'payment',
+      title: 'Удобная оплата при получении',
+      enabled: true,
+      sortOrder: 40,
+    },
+  ];
+}
+
+export function defaultHomepageHeroSlides(): HomepageHeroSlideDto[] {
+  return [
+    {
+      id: 'main',
+      title: 'Осенние букеты',
+      subtitle: 'Сезонная коллекция — тёплые оттенки и свежая сборка с доставкой по Гродно.',
+      imageUrl: '/categories/autumn-bouquet-warm.jpg',
+      mobileImageUrl: null,
+      ctaLabel: 'Смотреть коллекцию',
+      ctaHref: '/bukety',
+      enabled: true,
+      sortOrder: 10,
+      startsAt: null,
+      endsAt: null,
+    },
+  ];
+}
+
 export function defaultHomepageConfig(): HomepageConfigDto {
+  const heroSlides = defaultHomepageHeroSlides();
+  const primary = heroSlides[0]!;
   return {
     hero: {
-      title: 'Цветы, которые хочется дарить',
-      subtitle: 'Свежие букеты с доставкой по Гродно — спокойно, аккуратно, без лишнего.',
-      imageUrl: null,
-      ctaLabel: 'Выбрать букет',
-      ctaHref: '/bukety',
+      title: primary.title,
+      subtitle: primary.subtitle,
+      imageUrl: primary.imageUrl,
+      ctaLabel: primary.ctaLabel,
+      ctaHref: primary.ctaHref,
     },
+    heroSlides,
     sections: [
       {
         id: 'promotions',
         kind: 'promotions',
         enabled: true,
-        heading: 'Акционные предложения',
+        heading: 'Акционные товары',
         sortOrder: 10,
+        viewAllHref: '/akcii',
+        limit: 5,
       },
       {
-        id: 'bestsellers',
-        kind: 'bestsellers',
+        id: 'autumn',
+        kind: 'autumn',
         enabled: true,
-        heading: 'Наши бестселлеры',
+        heading: 'Вдохновение осени',
+        body: 'Тёплые букеты сезона — янтарь, бордо и сухая зелень.',
         sortOrder: 20,
+        viewAllHref: '/katalog/bukety-s-rozami',
+        sourceSlug: 'bukety-s-rozami',
+        limit: 5,
+        theme: 'autumn',
       },
       {
-        id: 'gifts',
-        kind: 'gifts',
+        id: 'popular',
+        kind: 'popular',
         enabled: true,
-        heading: 'Подарки',
+        heading: 'Популярные букеты',
         sortOrder: 30,
+        viewAllHref: '/bukety',
+        limit: 10,
       },
       {
-        id: 'instagram',
-        kind: 'instagram',
+        id: 'roses',
+        kind: 'roses',
         enabled: true,
-        heading: 'В Instagram',
-        sortOrder: 35,
+        heading: 'Розы',
+        sortOrder: 40,
+        viewAllHref: '/katalog/rozy',
+        sourceSlug: 'rozy',
+        limit: 5,
       },
       {
         id: 'help',
         kind: 'help',
         enabled: true,
-        heading: 'Не знаете, что выбрать?',
-        sortOrder: 40,
+        heading: 'Поможем выбрать идеальный букет',
+        body: 'Напишите или позвоните — подскажем по поводу, бюджету и сроку доставки.',
+        sortOrder: 50,
+        imageUrl: '/categories/discovery-buket-roz.png',
       },
       {
-        id: 'delivery',
-        kind: 'delivery',
-        enabled: true,
-        heading: 'Доставка по Гродно',
-        sortOrder: 50,
+        id: 'bestsellers',
+        kind: 'bestsellers',
+        enabled: false,
+        heading: 'Наши бестселлеры',
+        sortOrder: 90,
+      },
+      {
+        id: 'gifts',
+        kind: 'gifts',
+        enabled: false,
+        heading: 'Подарки',
+        sortOrder: 91,
+      },
+      {
+        id: 'instagram',
+        kind: 'instagram',
+        enabled: false,
+        heading: 'В Instagram',
+        sortOrder: 92,
       },
     ],
     discoveryTiles: defaultHomepageDiscoveryTiles(),
+    perks: defaultHomepagePerks(),
   };
 }
 

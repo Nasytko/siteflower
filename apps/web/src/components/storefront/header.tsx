@@ -24,7 +24,6 @@ export function StorefrontHeader({ city, brandName, phone, workingHours, navItem
   const pathname = usePathname();
   const [menuOpen, setMenuOpen] = useState(false);
   const [compact, setCompact] = useState(false);
-  const [placeOpen, setPlaceOpen] = useState(false);
   const [cartCount, setCartCount] = useState(0);
   const menuId = useId();
   const closeRef = useRef<HTMLButtonElement>(null);
@@ -32,7 +31,6 @@ export function StorefrontHeader({ city, brandName, phone, workingHours, navItem
 
   useEffect(() => {
     setMenuOpen(false);
-    setPlaceOpen(false);
   }, [pathname]);
 
   useEffect(() => {
@@ -48,7 +46,6 @@ export function StorefrontHeader({ city, brandName, phone, workingHours, navItem
       if (next === compactRef.current) return;
       compactRef.current = next;
       setCompact(next);
-      if (!next) setPlaceOpen(false);
     };
     onScroll();
     window.addEventListener('scroll', onScroll, { passive: true });
@@ -76,89 +73,52 @@ export function StorefrontHeader({ city, brandName, phone, workingHours, navItem
           compact ? 'sf-site-header--compact border-b border-border' : ''
         }`}
       >
-        {/* Utility bar — service links, not CatalogCategory menu */}
+        {/* Utility bar — city, hours, phone, service links (desktop) */}
         <div className="hidden border-b border-border/70 bg-[color-mix(in_oklab,var(--color-surface-muted)_70%,var(--color-background))] lg:block">
           <div className="sf-container-wide flex h-8 items-center justify-between gap-4 text-[0.7rem] text-muted">
             <span className="truncate">
-              📍 {city}
+              {city}
               {workingHours ? ` · ${workingHours}` : ''}
             </span>
             <nav className="flex items-center gap-4" aria-label="Служебные ссылки">
-              {telHref ? (
-                <a href={telHref} className="font-medium text-ink hover:text-brand">
-                  {phone}
-                </a>
-              ) : null}
-              <Link href="/o-nas" className="hover:text-brand">
-                О нас
-              </Link>
               <Link href="/dostavka" className="hover:text-brand">
                 Доставка и оплата
               </Link>
               <Link href="/kontakty" className="hover:text-brand">
                 Контакты
               </Link>
+              {telHref ? (
+                <a href={telHref} className="font-medium text-ink hover:text-brand">
+                  {phone}
+                </a>
+              ) : null}
             </nav>
           </div>
         </div>
 
         {/* Row 1 — brand chrome (always visible) */}
         <div className="sf-header-row sf-container-wide">
-          <div className="flex min-w-0 flex-col items-start gap-0.5 justify-self-start">
-            <div className="flex items-center gap-1">
-              <button
-                type="button"
-                className="inline-flex h-10 w-10 shrink-0 items-center justify-center text-foreground transition-colors hover:text-brand lg:hidden"
-                aria-expanded={menuOpen}
-                aria-controls={menuId}
-                aria-label={menuOpen ? 'Закрыть меню' : 'Открыть меню'}
-                onClick={() => setMenuOpen((open) => !open)}
-              >
-                <MenuIcon open={menuOpen} />
-              </button>
+          <div className="flex min-w-0 items-center gap-1 justify-self-start">
+            <button
+              type="button"
+              className="inline-flex h-11 w-11 shrink-0 items-center justify-center text-foreground transition-colors hover:text-brand lg:hidden"
+              aria-expanded={menuOpen}
+              aria-controls={menuId}
+              aria-label={menuOpen ? 'Закрыть меню' : 'Открыть меню'}
+              onClick={() => setMenuOpen((open) => !open)}
+            >
+              <MenuIcon open={menuOpen} />
+            </button>
 
-              {telHref ? (
-                <a
-                  href={telHref}
-                  className="sf-header-phone hidden max-w-[12rem] items-center gap-1.5 truncate font-semibold text-ink transition-colors hover:text-brand sm:inline-flex"
-                >
-                  <PhoneIcon />
-                  <span className="truncate">{phone}</span>
-                </a>
-              ) : null}
-            </div>
-
-            <div className="relative hidden md:block">
-              <button
-                type="button"
-                className="sf-header-place inline-flex max-w-[11rem] items-center gap-1 truncate text-muted hover:text-brand"
-                aria-expanded={placeOpen}
-                onClick={() => setPlaceOpen((open) => !open)}
+            {telHref ? (
+              <a
+                href={telHref}
+                className="sf-header-phone inline-flex max-w-[11rem] items-center gap-1.5 truncate font-semibold text-ink transition-colors hover:text-brand lg:hidden"
               >
-                <PinIcon />
-                <span className="truncate">{city}</span>
-                {workingHours && !compact ? (
-                  <span className="truncate opacity-70"> · {workingHours}</span>
-                ) : (
-                  <ChevronIcon open={placeOpen} />
-                )}
-              </button>
-              {placeOpen ? (
-                <div className="absolute left-0 top-full z-50 mt-2 w-56 rounded-[var(--radius-md)] border border-border bg-surface p-3 shadow-[var(--shadow-soft)]">
-                  <p className="text-sm font-semibold text-ink">{city}</p>
-                  {workingHours ? (
-                    <p className="mt-1 text-xs text-muted">{workingHours}</p>
-                  ) : null}
-                  <Link
-                    href="/kontakty"
-                    className="mt-2 inline-block text-xs font-semibold text-brand hover:underline"
-                    onClick={() => setPlaceOpen(false)}
-                  >
-                    Контакты и адрес
-                  </Link>
-                </div>
-              ) : null}
-            </div>
+                <PhoneIcon />
+                <span className="truncate text-sm">{phone}</span>
+              </a>
+            ) : null}
           </div>
 
           <Link href="/" className="justify-self-center text-center hover:opacity-90">
@@ -366,14 +326,6 @@ function HeaderActions({
         ) : null}
       </Link>
     </div>
-  );
-}
-
-function PinIcon() {
-  return (
-    <svg viewBox="0 0 16 16" className="h-3.5 w-3.5 shrink-0" fill="currentColor" aria-hidden>
-      <path d="M8 1.5a4.5 4.5 0 0 0-4.5 4.5c0 3.2 4.5 8.5 4.5 8.5s4.5-5.3 4.5-8.5A4.5 4.5 0 0 0 8 1.5Zm0 6.2a1.7 1.7 0 1 1 0-3.4 1.7 1.7 0 0 1 0 3.4Z" />
-    </svg>
   );
 }
 

@@ -39,6 +39,13 @@ const TILES: DiscoveryTile[] = [
     imageSrc: '/x.png',
     imageAlt: 'x',
   },
+  {
+    id: 'kompozicii',
+    label: 'Композиции',
+    href: '/katalog/kompozicii',
+    imageSrc: '/x.png',
+    imageAlt: 'x',
+  },
 ];
 
 test('filterDiscoveryTiles keeps always-on catalog routes', () => {
@@ -46,6 +53,7 @@ test('filterDiscoveryTiles keeps always-on catalog routes', () => {
     flowerSlugs: new Set<string>(),
     recipientSlugs: new Set<string>(),
     occasionSlugs: new Set<string>(),
+    catalogSlugs: new Set<string>(),
   };
   const filtered = filterDiscoveryTiles(TILES, empty);
   assert.ok(filtered.some((t) => t.href === '/cvety'));
@@ -53,6 +61,7 @@ test('filterDiscoveryTiles keeps always-on catalog routes', () => {
   assert.ok(!filtered.some((t) => t.href === '/cvety/rozy'));
   assert.ok(!filtered.some((t) => t.href === '/komu/neveste'));
   assert.ok(!filtered.some((t) => t.href === '/povod/den-rozhdeniya'));
+  assert.ok(!filtered.some((t) => t.href === '/katalog/kompozicii'));
 });
 
 test('filterDiscoveryTiles keeps taxonomy tiles when slugs exist', () => {
@@ -60,8 +69,10 @@ test('filterDiscoveryTiles keeps taxonomy tiles when slugs exist', () => {
     flowerSlugs: new Set(['rozy']),
     recipientSlugs: new Set(['neveste']),
     occasionSlugs: new Set(['den-rozhdeniya']),
+    catalogSlugs: new Set(['kompozicii']),
   });
   assert.ok(filtered.some((t) => t.id === 'rozy'));
   assert.ok(filtered.some((t) => t.id === 'neveste'));
   assert.ok(filtered.some((t) => t.id === 'den-rozhdeniya'));
+  assert.ok(filtered.some((t) => t.id === 'kompozicii'));
 });

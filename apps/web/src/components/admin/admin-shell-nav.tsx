@@ -36,17 +36,6 @@ function isDictionaryPath(pathname: string): boolean {
   );
 }
 
-function isStorefrontHomePath(pathname: string): boolean {
-  return (
-    pathname === '/admin/storefront/homepage' ||
-    pathname.startsWith('/admin/storefront/homepage/') ||
-    pathname === '/admin/storefront/navigation' ||
-    pathname.startsWith('/admin/storefront/navigation/') ||
-    pathname === '/admin/storefront/instagram' ||
-    pathname.startsWith('/admin/storefront/instagram/')
-  );
-}
-
 /**
  * Florist store panel IA:
  * Работа → orders · Каталог → goods & merchandising · Сайт → public site · Настройки + Система
@@ -86,9 +75,19 @@ const NAV_GROUPS: NavGroup[] = [
     items: [
       {
         href: '/admin/storefront/homepage',
-        label: 'Главная и меню',
+        label: 'Главная страница',
         permission: 'CONTENT_READ',
-        isActive: isStorefrontHomePath,
+        isActive: (pathname) =>
+          pathname === '/admin/storefront/homepage' ||
+          pathname.startsWith('/admin/storefront/homepage/'),
+      },
+      {
+        href: '/admin/storefront/navigation',
+        label: 'Меню сайта',
+        permission: 'SETTINGS_READ',
+        isActive: (pathname) =>
+          pathname === '/admin/storefront/navigation' ||
+          pathname.startsWith('/admin/storefront/navigation/'),
       },
       {
         href: '/admin/catalog/pages',

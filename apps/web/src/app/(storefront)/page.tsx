@@ -1,41 +1,52 @@
+import Image from 'next/image';
 import Link from 'next/link';
 import type { Metadata } from 'next';
+import type {
+  HomepageHeroSlideDto,
+  HomepageSectionDto,
+  ProductListItemDto,
+} from '@bouquet-one/contracts';
 import {
   getBestsellerGroup,
   getHomepageConfig,
-  getInstagramFeed,
   getStorefrontSettings,
   listBestsellerGroups,
-  listBudgetRanges,
+  listCatalogCategoryTree,
   listFlowerTypes,
   listOccasions,
+  listProducts,
   listPromotionalProducts,
   listRecipients,
 } from '@/lib/public-api';
 import { buildPageMetadata } from '@/lib/seo/metadata';
-import { BestsellersSection } from '@/components/storefront/bestsellers-section';
 import { CategoryNav, filterDiscoveryTiles } from '@/components/storefront/category-nav';
 import type { DiscoveryTile } from '@/components/storefront/category-nav-types';
-import {
-  ExpandingHero,
-  type AutumnPromoCard,
-  type HeroSlide,
-} from '@/components/storefront/expanding-hero';
+import { ExpandingHero, type HeroSlide } from '@/components/storefront/expanding-hero';
 import { HomeAnalytics } from '@/components/storefront/home-analytics';
-import { InstagramSection } from '@/components/storefront/instagram-section';
-import { ProductGrid } from '@/components/storefront/product-grid';
-import { Reveal } from '@/components/storefront/reveal';
+import { HomePerks } from '@/components/storefront/home-perks';
+import { ProductRow } from '@/components/storefront/product-row';
 import { SectionRail } from '@/components/storefront/section-rail';
 
 export async function generateMetadata(): Promise<Metadata> {
   try {
     const [homepage, settings] = await Promise.all([getHomepageConfig(), getStorefrontSettings()]);
+    const slide =
+      homepage.heroSlides?.find((item) => item.enabled) ??
+      (homepage.hero
+        ? {
+            title: homepage.hero.title,
+            subtitle: homepage.hero.subtitle,
+            imageUrl: homepage.hero.imageUrl,
+          }
+        : null);
     return buildPageMetadata({
-      title: homepage.hero.title,
+      title: slide?.title || homepage.hero.title,
       description:
-        homepage.hero.subtitle || `${settings.brandName} — цветы и доставка в ${settings.city}.`,
+        slide?.subtitle ||
+        homepage.hero.subtitle ||
+        `${settings.brandName} — цветы и доставка в ${settings.city}.`,
       path: '/',
-      imageUrl: homepage.hero.imageUrl ?? undefined,
+      imageUrl: slide?.imageUrl ?? homepage.hero.imageUrl ?? undefined,
     });
   } catch {
     return buildPageMetadata({
@@ -46,30 +57,55 @@ export async function generateMetadata(): Promise<Metadata> {
   }
 }
 
+function sectionOf(sections: HomepageSectionDto[], kind: HomepageSectionDto['kind']) {
+  return sections.find((section) => section.kind === kind);
+}
+
+function isSlideLive(slide: HomepageHeroSlideDto, now: Date): boolean {
+  if (!slide.enabled) return false;
+  if (slide.startsAt) {
+    const start = new Date(slide.startsAt);
+    if (!Number.isNaN(start.getTime()) && now < start) return false;
+  }
+  if (slide.endsAt) {
+    const end = new Date(slide.endsAt);
+    if (!Number.isNaN(end.getTime()) && now > end) return false;
+  }
+  return Boolean(slide.imageUrl || slide.title);
+}
+
+async function loadShelfProducts(opts: {
+  sourceSlug?: string | null;
+  limit: number;
+  fallback: () => Promise<ProductListItemDto[]>;
+}): Promise<ProductListItemDto[]> {
+  const slug = opts.sourceSlug?.trim();
+  if (slug) {
+    try {
+      const page = await listProducts({ categorySlug: slug, pageSize: opts.limit });
+      if (page.items.length > 0) return page.items;
+    } catch {
+      /* try bestseller group */
+    }
+    try {
+      const group = await getBestsellerGroup(slug);
+      if (group.products?.length) return group.products.slice(0, opts.limit);
+    } catch {
+      /* fallback */
+    }
+  }
+  return opts.fallback();
+}
+
 export default async function StorefrontHomePage() {
-  const [
-    homepage,
-    settings,
-    bestsellerGroups,
-    promoProducts,
-    giftsShelf,
-    budgets,
-    recipients,
-    flowers,
-    occasions,
-    instagram,
-  ] = await Promise.all([
-      getHomepageConfig().catch(() => null),
-      getStorefrontSettings().catch(() => null),
-      listBestsellerGroups().catch(() => []),
-      listPromotionalProducts(8).catch(() => []),
-      getBestsellerGroup('podarki').catch(() => null),
-      listBudgetRanges().catch(() => []),
-      listRecipients().catch(() => []),
-      listFlowerTypes().catch(() => []),
-      listOccasions().catch(() => []),
-      getInstagramFeed().catch(() => null),
-    ]);
+  const [homepage, settings, flowers, recipients, occasions, categoryTree] = await Promise.all([
+    getHomepageConfig().catch(() => null),
+    getStorefrontSettings().catch(() => null),
+    listFlowerTypes().catch(() => []),
+    listRecipients().catch(() => []),
+    listOccasions().catch(() => []),
+    listCatalogCategoryTree().catch(() => []),
+  ]);
 
   if (!homepage || !settings) {
     return (
@@ -85,6 +121,9 @@ export default async function StorefrontHomePage() {
     );
   }
 
+  const now = new Date();
+  const telHref = settings.phone ? `tel:${settings.phone.replace(/\s+/g, '')}` : null;
+
   const configuredTiles: DiscoveryTile[] = [...(homepage.discoveryTiles ?? [])]
     .filter((tile) => tile.enabled)
     .sort((a, b) => a.sortOrder - b.sortOrder || a.id.localeCompare(b.id))
@@ -96,242 +135,228 @@ export default async function StorefrontHomePage() {
       imageAlt: tile.imageAlt || tile.label,
     }));
 
+  const catalogSlugs = new Set<string>();
+  const walkCategories = (nodes: typeof categoryTree) => {
+    for (const node of nodes) {
+      if (node.slug && node.visibility !== 'HIDDEN') catalogSlugs.add(node.slug);
+      if (node.children?.length) walkCategories(node.children);
+    }
+  };
+  walkCategories(categoryTree);
+
   const discoveryTiles = filterDiscoveryTiles(configuredTiles, {
     flowerSlugs: new Set(flowers.map((item) => item.slug)),
     recipientSlugs: new Set(recipients.map((item) => item.slug)),
     occasionSlugs: new Set(occasions.map((item) => item.slug)),
-  });
+    catalogSlugs,
+  }).slice(0, 7);
 
-  const sections = [...homepage.sections]
-    .filter((section) => section.enabled)
-    .sort((a, b) => a.sortOrder - b.sortOrder);
-
-  const hero = homepage.hero;
-  const brandName = settings.brandName || 'BUKET №1';
-  const heroImage = hero.imageUrl || '/categories/hero.jpg';
-  const giftProducts = giftsShelf?.products ?? [];
-  const giftsConfig = homepage.sections.find((section) => section.kind === 'gifts');
-
-  const heroSlides: HeroSlide[] = [
-    {
-      id: 'main',
-      brandName,
-      title: hero.title || 'Цветы, которые хочется дарить',
-      subtitle:
-        hero.subtitle || `${brandName} — свежие букеты с доставкой по ${settings.city}.`,
-      ctaLabel: hero.ctaLabel || 'Выбрать букет',
-      ctaHref: hero.ctaHref || '/bukety',
-      imageUrl: heroImage,
-    },
-    {
-      id: 'akcii',
-      brandName,
-      title: 'Сейчас на акции',
-      subtitle: `Скидки на букеты — покажите заботу без лишних слов. Доставка по ${settings.city}.`,
-      ctaLabel: 'Смотреть акции',
-      ctaHref: '/akcii',
-      imageUrl: '/categories/discovery-buket-roz.png',
-    },
-    {
-      id: 'podarki',
-      brandName,
-      title: 'Букет как подарок',
-      subtitle: 'С открыткой и аккуратной сборкой — чтобы вручение прошло спокойно.',
-      ctaLabel: 'К подаркам',
-      ctaHref: '/bukety',
-      imageUrl: '/categories/discovery-podarki.png',
-    },
-  ];
-
-  const autumnCards: AutumnPromoCard[] = [
-    {
-      id: 'autumn-warm',
-      title: 'Янтарные букеты',
-      subtitle: 'Медь, охра и сухоцветы',
-      href: '/bukety',
-      imageUrl: '/categories/autumn-bouquet-warm.jpg',
-      imageAlt: 'Осенний букет в тёплых янтарных тонах',
-    },
-    {
-      id: 'autumn-deep',
-      title: 'Бордо и листья',
-      subtitle: 'Глубокие осенние оттенки',
-      href: '/katalog/monobukety',
-      imageUrl: '/categories/autumn-bouquet-burgundy.jpg',
-      imageAlt: 'Осенний букет в бордовых тонах',
-    },
-  ];
-
-  /** Fixed editorial rhythm: discovery → promo → bestsellers → gifts → rest. */
-  const promotionsSection = sections.find((section) => section.kind === 'promotions');
-  const bestsellersSection = sections.find((section) => section.kind === 'bestsellers');
-  // Read from raw config (not the enabled-only list) so a disabled section stays hidden.
-  const instagramSection = homepage.sections.find((section) => section.kind === 'instagram');
-  const showGifts = giftProducts.length > 0 && giftsConfig?.enabled !== false;
-  const showInstagram =
-    instagram != null &&
-    instagram.posts.length > 0 &&
-    (instagramSection ? instagramSection.enabled : true);
-  const trailing = sections.filter(
-    (section) =>
-      section.kind !== 'promotions' &&
-      section.kind !== 'bestsellers' &&
-      section.kind !== 'gifts' &&
-      section.kind !== 'instagram',
+  const sections = [...homepage.sections].sort(
+    (a, b) => a.sortOrder - b.sortOrder || a.id.localeCompare(b.id),
   );
+
+  const promoSection = sectionOf(sections, 'promotions');
+  const autumnSection = sectionOf(sections, 'autumn');
+  const popularSection =
+    sectionOf(sections, 'popular') ?? sectionOf(sections, 'bestsellers');
+  const rosesSection = sectionOf(sections, 'roses');
+  const helpSection = sectionOf(sections, 'help');
+
+  const heroSlidesSource =
+    homepage.heroSlides?.length > 0
+      ? homepage.heroSlides
+      : [
+          {
+            id: 'legacy',
+            title: homepage.hero.title,
+            subtitle: homepage.hero.subtitle,
+            imageUrl: homepage.hero.imageUrl,
+            mobileImageUrl: null,
+            ctaLabel: homepage.hero.ctaLabel,
+            ctaHref: homepage.hero.ctaHref,
+            enabled: true,
+            sortOrder: 10,
+            startsAt: null,
+            endsAt: null,
+          } satisfies HomepageHeroSlideDto,
+        ];
+
+  const heroSlides: HeroSlide[] = heroSlidesSource
+    .filter((slide) => isSlideLive(slide, now))
+    .sort((a, b) => a.sortOrder - b.sortOrder)
+    .map((slide) => ({
+      id: slide.id,
+      title: slide.title,
+      subtitle: slide.subtitle,
+      ctaLabel: slide.ctaLabel,
+      ctaHref: slide.ctaHref,
+      imageUrl: slide.imageUrl || '/categories/hero.jpg',
+      mobileImageUrl: slide.mobileImageUrl,
+    }));
+
+  const promoLimit = promoSection?.limit ?? 5;
+  const autumnLimit = autumnSection?.limit ?? 5;
+  const popularLimit = popularSection?.limit ?? 10;
+  const rosesLimit = rosesSection?.limit ?? 5;
+
+  const [promoProducts, autumnProducts, popularProducts, rosesProducts] = await Promise.all([
+    promoSection?.enabled
+      ? listPromotionalProducts(promoLimit).catch(() => [])
+      : Promise.resolve([] as ProductListItemDto[]),
+    autumnSection?.enabled
+      ? loadShelfProducts({
+          sourceSlug: autumnSection.sourceSlug,
+          limit: autumnLimit,
+          fallback: async () => {
+            const page = await listProducts({ categorySlug: 'bukety', pageSize: autumnLimit });
+            return page.items;
+          },
+        }).catch(() => [])
+      : Promise.resolve([] as ProductListItemDto[]),
+    popularSection?.enabled
+      ? loadShelfProducts({
+          sourceSlug: popularSection.sourceSlug,
+          limit: popularLimit,
+          fallback: async () => {
+            const groups = await listBestsellerGroups().catch(() => []);
+            const first = groups.find((g) => g.slug !== 'podarki' && (g.products?.length ?? 0) > 0);
+            if (first?.products?.length) return first.products.slice(0, popularLimit);
+            const page = await listProducts({ categorySlug: 'bukety', pageSize: popularLimit });
+            return page.items;
+          },
+        }).catch(() => [])
+      : Promise.resolve([] as ProductListItemDto[]),
+    rosesSection?.enabled
+      ? loadShelfProducts({
+          sourceSlug: rosesSection.sourceSlug ?? 'rozy',
+          limit: rosesLimit,
+          fallback: async () => {
+            const page = await listProducts({
+              productKind: 'STEM',
+              flowerTypeSlug: 'roza',
+              pageSize: rosesLimit,
+            });
+            return page.items;
+          },
+        }).catch(() => [])
+      : Promise.resolve([] as ProductListItemDto[]),
+  ]);
 
   return (
     <main id="main-content">
       <HomeAnalytics />
 
-      <ExpandingHero
-        brandName={brandName}
-        slides={heroSlides}
-        autumnCards={autumnCards}
-      />
+      <ExpandingHero slides={heroSlides} />
 
       <CategoryNav items={discoveryTiles} />
 
-      <section className="sf-promo-band py-10 md:py-14">
-        <div className="sf-container-wide">
-          <SectionRail
-            title={promotionsSection?.heading || 'Акции сейчас'}
-            href="/akcii"
-            linkLabel="Смотреть все"
-          />
-          {promoProducts.length > 0 ? (
-            <ProductGrid products={promoProducts.slice(0, 4)} priorityCount={0} />
-          ) : (
-            <div className="rounded-[var(--radius-xl)] border border-border bg-surface px-6 py-10 text-center md:px-10">
-              <p className="sf-body text-muted">
-                Акционные букеты появятся здесь — пока можно выбрать из каталога.
-              </p>
-              <Link href="/bukety" className="sf-cta mt-6 inline-flex">
-                Открыть каталог
-              </Link>
-            </div>
-          )}
-        </div>
-      </section>
+      <HomePerks items={homepage.perks ?? []} />
 
-      {bestsellersSection ? (
-        <BestsellersSection
-          heading={bestsellersSection.heading || 'Наши бестселлеры'}
-          groups={bestsellerGroups.filter((group) => group.slug !== 'podarki')}
-        />
-      ) : null}
-
-      {showGifts ? (
-        <section className="py-12 md:py-16">
+      {promoSection?.enabled && promoProducts.length > 0 ? (
+        <section className="py-10 md:py-14">
           <div className="sf-container-wide">
             <SectionRail
-              title={giftsConfig?.heading || 'Подарки'}
-              href="/bukety"
+              title={promoSection.heading || 'Акционные товары'}
+              href={promoSection.viewAllHref || '/akcii'}
               linkLabel="Смотреть все"
             />
-            <ProductGrid products={giftProducts.slice(0, 4)} priorityCount={0} />
+            <ProductRow products={promoProducts.slice(0, promoLimit)} />
           </div>
         </section>
       ) : null}
 
-      {showInstagram && instagram ? (
-        <InstagramSection
-          feed={instagram}
-          heading={
-            instagramSection?.heading
-              ? `${brandName} ${instagramSection.heading}`
-              : `${brandName} в Instagram`
+      {autumnSection?.enabled && autumnProducts.length > 0 ? (
+        <section
+          className={
+            autumnSection.theme === 'default' ? 'py-10 md:py-14' : 'sf-autumn'
           }
-        />
+        >
+          <div className="sf-container-wide">
+            <div className="sf-autumn__layout">
+              <div className="sf-autumn__intro">
+                <h2 className="sf-autumn__title">{autumnSection.heading}</h2>
+                {autumnSection.body ? (
+                  <p className="sf-autumn__body">{autumnSection.body}</p>
+                ) : null}
+                {autumnSection.viewAllHref ? (
+                  <Link href={autumnSection.viewAllHref} className="sf-cta sf-autumn__cta">
+                    Смотреть все
+                  </Link>
+                ) : null}
+              </div>
+              <ProductRow products={autumnProducts.slice(0, autumnLimit)} />
+            </div>
+          </div>
+        </section>
       ) : null}
 
-      {trailing.map((section) => {
-        switch (section.kind) {
-          case 'discovery':
-            if (budgets.length === 0 && recipients.length === 0) return null;
-            return (
-              <section key={section.id} className="sf-container-wide py-12 md:py-14">
-                <Reveal>
-                  <SectionRail
-                    title={section.heading || 'С чего начать'}
-                    href="/bukety"
-                    linkLabel="Смотреть все"
-                  />
-                </Reveal>
-                <ul className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-                  {budgets.slice(0, 4).map((range) => (
-                    <li key={range.id}>
-                      <Link
-                        href={`/bukety?budget=${encodeURIComponent(range.id)}`}
-                        className="sf-tile flex min-h-[4.75rem] flex-col justify-between p-4"
-                      >
-                        <span className="sf-label text-[0.65rem]">Бюджет</span>
-                        <span className="text-lg font-semibold">{range.label}</span>
-                      </Link>
-                    </li>
-                  ))}
-                  {recipients.slice(0, 4).map((item) => (
-                    <li key={item.id}>
-                      <Link
-                        href={`/bukety?recipient=${item.slug}`}
-                        className="sf-tile sf-tile--ink flex min-h-[4.75rem] flex-col justify-between p-4"
-                      >
-                        <span className="sf-label text-[0.65rem] text-white/60">Кому</span>
-                        <span className="text-lg font-semibold">{item.name}</span>
-                      </Link>
-                    </li>
-                  ))}
-                </ul>
-              </section>
-            );
+      {popularSection?.enabled && popularProducts.length > 0 ? (
+        <section className="py-10 md:py-14">
+          <div className="sf-container-wide">
+            <SectionRail
+              title={popularSection.heading || 'Популярные букеты'}
+              href={popularSection.viewAllHref || '/bukety'}
+              linkLabel="Смотреть все"
+            />
+            <ProductRow
+              products={popularProducts.slice(0, popularLimit)}
+              scrollOnMobile={false}
+            />
+          </div>
+        </section>
+      ) : null}
 
-          case 'recipients':
-            if (recipients.length === 0) return null;
-            return (
-              <section key={section.id} className="sf-container-wide py-12 md:py-14">
-                <SectionRail
-                  title={section.heading || 'Кому подарить'}
-                  href="/bukety"
-                  linkLabel="Смотреть все"
-                />
-                <ul className="flex flex-wrap gap-2">
-                  {recipients.map((item) => (
-                    <li key={item.id}>
-                      <Link href={`/komu/${item.slug}`} className="sf-chip">
-                        {item.name}
-                      </Link>
-                    </li>
-                  ))}
-                </ul>
-              </section>
-            );
+      {rosesSection?.enabled && rosesProducts.length > 0 ? (
+        <section className="py-10 md:py-14">
+          <div className="sf-container-wide">
+            <SectionRail
+              title={rosesSection.heading || 'Розы'}
+              href={rosesSection.viewAllHref || '/katalog/rozy'}
+              linkLabel="Смотреть все"
+            />
+            <ProductRow products={rosesProducts.slice(0, rosesLimit)} />
+          </div>
+        </section>
+      ) : null}
 
-          case 'help':
-            return (
-              <section key={section.id} className="sf-container-wide py-12 md:py-16">
-                <div className="sf-panel mx-auto max-w-3xl px-6 py-10 text-center md:px-10">
-                  <h2 className="sf-h2">{section.heading || 'Не знаете, что выбрать?'}</h2>
+      {helpSection?.enabled ? (
+        <section className="sf-help-band">
+          <div className="sf-container-wide">
+            <div className="sf-help-band__card">
+              <div className="sf-help-band__copy">
+                <h2 className="sf-h2">{helpSection.heading}</h2>
+                {helpSection.body ? (
+                  <p className="sf-body mt-3 text-muted">{helpSection.body}</p>
+                ) : (
                   <p className="sf-body mt-3 text-muted">
-                    Напишите повод и бюджет — подскажем 2–3 букета без лишнего.
+                    Подскажем по поводу, бюджету и сроку — или откройте каталог.
                   </p>
-                  <div className="mt-6 flex flex-wrap justify-center gap-3">
-                    <Link href="/bukety" className="sf-cta">
-                      Открыть каталог
-                    </Link>
-                    {settings.phone ? (
-                      <a href={`tel:${settings.phone.replace(/\s/g, '')}`} className="sf-cta-ghost">
-                        Позвонить
-                      </a>
-                    ) : null}
-                  </div>
+                )}
+                <div className="mt-6 flex flex-wrap gap-2">
+                  <Link href="/bukety" className="sf-cta">
+                    Получить подборку
+                  </Link>
+                  {telHref ? (
+                    <a href={telHref} className="sf-cta-ghost">
+                      Позвонить
+                    </a>
+                  ) : null}
                 </div>
-              </section>
-            );
+              </div>
+              <div className="sf-help-band__media">
+                <Image
+                  src={helpSection.imageUrl || '/categories/discovery-buket-roz.png'}
+                  alt=""
+                  fill
+                  sizes="(max-width: 800px) 100vw, 40vw"
+                  className="object-cover"
+                />
+              </div>
+            </div>
+          </div>
+        </section>
+      ) : null}
 
-          default:
-            return null;
-        }
-      })}
     </main>
   );
 }
