@@ -79,17 +79,19 @@ export function StorefrontHeader({
         }`}
       >
         <div className="hidden border-b border-border/70 bg-[color-mix(in_oklab,var(--color-surface-muted)_70%,var(--color-background))] lg:block">
-          <div className="sf-container-wide flex h-8 items-center justify-between gap-4 text-[0.7rem] text-muted">
-            <span className="truncate">
+          <div className="sf-utility-bar sf-container-wide">
+            <span className="sf-utility-bar__item truncate">
+              <PinIcon />
               {city}
               {workingHours ? ` · ${workingHours}` : ''}
             </span>
-            <nav className="flex items-center gap-4" aria-label="Служебные ссылки">
+            <nav className="flex items-center gap-7" aria-label="Служебные ссылки">
               <Link href="/dostavka" className="hover:text-brand">
                 Доставка и оплата
               </Link>
               {telHref ? (
-                <a href={telHref} className="font-medium text-ink hover:text-brand">
+                <a href={telHref} className="sf-utility-bar__item hover:text-brand">
+                  <PhoneIcon />
                   {phone}
                 </a>
               ) : null}
@@ -117,10 +119,11 @@ export function StorefrontHeader({
             {telHref ? (
               <a
                 href={telHref}
-                className="sf-header-phone inline-flex max-w-[11rem] items-center gap-1.5 truncate font-semibold text-ink transition-colors hover:text-brand lg:hidden"
+                aria-label={`Позвонить: ${phone}`}
+                className="sf-header-phone inline-flex h-11 max-w-[11rem] items-center gap-1.5 truncate px-1 font-semibold text-ink transition-colors hover:text-brand lg:hidden"
               >
                 <PhoneIcon />
-                <span className="truncate text-sm">{phone}</span>
+                <span className="hidden truncate text-sm sm:inline">{phone}</span>
               </a>
             ) : null}
           </div>
@@ -292,26 +295,17 @@ function HeaderActions({
   showLabels: boolean;
 }) {
   return (
-    <div className="ml-auto flex shrink-0 items-center justify-self-end gap-1 sm:gap-2.5">
-      <Link
-        href="/favorites"
-        className="inline-flex flex-col items-center gap-0.5 px-1 text-ink hover:text-brand"
-        aria-label="Избранное"
-      >
+    <div className="sf-header-actions">
+      <Link href="/favorites" className="sf-header-action" aria-label="Избранное">
         <HeartIcon />
-        {showLabels ? (
-          <span className="hidden text-[0.65rem] font-medium sm:block">Избранное</span>
-        ) : null}
+        {showLabels ? <span className="sf-header-action__label">Избранное</span> : null}
       </Link>
-      <Link
-        href="/cart"
-        className="relative inline-flex items-center px-1 text-ink hover:text-brand"
-        aria-label="Корзина"
-      >
-        <BagIcon />
-        <span className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-brand px-1 text-[0.65rem] font-semibold text-white">
-          {cartCount > 99 ? '99+' : cartCount}
+      <Link href="/cart" className="sf-header-action" aria-label="Корзина">
+        <span className="relative inline-flex">
+          <BagIcon />
+          <span className="sf-header-action__count">{cartCount > 99 ? '99+' : cartCount}</span>
         </span>
+        {showLabels ? <span className="sf-header-action__label">Корзина</span> : null}
       </Link>
     </div>
   );
@@ -332,6 +326,22 @@ function PhoneIcon() {
         strokeLinecap="round"
         strokeLinejoin="round"
       />
+    </svg>
+  );
+}
+
+function PinIcon() {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      className="h-3.5 w-3.5 shrink-0"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.6"
+      aria-hidden
+    >
+      <path d="M12 20.5s6-5.4 6-10.2a6 6 0 0 0-12 0c0 4.8 6 10.2 6 10.2Z" strokeLinejoin="round" />
+      <circle cx="12" cy="10.3" r="2.1" />
     </svg>
   );
 }
@@ -363,10 +373,12 @@ function BagIcon() {
   return (
     <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden>
       <path
-        d="M6.5 8.5h11l-.8 10.2a1.6 1.6 0 0 1-1.6 1.5H8.9a1.6 1.6 0 0 1-1.6-1.5L6.5 8.5Z"
+        d="M3 4h2.2l2 10.4a1.8 1.8 0 0 0 1.8 1.4h7.6a1.8 1.8 0 0 0 1.7-1.3L20 8H6.2"
+        strokeLinecap="round"
         strokeLinejoin="round"
       />
-      <path d="M9 8.5V7a3 3 0 0 1 6 0v1.5" strokeLinecap="round" />
+      <circle cx="9.5" cy="19.5" r="1.3" />
+      <circle cx="16.5" cy="19.5" r="1.3" />
     </svg>
   );
 }

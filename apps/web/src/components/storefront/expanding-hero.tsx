@@ -130,14 +130,18 @@ export function ExpandingHero({ slides, deliveryNote = null, intervalMs = 7000 }
                 <div className="sf-hero__overlay">
                   <p className="sf-hero__kicker">{kicker}</p>
                   {i === 0 ? (
-                    <h1 className="sf-hero__headline">{slide.title}</h1>
+                    <h1 className="sf-hero__headline">
+                      <HeadlineText title={slide.title} />
+                    </h1>
                   ) : (
-                    <p className="sf-hero__headline">{slide.title}</p>
+                    <p className="sf-hero__headline">
+                      <HeadlineText title={slide.title} />
+                    </p>
                   )}
                   {slide.subtitle ? (
                     <p className="sf-hero__subtitle">{slide.subtitle}</p>
                   ) : null}
-                  <Link href={slide.ctaHref} className="sf-cta sf-hero__cta">
+                  <Link href={slide.ctaHref} className="sf-home-btn sf-hero__cta">
                     {slide.ctaLabel}
                     <span aria-hidden> →</span>
                   </Link>
@@ -192,9 +196,22 @@ export function ExpandingHero({ slides, deliveryNote = null, intervalMs = 7000 }
   );
 }
 
+/** Last word of the slide title is set in the italic accent face. */
+function HeadlineText({ title }: { title: string }) {
+  const trimmed = title.trim();
+  const cut = trimmed.lastIndexOf(' ');
+  if (cut <= 0) return <>{trimmed}</>;
+  return (
+    <>
+      {trimmed.slice(0, cut)}{' '}
+      <em className="sf-hero__accent">{trimmed.slice(cut + 1)}</em>
+    </>
+  );
+}
+
 function TruckIcon() {
   return (
-    <svg viewBox="0 0 24 24" className="h-4 w-4 shrink-0" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden>
+    <svg viewBox="0 0 24 24" className="sf-hero__badge-icon" fill="none" stroke="currentColor" strokeWidth="1.4" aria-hidden>
       <path d="M3 7.5h11v9H3zM14 10.5h4.2L21 14v2.5h-7" strokeLinejoin="round" />
       <circle cx="7" cy="17.5" r="1.5" />
       <circle cx="17" cy="17.5" r="1.5" />

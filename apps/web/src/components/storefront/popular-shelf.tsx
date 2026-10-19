@@ -2,8 +2,8 @@
 
 import { useMemo, useState } from 'react';
 import type { ProductListItemDto } from '@bouquet-one/contracts';
+import { HomeSectionHead } from './home-section-head';
 import { ProductRow } from './product-row';
-import { SectionRail } from './section-rail';
 
 type TabId = 'all' | 'new' | 'authorial' | 'budget';
 
@@ -42,31 +42,26 @@ export function PopularShelf({
 }: Props) {
   const [tab, setTab] = useState<TabId>('all');
 
-  const visible = useMemo(() => {
-    if (tab === 'authorial') {
-      const source = authorialProducts.length > 0 ? authorialProducts : products;
-      return source.slice(0, limit);
-    }
-    if (tab === 'new') {
-      return [...products]
-        .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
-        .slice(0, limit);
-    }
-    if (tab === 'budget') {
-      return products.filter((item) => priceMinor(item) <= 10_000).slice(0, limit);
-    }
-    return products.slice(0, limit);
-  }, [tab, products, authorialProducts, limit]);
+  const byTab = useMemo<Record<TabId, ProductListItemDto[]>>(
+    () => ({
+      all: products.slice(0, limit),
+      new: [...products].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)).slice(0, limit),
+      authorial: authorialProducts.slice(0, limit),
+      budget: products.filter((item) => priceMinor(item) <= 10_000).slice(0, limit),
+    }),
+    [products, authorialProducts, limit],
+  );
+  const tabs = TABS.filter((item) => item.id === 'all' || byTab[item.id].length > 0);
+  const visible = byTab[tab];
 
-  if (products.length === 0 && authorialProducts.length === 0) return null;
+  if (products.length === 0) return null;
 
   return (
-    <section className="py-10 md:py-14">
+    <section className="sf-home-shelf">
       <div className="sf-container-wide">
-        <div className="sf-popular-head">
-          <SectionRail title={title} href={viewAllHref} linkLabel="Смотреть все" />
+        <HomeSectionHead title={title} href={viewAllHref}>
           <div className="sf-popular-tabs" role="tablist" aria-label="Фильтр букетов">
-            {TABS.map((item) => (
+            {tabs.map((item) => (
               <button
                 key={item.id}
                 type="button"
@@ -79,7 +74,7 @@ export function PopularShelf({
               </button>
             ))}
           </div>
-        </div>
+        </HomeSectionHead>
         {visible.length > 0 ? (
           <ProductRow products={visible} scrollOnMobile={false} />
         ) : (

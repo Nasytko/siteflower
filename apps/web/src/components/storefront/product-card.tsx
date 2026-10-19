@@ -12,6 +12,8 @@ type Props = {
   priority?: boolean;
   /** Card image sizes attribute — grids and scroll rows differ. */
   sizes?: string;
+  /** `compact` — homepage shelves: stock chip on the photo, stacked prices, round cart. */
+  variant?: 'default' | 'compact';
 };
 
 const DEFAULT_SIZES = '(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw';
@@ -34,8 +36,14 @@ function availabilityLabel(availability: ProductListItemDto['availability']): {
   }
 }
 
-export function ProductCard({ product, priority = false, sizes = DEFAULT_SIZES }: Props) {
+export function ProductCard({
+  product,
+  priority = false,
+  sizes = DEFAULT_SIZES,
+  variant = 'default',
+}: Props) {
   const [added, setAdded] = useState(false);
+  const compact = variant === 'compact';
 
   const availability = availabilityLabel(product.availability);
   const canQuickAdd = product.availability === 'AVAILABLE' && product.defaultVariant != null;
@@ -66,8 +74,35 @@ export function ProductCard({ product, priority = false, sizes = DEFAULT_SIZES }
     window.setTimeout(() => setAdded(false), 1600);
   }
 
+  const stock = availability ? (
+    <p
+      className={`sf-product-card__stock ${
+        availability.tone === 'ok' ? 'sf-product-card__stock--ok' : ''
+      }`}
+    >
+      {availability.tone === 'ok' ? (
+        compact ? (
+          <svg viewBox="0 0 16 16" className="sf-product-card__stock-icon" aria-hidden>
+            <circle cx="8" cy="8" r="6.25" fill="none" stroke="currentColor" strokeWidth="1.4" />
+            <path
+              d="m5.4 8.2 1.8 1.8 3.5-3.6"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.4"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          </svg>
+        ) : (
+          <span className="sf-product-card__stock-dot" aria-hidden />
+        )
+      ) : null}
+      {availability.text}
+    </p>
+  ) : null;
+
   return (
-    <article className="sf-product-card group">
+    <article className={`sf-product-card group ${compact ? 'sf-product-card--compact' : ''}`}>
       <div className="sf-product-card__media">
         <Link
           href={`/bukety/${product.slug}`}
@@ -100,45 +135,52 @@ export function ProductCard({ product, priority = false, sizes = DEFAULT_SIZES }
           </span>
         ) : null}
 
-        <div className="absolute right-2.5 top-2.5 z-[2]">
+        <div className="sf-product-card__fav absolute right-2.5 top-2.5 z-[2]">
           <FavoriteButton productId={product.id} slug={product.slug} />
         </div>
+
+        {compact ? stock : null}
       </div>
 
       <div className="sf-product-card__body">
-        {availability ? (
-          <p
-            className={`sf-product-card__stock ${
-              availability.tone === 'ok' ? 'sf-product-card__stock--ok' : ''
-            }`}
-          >
-            {availability.tone === 'ok' ? (
-              <span className="sf-product-card__stock-dot" aria-hidden />
-            ) : null}
-            {availability.text}
-          </p>
-        ) : null}
+        {compact ? null : stock}
 
         <h3 className="sf-product-card__title">
           <Link href={`/bukety/${product.slug}`}>{displayName}</Link>
         </h3>
 
-        {product.cardSubtitle ? (
+        {product.cardSubtitle && !compact ? (
           <p className="sf-small mt-0.5 text-muted">{product.cardSubtitle}</p>
         ) : null}
 
         <div className="sf-product-card__buy">
           <p className="sf-product-card__price">
             {priceLabel ? (
-              <>
-                <span className={`sf-price ${promotion ? 'sf-price--sale' : ''}`}>{priceLabel}</span>
-                {originalLabel ? (
-                  <span className="sf-price-was">
-                    <span className="sr-only">Обычная цена </span>
-                    {originalLabel}
+              compact ? (
+                <>
+                  {originalLabel ? (
+                    <span className="sf-price-was">
+                      <span className="sr-only">Обычная цена </span>
+                      {originalLabel}
+                    </span>
+                  ) : null}
+                  <span className={`sf-price ${promotion ? 'sf-price--sale' : ''}`}>
+                    {priceLabel}
                   </span>
-                ) : null}
-              </>
+                </>
+              ) : (
+                <>
+                  <span className={`sf-price ${promotion ? 'sf-price--sale' : ''}`}>
+                    {priceLabel}
+                  </span>
+                  {originalLabel ? (
+                    <span className="sf-price-was">
+                      <span className="sr-only">Обычная цена </span>
+                      {originalLabel}
+                    </span>
+                  ) : null}
+                </>
+              )
             ) : (
               <span className="sf-small text-muted">Цена уточняется</span>
             )}

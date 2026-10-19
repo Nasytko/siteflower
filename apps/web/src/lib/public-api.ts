@@ -106,10 +106,6 @@ export type CatalogListParams = {
   flowerTypeQuantitySlug?: string;
   /** Only products with an effective promotion (powers /akcii). */
   promotion?: boolean;
-  /** Admin/public filter — single commercial kind (e.g. STEM for single roses). */
-  productKind?: 'BOUQUET' | 'COMPOSITION' | 'STEM' | 'PLANT' | 'GIFT' | 'OTHER';
-  /** ProductTraitDefinition keys (e.g. AUTHORIAL). */
-  traitKeys?: string;
   sort?: ProductSort;
 };
 
@@ -139,15 +135,11 @@ export function listProducts(params: CatalogListParams = {}) {
     maxPriceMinor,
     minFlowerTypeQuantity,
     flowerTypeQuantitySlug,
-    productKind,
-    traitKeys,
     ...rest
   } = params;
   return publicFetch<PaginatedResponse<ProductListItemDto>>('/catalog/products', {
     searchParams: {
       ...rest,
-      productKind,
-      traitKeys,
       // Browser URLs use short keys; API DTO expects long facet names.
       budgetRangeIds: budget,
       occasionSlugs: occasion,
