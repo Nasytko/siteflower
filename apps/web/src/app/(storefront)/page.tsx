@@ -16,7 +16,11 @@ import { buildPageMetadata } from '@/lib/seo/metadata';
 import { BestsellersSection } from '@/components/storefront/bestsellers-section';
 import { CategoryNav, filterDiscoveryTiles } from '@/components/storefront/category-nav';
 import type { DiscoveryTile } from '@/components/storefront/category-nav-types';
-import { ExpandingHero, type HeroSlide } from '@/components/storefront/expanding-hero';
+import {
+  ExpandingHero,
+  type AutumnPromoCard,
+  type HeroSlide,
+} from '@/components/storefront/expanding-hero';
 import { HomeAnalytics } from '@/components/storefront/home-analytics';
 import { InstagramSection } from '@/components/storefront/instagram-section';
 import { ProductGrid } from '@/components/storefront/product-grid';
@@ -139,6 +143,25 @@ export default async function StorefrontHomePage() {
     },
   ];
 
+  const autumnCards: AutumnPromoCard[] = [
+    {
+      id: 'autumn-warm',
+      title: 'Янтарные букеты',
+      subtitle: 'Медь, охра и сухоцветы',
+      href: '/bukety',
+      imageUrl: '/categories/autumn-bouquet-warm.jpg',
+      imageAlt: 'Осенний букет в тёплых янтарных тонах',
+    },
+    {
+      id: 'autumn-deep',
+      title: 'Бордо и листья',
+      subtitle: 'Глубокие осенние оттенки',
+      href: '/katalog/monobukety',
+      imageUrl: '/categories/autumn-bouquet-burgundy.jpg',
+      imageAlt: 'Осенний букет в бордовых тонах',
+    },
+  ];
+
   /** Fixed editorial rhythm: discovery → promo → bestsellers → gifts → rest. */
   const promotionsSection = sections.find((section) => section.kind === 'promotions');
   const bestsellersSection = sections.find((section) => section.kind === 'bestsellers');
@@ -161,7 +184,11 @@ export default async function StorefrontHomePage() {
     <main id="main-content">
       <HomeAnalytics />
 
-      <ExpandingHero slides={heroSlides} />
+      <ExpandingHero
+        brandName={brandName}
+        slides={heroSlides}
+        autumnCards={autumnCards}
+      />
 
       <CategoryNav items={discoveryTiles} />
 
