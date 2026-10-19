@@ -12,13 +12,20 @@ import {
   normalizeSlug,
   productKindNeedsComposition,
   productKindNeedsGiftSubtype,
+  CANONICAL_LISTING_HUB_SLUGS,
+  isCanonicalListingHub,
+  isCatalogListingKind,
+  resolveCatalogCategoryIdForProductKind,
   resolveStoredCompositionKind,
   suggestedListingKindForProductKind,
+  type CatalogListingKind,
   type CompositionPrecision,
   type PaginatedResponse,
   type ProductAdminDto,
   type ProductKind,
   type ProductListItemDto,
+  type ProductPlacementDto,
+  type ProductPlacementEntryDto,
   type ProductPublicDto,
   type PublishValidationIssue,
 } from '@bouquet-one/contracts';
@@ -63,6 +70,7 @@ import type {
 } from './products.dto';
 import { ProductsRepository } from './products.repository';
 import { mapPromotionPrismaError, PromotionsService } from './promotions.service';
+import { rulesToFilters } from './seo-landings.service';
 import { SlugRedirectsService } from './slug-redirects.service';
 
 type CatalogReference = 'occasion' | 'recipient' | 'color';
@@ -251,6 +259,9 @@ export class ProductsService {
       await this.assertReferencesExist(tx, 'recipient', input.recipientIds ?? []);
       await this.assertReferencesExist(tx, 'color', input.colorIds ?? []);
 
+      const kind: ProductKind = input.productKind ?? 'BOUQUET';
+      const hubCategoryId = await this.resolveEditorCatalogCategoryId(tx, kind, null);
+
       const product = await this.products.create(
         {
           name,
@@ -260,7 +271,10 @@ export class ProductsService {
             : null,
           description: input.description ? trimmedOrNull(input.description) : null,
           lifecycle: 'DRAFT',
-          ...(input.productKind ? { productKind: input.productKind } : {}),
+          productKind: kind,
+          ...(hubCategoryId
+            ? { catalogCategory: { connect: { id: hubCategoryId } } }
+            : {}),
           ...(input.availability ? { availability: input.availability } : {}),
           ...(input.heightCm === undefined ? {} : { bouquetHeightCm: input.heightCm }),
           ...(input.currency ? { currency: input.currency } : {}),
@@ -1205,8 +1219,8 @@ export class ProductsService {
 
   /**
    * ProductKind is SSoT for commercial type. catalogCategoryId is compatibility glue:
+   * - Non-gifts: always canonical hub (never a merchandising leaf from the editor).
    * - Gifts: keep subtype under GIFTS tree when provided; else canonical hub.
-   * - Other kinds: keep merchandising leaf only if listingKind matches; else hub.
    * Public hub PLPs ignore category and filter by productKind alone.
    */
   private async resolveEditorCatalogCategoryId(
@@ -1218,25 +1232,170 @@ export class ProductsService {
     const hubId = await this.categories.findCanonicalHubId(suggested, tx);
 
     if (!requestedId) {
-      return hubId;
+      return resolveCatalogCategoryIdForProductKind({
+        productKind,
+        requestedId: null,
+        hubId,
+        requestedListingKind: null,
+      });
     }
 
     const category = await tx.catalogCategory.findUnique({ where: { id: requestedId } });
     if (!category) throw new BadRequestException('Catalog category not found');
 
-    if (productKindNeedsGiftSubtype(productKind)) {
-      // Accept gift subtypes and gift hubs; reject floral categories.
-      if (category.listingKind === 'GIFTS') {
-        return category.id;
+    const listingKind =
+      category.listingKind && isCatalogListingKind(category.listingKind)
+        ? category.listingKind
+        : null;
+
+    return resolveCatalogCategoryIdForProductKind({
+      productKind,
+      requestedId: category.id,
+      hubId,
+      requestedListingKind: listingKind,
+    });
+  }
+
+  /**
+   * Factual storefront placements for the admin editor («Где отображается товар»).
+   * Only real hub / gift-subtype / SEO-landing pages; never speculative matches.
+   */
+  async getPlacement(id: string): Promise<ProductPlacementDto> {
+    const product = await this.products.findById(id);
+    if (!product) throw new NotFoundException('Product not found');
+
+    const entries: ProductPlacementEntryDto[] = [];
+    const listingKind = suggestedListingKindForProductKind(product.productKind);
+    const hubSlug = CANONICAL_LISTING_HUB_SLUGS[listingKind];
+    const productLive = product.lifecycle === 'PUBLISHED';
+
+    if (hubSlug) {
+      const hub = await this.prisma.client.catalogCategory.findFirst({
+        where: { slug: hubSlug, listingKind },
+      });
+      if (hub) {
+        const hubHidden = hub.visibility === 'HIDDEN';
+        entries.push({
+          kind: 'HUB',
+          title: hub.name,
+          path: `/katalog/${hub.slug}`,
+          status: hubHidden ? 'HIDDEN' : productLive ? 'LIVE' : 'DRAFT_PRODUCT',
+          note: hubHidden
+            ? 'Раздел скрыт'
+            : productLive
+              ? undefined
+              : 'Товар ещё не опубликован',
+        });
       }
-      return hubId;
     }
 
-    // Merchandising leaf / hub only when listingKind still matches the product kind.
-    if (category.listingKind === suggested) {
-      return category.id;
+    if (
+      productKindNeedsGiftSubtype(product.productKind) &&
+      product.catalogCategoryId &&
+      product.catalogCategory
+    ) {
+      const cat = product.catalogCategory;
+      const isHub = isCanonicalListingHub({
+        slug: cat.slug,
+        listingKind: (cat.listingKind as CatalogListingKind | null) ?? null,
+      });
+      if (!isHub && cat.listingKind === 'GIFTS') {
+        entries.push({
+          kind: 'GIFT_SUBTYPE',
+          title: cat.name,
+          path: `/katalog/${cat.slug}`,
+          status:
+            cat.visibility === 'HIDDEN'
+              ? 'HIDDEN'
+              : productLive
+                ? 'LIVE'
+                : 'DRAFT_PRODUCT',
+          note:
+            cat.visibility === 'HIDDEN'
+              ? 'Подтип скрыт'
+              : productLive
+                ? undefined
+                : 'Товар ещё не опубликован',
+        });
+      }
     }
-    return hubId;
+
+    const landings = await this.prisma.client.seoLandingPage.findMany({
+      include: {
+        pinnedProducts: { select: { productId: true } },
+        excludedProducts: { select: { productId: true } },
+      },
+      orderBy: { title: 'asc' },
+    });
+
+    const now = new Date();
+    const landingEntries = await Promise.all(
+      landings.map(async (landing): Promise<ProductPlacementEntryDto | null> => {
+        const path = `/p/${landing.slug}`;
+        const excluded = landing.excludedProducts.some((row) => row.productId === id);
+        if (excluded) {
+          return {
+            kind: 'SEO_LANDING',
+            title: landing.title,
+            path,
+            status: 'EXCLUDED',
+            note: 'Товар исключён из этой подборки',
+          };
+        }
+
+        const pinned = landing.pinnedProducts.some((row) => row.productId === id);
+        let matches = pinned;
+        if (!matches) {
+          const { total } = await this.products.list({
+            filters: {
+              ...rulesToFilters(landing.rules),
+              includeProductIds: [id],
+            },
+            skip: 0,
+            take: 1,
+            sort: 'recommended',
+            now,
+          });
+          matches = total > 0;
+        }
+        if (!matches) return null;
+
+        const landingPublished = landing.status === 'PUBLISHED';
+        if (!landingPublished) {
+          return {
+            kind: 'SEO_LANDING',
+            title: landing.title,
+            path,
+            status: 'DRAFT_LANDING',
+            note: 'Подборка не опубликована',
+          };
+        }
+        if (!productLive) {
+          return {
+            kind: 'SEO_LANDING',
+            title: landing.title,
+            path,
+            status: 'DRAFT_PRODUCT',
+            note: 'Товар ещё не опубликован',
+          };
+        }
+        return {
+          kind: 'SEO_LANDING',
+          title: landing.title,
+          path,
+          status: 'LIVE',
+        };
+      }),
+    );
+    for (const entry of landingEntries) {
+      if (entry) entries.push(entry);
+    }
+
+    return {
+      productId: id,
+      productKind: product.productKind,
+      entries,
+    };
   }
 
   private async assertReferencesExist(

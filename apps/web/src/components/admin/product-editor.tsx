@@ -12,6 +12,7 @@ import {
   deriveProductEditorReadiness,
   parsePositivePriceMajor,
   productKindNeedsComposition,
+  productKindNeedsGiftSubtype,
   type ComponentUnit,
   type CompositionPrecision,
   type ProductAdminDto,
@@ -341,7 +342,16 @@ export function ProductEditor({
       if (!ok) return;
       setComponents([]);
     }
-    // Drop merchandising/gift subtype on kind change — server re-assigns hub on save.
+    const leavingGift =
+      productKindNeedsGiftSubtype(productKind) && !productKindNeedsGiftSubtype(next);
+    if (leavingGift && catalogCategoryId) {
+      const ok = window.confirm(
+        'Подтип подарка будет сброшен — раздел каталога определится по новому типу. Продолжить?',
+      );
+      if (!ok) return;
+    }
+    // Non-gifts: clear any leaf; gifts start without subtype until manager picks one.
+    // Server assigns the canonical hub on save.
     setCatalogCategoryId('');
     setProductKindState(next);
     if (!productKindNeedsComposition(next) && section === 'composition') {
@@ -720,7 +730,10 @@ export function ProductEditor({
           endsAt: fromDateTimeLocalValue(promotion.endsAt),
         },
         groupIds,
-        catalogCategoryId: catalogCategoryId || null,
+        // Non-gifts: null → server assigns canonical hub. Gifts: subtype or null → gifts hub.
+        catalogCategoryId: productKindNeedsGiftSubtype(productKind)
+          ? catalogCategoryId || null
+          : null,
         familyId: familyId || null,
         ...(familyId
           ? {
@@ -1362,10 +1375,6 @@ export function ProductEditor({
           touch={touch}
           toggleId={toggleId}
           nextVariantKey={() => nextEditorKey('variant')}
-          catalogCategoryId={catalogCategoryId}
-          setCatalogCategoryId={setCatalogCategoryId}
-          categories={options.categories}
-          productKind={productKind}
         />
       ) : null}
 

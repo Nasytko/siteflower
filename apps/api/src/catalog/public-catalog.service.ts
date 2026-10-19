@@ -72,14 +72,13 @@ export class PublicCatalogService {
   private async resolveCatalogFilters(query: PublicProductListQueryDto) {
     let catalogCategoryIds: string[] | undefined;
     let productKinds: ProductKind[] | undefined;
-    let matchCategoryOrProductKind = false;
     /** Category-scope composition (e.g. monobukety) — not Filter Pool gated. */
     let scopeCompositionKinds: CompositionKind[] | undefined;
     /** Category-scope flower type (e.g. /katalog/rozy) — not Filter Pool gated. */
     let scopeFlowerTypeSlugs: string[] | undefined;
 
     if (query.catalogCategoryId) {
-      // Direct id (admin/internal): keep tree scope only — no ProductKind OR.
+      // Direct id (admin/internal): category tree only.
       catalogCategoryIds = await this.categories.expandCategoryIds(query.catalogCategoryId, {
         visibleOnly: true,
       });
@@ -88,7 +87,6 @@ export class PublicCatalogService {
         const category = await this.categories.getBySlug(query.categorySlug);
         const scope = resolveCategoryListingScope(category);
         productKinds = scope.productKinds;
-        matchCategoryOrProductKind = Boolean(scope.matchCategoryOrProductKind);
         scopeCompositionKinds = scope.scopeCompositionKinds;
         scopeFlowerTypeSlugs = scope.scopeFlowerTypeSlugs;
         if (scope.useCategoryTree) {
@@ -107,7 +105,6 @@ export class PublicCatalogService {
     return {
       catalogCategoryIds,
       productKinds,
-      matchCategoryOrProductKind,
       scopeCompositionKinds,
       scopeFlowerTypeSlugs,
       flowerTypeIds: query.flowerTypeId,
@@ -185,7 +182,6 @@ export class PublicCatalogService {
         budgetRanges,
         catalogCategoryIds: catalogFilters.catalogCategoryIds,
         productKinds: catalogFilters.productKinds,
-        matchCategoryOrProductKind: catalogFilters.matchCategoryOrProductKind,
         familyId: catalogFilters.familyId,
         ...gatedFacet,
         flowerTypeSlugs: mergedFlowerTypeSlugs.length > 0 ? mergedFlowerTypeSlugs : undefined,

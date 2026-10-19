@@ -15,7 +15,7 @@
 | Область | Доказательство |
 | --- | --- |
 | `ProductKind` SSoT | `packages/database/prisma/schema.prisma` (`Product.productKind`); editor `product-editor-main-tab.tsx` («Раздел каталога определяется типом автоматически») |
-| Хабы без OR со старой категорией | `resolveCategoryListingScope` в `packages/contracts/src/catalog.ts`: canonical hubs → `useCategoryTree: false`, `matchCategoryOrProductKind: false`; тест `catalog.test.ts` |
+| Хабы без OR со старой категорией | `resolveCategoryListingScope`: hubs → productKind only; OR-флаг удалён |
 | Моно по PRIMARY, зелень не считается | enum `CompositionKind` + `ComponentRole.GREENERY`; `resolveStoredCompositionKind` обнуляет mono/mixed для STEM/GIFT |
 | Цвет линии ≠ палитра карточки | `ProductComponent.colorId` vs `ProductColor`; SEO constructor: `componentColorId` vs `colorId` |
 | Подарки через категорию-подтип | `productKindNeedsGiftSubtype` + `giftSubtypeOptions`; listing leaf → `useCategoryTree: true` |
@@ -109,15 +109,9 @@
 
 ---
 
-### P2 — `matchCategoryOrProductKind` жив в репозитории
+### P2 — `matchCategoryOrProductKind` ✅ удалён (2026-10-19)
 
-**Где.** `products.repository.ts` ~647–653; флаг в `CategoryListingScope`. Хабы его не ставят (`false`). Тест `products.repository.filter.spec.ts` ещё описывает OR-режим.
-
-**Проблема.** Любой будущий вызов с `true` вернёт букеты в «Цветы» из-за stale `catalogCategoryId`.
-
-**Риск.** Низкий сейчас, высокий при регрессии.
-
-**Решение.** Не вызывать с витрины. Пометить deprecated; удалить после того, как admin list перестанет фильтровать деревом хабов.
+Флаг и OR-ветка убраны из `CategoryListingScope`, public catalog и `products.repository`. Category ids + productKinds комбинируются только AND.
 
 ---
 

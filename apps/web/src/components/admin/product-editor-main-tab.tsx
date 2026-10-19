@@ -12,6 +12,7 @@ import {
   type ProductAdminDto,
   type ProductKind,
 } from '@bouquet-one/contracts';
+import { ProductPlacementPanel } from '@/components/admin/product-placement-panel';
 import { TaxonomyQuickPick } from '@/components/admin/taxonomy-quick-pick';
 import type { ComponentDraft, PickerOption, VariantDraft } from '@/components/admin/product-editor-shared';
 import type { CategoryPickerOption } from '@/lib/admin-catalog-picker-labels';
@@ -241,13 +242,17 @@ export function ProductEditorMainTab(props: Props) {
                 touch();
               }}
             >
-              <option value="">Без подтипа (Подарки)</option>
+              <option value="">Без подтипа (раздел «Подарки»)</option>
               {giftSubtypeOptions(categories).map((option) => (
                 <option key={option.id} value={option.id}>
                   {option.name}
                 </option>
               ))}
             </select>
+            <span className="admin-field__hint">
+              Опционально: открытки, свечи и другие ветки раздела «Подарки». Тип товара уже
+              «Подарок».
+            </span>
           </label>
         ) : null}
 
@@ -448,6 +453,8 @@ export function ProductEditorMainTab(props: Props) {
           </div>
         </div>
       </div>
+
+      <ProductPlacementPanel productId={server.id} refreshKey={server.version} />
     </section>
   );
 }

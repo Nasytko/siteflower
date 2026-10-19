@@ -12,7 +12,9 @@
 - **Навигация** = `NavigationMenu`, не дерево категорий.
 - **Канон «Цветы поштучно»** = `/katalog/tsvety`. «Букеты с X» = `/p/…` или `/bukety?flower=`.
 
-Опасные изменения (отдельное согласование): 301 `/cvety` → канон; drop `diameter_cm`; drop `matchCategoryOrProductKind`; смена slug хаба; outbox на смену статуса заказа; Playwright в CI.
+Опасные изменения (отдельное согласование): 301 `/cvety` → канон; drop `diameter_cm`; смена slug хаба; outbox на смену статуса заказа; Playwright в CI.
+
+`matchCategoryOrProductKind` удалён (2026-10-19): хабы всегда kind-only; category+kind только через AND.
 
 ## Порядок
 
@@ -22,7 +24,7 @@
 | **C2** | Таблица товаров: колонки/фильтры ProductKind | нет (нужен additive DTO) | query `catalogCategoryId` остаётся в API |
 | **C3** | Редактор: копирайт, STEM без категории, create-flow | нет | PUT `/editor` тот же |
 | **C4** | Справочники: группировка, usage counts, копирайт категорий | нет | CRUD endpoints те же |
-| **C5** | Классификация: admin не учит category-as-type; опционально не писать hub category на save | нет / later | `catalogCategoryId` остаётся |
+| **C5** | Классификация: без «Витринной категории»; gift subtype; placement block | нет | `catalogCategoryId` остаётся (hub/gift) |
 | **C6** | SEO: канон URL, count labels, предупреждение пересечений | нет до 301 | существующие `/p` сохранить |
 | **C7** | Доставка: progressive disclosure + ссылка на адрес магазина | нет | settings schema тот же |
 | **C8** | Очистка: DTO productKind на list, bulk permission annotation, dead copy | additive DTO | |
@@ -62,6 +64,18 @@ Follow-up после аудита каталога: `/bukety` и связанн�
 ## C3 — редактор
 
 Не переписывать `product-editor.tsx`. Точечно: create label, STEM-форма (вид/сорт/высота) уже на composition tab — проверить, что категория не всплывает; unsaved guard уже есть. Автосоздание справочника из editor — сохранить.
+
+## C5 — классификация ✅ (2026-10-19)
+
+Сделано:
+
+1. Убрано поле «Витринная / ручная категория» из редактора букетов, композиций и цветов поштучно.
+2. Для `GIFT` осталось понятное «Подтип подарка» (`catalogCategoryId` в дереве GIFTS).
+3. `catalogCategoryId` не обязателен при create/save/publish; create назначает канонический хаб по `ProductKind`.
+4. `resolveCatalogCategoryIdForProductKind`: non-gift → всегда hub; gift → subtype GIFTS или hub.
+5. Смена типа с подтверждением при потере подтипа подарка; сервер не оставляет флоральную категорию у подарка и не пишет merchandising leaf у букетов.
+6. Блок «Где отображается товар» (`GET …/placement`): хаб, подтип, фактические SEO-подборки (LIVE / draft / excluded).
+7. Таблица `CatalogCategory` и URL не удалялись; мультивыбор категорий не вводился.
 
 ## C6 — SEO / URL (осторожно)
 

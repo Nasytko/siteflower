@@ -110,6 +110,54 @@ export function productKindNeedsGiftSubtype(kind: ProductKind | null | undefined
   return kind === 'GIFT';
 }
 
+/**
+ * Resolve Product.catalogCategoryId on editor save.
+ * Non-gifts always get the canonical hub (or null if hub missing) — never a merchandising leaf.
+ * Gifts keep a GIFTS-tree subtype when provided; otherwise the gifts hub.
+ */
+export function resolveCatalogCategoryIdForProductKind(input: {
+  productKind: ProductKind;
+  requestedId: string | null | undefined;
+  hubId: string | null;
+  /** listingKind of the requested category when it exists; ignored when requestedId is empty. */
+  requestedListingKind: CatalogListingKind | null | undefined;
+}): string | null {
+  if (!productKindNeedsGiftSubtype(input.productKind)) {
+    return input.hubId;
+  }
+  if (!input.requestedId) {
+    return input.hubId;
+  }
+  if (input.requestedListingKind === 'GIFTS') {
+    return input.requestedId;
+  }
+  return input.hubId;
+}
+
+/** Admin «Где отображается товар» — factual storefront placements only. */
+export type ProductPlacementStatus =
+  | 'LIVE'
+  | 'DRAFT_LANDING'
+  | 'DRAFT_PRODUCT'
+  | 'HIDDEN'
+  | 'EXCLUDED';
+
+export type ProductPlacementKind = 'HUB' | 'GIFT_SUBTYPE' | 'SEO_LANDING';
+
+export type ProductPlacementEntryDto = {
+  kind: ProductPlacementKind;
+  title: string;
+  path: string;
+  status: ProductPlacementStatus;
+  note?: string;
+};
+
+export type ProductPlacementDto = {
+  productId: string;
+  productKind: ProductKind;
+  entries: ProductPlacementEntryDto[];
+};
+
 /** ProductKinds that belong on a CatalogCategory listingKind hub. */
 export function productKindsForListingKind(
   listingKind: CatalogListingKind | null | undefined,
@@ -163,11 +211,6 @@ export type CategoryListingScope = {
   /** Include products whose catalogCategoryId is in the expanded category tree. */
   useCategoryTree: boolean;
   productKinds?: ProductKind[];
-  /**
-   * When true with both tree and productKinds: OR them.
-   * Prefer false — hubs must not OR stale categories.
-   */
-  matchCategoryOrProductKind?: boolean;
   scopeFlowerTypeSlugs?: string[];
   scopeCompositionKinds?: CompositionKind[];
 };
@@ -182,7 +225,6 @@ export function resolveCategoryListingScope(category: {
     return {
       useCategoryTree: false,
       productKinds: kinds.length > 0 ? kinds : undefined,
-      matchCategoryOrProductKind: false,
     };
   }
 

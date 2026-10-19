@@ -87,12 +87,7 @@ export default async function CatalogPage({ searchParams }: { searchParams: Sear
 
       <div className="sf-catalog-layout">
         <aside className="sf-catalog-aside">
-          <CatalogFilters
-            variant="sidebar"
-            state={state}
-            options={options}
-            total={products.total}
-          />
+          <CatalogFilters state={state} options={options} />
         </aside>
 
         <div className="sf-catalog-main">

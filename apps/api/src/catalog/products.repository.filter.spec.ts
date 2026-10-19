@@ -50,28 +50,37 @@ describe('buildProductWhere composition facets', () => {
   it('hub PLP filters by productKind only (no category OR)', () => {
     const where = buildProductWhere({
       productKinds: ['BOUQUET'],
-      matchCategoryOrProductKind: false,
     });
     const and = (where.AND ?? []) as Array<Record<string, unknown>>;
     expect(and).toEqual(expect.arrayContaining([{ productKind: { in: ['BOUQUET'] } }]));
     expect(and.some((clause) => 'OR' in clause)).toBe(false);
   });
 
-  it('legacy OR mode still available for rare merchandising scopes', () => {
+  it('category ids and productKinds combine with AND (never OR)', () => {
     const where = buildProductWhere({
       catalogCategoryIds: ['cat-x'],
       productKinds: ['STEM'],
-      matchCategoryOrProductKind: true,
     });
     const and = (where.AND ?? []) as Array<Record<string, unknown>>;
     expect(and).toEqual(
       expect.arrayContaining([
-        {
-          OR: [
-            { catalogCategoryId: { in: ['cat-x'] } },
-            { productKind: { in: ['STEM'] } },
-          ],
-        },
+        { catalogCategoryId: { in: ['cat-x'] } },
+        { productKind: { in: ['STEM'] } },
+      ]),
+    );
+    expect(and.some((clause) => 'OR' in clause)).toBe(false);
+  });
+
+  it('includeProductIds restricts membership checks for placement', () => {
+    const where = buildProductWhere({
+      includeProductIds: ['prod-a'],
+      productKinds: ['BOUQUET'],
+    });
+    const and = (where.AND ?? []) as Array<Record<string, unknown>>;
+    expect(and).toEqual(
+      expect.arrayContaining([
+        { id: { in: ['prod-a'] } },
+        { productKind: { in: ['BOUQUET'] } },
       ]),
     );
   });

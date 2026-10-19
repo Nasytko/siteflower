@@ -104,6 +104,13 @@ export class AdminProductsController {
     return this.products.preview(id);
   }
 
+  /** Factual storefront placements for the product editor. */
+  @Get(':id/placement')
+  @RequirePermissions('CATALOG_READ')
+  placement(@Param('id', ParseUUIDPipe) id: string) {
+    return this.products.getPlacement(id);
+  }
+
   @Patch(':id')
   @RequirePermissions('CATALOG_UPDATE')
   update(

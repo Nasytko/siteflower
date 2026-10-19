@@ -66,6 +66,7 @@ export const adminEndpoints = {
   productDuplicate: (id: string) => `${ADMIN}/catalog/products/${id}/duplicate`,
   productEditor: (id: string) => `${ADMIN}/catalog/products/${id}/editor`,
   productPreview: (id: string) => `${ADMIN}/catalog/products/${id}/preview`,
+  productPlacement: (id: string) => `${ADMIN}/catalog/products/${id}/placement`,
   productVariants: (id: string) => `${ADMIN}/catalog/products/${id}/variants`,
   productComponents: (id: string) => `${ADMIN}/catalog/products/${id}/components`,
   productTaxonomies: (id: string) => `${ADMIN}/catalog/products/${id}/taxonomies`,

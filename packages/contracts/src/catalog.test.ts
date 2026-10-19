@@ -29,6 +29,7 @@ import {
   isCanonicalListingHub,
   isDominantFlowerType,
   productKindsForListingKind,
+  resolveCatalogCategoryIdForProductKind,
   resolveCategoryListingScope,
   resolveStoredCompositionKind,
   suggestVisualPaletteColorIds,
@@ -131,13 +132,65 @@ test('productKindsForListingKind and canonical hubs', () => {
   assert.equal(isCanonicalListingHub({ slug: 'otkrytki', listingKind: 'GIFTS' }), false);
 });
 
+test('resolveCatalogCategoryIdForProductKind: non-gifts always get hub', () => {
+  for (const kind of ['BOUQUET', 'COMPOSITION', 'STEM'] as const) {
+    assert.equal(
+      resolveCatalogCategoryIdForProductKind({
+        productKind: kind,
+        requestedId: 'leaf-rozy',
+        hubId: 'hub-id',
+        requestedListingKind: 'BOUQUETS',
+      }),
+      'hub-id',
+    );
+    assert.equal(
+      resolveCatalogCategoryIdForProductKind({
+        productKind: kind,
+        requestedId: null,
+        hubId: 'hub-id',
+        requestedListingKind: null,
+      }),
+      'hub-id',
+    );
+  }
+});
+
+test('resolveCatalogCategoryIdForProductKind: gifts keep GIFTS subtype, reject floral', () => {
+  assert.equal(
+    resolveCatalogCategoryIdForProductKind({
+      productKind: 'GIFT',
+      requestedId: 'otkrytki',
+      hubId: 'podarki-hub',
+      requestedListingKind: 'GIFTS',
+    }),
+    'otkrytki',
+  );
+  assert.equal(
+    resolveCatalogCategoryIdForProductKind({
+      productKind: 'GIFT',
+      requestedId: 'bukety-leaf',
+      hubId: 'podarki-hub',
+      requestedListingKind: 'BOUQUETS',
+    }),
+    'podarki-hub',
+  );
+  assert.equal(
+    resolveCatalogCategoryIdForProductKind({
+      productKind: 'GIFT',
+      requestedId: null,
+      hubId: 'podarki-hub',
+      requestedListingKind: null,
+    }),
+    'podarki-hub',
+  );
+});
+
 test('resolveCategoryListingScope: hubs are productKind-only (no stale category OR)', () => {
   assert.deepEqual(
     resolveCategoryListingScope({ slug: 'bukety', parentId: null, listingKind: 'BOUQUETS' }),
     {
       useCategoryTree: false,
       productKinds: ['BOUQUET'],
-      matchCategoryOrProductKind: false,
     },
   );
   assert.deepEqual(
@@ -145,7 +198,6 @@ test('resolveCategoryListingScope: hubs are productKind-only (no stale category 
     {
       useCategoryTree: false,
       productKinds: ['STEM'],
-      matchCategoryOrProductKind: false,
     },
   );
   assert.deepEqual(
@@ -153,7 +205,6 @@ test('resolveCategoryListingScope: hubs are productKind-only (no stale category 
     {
       useCategoryTree: false,
       productKinds: ['GIFT'],
-      matchCategoryOrProductKind: false,
     },
   );
 });

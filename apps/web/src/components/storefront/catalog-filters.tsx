@@ -20,7 +20,6 @@ import { trackEvent } from '@/lib/analytics';
 import { PriceRangeFilter } from '@/components/storefront/price-range-filter';
 import {
   bouquetCountLabel,
-  catalogActiveFilterCount,
   catalogHasActiveFilters,
   catalogHref,
   SORT_OPTIONS,
@@ -258,167 +257,6 @@ function FiltersPanelBody({
   );
 }
 
-/** Mobile bottom sheet — draft applied on «Показать». */
-function FilterSheet({
-  controls,
-  state,
-  total,
-  onApply,
-}: {
-  controls: Control[];
-  state: CatalogSearchState;
-  total: number;
-  onApply: (next: CatalogSearchState) => void;
-}) {
-  const [open, setOpen] = useState(false);
-  const [draft, setDraft] = useState(state);
-  const triggerRef = useRef<HTMLButtonElement>(null);
-  const closeRef = useRef<HTMLButtonElement>(null);
-  const sheetId = useId();
-  const activeCount = catalogActiveFilterCount(state);
-
-  useEffect(() => {
-    setDraft(state);
-  }, [state]);
-
-  useEffect(() => {
-    if (!open) return;
-    setDraft(state);
-    closeRef.current?.focus();
-    const previousOverflow = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') setOpen(false);
-    };
-    window.addEventListener('keydown', onKey);
-    return () => {
-      document.body.style.overflow = previousOverflow;
-      window.removeEventListener('keydown', onKey);
-    };
-  }, [open, state]);
-
-  const draftCount = catalogActiveFilterCount(draft);
-
-  return (
-    <>
-      <button
-        ref={triggerRef}
-        type="button"
-        className="sf-filter-pill w-full justify-between"
-        data-active={activeCount > 0}
-        aria-expanded={open}
-        aria-controls={sheetId}
-        onClick={() => setOpen(true)}
-      >
-        <span className="font-semibold">Фильтры</span>
-        <span className="flex items-center gap-2">
-          {activeCount > 0 ? (
-            <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-brand px-1.5 text-[0.7rem] font-semibold text-brand-foreground">
-              {activeCount}
-            </span>
-          ) : null}
-          <ChevronIcon open={false} />
-        </span>
-      </button>
-
-      {open ? (
-        <div className="sf-sheet" id={sheetId}>
-          <button
-            type="button"
-            className="sf-sheet__backdrop"
-            aria-label="Закрыть фильтры"
-            onClick={() => setOpen(false)}
-          />
-          <div className="sf-sheet__panel" role="dialog" aria-modal="true" aria-label="Фильтры каталога">
-            <div className="sf-sheet__header flex items-center justify-between gap-3">
-              <div>
-                <p className="sf-h3">Фильтры</p>
-                <p className="sf-small text-muted">
-                  {draftCount > 0 ? `Выбрано: ${draftCount}` : 'Ничего не выбрано'}
-                </p>
-              </div>
-              <button
-                ref={closeRef}
-                type="button"
-                className="inline-flex h-11 w-11 items-center justify-center rounded-full hover:bg-brand-soft"
-                aria-label="Закрыть фильтры"
-                onClick={() => setOpen(false)}
-              >
-                <svg
-                  viewBox="0 0 24 24"
-                  className="h-5 w-5"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="1.8"
-                  aria-hidden
-                >
-                  <path d="M6 6 18 18M18 6 6 18" strokeLinecap="round" />
-                </svg>
-              </button>
-            </div>
-
-            <div className="sf-sheet__body">
-              {controls.map((control) => (
-                <section key={control.id} className="border-b border-border py-4 last:border-b-0">
-                  <p className="sf-h3 mb-2">{control.label}</p>
-                  <div className="max-h-64 overflow-y-auto pr-0.5">
-                    {control.options.map((option) => (
-                      <OptionRow
-                        key={option.value}
-                        option={option}
-                        checked={draft[control.dimension].includes(option.value)}
-                        onToggle={() =>
-                          setDraft((current) => ({
-                            ...current,
-                            [control.dimension]: toggleSlug(current[control.dimension], option.value),
-                            page: 1,
-                          }))
-                        }
-                      />
-                    ))}
-                  </div>
-                </section>
-              ))}
-            </div>
-
-            <div className="sf-sheet__footer flex items-center gap-3">
-              <button
-                type="button"
-                className="sf-cta-ghost flex-1"
-                onClick={() => {
-                  setDraft({
-                    ...draft,
-                    budgets: [],
-                    occasions: [],
-                    recipients: [],
-                    colors: [],
-                    flowers: [],
-                    minPriceMinor: undefined,
-                    maxPriceMinor: undefined,
-                  });
-                }}
-              >
-                Сбросить
-              </button>
-              <button
-                type="button"
-                className="sf-cta flex-[1.4]"
-                onClick={() => {
-                  onApply({ ...draft, page: 1 });
-                  setOpen(false);
-                  triggerRef.current?.focus();
-                }}
-              >
-                Показать {bouquetCountLabel(total)}
-              </button>
-            </div>
-          </div>
-        </div>
-      ) : null}
-    </>
-  );
-}
-
 function SortControl({
   state,
   onApply,
@@ -503,16 +341,10 @@ function SortControl({
 type Props = {
   state: CatalogSearchState;
   options: CatalogFilterOptions;
-  /** Applied result count — powers «Показать N букетов» on mobile. */
-  total: number;
-  /** `sidebar` for desktop sticky column; `mobile` for the sheet trigger. */
-  variant?: 'sidebar' | 'mobile';
 };
 
-/**
- * Desktop sidebar (`variant="sidebar"`) or mobile sheet trigger (`variant="mobile"`).
- */
-export function CatalogFilters({ state, options, total, variant = 'sidebar' }: Props) {
+/** Sticky sidebar accordion filters for `/bukety`. */
+export function CatalogFilters({ state, options }: Props) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const controls = useMemo(() => buildControls(options), [options]);
@@ -529,16 +361,12 @@ export function CatalogFilters({ state, options, total, variant = 'sidebar' }: P
 
   return (
     <div data-pending={pending ? 'true' : 'false'}>
-      {variant === 'mobile' ? (
-        <FilterSheet controls={controls} state={state} total={total} onApply={apply} />
-      ) : (
-        <FiltersPanelBody
-          controls={controls}
-          state={state}
-          onApply={apply}
-          priceBounds={priceBounds}
-        />
-      )}
+      <FiltersPanelBody
+        controls={controls}
+        state={state}
+        onApply={apply}
+        priceBounds={priceBounds}
+      />
     </div>
   );
 }
@@ -675,23 +503,6 @@ export function CatalogEmptyState({ state }: { state: CatalogSearchState }) {
         </Link>
       </div>
     </div>
-  );
-}
-
-/** Kept for callers that want a bare sort control (e.g. taxonomy landings). */
-export function CatalogSortSelect({ state }: { state: CatalogSearchState }) {
-  const router = useRouter();
-  const [, startTransition] = useTransition();
-
-  return (
-    <SortControl
-      state={state}
-      onApply={(next) => {
-        startTransition(() => {
-          router.push(catalogHref(next), { scroll: false });
-        });
-      }}
-    />
   );
 }
 

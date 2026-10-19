@@ -23,6 +23,14 @@ test('product editor path matches Nest atomic save controller', () => {
   assert.equal(adminEndpoints.productEditor(id), `/api/v1/admin/catalog/products/${id}/editor`);
 });
 
+test('product placement path matches Nest controller', () => {
+  const id = '11111111-1111-4111-8111-111111111111';
+  assert.equal(
+    adminEndpoints.productPlacement(id),
+    `/api/v1/admin/catalog/products/${id}/placement`,
+  );
+});
+
 test('product duplicate path matches Nest controller', () => {
   const id = '11111111-1111-4111-8111-111111111111';
   assert.equal(
