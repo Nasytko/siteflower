@@ -25,7 +25,8 @@ import {
 import type { OrderEventType, Prisma } from '@bouquet-one/database';
 import { createHash, randomUUID } from 'node:crypto';
 import { AuditService } from '../audit/audit.service';
-import { toPromotionRow } from '../catalog/catalog.mapper';
+import { toPromotionRow, type ProductWithRelations } from '../catalog/catalog.mapper';
+import { lockProductRows } from '../catalog/product-lock.util';
 import { ProductsRepository } from '../catalog/products.repository';
 import {
   effectiveVariantPriceMinor,
@@ -106,11 +107,10 @@ export class OrdersService {
   /**
    * Resolver snapshots server-side pricing for a fixed `now`, so promotion
    * effectiveness cannot drift between validation and order creation.
+   * `createOrder` builds this again inside the transaction, after product locks.
    */
-  private async buildResolver(lines: CheckoutCartLineInput[], now: Date) {
-    const productIds = [...new Set(lines.map((l) => l.productId))];
-    const loaded = await Promise.all(productIds.map((id) => this.products.findById(id)));
-    const byId = new Map(loaded.filter(Boolean).map((p) => [p!.id, p!]));
+  private resolverFromLoaded(loaded: ProductWithRelations[], now: Date) {
+    const byId = new Map(loaded.map((product) => [product.id, product]));
 
     return (productId: string, variantId: string): VariantPriceSource | null => {
       const product = byId.get(productId);
@@ -143,6 +143,29 @@ export class OrdersService {
           : null,
       };
     };
+  }
+
+  private async buildResolver(lines: CheckoutCartLineInput[], now: Date) {
+    const productIds = [...new Set(lines.map((l) => l.productId))];
+    const loaded = (await Promise.all(productIds.map((id) => this.products.findById(id)))).filter(
+      (product): product is ProductWithRelations => product !== null,
+    );
+    return this.resolverFromLoaded(loaded, now);
+  }
+
+  private async loadLockedProducts(
+    tx: Prisma.TransactionClient,
+    productIds: readonly string[],
+  ): Promise<ProductWithRelations[]> {
+    const locked = await lockProductRows(tx, productIds);
+    const lockedSet = new Set(locked);
+    const loaded: ProductWithRelations[] = [];
+    for (const productId of [...new Set(productIds)].sort()) {
+      if (!lockedSet.has(productId)) continue;
+      const product = await this.products.findById(productId, tx);
+      if (product) loaded.push(product);
+    }
+    return loaded;
   }
 
   async validateCart(dto: CheckoutValidateRequest): Promise<CheckoutValidateResponse> {
@@ -296,7 +319,6 @@ export class OrdersService {
 
     const deliveryFee =
       dto.fulfillmentType === 'DELIVERY' ? settings.deliveryFeeMinor : 0n;
-    const total = priced.subtotalMinor + deliveryFee;
     const trackingToken = generateTrackingToken();
     const trackingTokenHash = hashTrackingToken(trackingToken);
     const businessDate = businessDateString(now, tz);
@@ -308,6 +330,25 @@ export class OrdersService {
         if (raced) {
           return { kind: 'replay' as const, order: raced };
         }
+
+        // Product locks before the order-number sequence. Delete locks the same
+        // product row and only then recounts order items, so one of the two
+        // transactions waits and then observes the other's commit.
+        const productIds = [...new Set(dto.items.map((item) => item.productId))];
+        const loaded = await this.loadLockedProducts(tx, productIds);
+        const fresh = validateCartLines({
+          lines: dto.items,
+          resolve: this.resolverFromLoaded(loaded, now),
+          now,
+        });
+        if (!fresh.ok) {
+          throw new BadRequestException({
+            message: 'Корзина содержит недоступные товары',
+            error: 'CartValidationFailed',
+            issues: fresh.issues.filter((issue) => issue.code !== 'PRICE_CHANGED'),
+          });
+        }
+        const freshTotal = fresh.subtotalMinor + deliveryFee;
 
         // Allocate order number — row lock via upsert + update
         await tx.orderNumberSequence.upsert({
@@ -349,11 +390,11 @@ export class OrdersService {
             anonymousCard,
             customerComment,
             currency: 'BYN',
-            subtotalMinor: priced.subtotalMinor,
+            subtotalMinor: fresh.subtotalMinor,
             deliveryFeeMinor: deliveryFee,
-            totalMinor: total,
+            totalMinor: freshTotal,
             items: {
-              create: priced.items.map((item, index) => ({
+              create: fresh.items.map((item, index) => ({
                 sortOrder: index,
                 productId: item.productId,
                 variantId: item.variantId,
@@ -395,7 +436,7 @@ export class OrdersService {
             payload: buildStorefrontOrderCreatedV1({
               eventId,
               order: created,
-              items: priced.items.map((item) => ({
+              items: fresh.items.map((item) => ({
                 productId: item.productId,
                 variantId: item.variantId,
                 productName: item.productName,
@@ -439,7 +480,7 @@ export class OrdersService {
         });
 
         return { kind: 'created' as const, order: created };
-      });
+      }, { timeout: 15_000 });
 
       if (order.kind === 'replay') {
         return this.replayOrConflict(order.order, requestHash);

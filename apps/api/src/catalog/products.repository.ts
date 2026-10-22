@@ -8,6 +8,12 @@ import {
 import { PrismaService } from '../database/prisma.service';
 import { PRODUCT_INCLUDE, type ProductWithRelations } from './catalog.mapper';
 import {
+  planVariantSync,
+  VariantSyncError,
+  type VariantSyncIncoming,
+  type VariantSyncPlan,
+} from './product-editor.util';
+import {
   buildPublicPromotionDto,
   effectiveVariantPriceMinor,
   type PromotionRow,
@@ -462,62 +468,60 @@ export class ProductsRepository {
     return found !== null;
   }
 
+  /**
+   * Upsert variants by identity. `replace` drops rows the caller did not claim
+   * (legacy PUT /variants). `keep-unmentioned` leaves hidden rows in place
+   * (product editor).
+   */
   async replaceVariants(
     productId: string,
-    variants: Array<{
-      name: string;
-      priceMinor: bigint;
-      sortOrder: number;
-      status: 'ACTIVE' | 'INACTIVE';
-    }>,
+    variants: VariantSyncIncoming[],
     tx: Prisma.TransactionClient,
+    mode: 'keep-unmentioned' | 'replace' = 'replace',
   ): Promise<void> {
-    await this.replaceVariantsReturning(productId, variants, tx);
+    const existing = await tx.productVariant.findMany({
+      where: { productId },
+      select: { id: true, sortOrder: true },
+    });
+    const plan = planVariantSync(existing, variants, mode);
+    await this.applyVariantPlan(productId, plan, tx);
   }
 
-  /**
-   * Delete-all + recreate variants. Returns created rows carrying optional
-   * `salePriceMinor` from the same input object used to create each row.
-   */
-  async replaceVariantsReturning(
+  async applyVariantPlan(
     productId: string,
-    variants: Array<{
-      name: string;
-      priceMinor: bigint;
-      sortOrder: number;
-      status: 'ACTIVE' | 'INACTIVE';
-      salePriceMinor?: string | null;
-    }>,
+    plan: VariantSyncPlan,
     tx: Prisma.TransactionClient,
-  ): Promise<
-    Array<{
-      id: string;
-      priceMinor: bigint;
-      status: 'ACTIVE' | 'INACTIVE';
-      salePriceMinor?: string | null;
-    }>
-  > {
-    await tx.productVariant.deleteMany({ where: { productId } });
-    const created: Array<{
-      id: string;
-      priceMinor: bigint;
-      status: 'ACTIVE' | 'INACTIVE';
-      salePriceMinor?: string | null;
-    }> = [];
-    for (const variant of variants) {
-      const { salePriceMinor, ...data } = variant;
-      const row = await tx.productVariant.create({
-        data: { ...data, productId },
-        select: { id: true, priceMinor: true, status: true },
+  ): Promise<void> {
+    for (const row of plan.updates) {
+      const updated = await tx.productVariant.updateMany({
+        where: { id: row.id, productId },
+        data: {
+          name: row.name,
+          priceMinor: row.priceMinor,
+          sortOrder: row.sortOrder,
+          status: row.status,
+        },
       });
-      created.push({
-        id: row.id,
-        priceMinor: row.priceMinor,
-        status: row.status as 'ACTIVE' | 'INACTIVE',
-        salePriceMinor,
+      if (updated.count !== 1) {
+        throw new VariantSyncError('FOREIGN_VARIANT');
+      }
+    }
+    for (const row of plan.creates) {
+      await tx.productVariant.create({
+        data: {
+          productId,
+          name: row.name,
+          priceMinor: row.priceMinor,
+          sortOrder: row.sortOrder,
+          status: row.status,
+        },
       });
     }
-    return created;
+    if (plan.deleteIds.length > 0) {
+      await tx.productVariant.deleteMany({
+        where: { productId, id: { in: plan.deleteIds } },
+      });
+    }
   }
 
   async replaceComponents(

@@ -4,10 +4,8 @@ import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   analyzeProductSeo,
-  applyPercentOff,
   defaultProductSeoDescription,
   defaultProductSeoTitle,
-  formatPriceFromMinor,
   isPlaceholderProductName,
   normalizeSlug,
   deriveProductEditorReadiness,
@@ -21,7 +19,6 @@ import {
   type ProductAdminDto,
   type ProductDeleteImpactDto,
   type ProductKind,
-  type PromotionType,
   DEFAULT_PRODUCT_VARIANT_NAME,
 } from '@bouquet-one/contracts';
 import type { CategoryPickerOption } from '@/lib/admin-catalog-picker-labels';
@@ -87,9 +84,7 @@ type Props = {
     recipients: PickerOption[];
     colors: Array<PickerOption & { swatch?: string | null }>;
     categories: CategoryPickerOption[];
-    families: Array<{ id: string; name: string }>;
   };
-  bestsellerGroups: PickerOption[];
   canUpdate: boolean;
   canCreate: boolean;
   canPublish: boolean;
@@ -107,37 +102,14 @@ const READINESS_SECTION: Record<string, string> = {
   slug: 'seo',
 };
 
-type PromotionDraft = {
-  enabled: boolean;
-  type: PromotionType;
-  percentOff: string;
-  startsAt: string;
-  endsAt: string;
-};
-
 function familyMemberSortOrderFor(product: ProductAdminDto): number | undefined {
   return product.family?.members.find((member) => member.productId === product.id)?.sortOrder;
-}
-
-function toPromotionDraft(product: ProductAdminDto): PromotionDraft {
-  const promotion = product.promotion;
-  return {
-    enabled: promotion?.enabled ?? false,
-    type: promotion?.type ?? 'PERCENT',
-    percentOff:
-      promotion?.percentOff === null || promotion?.percentOff === undefined
-        ? ''
-        : String(promotion.percentOff),
-    startsAt: toDateTimeLocalValue(promotion?.startsAt ?? null),
-    endsAt: toDateTimeLocalValue(promotion?.endsAt ?? null),
-  };
 }
 
 export function ProductEditor({
   product,
   justCreated = false,
   options,
-  bestsellerGroups: _bestsellerGroups,
   canUpdate,
   canCreate,
   canPublish,
@@ -196,21 +168,9 @@ export function ProductEditor({
     colors: options.colors,
   });
   const [familyId, setFamilyId] = useState(product.family?.id ?? '');
-  const [, setFamilyPanelOpen] = useState(
-    () => Boolean(product.family?.id) || (product.family?.members?.length ?? 0) > 0,
-  );
   const [familyMemberSortOrder, setFamilyMemberSortOrder] = useState<number | undefined>(() =>
     familyMemberSortOrderFor(product),
   );
-  const [familyOptions, setFamilyOptions] = useState(options.families);
-  const [newFamilyName, setNewFamilyName] = useState('');
-  const [, setCreatingFamily] = useState(false);
-  const [, setAddingFamilyProduct] = useState(false);
-  const [familyReorderPending, setFamilyReorderPending] = useState(false);
-
-  useEffect(() => {
-    setFamilyOptions(options.families);
-  }, [options.families]);
 
   useEffect(() => {
     setTaxonomyOptions({
@@ -248,8 +208,6 @@ export function ProductEditor({
     Array<{ key: string; name: string; description: string | null }>
   >([]);
   const needsComposition = productKindNeedsComposition(productKind);
-  const [promotion, setPromotion] = useState<PromotionDraft>(() => toPromotionDraft(product));
-  const [, setGroupIds] = useState<string[]>(product.bestsellerGroupIds);
   const [seo, setSeo] = useState({
     seoTitle: product.seoTitle ?? '',
     seoDescription: product.seoDescription ?? '',
@@ -290,7 +248,6 @@ export function ProductEditor({
     setCompositionPrecision(updated.compositionPrecision ?? 'UNKNOWN');
     setCatalogCategoryId(updated.catalogCategoryId ?? '');
     setFamilyId(updated.family?.id ?? '');
-    if (updated.family?.id) setFamilyPanelOpen(true);
     setFamilyMemberSortOrder(familyMemberSortOrderFor(updated));
     setVariants(toVariantDrafts(updated));
     setComponents(toComponentDrafts(updated));
@@ -300,8 +257,6 @@ export function ProductEditor({
       colorIds: updated.colors.map((item) => item.id),
       traitKeys: updated.traitKeys ?? [],
     });
-    setPromotion(toPromotionDraft(updated));
-    setGroupIds(updated.bestsellerGroupIds);
     setSeo({
       seoTitle: updated.seoTitle ?? '',
       seoDescription: updated.seoDescription ?? '',
@@ -324,7 +279,6 @@ export function ProductEditor({
     }
   }
 
-  const activeVariants = variants.filter((variant) => variant.status === 'ACTIVE');
   const hasPrimaryImage = server.media.some((item) => item.isPrimary);
 
   const readiness = useMemo(
@@ -536,45 +490,6 @@ export function ProductEditor({
     return [...server.family.members].sort((a, b) => a.sortOrder - b.sortOrder);
   }, [server.family]);
 
-  const _promotionPreview = useMemo(() => {
-    if (!promotion.enabled) return [];
-    return activeVariants.map((variant) => {
-      const regularMinor = majorInputToMinor(variant.priceMajor);
-      if (regularMinor === null) {
-        return { key: variant.key, name: variant.name, regular: '—', sale: '—', note: 'Проверьте цену' };
-      }
-      const regular = formatPriceFromMinor(regularMinor, server.currency);
-      if (promotion.type === 'PERCENT') {
-        const percent = Number(promotion.percentOff);
-        if (!Number.isInteger(percent) || percent < 1 || percent > 99) {
-          return { key: variant.key, name: variant.name, regular, sale: '—', note: 'Укажите скидку 1–99%' };
-        }
-        const saleMinor = applyPercentOff(BigInt(regularMinor), percent);
-        return {
-          key: variant.key,
-          name: variant.name,
-          regular,
-          sale: formatPriceFromMinor(saleMinor.toString(), server.currency),
-          note: null as string | null,
-        };
-      }
-      const saleMinor = majorInputToMinor(variant.salePriceMajor);
-      if (saleMinor === null) {
-        return { key: variant.key, name: variant.name, regular, sale: '—', note: 'Укажите цену по акции' };
-      }
-      return {
-        key: variant.key,
-        name: variant.name,
-        regular,
-        sale: formatPriceFromMinor(saleMinor, server.currency),
-        note:
-          BigInt(saleMinor) >= BigInt(regularMinor)
-            ? 'Цена по акции должна быть ниже обычной'
-            : null,
-      };
-    });
-  }, [promotion, activeVariants, server.currency]);
-
   const seoHealth = useMemo(() => {
     const titleManual = seo.seoTitle.trim();
     const descriptionManual = seo.seoDescription.trim();
@@ -670,33 +585,6 @@ export function ProductEditor({
         }
       }
     }
-    if (promotion.enabled && promotion.type === 'PERCENT') {
-      const percent = Number(promotion.percentOff);
-      if (!Number.isInteger(percent) || percent < 1 || percent > 99) {
-        return 'Скидка должна быть целым числом от 1 до 99%';
-      }
-    }
-    if (!promotion.enabled && promotion.type === 'PERCENT' && promotion.percentOff.trim() !== '') {
-      const percent = Number(promotion.percentOff);
-      if (!Number.isInteger(percent) || percent < 1 || percent > 99) {
-        return 'Скидка должна быть целым числом от 1 до 99%';
-      }
-    }
-    if (promotion.enabled) {
-      if (promotion.type === 'FIXED') {
-        for (const variant of activeVariants) {
-          const sale = majorInputToMinor(variant.salePriceMajor);
-          const regular = majorInputToMinor(variant.priceMajor);
-          if (sale === null) return `Укажите цену по акции для «${variant.name}»`;
-          if (regular !== null && BigInt(sale) >= BigInt(regular)) {
-            return `Цена по акции для «${variant.name}» должна быть ниже обычной`;
-          }
-        }
-      }
-      if (promotion.startsAt && promotion.endsAt && promotion.startsAt >= promotion.endsAt) {
-        return 'Начало акции должно быть раньше окончания';
-      }
-    }
     return null;
   }
 
@@ -716,18 +604,6 @@ export function ProductEditor({
     setSavedAt(null);
     setSavePhase('saving');
     try {
-      const percentValue = Number(promotion.percentOff);
-      const hasValidPercent =
-        Number.isInteger(percentValue) && percentValue >= 1 && percentValue <= 99;
-      const promotionType: PromotionType =
-        promotion.type === 'PERCENT' && (promotion.enabled || hasValidPercent)
-          ? 'PERCENT'
-          : promotion.type === 'FIXED'
-            ? 'FIXED'
-            : hasValidPercent
-              ? 'PERCENT'
-              : 'FIXED';
-
       const current = await adminPut<ProductAdminDto>(adminEndpoints.productEditor(server.id), {
         expectedVersion: version,
         name: basic.name.trim(),
@@ -748,18 +624,12 @@ export function ProductEditor({
           const trimmedName = variant.name.trim();
           const fallbackName =
             variants.length === 1 ? DEFAULT_PRODUCT_VARIANT_NAME : `Размер ${index + 1}`;
-          const existingSale = server.promotion?.variantSalePrices?.find(
-            (row) => row.variantId === variant.id,
-          )?.salePriceMinor;
           return {
+            ...(variant.id ? { id: variant.id } : {}),
             name: trimmedName || fallbackName,
             priceMinor: majorInputToMinor(variant.priceMajor) ?? '0',
             sortOrder: index,
             status: variant.status,
-            salePriceMinor:
-              promotion.enabled && promotionType === 'FIXED' && variant.status === 'ACTIVE'
-                ? (majorInputToMinor(variant.salePriceMajor) ?? existingSale ?? null)
-                : null,
           };
         }),
         components: needsComposition
@@ -777,14 +647,6 @@ export function ProductEditor({
         recipientIds: discovery.recipientIds,
         colorIds: discovery.colorIds,
         traitKeys: discovery.traitKeys,
-        promotion: {
-          enabled: server.promotion?.enabled ?? false,
-          type: server.promotion?.type ?? promotionType,
-          percentOff: server.promotion?.percentOff ?? (promotionType === 'PERCENT' ? percentValue : null),
-          startsAt: server.promotion?.startsAt ?? null,
-          endsAt: server.promotion?.endsAt ?? null,
-        },
-        groupIds: server.bestsellerGroupIds,
         // Non-gifts: null → server assigns canonical hub. Gifts: subtype or null → gifts hub.
         catalogCategoryId: productKindNeedsGiftSubtype(productKind)
           ? catalogCategoryId || null
@@ -1050,125 +912,6 @@ export function ProductEditor({
       setError(errorMessage(err, 'Не удалось удалить фото'));
     } finally {
       setMediaPending(false);
-    }
-  }
-
-  async function _onCreateFamily() {
-    if (!canUpdate) return;
-    const name = newFamilyName.trim();
-    if (name.length === 0) return;
-    setCreatingFamily(true);
-    setError(null);
-    try {
-      const created = await adminPost<{ id: string; name: string }>(adminEndpoints.productFamilies, {
-        name,
-      });
-      setFamilyOptions((prev) => {
-        if (prev.some((row) => row.id === created.id)) return prev;
-        return [...prev, { id: created.id, name: created.name }].sort((a, b) =>
-          a.name.localeCompare(b.name, 'ru'),
-        );
-      });
-      setFamilyId(created.id);
-      setFamilyMemberSortOrder(0);
-      setNewFamilyName('');
-      touch();
-    } catch (err) {
-      setError(errorMessage(err, 'Не удалось создать линейку'));
-    } finally {
-      setCreatingFamily(false);
-    }
-  }
-
-  async function _onAddProductToLine() {
-    if (!canUpdate || !familyId) return;
-    if (dirty) {
-      setError('Сначала сохраните изменения текущего товара, затем добавьте карточку в линейку.');
-      return;
-    }
-    const lineName =
-      familyOptions.find((row) => row.id === familyId)?.name ?? server.family?.name ?? 'Линейка';
-    setAddingFamilyProduct(true);
-    setError(null);
-    try {
-      const created = await adminPost<ProductAdminDto>(adminEndpoints.products, {
-        name: `${lineName} — новая карточка`,
-      });
-      const sortedVariants = [...created.variants].sort((a, b) => a.sortOrder - b.sortOrder);
-      await adminPut<ProductAdminDto>(adminEndpoints.productEditor(created.id), {
-        expectedVersion: created.version,
-        name: created.name,
-        slug: created.slug,
-        shortDescription: created.shortDescription,
-        description: created.description,
-        heightCm: created.heightCm,
-        productKind: created.productKind ?? productKind,
-        compositionPrecision: created.compositionPrecision ?? 'UNKNOWN',
-        availability: created.availability,
-        publishAt: null,
-        unpublishAt: null,
-        seoTitle: created.seoTitle,
-        seoDescription: created.seoDescription,
-        noIndex: created.noIndex,
-        variants: (sortedVariants.length > 0
-          ? sortedVariants
-          : [{ name: DEFAULT_PRODUCT_VARIANT_NAME, priceMinor: '0', sortOrder: 0, status: 'ACTIVE' }]
-        ).map((variant, index) => ({
-          name: variant.name,
-          priceMinor: variant.priceMinor,
-          sortOrder: variant.sortOrder ?? index,
-          status: variant.status,
-          salePriceMinor: null,
-        })),
-        components: [],
-        occasionIds: [],
-        recipientIds: [],
-        colorIds: [],
-        promotion: {
-          enabled: false,
-          type: 'PERCENT',
-          percentOff: null,
-          startsAt: null,
-          endsAt: null,
-        },
-        groupIds: [],
-        catalogCategoryId: null,
-        familyId,
-        familyMemberSortOrder: familyMembers.length,
-      });
-      router.push(`/admin/catalog/products/${created.id}?created=1`);
-    } catch (err) {
-      setError(errorMessage(err, 'Не удалось добавить карточку в линейку'));
-    } finally {
-      setAddingFamilyProduct(false);
-    }
-  }
-
-  async function _reorderFamilyMember(productId: string, direction: -1 | 1) {
-    if (!canUpdate || !server.family || familyReorderPending) return;
-    const ordered = [...familyMembers];
-    const index = ordered.findIndex((member) => member.productId === productId);
-    const target = index + direction;
-    if (index < 0 || target < 0 || target >= ordered.length) return;
-    const next = [...ordered];
-    const [moved] = next.splice(index, 1);
-    next.splice(target, 0, moved!);
-
-    setFamilyReorderPending(true);
-    setError(null);
-    try {
-      await adminPut(adminEndpoints.productFamilyMembersOrder(server.family.id), {
-        orderedProductIds: next.map((member) => member.productId),
-      });
-      const fresh = await adminGet<ProductAdminDto>(adminEndpoints.product(server.id));
-      setServer(fresh);
-      setVersion(fresh.version);
-      setFamilyMemberSortOrder(familyMemberSortOrderFor(fresh));
-      router.refresh();
-    } catch (err) {
-      setError(errorMessage(err, 'Не удалось изменить порядок в семействе'));
-    } finally {
-      setFamilyReorderPending(false);
     }
   }
 
@@ -1699,7 +1442,7 @@ export function ProductEditor({
           setServer(updated);
           setVersion(updated.version);
           setFamilyId(updated.family?.id ?? '');
-          if (updated.family?.id) setFamilyPanelOpen(true);
+          setFamilyMemberSortOrder(familyMemberSortOrderFor(updated));
           router.refresh();
         }}
       />

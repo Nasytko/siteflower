@@ -1,5 +1,8 @@
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import path from 'node:path';
 import test from 'node:test';
+import { fileURLToPath } from 'node:url';
 import {
   buildBestsellerGroupProductsBody,
   buildProductAvailabilityPatchBody,
@@ -148,4 +151,20 @@ test('withQuery joins string arrays for Nest toStringList', () => {
     bestsellerGroupIds: ['aaa', 'bbb'],
   });
   assert.equal(url, '/api/v1/admin/catalog/products?bestsellerGroupIds=aaa%2Cbbb');
+});
+
+test('product editor save posts variant ids and omits promotions and collections', () => {
+  const file = path.join(
+    path.dirname(fileURLToPath(import.meta.url)),
+    '../components/admin/product-editor.tsx',
+  );
+  const source = readFileSync(file, 'utf8');
+  const start = source.indexOf('async function onSave');
+  const end = source.indexOf('resync(current)', start);
+  assert.ok(start > 0 && end > start);
+  const body = source.slice(start, end);
+  assert.match(body, /variant\.id/);
+  assert.equal(body.includes('groupIds'), false);
+  assert.equal(body.includes('promotion:'), false);
+  assert.equal(body.includes('salePriceMinor'), false);
 });

@@ -70,6 +70,15 @@ export class ExpectedVersionDto {
 }
 
 export class ProductVariantInputDto {
+  /**
+   * Existing variant of this product. Omitted for a new row.
+   * The server rejects an id that does not belong to the product.
+   */
+  @IsOptional()
+  @ValidateIf((_, value) => value !== null && value !== undefined && value !== '')
+  @IsUUID()
+  id?: string | null;
+
   @IsString()
   @MinLength(1)
   @MaxLength(120)
@@ -91,9 +100,8 @@ export class ProductVariantInputDto {
 }
 
 /**
- * Editor variant row: FIXED sale price is bound to this object (not a separate
- * variantId list). Server creates the variant then attaches salePriceMinor to the
- * new id inside the same transaction.
+ * Editor variant row. `id` is the stable identity. `salePriceMinor` is accepted
+ * from older clients and ignored: sale prices belong to the promotions module.
  */
 export class EditorVariantInputDto extends ProductVariantInputDto {
   @IsOptional()
@@ -275,14 +283,24 @@ export class SaveProductEditorDto extends ExpectedVersionDto {
   @IsString({ each: true })
   traitKeys?: string[];
 
+  /**
+   * Accepted for older clients. Product save does not write ProductPromotion;
+   * promotions are changed only through the promotions module.
+   */
+  @IsOptional()
   @ValidateNested()
   @Type(() => EditorPromotionInputDto)
-  promotion!: EditorPromotionInputDto;
+  promotion?: EditorPromotionInputDto;
 
+  /**
+   * Accepted for older clients. Product save does not write BestsellerGroup
+   * membership; collections are changed only through the bestsellers module.
+   */
+  @IsOptional()
   @IsArray()
   @ArrayMaxSize(20)
   @IsUUID(undefined, { each: true })
-  groupIds!: string[];
+  groupIds?: string[];
 }
 
 export class ProductComponentInputDto {

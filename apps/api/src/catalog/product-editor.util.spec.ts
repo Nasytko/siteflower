@@ -1,7 +1,9 @@
 import assert from 'node:assert/strict';
 import {
   collectFixedSalePricesFromCreatedVariants,
+  planVariantSync,
   resolveEditorPromotionType,
+  VariantSyncError,
 } from './product-editor.util';
 
 describe('product-editor.util', () => {
@@ -56,6 +58,169 @@ describe('product-editor.util', () => {
       expect(
         resolveEditorPromotionType({ enabled: true, type: 'FIXED', percentOff: null }),
       ).toBe('FIXED');
+    });
+  });
+
+  describe('planVariantSync', () => {
+    const existing = [
+      { id: 'variant-a', sortOrder: 0 },
+      { id: 'variant-b', sortOrder: 1 },
+      { id: 'variant-hidden', sortOrder: 2 },
+    ];
+
+    it('keeps ids when name and price change', () => {
+      const plan = planVariantSync(
+        existing,
+        [
+          {
+            id: 'variant-a',
+            name: 'Стандарт',
+            priceMinor: 9900n,
+            sortOrder: 0,
+            status: 'ACTIVE',
+          },
+          {
+            id: 'variant-b',
+            name: 'Большой',
+            priceMinor: 14900n,
+            sortOrder: 1,
+            status: 'ACTIVE',
+          },
+          {
+            id: 'variant-hidden',
+            name: 'Скрытый',
+            priceMinor: 5000n,
+            sortOrder: 2,
+            status: 'INACTIVE',
+          },
+        ],
+        'keep-unmentioned',
+      );
+      expect(plan.creates).toEqual([]);
+      expect(plan.deleteIds).toEqual([]);
+      expect(plan.updates.map((row) => [row.id, row.name, row.priceMinor])).toEqual([
+        ['variant-a', 'Стандарт', 9900n],
+        ['variant-b', 'Большой', 14900n],
+        ['variant-hidden', 'Скрытый', 5000n],
+      ]);
+    });
+
+    it('keeps variants the simplified editor did not send', () => {
+      const plan = planVariantSync(
+        existing,
+        [
+          {
+            id: 'variant-a',
+            name: 'Стандарт',
+            priceMinor: 11000n,
+            sortOrder: 0,
+            status: 'ACTIVE',
+          },
+        ],
+        'keep-unmentioned',
+      );
+      expect(plan.updates).toEqual([
+        {
+          id: 'variant-a',
+          name: 'Стандарт',
+          priceMinor: 11000n,
+          sortOrder: 0,
+          status: 'ACTIVE',
+        },
+      ]);
+      expect(plan.creates).toEqual([]);
+      expect(plan.deleteIds).toEqual([]);
+    });
+
+    it('binds one id-less row onto the single existing variant', () => {
+      const plan = planVariantSync(
+        [{ id: 'default-id', sortOrder: 0 }],
+        [{ name: 'S', priceMinor: 9900n, sortOrder: 0, status: 'ACTIVE' }],
+        'replace',
+      );
+      expect(plan.updates.map((row) => row.id)).toEqual(['default-id']);
+      expect(plan.creates).toEqual([]);
+      expect(plan.deleteIds).toEqual([]);
+    });
+
+    it('updates the first unmatched row and creates only the surplus', () => {
+      const plan = planVariantSync(
+        [{ id: 'default-id', sortOrder: 0 }],
+        [
+          { name: 'S', priceMinor: 9900n, sortOrder: 0, status: 'ACTIVE' },
+          { name: 'L', priceMinor: 14900n, sortOrder: 1, status: 'ACTIVE' },
+        ],
+        'replace',
+      );
+      expect(plan.updates.map((row) => row.id)).toEqual(['default-id']);
+      expect(plan.creates.map((row) => row.name)).toEqual(['L']);
+      expect(plan.deleteIds).toEqual([]);
+    });
+
+    it('drops unmentioned rows only in replace mode', () => {
+      const plan = planVariantSync(
+        existing,
+        [
+          {
+            id: 'variant-a',
+            name: 'S',
+            priceMinor: 100n,
+            sortOrder: 0,
+            status: 'ACTIVE',
+          },
+        ],
+        'replace',
+      );
+      expect(plan.deleteIds).toEqual(['variant-b', 'variant-hidden']);
+    });
+
+    it('rejects an id that does not belong to the product', () => {
+      expect(() =>
+        planVariantSync(
+          existing,
+          [
+            {
+              id: 'foreign-variant',
+              name: 'Чужой',
+              priceMinor: 100n,
+              sortOrder: 0,
+              status: 'ACTIVE',
+            },
+          ],
+          'keep-unmentioned',
+        ),
+      ).toThrow(VariantSyncError);
+      try {
+        planVariantSync(
+          existing,
+          [
+            {
+              id: 'foreign-variant',
+              name: 'Чужой',
+              priceMinor: 100n,
+              sortOrder: 0,
+              status: 'ACTIVE',
+            },
+          ],
+          'keep-unmentioned',
+        );
+      } catch (err) {
+        expect(err).toBeInstanceOf(VariantSyncError);
+        expect((err as VariantSyncError).code).toBe('FOREIGN_VARIANT');
+      }
+    });
+
+    it('rejects a repeated variant id', () => {
+      expect(() =>
+        planVariantSync(
+          existing,
+          [
+            { id: 'variant-a', name: 'A', priceMinor: 1n, sortOrder: 0, status: 'ACTIVE' },
+            { id: 'variant-a', name: 'A2', priceMinor: 2n, sortOrder: 1, status: 'ACTIVE' },
+          ],
+          'keep-unmentioned',
+        ),
+      ).toThrow(VariantSyncError);
     });
   });
 });

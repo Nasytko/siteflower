@@ -50,9 +50,11 @@ import { OCC_CONFLICT_MESSAGE, validatePublishRequirements } from './catalog.log
 import { toProductAdminDto, toProductListItemDto, toProductPublicDto } from './catalog.mapper';
 import { FlowerRefsService } from './flower-refs.service';
 import { ProductFamiliesService } from './product-families.service';
+import { lockProductRows } from './product-lock.util';
 import {
-  collectFixedSalePricesFromCreatedVariants,
-  resolveEditorPromotionType,
+  planVariantSync,
+  VariantSyncError,
+  type VariantSyncIncoming,
 } from './product-editor.util';
 import {
   allocateDuplicateSlug,
@@ -74,7 +76,7 @@ import type {
   UploadProductMediaDto,
 } from './products.dto';
 import { ProductsRepository } from './products.repository';
-import { mapPromotionPrismaError, PromotionsService } from './promotions.service';
+import { mapPromotionPrismaError } from './promotions.service';
 import {
   describeSeoLandingRules,
   flowerTypeSlugsFromRules,
@@ -116,7 +118,6 @@ export class ProductsService {
     private readonly categories: CatalogCategoriesService,
     private readonly flowerRefs: FlowerRefsService,
     private readonly families: ProductFamiliesService,
-    private readonly promotions: PromotionsService,
     private readonly media: MediaService,
     private readonly audit: AuditService,
     private readonly prisma: PrismaService,
@@ -559,10 +560,35 @@ export class ProductsService {
     return this.finishAdminMutation(id, options);
   }
 
+  private async syncProductVariants(
+    tx: Prisma.TransactionClient,
+    productId: string,
+    incoming: VariantSyncIncoming[],
+    mode: 'keep-unmentioned' | 'replace',
+  ): Promise<void> {
+    const existing = await tx.productVariant.findMany({
+      where: { productId },
+      select: { id: true, sortOrder: true },
+    });
+    try {
+      const plan = planVariantSync(existing, incoming, mode);
+      await this.products.applyVariantPlan(productId, plan, tx);
+    } catch (err) {
+      if (err instanceof VariantSyncError) {
+        throw new BadRequestException(
+          err.code === 'FOREIGN_VARIANT'
+            ? 'Вариант не принадлежит этому товару'
+            : 'Повторяющийся идентификатор варианта',
+        );
+      }
+      throw err;
+    }
+  }
+
   /**
    * Atomic product-editor save: one OCC check, one transaction, one version bump.
-   * FIXED promotion sale prices bind to each variant input object as it is created
-   * (no cross-request positional remapping).
+   * Variants are updated by id. Promotion and bestseller fields on the DTO are
+   * ignored so a stale card cannot overwrite those modules.
    */
   async saveEditor(
     id: string,
@@ -584,14 +610,6 @@ export class ProductsService {
         throw new ConflictException('Slug already in use');
       }
     }
-
-    const promotionType = resolveEditorPromotionType({
-      enabled: input.promotion.enabled,
-      type: input.promotion.type,
-      percentOff: input.promotion.percentOff ?? null,
-    });
-    const startsAt = input.promotion.startsAt ? new Date(input.promotion.startsAt) : null;
-    const endsAt = input.promotion.endsAt ? new Date(input.promotion.endsAt) : null;
 
     const previousFlowerItemIds = new Set(
       product.components.map((component) => component.flowerItemId),
@@ -660,44 +678,22 @@ export class ProductsService {
         await this.slugRedirects.record(tx, 'PRODUCT', product.slug, nextSlug);
       }
 
-      // Single OCC bump for the whole editor snapshot.
+      // Single OCC bump for the whole editor snapshot. The update locks the product
+      // row before variants are read, so a concurrent delete waits.
       await this.guardVersion(tx, id, input.expectedVersion, data);
 
-      const createdVariants = await this.products.replaceVariantsReturning(
+      await this.syncProductVariants(
+        tx,
         id,
         input.variants.map((variant, index) => ({
+          id: variant.id,
           name: variant.name.trim(),
           priceMinor: BigInt(variant.priceMinor),
           sortOrder: variant.sortOrder ?? index,
           status: variant.status ?? 'ACTIVE',
-          salePriceMinor: variant.salePriceMinor,
         })),
-        tx,
+        'keep-unmentioned',
       );
-
-      // salePriceMinor traveled with each create input → returned on the same object.
-      const variantSalePrices =
-        promotionType === 'FIXED'
-          ? collectFixedSalePricesFromCreatedVariants(
-              createdVariants.map((created) => ({
-                createdId: created.id,
-                status: created.status,
-                salePriceMinor: created.salePriceMinor,
-              })),
-            )
-          : [];
-
-      this.promotions.assertPromotionValid({
-        enabled: input.promotion.enabled,
-        type: promotionType,
-        percentOff: promotionType === 'PERCENT' ? (input.promotion.percentOff ?? null) : null,
-        startsAt,
-        endsAt,
-        variantSalePrices,
-        activeVariants: createdVariants
-          .filter((variant) => variant.status === 'ACTIVE')
-          .map((variant) => ({ id: variant.id, priceMinor: variant.priceMinor })),
-      });
 
       await this.products.replaceComponents(id, normalizedComposition.rows, tx);
 
@@ -707,17 +703,6 @@ export class ProductsService {
       if (input.traitKeys !== undefined) {
         await this.replaceTraitsByKeys(tx, id, input.traitKeys);
       }
-
-      await this.promotions.applyPromotionUpsertInTx(tx, id, {
-        enabled: input.promotion.enabled,
-        type: promotionType,
-        percentOff: promotionType === 'PERCENT' ? (input.promotion.percentOff ?? null) : null,
-        startsAt,
-        endsAt,
-        variantSalePrices,
-      });
-
-      await this.bestsellers.setGroupsForProduct(id, input.groupIds, tx);
 
       if (input.familyId !== undefined) {
         await this.families.setProductFamilyInTx(
@@ -733,8 +718,7 @@ export class ProductsService {
         fields: Object.keys(data),
         variants: input.variants.length,
         components: input.components.length,
-        promotionType,
-        groups: input.groupIds.length,
+        merchandising: 'unchanged',
         familyId: input.familyId === undefined ? undefined : input.familyId,
         ...(nextSlug !== product.slug ? { previousSlug: product.slug, slug: nextSlug } : {}),
       });
@@ -750,15 +734,17 @@ export class ProductsService {
   ): Promise<ProductAdminDto> {
     await this.prisma.client.$transaction(async (tx) => {
       await this.guardVersion(tx, id, input.expectedVersion);
-      await this.products.replaceVariants(
+      await this.syncProductVariants(
+        tx,
         id,
         input.variants.map((variant, index) => ({
+          id: variant.id,
           name: variant.name.trim(),
           priceMinor: BigInt(variant.priceMinor),
           sortOrder: variant.sortOrder ?? index,
           status: variant.status ?? 'ACTIVE',
         })),
-        tx,
+        'replace',
       );
       await this.recordAudit(tx, actor, 'PRODUCT_VARIANT_CHANGED', id, {
         count: input.variants.length,
@@ -996,25 +982,56 @@ export class ProductsService {
       });
     }
 
-    const slug = product.slug;
-    const mediaAssetIds = [...new Set(product.media.map((row) => row.mediaAssetId))];
+    let slug = product.slug;
 
-    await this.prisma.client.$transaction(async (tx) => {
-      await tx.product.delete({ where: { id } });
-      for (const mediaAssetId of mediaAssetIds) {
-        const productRefs = await tx.productMedia.count({ where: { mediaAssetId } });
-        const navRefs = await tx.navigationMenuItem.count({ where: { mediaAssetId } });
-        await tx.mediaAsset.update({
-          where: { id: mediaAssetId },
-          data: { orphanedAt: productRefs + navRefs === 0 ? new Date() : null },
+    await this.prisma.client.$transaction(
+      async (tx) => {
+        const locked = await lockProductRows(tx, [id]);
+        if (!locked.includes(id)) {
+          throw new NotFoundException('Product not found');
+        }
+        const current = await tx.product.findUnique({
+          where: { id },
+          include: { media: { select: { mediaAssetId: true } } },
         });
-      }
-      await this.recordAudit(tx, actor, 'PRODUCT_DELETED', id, {
-        name: product.name,
-        slug,
-        detached: impact.detachable.map((row) => row.code),
-      });
-    });
+        if (!current) {
+          throw new NotFoundException('Product not found');
+        }
+        if (current.version !== input.expectedVersion) {
+          throw new ConflictException('Товар изменён в другом окне');
+        }
+        if (input.confirmName.trim() !== current.name.trim()) {
+          throw new BadRequestException('Введите точное название товара для подтверждения удаления');
+        }
+        const orderItemsCount = await tx.orderItem.count({ where: { productId: id } });
+        if (orderItemsCount > 0) {
+          throw new BadRequestException({
+            message: 'У товара есть заказы. Удаление запрещено, история заказов сохраняется.',
+            error: 'CatalogDeleteBlocked',
+            code: 'HAS_ORDERS',
+            ordersCount: orderItemsCount,
+          });
+        }
+
+        slug = current.slug;
+        const mediaAssetIds = [...new Set(current.media.map((row) => row.mediaAssetId))];
+        await tx.product.delete({ where: { id } });
+        for (const mediaAssetId of mediaAssetIds) {
+          const productRefs = await tx.productMedia.count({ where: { mediaAssetId } });
+          const navRefs = await tx.navigationMenuItem.count({ where: { mediaAssetId } });
+          await tx.mediaAsset.update({
+            where: { id: mediaAssetId },
+            data: { orphanedAt: productRefs + navRefs === 0 ? new Date() : null },
+          });
+        }
+        await this.recordAudit(tx, actor, 'PRODUCT_DELETED', id, {
+          name: current.name,
+          slug,
+          detached: impact.detachable.map((row) => row.code),
+        });
+      },
+      { timeout: 15_000 },
+    );
 
     await this.bumpStorefrontCache(slug);
     return { deleted: true, id, slug };
