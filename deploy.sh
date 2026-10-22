@@ -12,13 +12,23 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=deploy/lib/common.sh
 source "${SCRIPT_DIR}/deploy/lib/common.sh"
+# shellcheck source=deploy/lib/nginx.sh
+source "${SCRIPT_DIR}/deploy/lib/nginx.sh"
+SHOPBUKET1_NGINX_LIB_LOADED=1
+# shellcheck source=deploy/lib/health.sh
+source "${SCRIPT_DIR}/deploy/lib/health.sh"
+
+# Compose file interpolates ${SHOPBUKET1_ENV_FILE}; always export the default path.
+export SHOPBUKET1_ENV_FILE="${SHOPBUKET1_ENV_FILE:-/etc/shopbuket1/production.env}"
 
 REF="${1:-}"
 NEW_API_IMAGE=""
 NEW_WEB_IMAGE=""
 PREV_API_IMAGE=""
 PREV_WEB_IMAGE=""
+# Set only after containers are about to be replaced (rollback applies then).
 DEPLOY_STARTED=0
+DEPLOY_INTERRUPTED=0
 
 rollback_app_images() {
   if [[ -z "${PREV_API_IMAGE:-}" || -z "${PREV_WEB_IMAGE:-}" ]]; then
@@ -35,16 +45,31 @@ rollback_app_images() {
 
 on_err() {
   local code=$?
+  if [[ "$DEPLOY_INTERRUPTED" -eq 1 ]]; then
+    exit "$code"
+  fi
   if [[ "$DEPLOY_STARTED" -eq 1 ]]; then
     log "Deploy failed (exit ${code}). Attempting application container rollback."
     log "Database migrations are NOT reverted automatically."
     rollback_app_images || true
   else
-    log "Deploy aborted early (exit ${code}) before image build/switch started."
+    log "Deploy aborted early (exit ${code}) before container switch — no image rollback."
   fi
   exit "$code"
 }
+
+on_interrupt() {
+  DEPLOY_INTERRUPTED=1
+  log "Deploy interrupted (SIGINT/SIGTERM). Lock will release on process exit."
+  if [[ "$DEPLOY_STARTED" -eq 1 ]]; then
+    log "Attempting application container rollback after interrupt."
+    rollback_app_images || true
+  fi
+  exit 130
+}
+
 trap on_err ERR
+trap on_interrupt INT TERM
 
 require_docker_access() {
   require_cmd docker
@@ -54,9 +79,6 @@ require_docker_access() {
 resolve_ref() {
   # Prints ONLY the commit SHA on stdout. All diagnostics go via log/die → stderr
   # so callers can safely use: rev="$(resolve_ref)"
-  #
-  # Important: git fetch/pull/checkout may print human messages on stdout
-  # (e.g. "Already up to date."). Those MUST NOT leak into the substitution.
   cd "$SCRIPT_DIR"
   require_cmd git
   if [[ -n "$REF" ]]; then
@@ -79,7 +101,6 @@ resolve_ref() {
       log "Fetching origin/${branch}"
       git fetch --tags --prune origin 1>&2
       if git show-ref --verify --quiet "refs/remotes/origin/${branch}"; then
-        # stdout → stderr: avoid contaminating rev="$(resolve_ref)"
         git pull --ff-only "origin" "$branch" 1>&2
       else
         log "No origin/${branch} remote-tracking branch — using local HEAD"
@@ -146,8 +167,6 @@ backup_before_migrate() {
 
 migrate() {
   log "Running prisma migrate deploy"
-  # API image is a pnpm deploy --prod tree: schema lives under the injected
-  # @bouquet-one/database package; prisma CLI is a production dependency.
   compose run --rm --no-deps \
     -e "DATABASE_URL=${DATABASE_URL}" \
     api \
@@ -164,23 +183,59 @@ bring_up() {
   fi
 }
 
-wait_healthy() {
-  # Containers may need a short warm-up; domain/Nginx/TLS mistakes never self-heal.
-  local i rc max_attempts="${SHOPBUKET1_HEALTH_ATTEMPTS:-36}"
-  log "Waiting for healthchecks (up to ${max_attempts} attempts, 5s apart)"
+# Static domain/Nginx checks before build/migrate (permanent failures only).
+preflight_storefront() {
+  log "Stage: preflight storefront (domain + Nginx site/HSTS/cert)"
+  local rc=0
+  run_healthcheck_mode preflight || rc=$?
+  if [[ "$rc" -ne 0 ]]; then
+    die "Preflight failed (exit ${rc}): ${HEALTH_LAST_REASON:-fix production.env / shopbuket1 Nginx site for ${SHOPBUKET1_CANONICAL_PUBLIC_HOST}}. No containers were switched."
+  fi
+  log "Preflight OK for ${SHOPBUKET1_CANONICAL_PUBLIC_HOST}"
+}
+
+# Wait until local containers answer (502/starting = retry).
+wait_startup_ready() {
+  local i rc max_attempts="${SHOPBUKET1_STARTUP_ATTEMPTS:-36}"
+  local sleep_s="${SHOPBUKET1_STARTUP_SLEEP_SECONDS:-5}"
+  log "Waiting for startup readiness (up to ${max_attempts}×${sleep_s}s)"
   for i in $(seq 1 "$max_attempts"); do
     rc=0
-    "$SCRIPT_DIR/healthcheck.sh" || rc=$?
+    SHOPBUKET1_HEALTH_QUIET=1 run_healthcheck_mode startup || rc=$?
     if [[ "$rc" -eq 0 ]]; then
+      log "Startup ready (attempt ${i}/${max_attempts})"
       return 0
     fi
     if [[ "$rc" -eq 2 ]]; then
-      die "Healthcheck failed with a non-retryable domain/Nginx/TLS error (attempt ${i}/${max_attempts}). Fix production.env and/or the shopbuket1 Nginx site for ${SHOPBUKET1_CANONICAL_PUBLIC_HOST:-buketnomer1.by}, then re-run ./deploy.sh. ERP was not modified."
+      die "Startup hit a permanent error (attempt ${i}): ${HEALTH_LAST_REASON:-unknown}"
     fi
-    log "Healthcheck attempt ${i}/${max_attempts} not ready yet (exit ${rc}); retrying in 5s"
-    sleep 5
+    log "Startup not ready yet (${i}/${max_attempts}): ${HEALTH_LAST_REASON:-containers warming}; retry in ${sleep_s}s"
+    sleep "$sleep_s"
   done
-  die "Healthchecks did not become ready in time (${max_attempts} attempts). See FAIL lines above."
+  # One verbose dump for diagnosis.
+  run_healthcheck_mode startup || true
+  die "Startup readiness timed out after ${max_attempts} attempts. Last: ${HEALTH_LAST_REASON:-unknown}. Check: docker logs shopbuket1-web --tail 80"
+}
+
+# Final public HTTPS/HSTS gate; short retry for residual 502 only.
+wait_production_healthy() {
+  local i rc max_attempts="${SHOPBUKET1_PRODUCTION_ATTEMPTS:-12}"
+  local sleep_s="${SHOPBUKET1_PRODUCTION_SLEEP_SECONDS:-5}"
+  log "Running production healthcheck (up to ${max_attempts}×${sleep_s}s)"
+  for i in $(seq 1 "$max_attempts"); do
+    rc=0
+    run_healthcheck_mode production || rc=$?
+    if [[ "$rc" -eq 0 ]]; then
+      log "Production healthcheck OK (attempt ${i}/${max_attempts})"
+      return 0
+    fi
+    if [[ "$rc" -eq 2 ]]; then
+      die "Production healthcheck permanent failure (attempt ${i}): ${HEALTH_LAST_REASON:-fix Nginx/HSTS/domain}. ERP was not modified."
+    fi
+    log "Production not ready yet (${i}/${max_attempts}): ${HEALTH_LAST_REASON:-transient}; retry in ${sleep_s}s"
+    sleep "$sleep_s"
+  done
+  die "Production healthcheck timed out after ${max_attempts} attempts. Last: ${HEALTH_LAST_REASON:-unknown}"
 }
 
 prune_old_shopbuket1_images() {
@@ -206,19 +261,21 @@ main() {
   [[ -f "$SHOPBUKET1_ENV_FILE" ]] || die "Missing $SHOPBUKET1_ENV_FILE — run sudo ./install.sh and edit secrets"
   log "Stage: validate production env ($SHOPBUKET1_ENV_FILE)"
   validate_production_env
+
+  # Catch wrong domain / missing HSTS / bad site file before build or migrate.
+  preflight_storefront
+
   log "Stage: remember previous release images"
   remember_previous_images
 
   local rev
   log "Stage: resolve git revision"
   rev="$(resolve_ref)"
-  # Defensive: strip CR and ensure a pure SHA even if a future git command regresses.
   rev="${rev//$'\r'/}"
   rev="$(printf '%s' "$rev" | tr -d '\n')"
   [[ "$rev" =~ ^[0-9a-f]{40}$ ]] || die "resolve_ref returned invalid revision: ${rev}"
   log "Deploying revision $rev"
   tag_images "$rev"
-  DEPLOY_STARTED=1
 
   log "Stage: build images"
   build_images
@@ -234,8 +291,11 @@ main() {
 
   backup_before_migrate
   migrate
+
+  DEPLOY_STARTED=1
   bring_up
-  wait_healthy
+  wait_startup_ready
+  wait_production_healthy
 
   write_release_metadata "$rev" "$NEW_API_IMAGE" "$NEW_WEB_IMAGE"
   prune_old_shopbuket1_images

@@ -53,15 +53,24 @@ EOF
   export SHOPBUKET1_WEB_IMAGE="$web_image"
   compose up -d api web
 
-  local i
+  local i rc
   for i in $(seq 1 40); do
-    if "$SCRIPT_DIR/healthcheck.sh"; then
-      if [[ -f "$SHOPBUKET1_CURRENT_FILE" ]]; then
-        cp -f "$SHOPBUKET1_CURRENT_FILE" "${SHOPBUKET1_STATE_DIR}/rolled-forward-from" || true
+    rc=0
+    "$SCRIPT_DIR/healthcheck.sh" --startup --quiet || rc=$?
+    if [[ "$rc" -eq 0 ]]; then
+      rc=0
+      "$SCRIPT_DIR/healthcheck.sh" --production || rc=$?
+      if [[ "$rc" -eq 0 ]]; then
+        if [[ -f "$SHOPBUKET1_CURRENT_FILE" ]]; then
+          cp -f "$SHOPBUKET1_CURRENT_FILE" "${SHOPBUKET1_STATE_DIR}/rolled-forward-from" || true
+        fi
+        printf '%s\n' "$meta_path" >"$SHOPBUKET1_CURRENT_FILE"
+        log "Rollback healthy for $rev"
+        exit 0
       fi
-      printf '%s\n' "$meta_path" >"$SHOPBUKET1_CURRENT_FILE"
-      log "Rollback healthy for $rev"
-      exit 0
+      if [[ "$rc" -eq 2 ]]; then
+        die "Rollback permanent healthcheck failure — inspect Nginx/domain for shopbuket1"
+      fi
     fi
     sleep 5
   done
