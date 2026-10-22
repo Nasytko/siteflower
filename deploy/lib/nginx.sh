@@ -11,6 +11,9 @@ SHOPBUKET1_NGINX_MAP_SRC="${SHOPBUKET1_NGINX_MAP_SRC:-deploy/nginx/shopbuket1-ma
 SHOPBUKET1_NGINX_MAP_DST="${SHOPBUKET1_NGINX_MAP_DST:-/etc/nginx/conf.d/shopbuket1-map.conf}"
 SHOPBUKET1_ACME_WEBROOT="${SHOPBUKET1_ACME_WEBROOT:-/var/www/html}"
 
+# Apex of the public shop. www is not implied and is not covered by HSTS.
+SHOPBUKET1_CANONICAL_PUBLIC_HOST="${SHOPBUKET1_CANONICAL_PUBLIC_HOST:-buketnomer1.by}"
+
 # Resolve hostname from PUBLIC_DOMAIN, else host of NEXT_PUBLIC_SITE_URL.
 # Prints domain only (no scheme/path/port). Empty if unset.
 resolve_public_domain() {
@@ -24,6 +27,25 @@ resolve_public_domain() {
   raw="${raw%%/*}"
   raw="${raw%%:*}"
   printf '%s\n' "$raw"
+}
+
+# Retired storefront host. It must not be the required healthcheck or server_name.
+is_retired_shop_host() {
+  local lower
+  lower="$(printf '%s' "${1:-}" | tr '[:upper:]' '[:lower:]')"
+  [[ "$lower" == "shop.nasytko.ru" ]]
+}
+
+# Host that healthcheck and Nginx provisioning must use.
+# A retired host in env is replaced by the canonical shop domain.
+resolve_required_storefront_domain() {
+  local domain
+  domain="$(resolve_public_domain)"
+  if is_retired_shop_host "$domain"; then
+    printf '%s\n' "$SHOPBUKET1_CANONICAL_PUBLIC_HOST"
+    return 0
+  fi
+  printf '%s\n' "$domain"
 }
 
 is_placeholder_domain() {
@@ -45,7 +67,7 @@ assert_valid_public_domain() {
   local d="${1:-}"
   [[ -n "$d" ]] || die "Public domain is empty (set PUBLIC_DOMAIN or NEXT_PUBLIC_SITE_URL)"
   if is_placeholder_domain "$d"; then
-    die "Public domain is a placeholder ($d). Set PUBLIC_DOMAIN or NEXT_PUBLIC_SITE_URL to a real FQDN (e.g. shop.nasytko.ru)"
+    die "Public domain is a placeholder ($d). Set PUBLIC_DOMAIN or NEXT_PUBLIC_SITE_URL to a real FQDN (e.g. ${SHOPBUKET1_CANONICAL_PUBLIC_HOST})"
   fi
   [[ "$d" =~ ^[A-Za-z0-9]([A-Za-z0-9.-]*[A-Za-z0-9])?$ ]] \
     || die "Invalid public domain hostname: $d"
@@ -102,8 +124,14 @@ validate_nginx_site_file() {
       return 1
     fi
     # HSTS belongs on the TLS vhost only (not the port-80 redirect server).
+    # includeSubDomains would also pin every child hostname; preload cannot be undone here.
     if ! grep -Eq 'Strict-Transport-Security' "$file"; then
       log "Nginx HTTPS site missing Strict-Transport-Security: $file"
+      return 1
+    fi
+    if grep -Ei 'add_header[[:space:]]+Strict-Transport-Security' "$file" \
+      | grep -Eqi 'includeSubDomains|preload'; then
+      log "Nginx HSTS must not set includeSubDomains or preload: $file"
       return 1
     fi
   fi
@@ -281,6 +309,11 @@ provision_nginx() {
   fi
 
   domain="$(resolve_public_domain)"
+  if is_retired_shop_host "$domain"; then
+    log "WARN: ${domain} is retired. Required storefront host is ${SHOPBUKET1_CANONICAL_PUBLIC_HOST}."
+    log "WARN: set NEXT_PUBLIC_SITE_URL, CORS_ORIGINS and PUBLIC_DOMAIN to https://${SHOPBUKET1_CANONICAL_PUBLIC_HOST} before provisioning."
+    domain="$SHOPBUKET1_CANONICAL_PUBLIC_HOST"
+  fi
 
   if is_placeholder_domain "$domain" || [[ -z "$domain" ]]; then
     if [[ "$mode" == "bootstrap" ]]; then

@@ -16,25 +16,31 @@ source "${ROOT}/deploy/lib/common.sh"
 source "${ROOT}/deploy/lib/nginx.sh"
 
 # --- resolve_public_domain ---
-PUBLIC_DOMAIN="shop.nasytko.ru"
+PUBLIC_DOMAIN="buketnomer1.by"
 NEXT_PUBLIC_SITE_URL="https://ignored.example"
-[[ "$(resolve_public_domain)" == "shop.nasytko.ru" ]] || fail "PUBLIC_DOMAIN should win"
+[[ "$(resolve_public_domain)" == "buketnomer1.by" ]] || fail "PUBLIC_DOMAIN should win"
 pass "PUBLIC_DOMAIN preferred over NEXT_PUBLIC_SITE_URL"
 
 unset PUBLIC_DOMAIN
-NEXT_PUBLIC_SITE_URL="https://shop.nasytko.ru/path"
-[[ "$(resolve_public_domain)" == "shop.nasytko.ru" ]] || fail "should strip scheme/path"
+NEXT_PUBLIC_SITE_URL="https://buketnomer1.by/path"
+[[ "$(resolve_public_domain)" == "buketnomer1.by" ]] || fail "should strip scheme/path"
 pass "NEXT_PUBLIC_SITE_URL host extraction"
 
-NEXT_PUBLIC_SITE_URL="http://shop.nasytko.ru:443/"
-[[ "$(resolve_public_domain)" == "shop.nasytko.ru" ]] || fail "should strip port"
+NEXT_PUBLIC_SITE_URL="http://buketnomer1.by:443/"
+[[ "$(resolve_public_domain)" == "buketnomer1.by" ]] || fail "should strip port"
 pass "port stripping"
 
 # --- placeholders ---
 is_placeholder_domain "YOUR_DOMAIN" || fail "YOUR_DOMAIN should be placeholder"
 is_placeholder_domain "your_domain" || fail "your_domain should be placeholder"
 is_placeholder_domain "_" || fail "_ should be placeholder"
-is_placeholder_domain "shop.nasytko.ru" && fail "shop.nasytko.ru must not be placeholder"
+is_placeholder_domain "buketnomer1.by" && fail "buketnomer1.by must not be placeholder"
+is_retired_shop_host "shop.nasytko.ru" || fail "shop.nasytko.ru must be retired"
+is_retired_shop_host "buketnomer1.by" && fail "canonical host must not be retired"
+PUBLIC_DOMAIN="shop.nasytko.ru"
+[[ "$(resolve_public_domain)" == "shop.nasytko.ru" ]] || fail "retired host remains readable from env"
+[[ "$(resolve_required_storefront_domain)" == "buketnomer1.by" ]] || fail "retired host must not be the required check"
+unset PUBLIC_DOMAIN
 pass "placeholder detection"
 
 # assert_valid_public_domain calls die→exit; run in subshell
@@ -43,8 +49,8 @@ if ( assert_valid_public_domain "YOUR_DOMAIN" ) 2>"$TMP/err"; then
 fi
 pass "assert rejects YOUR_DOMAIN"
 
-( assert_valid_public_domain "shop.nasytko.ru" ) || fail "assert should accept shop.nasytko.ru"
-pass "assert accepts shop.nasytko.ru"
+( assert_valid_public_domain "buketnomer1.by" ) || fail "assert should accept buketnomer1.by"
+pass "assert accepts buketnomer1.by"
 
 # --- validate_nginx_site_file ---
 cat >"$TMP/bad.conf" <<'EOF'
@@ -53,7 +59,7 @@ server {
   server_name YOUR_DOMAIN;
 }
 EOF
-if validate_nginx_site_file "$TMP/bad.conf" "shop.nasytko.ru" 0 2>"$TMP/err"; then
+if validate_nginx_site_file "$TMP/bad.conf" "buketnomer1.by" 0 2>"$TMP/err"; then
   fail "must reject YOUR_DOMAIN in site file"
 fi
 pass "detects YOUR_DOMAIN in site"
@@ -61,11 +67,11 @@ pass "detects YOUR_DOMAIN in site"
 cat >"$TMP/http.conf" <<'EOF'
 server {
   listen 80;
-  server_name shop.nasytko.ru;
+  server_name buketnomer1.by;
   include /etc/nginx/snippets/shopbuket1-proxy.conf;
 }
 EOF
-validate_nginx_site_file "$TMP/http.conf" "shop.nasytko.ru" 0 || fail "valid HTTP site rejected"
+validate_nginx_site_file "$TMP/http.conf" "buketnomer1.by" 0 || fail "valid HTTP site rejected"
 pass "accepts HTTP site with correct server_name"
 
 cat >"$TMP/wrong-name.conf" <<'EOF'
@@ -74,7 +80,7 @@ server {
   server_name other.example;
 }
 EOF
-if validate_nginx_site_file "$TMP/wrong-name.conf" "shop.nasytko.ru" 0 2>"$TMP/err"; then
+if validate_nginx_site_file "$TMP/wrong-name.conf" "buketnomer1.by" 0 2>"$TMP/err"; then
   fail "must reject wrong server_name"
 fi
 pass "detects wrong server_name"
@@ -82,57 +88,106 @@ pass "detects wrong server_name"
 cat >"$TMP/https.conf" <<'EOF'
 server {
   listen 80;
-  server_name shop.nasytko.ru;
+  server_name buketnomer1.by;
   location / { return 301 https://$host$request_uri; }
 }
 server {
   listen 443 ssl http2;
-  server_name shop.nasytko.ru;
-  ssl_certificate /etc/letsencrypt/live/shop.nasytko.ru/fullchain.pem;
-  ssl_certificate_key /etc/letsencrypt/live/shop.nasytko.ru/privkey.pem;
+  server_name buketnomer1.by;
+  ssl_certificate /etc/letsencrypt/live/buketnomer1.by/fullchain.pem;
+  ssl_certificate_key /etc/letsencrypt/live/buketnomer1.by/privkey.pem;
   add_header Strict-Transport-Security "max-age=31536000" always;
 }
 EOF
-validate_nginx_site_file "$TMP/https.conf" "shop.nasytko.ru" 1 || fail "valid HTTPS site rejected"
+validate_nginx_site_file "$TMP/https.conf" "buketnomer1.by" 1 || fail "valid HTTPS site rejected"
 pass "accepts HTTPS site with redirect + 443 + HSTS"
 
 cat >"$TMP/https-no-hsts.conf" <<'EOF'
 server {
   listen 80;
-  server_name shop.nasytko.ru;
+  server_name buketnomer1.by;
   location / { return 301 https://$host$request_uri; }
 }
 server {
   listen 443 ssl http2;
-  server_name shop.nasytko.ru;
-  ssl_certificate /etc/letsencrypt/live/shop.nasytko.ru/fullchain.pem;
-  ssl_certificate_key /etc/letsencrypt/live/shop.nasytko.ru/privkey.pem;
+  server_name buketnomer1.by;
+  ssl_certificate /etc/letsencrypt/live/buketnomer1.by/fullchain.pem;
+  ssl_certificate_key /etc/letsencrypt/live/buketnomer1.by/privkey.pem;
 }
 EOF
-if validate_nginx_site_file "$TMP/https-no-hsts.conf" "shop.nasytko.ru" 1 2>"$TMP/err"; then
+if validate_nginx_site_file "$TMP/https-no-hsts.conf" "buketnomer1.by" 1 2>"$TMP/err"; then
   fail "must reject HTTPS site without Strict-Transport-Security"
 fi
 pass "detects missing HSTS on TLS site"
 
+cat >"$TMP/https-hsts-broad.conf" <<'EOF'
+server {
+  listen 443 ssl http2;
+  server_name buketnomer1.by;
+  ssl_certificate /etc/letsencrypt/live/buketnomer1.by/fullchain.pem;
+  return 301 https://$host$request_uri;
+  add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
+}
+EOF
+if validate_nginx_site_file "$TMP/https-hsts-broad.conf" "buketnomer1.by" 1 2>"$TMP/err"; then
+  fail "must reject HSTS includeSubDomains"
+fi
+pass "rejects HSTS includeSubDomains and does not require it"
+
+cat >"$TMP/https-www.conf" <<'EOF'
+server {
+  listen 80;
+  server_name buketnomer1.by www.buketnomer1.by;
+  location / { return 301 https://$host$request_uri; }
+}
+server {
+  listen 443 ssl http2;
+  server_name buketnomer1.by www.buketnomer1.by;
+  ssl_certificate /etc/letsencrypt/live/buketnomer1.by/fullchain.pem;
+  add_header Strict-Transport-Security "max-age=31536000" always;
+}
+EOF
+validate_nginx_site_file "$TMP/https-www.conf" "buketnomer1.by" 1 \
+  || fail "apex plus www server_name should pass"
+pass "accepts optional www.buketnomer1.by beside the apex"
+
+cat >"$TMP/https-www-only.conf" <<'EOF'
+server {
+  listen 80;
+  server_name www.buketnomer1.by;
+  location / { return 301 https://$host$request_uri; }
+}
+server {
+  listen 443 ssl http2;
+  server_name www.buketnomer1.by;
+  ssl_certificate /etc/letsencrypt/live/buketnomer1.by/fullchain.pem;
+  add_header Strict-Transport-Security "max-age=31536000" always;
+}
+EOF
+if validate_nginx_site_file "$TMP/https-www-only.conf" "buketnomer1.by" 1 2>"$TMP/err"; then
+  fail "www alone must not satisfy the apex check"
+fi
+pass "www.buketnomer1.by alone is not the required host"
+
 cat >"$TMP/no443.conf" <<'EOF'
 server {
   listen 80;
-  server_name shop.nasytko.ru;
+  server_name buketnomer1.by;
 }
 EOF
-if validate_nginx_site_file "$TMP/no443.conf" "shop.nasytko.ru" 1 2>"$TMP/err"; then
+if validate_nginx_site_file "$TMP/no443.conf" "buketnomer1.by" 1 2>"$TMP/err"; then
   fail "must reject missing listen 443 when TLS required"
 fi
 pass "detects missing listen 443"
 
 # --- render helpers (file content only) ---
-render_nginx_http_only "shop.nasytko.ru" "$TMP/rendered-http.conf"
-grep -q 'server_name shop.nasytko.ru;' "$TMP/rendered-http.conf" || fail "rendered HTTP missing domain"
+render_nginx_http_only "buketnomer1.by" "$TMP/rendered-http.conf"
+grep -q 'server_name buketnomer1.by;' "$TMP/rendered-http.conf" || fail "rendered HTTP missing domain"
 grep -q 'YOUR_DOMAIN' "$TMP/rendered-http.conf" && fail "rendered HTTP contains YOUR_DOMAIN"
 grep -q 'listen 80;' "$TMP/rendered-http.conf" || fail "rendered HTTP missing listen 80"
 pass "render_nginx_http_only"
 
-render_nginx_https "shop.nasytko.ru" "$TMP/rendered-https.conf"
+render_nginx_https "buketnomer1.by" "$TMP/rendered-https.conf"
 grep -q 'listen 443 ssl http2;' "$TMP/rendered-https.conf" || fail "rendered HTTPS missing 443"
 grep -q 'return 301 https://' "$TMP/rendered-https.conf" || fail "rendered HTTPS missing redirect"
 grep -q 'ssl_certificate' "$TMP/rendered-https.conf" || fail "rendered HTTPS missing ssl_certificate"
@@ -157,12 +212,12 @@ if command -v nginx >/dev/null 2>&1; then
   # Point includes at temp paths for syntax check.
   sed \
     -e "s|/etc/nginx/snippets/shopbuket1-proxy.conf|${SNIPPET_DIR}/snippets/shopbuket1-proxy.conf|g" \
-    -e "s|/etc/letsencrypt/live/shop.nasytko.ru/fullchain.pem|${SNIPPET_DIR}/fullchain.pem|g" \
-    -e "s|/etc/letsencrypt/live/shop.nasytko.ru/privkey.pem|${SNIPPET_DIR}/privkey.pem|g" \
+    -e "s|/etc/letsencrypt/live/buketnomer1.by/fullchain.pem|${SNIPPET_DIR}/fullchain.pem|g" \
+    -e "s|/etc/letsencrypt/live/buketnomer1.by/privkey.pem|${SNIPPET_DIR}/privkey.pem|g" \
     "$TMP/rendered-https.conf" >"$TMP/nginx-syntax.conf"
   # Dummy PEM files so nginx -t can open paths (content need not be valid for parse-only).
-  printf '-----BEGIN CERTIFICATE-----\nMIIB\n-----END CERTIFICATE-----\n' >"$SNIPPET_DIR/fullchain.pem"
-  printf '-----BEGIN PRIVATE KEY-----\nMIIB\n-----END PRIVATE KEY-----\n' >"$SNIPPET_DIR/privkey.pem"
+  printf '%s\n' '-----BEGIN CERTIFICATE-----' 'MIIB' '-----END CERTIFICATE-----' >"$SNIPPET_DIR/fullchain.pem"
+  printf '%s\n' '-----BEGIN PRIVATE KEY-----' 'MIIB' '-----END PRIVATE KEY-----' >"$SNIPPET_DIR/privkey.pem"
   cat >"$TMP/nginx-main.conf" <<EOF
 events {}
 http {

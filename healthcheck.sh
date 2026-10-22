@@ -62,8 +62,12 @@ main() {
       set -a
       source "$SHOPBUKET1_ENV_FILE"
       set +a
-      local domain require_tls=0
-      domain="$(resolve_public_domain)"
+      local configured domain require_tls=0 public_code
+      configured="$(resolve_public_domain)"
+      domain="$(resolve_required_storefront_domain)"
+      if is_retired_shop_host "$configured"; then
+        log "WARN ${configured} is retired; required storefront check is https://${domain}"
+      fi
       if [[ -n "$domain" ]] && ! is_placeholder_domain "$domain"; then
         if tls_cert_present "$domain"; then
           require_tls=1
@@ -72,6 +76,13 @@ main() {
           log "OK  nginx site (${domain}, tls=${require_tls})"
         else
           log "FAIL nginx site checks for ${domain}"
+          FAIL=1
+        fi
+        public_code="$(curl -fsS -o /dev/null -w '%{http_code}' --max-time 20 "https://${domain}/" || true)"
+        if [[ "$public_code" =~ ^(200|301|302|307|308)$ ]]; then
+          log "OK  https://${domain}/ (HTTP $public_code)"
+        else
+          log "FAIL https://${domain}/ (HTTP ${public_code:-none})"
           FAIL=1
         fi
       else

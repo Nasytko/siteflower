@@ -279,9 +279,9 @@ Backups:    ${SHOPBUKET1_BACKUP_DIR}
 
 NEXT MANUAL STEPS:
   1) Edit /etc/shopbuket1/production.env
-     - NEXT_PUBLIC_SITE_URL=https://shop.example.com
-     - CORS_ORIGINS=https://shop.example.com
-     - optional PUBLIC_DOMAIN=shop.example.com
+     - NEXT_PUBLIC_SITE_URL=https://buketnomer1.by
+     - CORS_ORIGINS=https://buketnomer1.by
+     - optional PUBLIC_DOMAIN=buketnomer1.by
      - CERTBOT_EMAIL=ops@example.com  (for Let's Encrypt)
      - HostFly S3_* (example bucket: shopbuket1-media)
      - Confirm DATABASE_URL host is "postgres"

@@ -132,9 +132,10 @@ sudoeditor /etc/shopbuket1/production.env
 
 Must set at least:
 
-- `NEXT_PUBLIC_SITE_URL=https://shop.nasytko.ru` (real FQDN — never `YOUR_DOMAIN`)
-- `CORS_ORIGINS=https://shop.nasytko.ru`
-- optional `PUBLIC_DOMAIN=shop.nasytko.ru` (Nginx `server_name`; defaults to host from `NEXT_PUBLIC_SITE_URL`)
+- `NEXT_PUBLIC_SITE_URL=https://buketnomer1.by` (real FQDN — never `YOUR_DOMAIN`)
+- `CORS_ORIGINS=https://buketnomer1.by`
+- optional `PUBLIC_DOMAIN=buketnomer1.by` (Nginx `server_name`; defaults to host from `NEXT_PUBLIC_SITE_URL`)
+- `shop.nasytko.ru` is retired and is not a required healthcheck host
 - `CERTBOT_EMAIL=ops@example.com` (Let's Encrypt account email for `provision-nginx.sh`)
 - `TRUST_PROXY=true`
 - `MEDIA_STORAGE=s3` + all `S3_*` (example bucket `shopbuket1-media`)
@@ -181,11 +182,11 @@ What it does:
 cd /opt/shopbuket1/repo 2>/dev/null || cd /opt/shopbuket1/current
 git pull --ff-only origin main
 
-# 1) Fix domain + certbot email (example for shop.nasytko.ru)
+# 1) Fix domain + certbot email (storefront: buketnomer1.by)
 sudoeditor /etc/shopbuket1/production.env
-# NEXT_PUBLIC_SITE_URL=https://shop.nasytko.ru
-# CORS_ORIGINS=https://shop.nasytko.ru
-# PUBLIC_DOMAIN=shop.nasytko.ru
+# NEXT_PUBLIC_SITE_URL=https://buketnomer1.by
+# CORS_ORIGINS=https://buketnomer1.by
+# PUBLIC_DOMAIN=buketnomer1.by
 # CERTBOT_EMAIL=you@example.com
 
 # 2) Re-render Nginx + issue/install TLS
@@ -194,8 +195,8 @@ sudo ./provision-nginx.sh
 # 3) Confirm
 sudo grep -E 'server_name|listen' /etc/nginx/sites-available/shopbuket1
 sudo nginx -t
-curl -fsSI http://shop.nasytko.ru/ | head
-curl -fsSI https://shop.nasytko.ru/ | head
+curl -fsSI http://buketnomer1.by/ | head
+curl -fsSI https://buketnomer1.by/ | head
 ./healthcheck.sh
 ```
 
@@ -317,7 +318,7 @@ See [media-production.md](./media-production.md) for lifecycle details.
 
 `Strict-Transport-Security: max-age=31536000`
 
-No `includeSubDomains`, no `preload` (single shopbuket1 FQDN; preload is irreversible without ops ownership). HTTP `:80` remains ACME + 301 redirect only — no HSTS on plaintext responses. After TLS changes: `sudo ./provision-nginx.sh` then `nginx -t && systemctl reload nginx`.
+No `includeSubDomains`, no `preload` (one apex FQDN, `buketnomer1.by`; preload is irreversible without ops ownership). `www.buketnomer1.by` is not added automatically and is not covered by this HSTS header. HTTP `:80` remains ACME + 301 redirect only — no HSTS on plaintext responses. After TLS changes: preview the rendered site, then `sudo ./provision-nginx.sh` and `nginx -t && systemctl reload nginx`.
 
 ## Related docs
 
