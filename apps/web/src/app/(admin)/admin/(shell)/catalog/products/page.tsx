@@ -109,6 +109,7 @@ export default async function AdminProductsPage({
           canCreate={canCreate}
           canUpdate={roleHasPermission(me.user.role, 'CATALOG_UPDATE')}
           canPublish={roleHasPermission(me.user.role, 'CATALOG_PUBLISH')}
+          canDelete={roleHasPermission(me.user.role, 'CATALOG_DELETE')}
         />
       </Suspense>
     </main>

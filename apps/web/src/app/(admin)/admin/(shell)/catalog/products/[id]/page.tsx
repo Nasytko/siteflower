@@ -78,6 +78,7 @@ export default async function AdminProductEditPage({ params, searchParams }: Pro
         canUpdate={roleHasPermission(me.user.role, 'CATALOG_UPDATE')}
         canCreate={roleHasPermission(me.user.role, 'CATALOG_CREATE')}
         canPublish={roleHasPermission(me.user.role, 'CATALOG_PUBLISH')}
+        canDelete={roleHasPermission(me.user.role, 'CATALOG_DELETE')}
       />
     </main>
   );

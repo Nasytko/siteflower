@@ -72,8 +72,14 @@ export const adminEndpoints = {
   productTaxonomies: (id: string) => `${ADMIN}/catalog/products/${id}/taxonomies`,
   productPromotion: (id: string) => `${ADMIN}/catalog/products/${id}/promotion`,
   productBestsellerGroups: (id: string) => `${ADMIN}/catalog/products/${id}/bestseller-groups`,
-  productLifecycle: (id: string, action: 'publish' | 'unpublish' | 'archive') =>
+  productLifecycle: (id: string, action: 'publish' | 'unpublish' | 'archive' | 'restore') =>
     `${ADMIN}/catalog/products/${id}/${action}`,
+  productDeleteImpact: (id: string) => `${ADMIN}/catalog/products/${id}/delete-impact`,
+  productRelatedSuggestions: (id: string) =>
+    `${ADMIN}/catalog/products/${id}/related-suggestions`,
+  productRelated: (id: string) => `${ADMIN}/catalog/products/${id}/related`,
+  productRelatedItem: (id: string, relatedId: string) =>
+    `${ADMIN}/catalog/products/${id}/related/${relatedId}`,
   productMedia: (id: string) => `${ADMIN}/catalog/products/${id}/media`,
   productMediaItem: (id: string, mediaId: string) =>
     `${ADMIN}/catalog/products/${id}/media/${mediaId}`,

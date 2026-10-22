@@ -14,6 +14,13 @@ test('API_V1_PREFIX is stable', () => {
 test('SUPER_ADMIN has all permissions', () => {
   assert.equal(roleHasPermission('SUPER_ADMIN', 'USERS_DISABLE'), true);
   assert.equal(roleHasPermission('SUPER_ADMIN', 'SITE_HEALTH_READ'), true);
+  assert.equal(roleHasPermission('SUPER_ADMIN', 'CATALOG_DELETE'), true);
+});
+
+test('only SUPER_ADMIN can hard-delete catalog records', () => {
+  assert.equal(roleHasPermission('MANAGER', 'CATALOG_DELETE'), false);
+  assert.equal(roleHasPermission('CONTENT_MANAGER', 'CATALOG_DELETE'), false);
+  assert.equal(roleHasPermission('MANAGER', 'CATALOG_PUBLISH'), true);
 });
 
 test('CONTENT_MANAGER cannot manage users', () => {

@@ -8,14 +8,18 @@ import {
   defaultProductSeoDescription,
   defaultProductSeoTitle,
   formatPriceFromMinor,
+  isPlaceholderProductName,
   normalizeSlug,
   deriveProductEditorReadiness,
   parsePositivePriceMajor,
   productKindNeedsComposition,
   productKindNeedsGiftSubtype,
+  suggestProductNameFromComposition,
+  suggestStemProductName,
   type ComponentUnit,
   type CompositionPrecision,
   type ProductAdminDto,
+  type ProductDeleteImpactDto,
   type ProductKind,
   type PromotionType,
   DEFAULT_PRODUCT_VARIANT_NAME,
@@ -59,7 +63,8 @@ import {
 import { ProductReadinessPanel } from '@/components/admin/product-readiness-panel';
 import { ProductEditorMainTab } from '@/components/admin/product-editor-main-tab';
 import { ProductEditorCompositionTab } from '@/components/admin/product-editor-composition-tab';
-import { ProductEditorExtraTab } from '@/components/admin/product-editor-extra-tab';
+import { ProductEditorRelated } from '@/components/admin/product-editor-related';
+import { ProductPlacementPanel } from '@/components/admin/product-placement-panel';
 import {
   compositionHitMeta,
   emptyComponentDraft,
@@ -88,26 +93,18 @@ type Props = {
   canUpdate: boolean;
   canCreate: boolean;
   canPublish: boolean;
+  canDelete?: boolean;
 };
 
-type SectionId = 'main' | 'photos' | 'composition' | 'extra';
-
-const SECTIONS: Array<[SectionId, string]> = [
-  ['main', 'Основное'],
-  ['photos', 'Фото'],
-  ['composition', 'Состав'],
-  ['extra', 'Дополнительно'],
-];
-
-const READINESS_SECTION: Record<string, SectionId> = {
-  name: 'main',
-  shortDescription: 'main',
-  description: 'main',
-  price: 'main',
-  category: 'main',
-  photo: 'photos',
+const READINESS_SECTION: Record<string, string> = {
+  name: 'name',
+  shortDescription: 'shortDescription',
+  description: 'description',
+  price: 'price',
+  category: 'category',
+  photo: 'photo',
   composition: 'composition',
-  slug: 'extra',
+  slug: 'seo',
 };
 
 type PromotionDraft = {
@@ -140,16 +137,14 @@ export function ProductEditor({
   product,
   justCreated = false,
   options,
-  bestsellerGroups,
+  bestsellerGroups: _bestsellerGroups,
   canUpdate,
   canCreate,
   canPublish,
+  canDelete = false,
 }: Props) {
   const router = useRouter();
   const initialKind: ProductKind = product.productKind ?? 'BOUQUET';
-  const [section, setSection] = useState<SectionId>(() =>
-    justCreated && productKindNeedsComposition(initialKind) ? 'composition' : 'main',
-  );
   const [server, setServer] = useState(product);
   const [version, setVersion] = useState(product.version);
   const [dirty, setDirty] = useState(false);
@@ -175,6 +170,12 @@ export function ProductEditor({
   const [slugManual, setSlugManual] = useState(
     () => normalizeSlug(product.name) !== product.slug,
   );
+  const [nameManual, setNameManual] = useState(
+    () => !justCreated && !isPlaceholderProductName(product.name, product.productKind),
+  );
+  const [deleteImpact, setDeleteImpact] = useState<ProductDeleteImpactDto | null>(null);
+  const [deleteConfirm, setDeleteConfirm] = useState('');
+  const [deleteOpen, setDeleteOpen] = useState(false);
 
   const [basic, setBasic] = useState({
     name: product.name,
@@ -195,7 +196,7 @@ export function ProductEditor({
     colors: options.colors,
   });
   const [familyId, setFamilyId] = useState(product.family?.id ?? '');
-  const [familyPanelOpen, setFamilyPanelOpen] = useState(
+  const [, setFamilyPanelOpen] = useState(
     () => Boolean(product.family?.id) || (product.family?.members?.length ?? 0) > 0,
   );
   const [familyMemberSortOrder, setFamilyMemberSortOrder] = useState<number | undefined>(() =>
@@ -203,8 +204,8 @@ export function ProductEditor({
   );
   const [familyOptions, setFamilyOptions] = useState(options.families);
   const [newFamilyName, setNewFamilyName] = useState('');
-  const [creatingFamily, setCreatingFamily] = useState(false);
-  const [addingFamilyProduct, setAddingFamilyProduct] = useState(false);
+  const [, setCreatingFamily] = useState(false);
+  const [, setAddingFamilyProduct] = useState(false);
   const [familyReorderPending, setFamilyReorderPending] = useState(false);
 
   useEffect(() => {
@@ -248,7 +249,7 @@ export function ProductEditor({
   >([]);
   const needsComposition = productKindNeedsComposition(productKind);
   const [promotion, setPromotion] = useState<PromotionDraft>(() => toPromotionDraft(product));
-  const [groupIds, setGroupIds] = useState<string[]>(product.bestsellerGroupIds);
+  const [, setGroupIds] = useState<string[]>(product.bestsellerGroupIds);
   const [seo, setSeo] = useState({
     seoTitle: product.seoTitle ?? '',
     seoDescription: product.seoDescription ?? '',
@@ -323,10 +324,6 @@ export function ProductEditor({
     }
   }
 
-  function toggleId(list: string[], id: string): string[] {
-    return list.includes(id) ? list.filter((item) => item !== id) : [...list, id];
-  }
-
   const activeVariants = variants.filter((variant) => variant.status === 'ACTIVE');
   const hasPrimaryImage = server.media.some((item) => item.isPrimary);
 
@@ -383,17 +380,15 @@ export function ProductEditor({
     // Server assigns the canonical hub on save.
     setCatalogCategoryId('');
     setProductKindState(next);
-    if (!productKindNeedsComposition(next) && section === 'composition') {
-      setSection('main');
+    if (justCreated || !nameManual) {
+      setNameManual(false);
     }
     touch();
   }
 
   function jumpToReadinessIssue(issueId: string) {
-    const target = READINESS_SECTION[issueId] ?? 'main';
-    setSection(target);
     window.requestAnimationFrame(() => {
-      const el = document.querySelector(`[data-section="${issueId}"]`);
+      const el = document.querySelector(`[data-section="${READINESS_SECTION[issueId] ?? issueId}"]`);
       if (el instanceof HTMLElement) {
         el.scrollIntoView({ behavior: 'smooth', block: 'center' });
       }
@@ -423,7 +418,7 @@ export function ProductEditor({
   const compositionBrowseMode = compositionSearch.trim().length === 0;
 
   useEffect(() => {
-    if (section !== 'composition') return;
+    if (!needsComposition) return;
     const q = compositionSearch.trim();
     const timer = window.setTimeout(() => {
       setCompositionSearchPending(true);
@@ -454,7 +449,7 @@ export function ProductEditor({
         .finally(() => setCompositionSearchPending(false));
     }, 250);
     return () => window.clearTimeout(timer);
-  }, [compositionSearch, section, components, compositionReplaceKey]);
+  }, [compositionSearch, needsComposition, components, compositionReplaceKey]);
 
   function addFlowerItemToComposition(itemId: string, itemName?: string) {
     const fromHits = compositionHits.find((row) => row.id === itemId);
@@ -476,6 +471,16 @@ export function ProductEditor({
         ),
       );
       setCompositionReplaceKey(null);
+    } else if (productKind === 'STEM') {
+      setComponents([
+        emptyComponentDraft({
+          ...meta,
+          quantity: '1',
+          unit: 'STEM' as ComponentUnit,
+          flowerItemId: itemId,
+          role: 'PRIMARY',
+        }),
+      ]);
     } else {
       if (components.some((row) => row.flowerItemId === itemId)) {
         setError('Этот цветок уже есть в составе — измените количество или замените позицию');
@@ -500,15 +505,38 @@ export function ProductEditor({
   function applySuggestedPalette(colorIds: string[]) {
     setDiscovery((prev) => ({ ...prev, colorIds }));
     touch();
-    setSection('main');
   }
+
+  useEffect(() => {
+    if (nameManual || !needsComposition) return;
+    const suggested =
+      productKind === 'STEM'
+        ? suggestStemProductName(components[0] ?? { displayName: '' })
+        : suggestProductNameFromComposition(
+            components.map((row) => ({
+              displayName: row.displayName,
+              quantity: row.quantity.trim() ? Number(row.quantity) : null,
+              typeName: row.typeName,
+              varietyName: row.varietyName,
+            })),
+          );
+    if (!suggested) return;
+    setBasic((prev) => {
+      if (prev.name === suggested) return prev;
+      return {
+        ...prev,
+        name: suggested,
+        ...(slugManual ? {} : { slug: normalizeSlug(suggested) }),
+      };
+    });
+  }, [components, nameManual, needsComposition, productKind, slugManual]);
 
   const familyMembers = useMemo(() => {
     if (!server.family?.members.length) return [];
     return [...server.family.members].sort((a, b) => a.sortOrder - b.sortOrder);
   }, [server.family]);
 
-  const promotionPreview = useMemo(() => {
+  const _promotionPreview = useMemo(() => {
     if (!promotion.enabled) return [];
     return activeVariants.map((variant) => {
       const regularMinor = majorInputToMinor(variant.priceMajor);
@@ -720,6 +748,9 @@ export function ProductEditor({
           const trimmedName = variant.name.trim();
           const fallbackName =
             variants.length === 1 ? DEFAULT_PRODUCT_VARIANT_NAME : `Размер ${index + 1}`;
+          const existingSale = server.promotion?.variantSalePrices?.find(
+            (row) => row.variantId === variant.id,
+          )?.salePriceMinor;
           return {
             name: trimmedName || fallbackName,
             priceMinor: majorInputToMinor(variant.priceMajor) ?? '0',
@@ -727,7 +758,7 @@ export function ProductEditor({
             status: variant.status,
             salePriceMinor:
               promotion.enabled && promotionType === 'FIXED' && variant.status === 'ACTIVE'
-                ? (majorInputToMinor(variant.salePriceMajor) ?? null)
+                ? (majorInputToMinor(variant.salePriceMajor) ?? existingSale ?? null)
                 : null,
           };
         }),
@@ -747,13 +778,13 @@ export function ProductEditor({
         colorIds: discovery.colorIds,
         traitKeys: discovery.traitKeys,
         promotion: {
-          enabled: promotion.enabled,
-          type: promotionType,
-          percentOff: promotionType === 'PERCENT' ? percentValue : null,
-          startsAt: fromDateTimeLocalValue(promotion.startsAt),
-          endsAt: fromDateTimeLocalValue(promotion.endsAt),
+          enabled: server.promotion?.enabled ?? false,
+          type: server.promotion?.type ?? promotionType,
+          percentOff: server.promotion?.percentOff ?? (promotionType === 'PERCENT' ? percentValue : null),
+          startsAt: server.promotion?.startsAt ?? null,
+          endsAt: server.promotion?.endsAt ?? null,
         },
-        groupIds,
+        groupIds: server.bestsellerGroupIds,
         // Non-gifts: null → server assigns canonical hub. Gifts: subtype or null → gifts hub.
         catalogCategoryId: productKindNeedsGiftSubtype(productKind)
           ? catalogCategoryId || null
@@ -789,7 +820,7 @@ export function ProductEditor({
     }
   }
 
-  async function runLifecycle(action: 'publish' | 'unpublish' | 'archive') {
+  async function runLifecycle(action: 'publish' | 'unpublish' | 'archive' | 'restore') {
     if (!canPublish) return;
     setSavePending(true);
     setError(null);
@@ -810,6 +841,35 @@ export function ProductEditor({
       }
       setError(errorMessage(err, 'Не удалось изменить статус'));
     } finally {
+      setSavePending(false);
+    }
+  }
+
+  async function openDelete() {
+    if (!canDelete) return;
+    setDeleteOpen(true);
+    setDeleteConfirm('');
+    try {
+      setDeleteImpact(await adminGet<ProductDeleteImpactDto>(adminEndpoints.productDeleteImpact(server.id)));
+    } catch (err) {
+      setError(errorMessage(err, 'Не удалось проверить зависимости'));
+    }
+  }
+
+  async function confirmDelete() {
+    if (!canDelete || !deleteImpact) return;
+    setSavePending(true);
+    setError(null);
+    try {
+      await adminDelete(adminEndpoints.product(server.id), {
+        expectedVersion: version,
+        confirmName: deleteConfirm.trim(),
+        detach: deleteImpact.detachable.length > 0,
+      });
+      router.push('/admin/catalog/products');
+      router.refresh();
+    } catch (err) {
+      setError(errorMessage(err, 'Не удалось удалить товар'));
       setSavePending(false);
     }
   }
@@ -993,7 +1053,7 @@ export function ProductEditor({
     }
   }
 
-  async function onCreateFamily() {
+  async function _onCreateFamily() {
     if (!canUpdate) return;
     const name = newFamilyName.trim();
     if (name.length === 0) return;
@@ -1020,7 +1080,7 @@ export function ProductEditor({
     }
   }
 
-  async function onAddProductToLine() {
+  async function _onAddProductToLine() {
     if (!canUpdate || !familyId) return;
     if (dirty) {
       setError('Сначала сохраните изменения текущего товара, затем добавьте карточку в линейку.');
@@ -1084,7 +1144,7 @@ export function ProductEditor({
     }
   }
 
-  async function reorderFamilyMember(productId: string, direction: -1 | 1) {
+  async function _reorderFamilyMember(productId: string, direction: -1 | 1) {
     if (!canUpdate || !server.family || familyReorderPending) return;
     const ordered = [...familyMembers];
     const index = ordered.findIndex((member) => member.productId === productId);
@@ -1260,6 +1320,26 @@ export function ProductEditor({
               Снять с витрины
             </button>
           ) : null}
+          {canPublish && server.lifecycle === 'ARCHIVED' ? (
+            <button
+              type="button"
+              className="admin-btn-ghost"
+              disabled={pending}
+              onClick={() => void runLifecycle('restore')}
+            >
+              Восстановить
+            </button>
+          ) : null}
+          {canPublish && server.lifecycle !== 'ARCHIVED' ? (
+            <button
+              type="button"
+              className="admin-btn-ghost"
+              disabled={pending}
+              onClick={() => void runLifecycle('archive')}
+            >
+              В архив
+            </button>
+          ) : null}
         </div>
       </div>
 
@@ -1271,65 +1351,58 @@ export function ProductEditor({
       ) : null}
       {readOnlyNote}
 
-      <div className="admin-seg admin-seg--wrap">
-        {SECTIONS.filter(([id]) => id !== 'composition' || needsComposition).map(([id, label]) => (
-          <button
-            key={id}
-            type="button"
-            className={`admin-seg__btn ${section === id ? 'admin-seg__btn--active' : ''}`}
-            onClick={() => setSection(id)}
-          >
-            {label}
-          </button>
-        ))}
-      </div>
-
       {justCreated ? (
         <p className="text-sm text-[var(--admin-muted)]">
-          Черновик создан. Укажите цену и сохраните — затем фото и публикация
-          {needsComposition ? '; состав — во вкладке «Состав»' : ''}.
+          Черновик создан. Состав и цена — на этой странице. Фото можно добавить сразу.
         </p>
       ) : null}
 
-      {section === 'main' ? (
-        <ProductEditorMainTab
-          server={server}
-          canUpdate={canUpdate}
-          canCreate={canCreate}
-          canPublish={canPublish}
-          pending={pending}
-          productKind={productKind}
-          setProductKind={changeProductKind}
-          basic={basic}
-          setBasic={setBasic}
-          slugManual={slugManual}
-          components={components}
-          variants={variants}
-          setVariants={setVariants}
-          catalogCategoryId={catalogCategoryId}
-          setCatalogCategoryId={setCatalogCategoryId}
-          categories={options.categories}
-          discovery={discovery}
-          setDiscovery={setDiscovery}
-          occasions={taxonomyOptions.occasions}
-          recipients={taxonomyOptions.recipients}
-          colors={taxonomyOptions.colors}
-          traitOptions={traitOptions}
-          onTaxonomyCreated={onTaxonomyCreated}
-          publication={publication}
-          setPublication={setPublication}
-          hasPrimaryImage={hasPrimaryImage}
-          mediaCount={server.media.length}
-          onGoPhotos={() => setSection('photos')}
-          onGoExtraVariants={() => setSection('extra')}
-          onPublish={() => void runLifecycle('publish')}
-          onUnpublish={() => void runLifecycle('unpublish')}
-          onArchive={() => void runLifecycle('archive')}
-          touch={touch}
-        />
+      {server.promotion?.enabled ? (
+        <p className="admin-help">
+          Участвует в акции. Условия меняются в разделе «Акции», не в карточке товара.
+        </p>
       ) : null}
 
-      {section === 'composition' && needsComposition ? (
+      <ProductEditorMainTab
+        server={server}
+        canUpdate={canUpdate}
+        canCreate={canCreate}
+        canPublish={canPublish}
+        pending={pending}
+        productKind={productKind}
+        setProductKind={changeProductKind}
+        basic={basic}
+        setBasic={setBasic}
+        slugManual={slugManual}
+        nameManual={nameManual}
+        onNameTyped={() => setNameManual(true)}
+        blocks={['kind']}
+        components={components}
+        variants={variants}
+        setVariants={setVariants}
+        catalogCategoryId={catalogCategoryId}
+        setCatalogCategoryId={setCatalogCategoryId}
+        categories={options.categories}
+        discovery={discovery}
+        setDiscovery={setDiscovery}
+        occasions={taxonomyOptions.occasions}
+        recipients={taxonomyOptions.recipients}
+        colors={taxonomyOptions.colors}
+        traitOptions={traitOptions}
+        onTaxonomyCreated={onTaxonomyCreated}
+        publication={publication}
+        setPublication={setPublication}
+        hasPrimaryImage={hasPrimaryImage}
+        mediaCount={server.media.length}
+        onGoPhotos={() => jumpToReadinessIssue('photo')}
+        onGoExtraVariants={() => undefined}
+        onPublish={() => void runLifecycle('publish')}
+        onUnpublish={() => void runLifecycle('unpublish')}
+        onArchive={() => void runLifecycle('archive')}
+        touch={touch}
+      />
+
+      {needsComposition ? (
         <ProductEditorCompositionTab
           canUpdate={canUpdate}
           productKind={productKind}
@@ -1350,65 +1423,60 @@ export function ProductEditor({
           touch={touch}
           nextComponentKey={() => nextEditorKey('component')}
         />
-      ) : null}
+      ) : (
+        <section className="sf-pe-card">
+          <div className="sf-pe-card__head">
+            <span className="sf-pe-card__index">2</span>
+            <div>
+              <h2>Состав</h2>
+              <p className="sf-pe-card__lead">
+                Для подарка, растения или другого типа состав из справочника цветов не нужен.
+              </p>
+            </div>
+          </div>
+        </section>
+      )}
 
-      {section === 'extra' ? (
-        <ProductEditorExtraTab
-          server={server}
-          canUpdate={canUpdate}
-          canPublish={canPublish}
-          pending={pending}
-          productKind={productKind}
-          compositionPrecision={compositionPrecision}
-          setCompositionPrecision={setCompositionPrecision}
-          basic={basic}
-          setBasic={setBasic}
-          setSlugManual={setSlugManual}
-          variants={variants}
-          setVariants={setVariants}
-          familyId={familyId}
-          setFamilyId={setFamilyId}
-          familyPanelOpen={familyPanelOpen}
-          setFamilyPanelOpen={setFamilyPanelOpen}
-          familyOptions={familyOptions}
-          familyMembers={familyMembers}
-          newFamilyName={newFamilyName}
-          setNewFamilyName={setNewFamilyName}
-          creatingFamily={creatingFamily}
-          onCreateFamily={() => void onCreateFamily()}
-          familyReorderPending={familyReorderPending}
-          onReorderFamilyMember={(id, dir) => void reorderFamilyMember(id, dir)}
-          onAddProductToLine={() => void onAddProductToLine()}
-          addingFamilyProduct={addingFamilyProduct}
-          promotion={promotion}
-          setPromotion={setPromotion}
-          promotionPreview={promotionPreview}
-          groupIds={groupIds}
-          setGroupIds={setGroupIds}
-          bestsellerGroups={bestsellerGroups}
-          seo={seo}
-          setSeo={setSeo}
-          seoManualOpen={seoManualOpen}
-          setSeoManualOpen={setSeoManualOpen}
-          seoHealth={seoHealth}
-          previewTitle={previewTitle}
-          previewDescription={previewDescription}
-          titleIsAutomatic={titleIsAutomatic}
-          descriptionIsAutomatic={descriptionIsAutomatic}
-          publication={publication}
-          setPublication={setPublication}
-          fieldErrors={fieldErrors}
-          onPublish={() => void runLifecycle('publish')}
-          onUnpublish={() => void runLifecycle('unpublish')}
-          onArchive={() => void runLifecycle('archive')}
-          touch={touch}
-          toggleId={toggleId}
-          nextVariantKey={() => nextEditorKey('variant')}
-        />
-      ) : null}
+      <ProductEditorMainTab
+        server={server}
+        canUpdate={canUpdate}
+        canCreate={canCreate}
+        canPublish={canPublish}
+        pending={pending}
+        productKind={productKind}
+        setProductKind={changeProductKind}
+        basic={basic}
+        setBasic={setBasic}
+        slugManual={slugManual}
+        nameManual={nameManual}
+        onNameTyped={() => setNameManual(true)}
+        blocks={['identity']}
+        components={components}
+        variants={variants}
+        setVariants={setVariants}
+        catalogCategoryId={catalogCategoryId}
+        setCatalogCategoryId={setCatalogCategoryId}
+        categories={options.categories}
+        discovery={discovery}
+        setDiscovery={setDiscovery}
+        occasions={taxonomyOptions.occasions}
+        recipients={taxonomyOptions.recipients}
+        colors={taxonomyOptions.colors}
+        traitOptions={traitOptions}
+        onTaxonomyCreated={onTaxonomyCreated}
+        publication={publication}
+        setPublication={setPublication}
+        hasPrimaryImage={hasPrimaryImage}
+        mediaCount={server.media.length}
+        onGoPhotos={() => jumpToReadinessIssue('photo')}
+        onGoExtraVariants={() => undefined}
+        onPublish={() => void runLifecycle('publish')}
+        onUnpublish={() => void runLifecycle('unpublish')}
+        onArchive={() => void runLifecycle('archive')}
+        touch={touch}
+      />
 
-      {section === 'photos' ? (
-        <section className="admin-section" data-section="photo">
+        <section className="admin-section sf-pe-card" data-section="photo">
           <h2 className="admin-section__title">Фотографии</h2>
           <p className="admin-section__lead">
             Добавьте до 12 фотографий товара. {server.media.length} из 12 уже загружено. Главное фото
@@ -1582,6 +1650,197 @@ export function ProductEditor({
             Фото сохраняются сразу, отдельно от кнопки «Сохранить». Удаление убирает фото из товара;
             файл в хранилище очищается позже служебной задачей.
           </p>
+        </section>
+
+      <ProductEditorMainTab
+        server={server}
+        canUpdate={canUpdate}
+        canCreate={canCreate}
+        canPublish={canPublish}
+        pending={pending}
+        productKind={productKind}
+        setProductKind={changeProductKind}
+        basic={basic}
+        setBasic={setBasic}
+        slugManual={slugManual}
+        nameManual={nameManual}
+        onNameTyped={() => setNameManual(true)}
+        blocks={['copy', 'audience']}
+        components={components}
+        variants={variants}
+        setVariants={setVariants}
+        catalogCategoryId={catalogCategoryId}
+        setCatalogCategoryId={setCatalogCategoryId}
+        categories={options.categories}
+        discovery={discovery}
+        setDiscovery={setDiscovery}
+        occasions={taxonomyOptions.occasions}
+        recipients={taxonomyOptions.recipients}
+        colors={taxonomyOptions.colors}
+        traitOptions={traitOptions}
+        onTaxonomyCreated={onTaxonomyCreated}
+        publication={publication}
+        setPublication={setPublication}
+        hasPrimaryImage={hasPrimaryImage}
+        mediaCount={server.media.length}
+        onGoPhotos={() => jumpToReadinessIssue('photo')}
+        onGoExtraVariants={() => undefined}
+        onPublish={() => void runLifecycle('publish')}
+        onUnpublish={() => void runLifecycle('unpublish')}
+        onArchive={() => void runLifecycle('archive')}
+        touch={touch}
+      />
+
+      <ProductEditorRelated
+        product={server}
+        canUpdate={canUpdate}
+        members={familyMembers}
+        onChanged={(updated) => {
+          setServer(updated);
+          setVersion(updated.version);
+          setFamilyId(updated.family?.id ?? '');
+          if (updated.family?.id) setFamilyPanelOpen(true);
+          router.refresh();
+        }}
+      />
+
+      <section className="sf-pe-card">
+        <div className="sf-pe-card__head">
+          <span className="sf-pe-card__index">8</span>
+          <div>
+            <h2>Размещение в каталоге</h2>
+            <p className="sf-pe-card__lead">
+              Только информация. Разделы считаются по типу, составу, цене и опубликованным правилам.
+            </p>
+          </div>
+        </div>
+        <div className="sf-pe-card__body">
+          <ProductPlacementPanel productId={server.id} refreshKey={server.version} />
+        </div>
+      </section>
+
+      <details className="sf-pe-card" open={seoManualOpen} data-section="seo">
+        <summary className="sf-pe-card__toggle">
+          <span className="sf-pe-card__index">9</span>
+          <span>
+            <strong>SEO</strong>
+            <span className="sf-pe-card__lead">
+              Адрес, title и description создаются автоматически. Ручная правка — только при необходимости.
+            </span>
+          </span>
+        </summary>
+        <div className="sf-pe-card__body space-y-3">
+          <label className="admin-field">
+            <span>Адрес в ссылке</span>
+            <input
+              className="admin-input"
+              value={basic.slug}
+              disabled={!canUpdate}
+              onChange={(event) => {
+                setSlugManual(true);
+                setBasic((prev) => ({ ...prev, slug: event.target.value }));
+                touch();
+              }}
+            />
+          </label>
+          <label className="admin-field">
+            <span>SEO title {titleIsAutomatic ? '(авто)' : ''}</span>
+            <input
+              className="admin-input"
+              value={seo.seoTitle}
+              disabled={!canUpdate}
+              placeholder={previewTitle}
+              onChange={(event) => {
+                setSeo((prev) => ({ ...prev, seoTitle: event.target.value }));
+                setSeoManualOpen(true);
+                touch();
+              }}
+            />
+          </label>
+          <label className="admin-field">
+            <span>Meta description {descriptionIsAutomatic ? '(авто)' : ''}</span>
+            <textarea
+              className="admin-input"
+              rows={3}
+              value={seo.seoDescription}
+              disabled={!canUpdate}
+              placeholder={previewDescription}
+              onChange={(event) => {
+                setSeo((prev) => ({ ...prev, seoDescription: event.target.value }));
+                setSeoManualOpen(true);
+                touch();
+              }}
+            />
+          </label>
+          <label className="admin-check">
+            <input
+              type="checkbox"
+              checked={seo.noIndex}
+              disabled={!canUpdate}
+              onChange={(event) => {
+                setSeo((prev) => ({ ...prev, noIndex: event.target.checked }));
+                touch();
+              }}
+            />
+            Не индексировать
+          </label>
+          <p className="admin-help">Статус SEO: {seoHealth.status}</p>
+        </div>
+      </details>
+
+      {canDelete ? (
+        <section className="sf-pe-card">
+          <div className="sf-pe-card__head">
+            <span className="sf-pe-card__index">!</span>
+            <div>
+              <h2>Удалить навсегда</h2>
+              <p className="sf-pe-card__lead">
+                Если есть заказы — удаление запрещено, используйте архив.
+              </p>
+            </div>
+          </div>
+          <div className="sf-pe-card__body space-y-3">
+            {!deleteOpen ? (
+              <button type="button" className="admin-btn-ghost" onClick={() => void openDelete()}>
+                Проверить и удалить
+              </button>
+            ) : (
+              <>
+                {deleteImpact?.blockers.map((row) => (
+                  <p key={row.code} className="admin-field-error">
+                    {row.message}
+                  </p>
+                ))}
+                {deleteImpact?.detachable.map((row) => (
+                  <p key={row.code} className="admin-help">
+                    {row.message}
+                  </p>
+                ))}
+                {deleteImpact?.canDelete ? (
+                  <>
+                    <label className="admin-field">
+                      <span>Введите название «{server.name}»</span>
+                      <input
+                        className="admin-input"
+                        value={deleteConfirm}
+                        onChange={(event) => setDeleteConfirm(event.target.value)}
+                      />
+                    </label>
+                    <button
+                      type="button"
+                      className="admin-btn-ghost"
+                      disabled={pending || deleteConfirm.trim() !== server.name.trim()}
+                      onClick={() => void confirmDelete()}
+                    >
+                      Удалить навсегда
+                    </button>
+                  </>
+                ) : (
+                  <p className="admin-help">Физическое удаление недоступно — архивируйте товар.</p>
+                )}
+              </>
+            )}
+          </div>
         </section>
       ) : null}
     </div>

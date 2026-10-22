@@ -26,7 +26,9 @@ import { MEDIA_UPLOAD_MAX_INPUT_BYTES, MEDIA_UPLOAD_THROTTLE } from '../media/me
 import { MEDIA_ERROR_CODES, mediaHttpException } from '../media/media-errors';
 import {
   CreateProductDto,
+  DeleteProductDto,
   ExpectedVersionDto,
+  LinkRelatedProductDto,
   ProductListQueryDto,
   PublishProductDto,
   ReorderProductMediaDto,
@@ -237,6 +239,62 @@ export class AdminProductsController {
     @Req() req: Request,
   ) {
     return this.products.archive(id, body.expectedVersion, actorFrom(admin, req));
+  }
+
+  @Post(':id/restore')
+  @RequirePermissions('CATALOG_PUBLISH')
+  restore(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() body: ExpectedVersionDto,
+    @CurrentAdmin() admin: AuthenticatedAdmin,
+    @Req() req: Request,
+  ) {
+    return this.products.restore(id, body.expectedVersion, actorFrom(admin, req));
+  }
+
+  @Get(':id/delete-impact')
+  @RequirePermissions('CATALOG_READ')
+  deleteImpact(@Param('id', ParseUUIDPipe) id: string) {
+    return this.products.getDeleteImpact(id);
+  }
+
+  @Get(':id/related-suggestions')
+  @RequirePermissions('CATALOG_READ')
+  relatedSuggestions(@Param('id', ParseUUIDPipe) id: string) {
+    return this.products.suggestRelatedProducts(id);
+  }
+
+  @Post(':id/related')
+  @RequirePermissions('CATALOG_UPDATE')
+  linkRelated(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() body: LinkRelatedProductDto,
+    @CurrentAdmin() admin: AuthenticatedAdmin,
+    @Req() req: Request,
+  ) {
+    return this.products.linkRelatedProduct(id, body.productId, actorFrom(admin, req));
+  }
+
+  @Delete(':id/related/:relatedId')
+  @RequirePermissions('CATALOG_UPDATE')
+  unlinkRelated(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('relatedId', ParseUUIDPipe) relatedId: string,
+    @CurrentAdmin() admin: AuthenticatedAdmin,
+    @Req() req: Request,
+  ) {
+    return this.products.unlinkRelatedProduct(id, relatedId, actorFrom(admin, req));
+  }
+
+  @Delete(':id')
+  @RequirePermissions('CATALOG_DELETE')
+  remove(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() body: DeleteProductDto,
+    @CurrentAdmin() admin: AuthenticatedAdmin,
+    @Req() req: Request,
+  ) {
+    return this.products.removePermanently(id, body, actorFrom(admin, req));
   }
 
   @Post(':id/media')

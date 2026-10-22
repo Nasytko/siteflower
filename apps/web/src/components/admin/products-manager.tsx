@@ -7,6 +7,7 @@ import {
   BULK_PRODUCTS_MAX_ITEMS,
   COMMERCIAL_AVAILABILITIES,
   COMPOSITION_KINDS,
+  DEFAULT_NEW_PRODUCT_NAMES,
   PRIMARY_PRODUCT_KINDS,
   PRODUCT_LIFECYCLES,
   type BulkProductOperation,
@@ -17,7 +18,7 @@ import {
   type ProductKind,
   type ProductListItemDto,
 } from '@bouquet-one/contracts';
-import { adminPatch, adminPost, AdminRequestError, errorMessage } from '@/lib/admin-client';
+import { adminDelete, adminPatch, adminPost, AdminRequestError, errorMessage } from '@/lib/admin-client';
 import {
   buildProductAvailabilityPatchBody,
   buildProductsBulkBody,
@@ -57,6 +58,7 @@ type Props = {
   canCreate: boolean;
   canUpdate: boolean;
   canPublish: boolean;
+  canDelete?: boolean;
 };
 
 type BulkConfirm =
@@ -91,6 +93,7 @@ export function ProductsManager({
   canCreate,
   canUpdate,
   canPublish,
+  canDelete = false,
 }: Props) {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -173,8 +176,8 @@ export function ProductsManager({
     event.preventDefault();
     if (!canCreate) return;
     const form = new FormData(event.currentTarget);
-    const name = String(form.get('name') ?? '').trim();
-    if (name.length === 0) return;
+    const typed = String(form.get('name') ?? '').trim();
+    const name = typed || DEFAULT_NEW_PRODUCT_NAMES[createKind];
     setCreating(true);
     setError(null);
     setRequestId(null);
@@ -630,9 +633,8 @@ export function ProductsManager({
             <span>Название</span>
             <input
               name="name"
-              required
               className="admin-input w-64"
-              placeholder="Например «Амели» или «Роза Жизель»"
+              placeholder="Можно оставить пустым — подставится из состава"
             />
           </label>
           <button type="submit" disabled={creating} className="admin-btn">
@@ -1006,6 +1008,63 @@ export function ProductsManager({
                             }}
                           >
                             Дублировать
+                          </button>
+                        ) : null}
+                        {canPublish && item.lifecycle !== 'ARCHIVED' ? (
+                          <button
+                            type="button"
+                            className="admin-link text-sm"
+                            onClick={() => {
+                              void adminPost(adminEndpoints.productLifecycle(item.id, 'archive'), {
+                                expectedVersion: item.version,
+                              })
+                                .then(() => router.refresh())
+                                .catch((err) =>
+                                  setError(errorMessage(err, 'Не удалось архивировать товар')),
+                                );
+                            }}
+                          >
+                            Архивировать
+                          </button>
+                        ) : null}
+                        {canPublish && item.lifecycle === 'ARCHIVED' ? (
+                          <button
+                            type="button"
+                            className="admin-link text-sm"
+                            onClick={() => {
+                              void adminPost(adminEndpoints.productLifecycle(item.id, 'restore'), {
+                                expectedVersion: item.version,
+                              })
+                                .then(() => router.refresh())
+                                .catch((err) =>
+                                  setError(errorMessage(err, 'Не удалось восстановить товар')),
+                                );
+                            }}
+                          >
+                            Восстановить
+                          </button>
+                        ) : null}
+                        {canDelete ? (
+                          <button
+                            type="button"
+                            className="admin-link text-sm"
+                            onClick={() => {
+                              const confirmName = window.prompt(
+                                `Удалить навсегда «${item.name}»? Введите название товара.`,
+                              );
+                              if (confirmName == null) return;
+                              void adminDelete(adminEndpoints.product(item.id), {
+                                expectedVersion: item.version,
+                                confirmName,
+                                detach: true,
+                              })
+                                .then(() => router.refresh())
+                                .catch((err) =>
+                                  setError(errorMessage(err, 'Не удалось удалить товар')),
+                                );
+                            }}
+                          >
+                            Удалить навсегда
                           </button>
                         ) : null}
                       </div>

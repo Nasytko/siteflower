@@ -831,14 +831,117 @@ export type FlowerItemDuplicateConflictDto = {
 
 /** Why a destructive catalog-structure delete is blocked. */
 export type CatalogDeleteBlockerDto = {
-  code: 'HAS_CHILDREN' | 'HAS_PRODUCTS' | 'HAS_VARIETIES' | 'HAS_COMPONENTS' | 'HAS_ITEMS' | 'NOT_EMPTY';
+  code:
+    | 'HAS_CHILDREN'
+    | 'HAS_PRODUCTS'
+    | 'HAS_VARIETIES'
+    | 'HAS_COMPONENTS'
+    | 'HAS_ITEMS'
+    | 'NOT_EMPTY'
+    | 'HAS_ORDERS';
   message: string;
   productsCount?: number;
   childrenCount?: number;
   varietiesCount?: number;
   componentsCount?: number;
   itemsCount?: number;
+  ordersCount?: number;
 };
+
+export type ProductDeleteRelationCode =
+  | 'ORDERS'
+  | 'FAMILY_MEMBERS'
+  | 'PROMOTION'
+  | 'BESTSELLERS'
+  | 'CATALOG_PINS'
+  | 'MEDIA';
+
+export type ProductDeleteRelationDto = {
+  code: ProductDeleteRelationCode;
+  kind: 'blocking' | 'detachable';
+  message: string;
+  count: number;
+};
+
+export type ProductDeleteImpactDto = {
+  productId: string;
+  name: string;
+  slug: string;
+  canDelete: boolean;
+  blockers: ProductDeleteRelationDto[];
+  detachable: ProductDeleteRelationDto[];
+};
+
+export function evaluateProductDeleteImpact(input: {
+  productId: string;
+  name: string;
+  slug: string;
+  orderItemsCount: number;
+  familyMembersCount: number;
+  hasPromotion: boolean;
+  bestsellerLinksCount: number;
+  catalogPinsCount: number;
+  mediaCount: number;
+}): ProductDeleteImpactDto {
+  const blockers: ProductDeleteRelationDto[] = [];
+  const detachable: ProductDeleteRelationDto[] = [];
+  if (input.orderItemsCount > 0) {
+    blockers.push({
+      code: 'ORDERS',
+      kind: 'blocking',
+      message: `Товар есть в ${input.orderItemsCount} позициях заказов. Историю заказов нельзя удалять — архивируйте товар.`,
+      count: input.orderItemsCount,
+    });
+  }
+  if (input.familyMembersCount > 0) {
+    detachable.push({
+      code: 'FAMILY_MEMBERS',
+      kind: 'detachable',
+      message: `Связан с ${input.familyMembersCount} другими товарами. Связь будет снята, соседние карточки останутся.`,
+      count: input.familyMembersCount,
+    });
+  }
+  if (input.hasPromotion) {
+    detachable.push({
+      code: 'PROMOTION',
+      kind: 'detachable',
+      message: 'Товар участвует в акции. Запись акции будет удалена вместе с карточкой.',
+      count: 1,
+    });
+  }
+  if (input.bestsellerLinksCount > 0) {
+    detachable.push({
+      code: 'BESTSELLERS',
+      kind: 'detachable',
+      message: `Стоит в ${input.bestsellerLinksCount} подборках. Позиции будут отвязаны.`,
+      count: input.bestsellerLinksCount,
+    });
+  }
+  if (input.catalogPinsCount > 0) {
+    detachable.push({
+      code: 'CATALOG_PINS',
+      kind: 'detachable',
+      message: `Закреплён или исключён на ${input.catalogPinsCount} страницах каталога. Привязки будут сняты.`,
+      count: input.catalogPinsCount,
+    });
+  }
+  if (input.mediaCount > 0) {
+    detachable.push({
+      code: 'MEDIA',
+      kind: 'detachable',
+      message: `У товара ${input.mediaCount} фото. Связи снимутся, общие файлы останутся до очистки неиспользуемых.`,
+      count: input.mediaCount,
+    });
+  }
+  return {
+    productId: input.productId,
+    name: input.name,
+    slug: input.slug,
+    canDelete: blockers.length === 0,
+    blockers,
+    detachable,
+  };
+}
 
 /** Stable uniqueness key for FlowerItem (null parts → `_`). */
 export function flowerItemIdentityKey(input: {
@@ -860,11 +963,28 @@ export function flowerItemIdentityKey(input: {
   ].join('|');
 }
 
+/** Wrap a cultivar in Russian quotation marks; keep already-quoted values. */
+export function quoteFlowerVariety(name: string): string {
+  const trimmed = name.trim();
+  if (!trimmed) return '';
+  const inner = trimmed
+    .replace(/^[«"]\s*/, '')
+    .replace(/\s*[»"]$/, '')
+    .trim();
+  return inner ? `«${inner}»` : '';
+}
+
+function formRepeatsType(typeName: string, formName: string): boolean {
+  const type = typeName.trim().toLowerCase();
+  const form = formName.trim().toLowerCase();
+  return !form || !type || type.includes(form);
+}
+
 /**
  * Canonical FlowerItem label — single SoT for admin + storefront.
- * Format: "{Type} {Variety} {stem} см {Origin}" — form omitted from default retail label
- * (form is a manager/filter attribute; name stays short for shoppers).
- * e.g. "Роза Мондиаль 60 см Эквадор"
+ * Format: "{Type} {form} «Variety», {stem} см"
+ * Origin is a filter attribute and is omitted from the retail label.
+ * e.g. "Роза кустовая «Жизель», 60 см"
  */
 export function flowerItemDisplayName(input: {
   typeName: string;
@@ -875,12 +995,75 @@ export function flowerItemDisplayName(input: {
   /** @deprecated Use stemLengthCm */
   heightCm?: number | null;
 }): string {
+  const type = input.typeName.trim();
+  if (!type) return '';
+  const form = input.formName?.trim() ?? '';
+  const variety = quoteFlowerVariety(input.varietyName ?? '');
   const stem = input.stemLengthCm ?? input.heightCm;
-  const parts: string[] = [input.typeName.trim()];
-  if (input.varietyName?.trim()) parts.push(input.varietyName.trim());
-  if (stem != null) parts.push(`${stem} см`);
-  if (input.originName?.trim()) parts.push(input.originName.trim());
-  return parts.filter(Boolean).join(' ');
+
+  const head = [type, form && !formRepeatsType(type, form) ? form : '', variety]
+    .filter(Boolean)
+    .join(' ');
+  if (stem != null) return `${head}, ${stem} см`;
+  return head;
+}
+
+/** Default draft titles when a manager opens a new product card. */
+export const DEFAULT_NEW_PRODUCT_NAMES: Record<ProductKind, string> = {
+  BOUQUET: 'Новый букет',
+  COMPOSITION: 'Новая композиция',
+  STEM: 'Новый товар',
+  PLANT: 'Новое растение',
+  GIFT: 'Новый подарок',
+  OTHER: 'Новый товар',
+};
+
+export function isPlaceholderProductName(name: string, kind?: ProductKind | null): boolean {
+  const trimmed = name.trim().toLowerCase();
+  if (!trimmed) return true;
+  const defaults = Object.values(DEFAULT_NEW_PRODUCT_NAMES).map((value) => value.toLowerCase());
+  if (defaults.includes(trimmed)) return true;
+  if (kind && trimmed === DEFAULT_NEW_PRODUCT_NAMES[kind].toLowerCase()) return true;
+  return false;
+}
+
+/**
+ * Mutual related-product link: one family per product, no merge of two existing families.
+ */
+export function resolveRelatedProductLink(
+  leftFamilyId: string | null | undefined,
+  rightFamilyId: string | null | undefined,
+):
+  | { type: 'already'; familyId: string }
+  | { type: 'join'; familyId: string }
+  | { type: 'create' }
+  | { type: 'conflict'; leftFamilyId: string; rightFamilyId: string } {
+  const left = leftFamilyId?.trim() || null;
+  const right = rightFamilyId?.trim() || null;
+  if (left && right && left === right) return { type: 'already', familyId: left };
+  if (left && right) return { type: 'conflict', leftFamilyId: left, rightFamilyId: right };
+  if (left) return { type: 'join', familyId: left };
+  if (right) return { type: 'join', familyId: right };
+  return { type: 'create' };
+}
+
+/** Public name of a by-the-stem product — the selected flower, not a bouquet title. */
+export function suggestStemProductName(input: {
+  displayName?: string | null;
+  typeName?: string | null;
+  formName?: string | null;
+  varietyName?: string | null;
+  stemLengthCm?: number | null;
+}): string {
+  if (input.typeName?.trim()) {
+    return flowerItemDisplayName({
+      typeName: input.typeName,
+      formName: input.formName,
+      varietyName: input.varietyName,
+      stemLengthCm: input.stemLengthCm,
+    });
+  }
+  return input.displayName?.trim() ?? '';
 }
 
 /** ProductComponent must reference a FlowerItem. */
@@ -942,10 +1125,16 @@ function inferCompositionVarietyName(row: {
   varietyName?: string | null;
 }): string {
   const explicit = row.varietyName?.trim();
-  if (explicit) return explicit;
+  if (explicit) return explicit.replace(/^[«"]\s*/, '').replace(/\s*[»"]$/, '');
+  const quoted = row.displayName.match(/«([^»]+)»/);
+  if (quoted?.[1]?.trim()) return quoted[1].trim();
   const type = inferCompositionTypeName(row);
   const parts = row.displayName.trim().split(/\s+/);
-  if (parts.length >= 2 && parts[0] === type) return parts[1] ?? '';
+  if (parts.length >= 2 && parts[0] === type) {
+    const candidate = parts[1] ?? '';
+    if (/^\d+$/.test(candidate) || candidate === 'см') return '';
+    return candidate;
+  }
   return '';
 }
 
@@ -1076,10 +1265,10 @@ export function suggestProductNameFromComposition(
     const label = row.displayName.trim();
     const variety = inferCompositionVarietyName(row);
     if (qty && qty > 1) {
-      if (variety) return `Букет из ${flowerTypeGenitive(type)} ${variety}`;
+      if (variety) return `Букет из ${flowerTypeGenitive(type)} ${quoteFlowerVariety(variety)}`;
       return `Букет из ${qty} ${label}`;
     }
-    if (variety) return `${type} ${variety}`;
+    if (variety) return `${type} ${quoteFlowerVariety(variety)}`;
     return label;
   }
 
@@ -1095,10 +1284,10 @@ export function suggestProductNameFromComposition(
       return `Букет из ${flowerTypeGenitive(type)} разных сортов`;
     }
     if (varieties.length === 2) {
-      return `Букет из ${flowerTypeGenitive(type)} ${varieties[0]} и ${varieties[1]}`;
+      return `Букет из ${flowerTypeGenitive(type)} ${quoteFlowerVariety(varieties[0]!)} и ${quoteFlowerVariety(varieties[1]!)}`;
     }
     if (varieties.length === 1) {
-      return `Букет из ${flowerTypeGenitive(type)} ${varieties[0]}`;
+      return `Букет из ${flowerTypeGenitive(type)} ${quoteFlowerVariety(varieties[0]!)}`;
     }
     return `Букет из ${flowerTypeGenitive(type)}`;
   }

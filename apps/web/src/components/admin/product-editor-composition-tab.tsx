@@ -17,6 +17,7 @@ import {
   type ComponentDraft,
   type CompositionHit,
 } from '@/components/admin/product-editor-shared';
+import { ProductEditorInlineFlower } from '@/components/admin/product-editor-inline-flower';
 import { componentRoleLabel } from '@/lib/admin-labels';
 
 type Props = {
@@ -150,15 +151,19 @@ export function ProductEditorCompositionTab(props: Props) {
   }
 
   return (
-    <section className="admin-section space-y-6" data-section="composition">
-      <div>
-        <h2 className="admin-section__title">Состав</h2>
-        <p className="admin-section__lead">
+    <section className="sf-pe-card space-y-6" data-section="composition">
+      <div className="sf-pe-card__head">
+        <span className="sf-pe-card__index">2</span>
+        <div>
+          <h2>{isStem ? 'Выбор цветка' : 'Состав'}</h2>
+          <p className="sf-pe-card__lead">
           {isStem
-            ? 'Выберите цветок из справочника — цвет подставится автоматически.'
-            : 'Добавьте цветы из справочника. Цвет берётся из карточки цветка, не задаётся вручную.'}
-        </p>
+            ? 'Выберите одну позицию справочника. Вид, форма, сорт и высота подставятся сами.'
+            : 'Добавьте цветы из справочника и укажите количество веток.'}
+          </p>
+        </div>
       </div>
+      <div className="sf-pe-card__body space-y-6">
 
       {summaryLine ? (
         <p className="text-sm text-[var(--admin-muted)]">{summaryLine}</p>
@@ -199,7 +204,7 @@ export function ProductEditorCompositionTab(props: Props) {
             />
           </label>
 
-          {!isReplacing ? (
+          {!isReplacing && !isStem ? (
             <label className="admin-field max-w-[8rem]">
               <span>Кол-во</span>
               <input
@@ -230,12 +235,6 @@ export function ProductEditorCompositionTab(props: Props) {
                   {compositionBrowseMode
                     ? 'Нет доступных позиций. '
                     : 'Ничего не найдено. '}
-                  <a
-                    href="/admin/catalog/flower-structure"
-                    className="underline underline-offset-2"
-                  >
-                    Создать цветок
-                  </a>
                 </li>
               ) : (
                 compositionHits.map((item, index) => {
@@ -279,6 +278,10 @@ export function ProductEditorCompositionTab(props: Props) {
               )}
             </ul>
           </div>
+          <ProductEditorInlineFlower
+            canUpdate={canUpdate}
+            onCreated={(item) => onAddFlower(item.id, item.name)}
+          />
         </div>
       ) : null}
 
@@ -334,6 +337,7 @@ export function ProductEditorCompositionTab(props: Props) {
                       >
                         Заменить
                       </button>
+                      {!isStem ? (
                       <button
                         type="button"
                         className="admin-btn-ghost text-xs"
@@ -341,6 +345,7 @@ export function ProductEditorCompositionTab(props: Props) {
                       >
                         Дублировать
                       </button>
+                      ) : null}
                       <button
                         type="button"
                         className="admin-btn-ghost text-xs"
@@ -406,10 +411,11 @@ export function ProductEditorCompositionTab(props: Props) {
             Предложить гамму из состава
           </button>
           <span className="admin-field__hint">
-            Необязательно — для SEO-фильтров во вкладке «Основное»
+            Необязательно — для SEO-фильтров в блоке «Кому подходит»
           </span>
         </div>
       ) : null}
+      </div>
     </section>
   );
 }

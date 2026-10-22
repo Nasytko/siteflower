@@ -2,7 +2,6 @@
 
 import {
   COMMERCIAL_AVAILABILITIES,
-  DEFAULT_PRODUCT_VARIANT_NAME,
   PRIMARY_PRODUCT_KINDS,
   PRODUCT_KINDS,
   normalizeSlug,
@@ -12,13 +11,11 @@ import {
   type ProductAdminDto,
   type ProductKind,
 } from '@bouquet-one/contracts';
-import { ProductPlacementPanel } from '@/components/admin/product-placement-panel';
 import { TaxonomyQuickPick } from '@/components/admin/taxonomy-quick-pick';
 import type { ComponentDraft, PickerOption, VariantDraft } from '@/components/admin/product-editor-shared';
 import type { CategoryPickerOption } from '@/lib/admin-catalog-picker-labels';
 import { giftSubtypeOptions } from '@/lib/admin-catalog-picker-labels';
-import { availabilityLabel, lifecycleLabel, productKindLabel } from '@/lib/admin-labels';
-import { availabilityChipClass, lifecycleChipClass } from '@/lib/admin-status';
+import { availabilityLabel, productKindLabel } from '@/lib/admin-labels';
 
 export type {
   ComponentDraft,
@@ -55,6 +52,9 @@ type Props = {
     }>
   >;
   slugManual: boolean;
+  nameManual?: boolean;
+  onNameTyped?: () => void;
+  blocks?: Array<'kind' | 'identity' | 'copy' | 'audience' | 'status'>;
   components: ComponentDraft[];
   variants: VariantDraft[];
   setVariants: React.Dispatch<React.SetStateAction<VariantDraft[]>>;
@@ -107,16 +107,18 @@ type Props = {
 
 export function ProductEditorMainTab(props: Props) {
   const {
-    server,
+    server: _server,
     canUpdate,
     canCreate,
-    canPublish,
-    pending,
+    canPublish: _canPublish,
+    pending: _pending,
     productKind,
     setProductKind,
     basic,
     setBasic,
     slugManual,
+    onNameTyped,
+    blocks = ['kind', 'identity', 'copy', 'audience', 'status'],
     components,
     variants,
     setVariants,
@@ -132,13 +134,9 @@ export function ProductEditorMainTab(props: Props) {
     onTaxonomyCreated,
     publication,
     setPublication,
-    hasPrimaryImage,
-    mediaCount,
-    onGoPhotos,
-    onGoExtraVariants,
-    onPublish,
-    onUnpublish,
-    onArchive,
+    onPublish: _onPublish,
+    onUnpublish: _onUnpublish,
+    onArchive: _onArchive,
     touch,
   } = props;
 
@@ -153,45 +151,87 @@ export function ProductEditorMainTab(props: Props) {
 
   const simplePrice = variants[0];
   const multiSize = variants.length > 1;
+  const show = (block: (typeof blocks)[number]) => blocks.includes(block);
 
   return (
-    <section className="admin-section space-y-6">
-      <div>
-        <h2 className="admin-section__title">Основное</h2>
-        <p className="admin-section__lead">
-          Что продаём, название, цена и описание. Раздел каталога определяется типом автоматически —
-          категорию «Розы» выбирать не нужно.
-        </p>
-      </div>
+    <div className="space-y-4">
+      {show('kind') ? (
+        <section className="sf-pe-card">
+          <div className="sf-pe-card__head">
+            <span className="sf-pe-card__index">1</span>
+            <div>
+              <h2>Что продаём?</h2>
+              <p className="sf-pe-card__lead">
+                Основной выбор — букет или цветы поштучно. Раздел каталога определится сам.
+              </p>
+            </div>
+          </div>
+          <div className="sf-pe-card__body">
+            <div className="sf-pe-kind">
+              {PRIMARY_PRODUCT_KINDS.filter((value) => value === 'BOUQUET' || value === 'STEM').map(
+                (value) => (
+                  <button
+                    key={value}
+                    type="button"
+                    className={`sf-pe-kind__card ${productKind === value ? 'sf-pe-kind__card--active' : ''}`}
+                    disabled={!canUpdate}
+                    onClick={() => setProductKind(value)}
+                  >
+                    <strong>{productKindLabel(value)}</strong>
+                    <span>
+                      {value === 'BOUQUET'
+                        ? 'Готовая композиция из нескольких цветов'
+                        : 'Продаётся по ветке. Название и характеристики — из справочника.'}
+                    </span>
+                  </button>
+                ),
+              )}
+            </div>
+            {(PRODUCT_KINDS as readonly ProductKind[]).some(
+              (value) => !(PRIMARY_PRODUCT_KINDS as readonly string[]).includes(value) || value === 'COMPOSITION' || value === 'GIFT',
+            ) ? (
+              <label className="admin-field mt-3">
+                <span>Другой тип</span>
+                <select
+                  className="admin-select"
+                  value={
+                    productKind === 'BOUQUET' || productKind === 'STEM' ? '' : productKind
+                  }
+                  disabled={!canUpdate}
+                  onChange={(event) => {
+                    const next = event.target.value as ProductKind | '';
+                    if (next) setProductKind(next);
+                  }}
+                >
+                  <option value="">Не выбран</option>
+                  {(PRODUCT_KINDS as readonly ProductKind[])
+                    .filter((value) => value !== 'BOUQUET' && value !== 'STEM')
+                    .map((value) => (
+                      <option key={value} value={value}>
+                        {productKindLabel(value)}
+                      </option>
+                    ))}
+                </select>
+              </label>
+            ) : null}
+          </div>
+        </section>
+      ) : null}
 
-      <div className="grid max-w-2xl gap-4">
-        <label className="admin-field" data-section="productKind">
-          <span>Что продаём?</span>
-          <select
-            className="admin-select"
-            value={productKind}
-            disabled={!canUpdate}
-            onChange={(event) => setProductKind(event.target.value as ProductKind)}
-          >
-            {PRIMARY_PRODUCT_KINDS.map((value) => (
-              <option key={value} value={value}>
-                {productKindLabel(value)}
-              </option>
-            ))}
-            {(PRODUCT_KINDS as readonly ProductKind[])
-              .filter((value) => !(PRIMARY_PRODUCT_KINDS as readonly string[]).includes(value))
-              .map((value) => (
-                <option key={value} value={value}>
-                  {productKindLabel(value)}
-                </option>
-              ))}
-          </select>
-          <span className="admin-field__hint">
-            Букет / композиция / поштучно / подарок. Характеристики состава и разделы «Розы»,
-            «Монобукеты» считаются сами.
-          </span>
-        </label>
-
+      {show('identity') ? (
+      <section className="sf-pe-card">
+        <div className="sf-pe-card__head">
+          <span className="sf-pe-card__index">3</span>
+          <div>
+            <h2>Название и цена</h2>
+            <p className="sf-pe-card__lead">
+              {productKind === 'STEM'
+                ? 'Название берётся из выбранного цветка. Цена — за одну ветку.'
+                : 'Название предлагается по составу. Его можно задать вручную — тогда оно не перезапишется.'}
+            </p>
+          </div>
+        </div>
+        <div className="sf-pe-card__body grid max-w-2xl gap-4">
         <label className="admin-field" data-section="name">
           <span>Название</span>
           <input
@@ -200,6 +240,7 @@ export function ProductEditorMainTab(props: Props) {
             disabled={!canUpdate}
             onChange={(event) => {
               const name = event.target.value;
+              onNameTyped?.();
               setBasic((prev) => ({
                 ...prev,
                 name,
@@ -267,28 +308,19 @@ export function ProductEditorMainTab(props: Props) {
             {multiSize ? 'Цена (несколько размеров)' : 'Цена товара'}
           </h3>
           {multiSize ? (
-            <div className="space-y-2">
-              <ul className="space-y-1 text-sm">
-                {variants.map((variant) => (
-                  <li key={variant.key}>
-                    {variant.name || DEFAULT_PRODUCT_VARIANT_NAME}:{' '}
-                    {variant.priceMajor.trim() ? `${variant.priceMajor} BYN` : 'цена не указана'}
-                  </li>
-                ))}
-              </ul>
-              <button type="button" className="admin-link text-sm" onClick={onGoExtraVariants}>
-                Изменить размеры и цены
-              </button>
-            </div>
-          ) : (
+            <p className="admin-help">
+              У этого товара несколько размеров из старой системы. На витрине действует первая
+              активная цена. Новые размеры создавайте отдельными связанными товарами.
+            </p>
+          ) : null}
             <label className="admin-field max-w-xs">
-              <span>{simplePrice?.name || DEFAULT_PRODUCT_VARIANT_NAME}</span>
+              <span>{productKind === 'STEM' ? 'Цена за 1 ветку, BYN' : 'Цена, BYN'}</span>
               <input
                 className="admin-input tabular-nums"
                 value={simplePrice?.priceMajor ?? ''}
                 disabled={!canUpdate}
                 inputMode="decimal"
-                placeholder="Укажите цену"
+                placeholder="0,00"
                 onChange={(event) => {
                   const value = event.target.value;
                   setVariants((prev) =>
@@ -297,32 +329,22 @@ export function ProductEditorMainTab(props: Props) {
                   touch();
                 }}
               />
-              <span className="admin-field__hint">BYN</span>
             </label>
-          )}
-          {canUpdate && !multiSize ? (
-            <button type="button" className="admin-btn-ghost" onClick={onGoExtraVariants}>
-              + Несколько размеров (7 шт / 15 шт)
-            </button>
-          ) : null}
         </div>
-
-        <div className="flex flex-wrap items-center gap-3 text-sm" data-section="photo">
-          <span className="text-[var(--admin-muted)]">Фото:</span>
-          {hasPrimaryImage ? (
-            <span>
-              ✓ основное · {mediaCount} из 12
-            </span>
-          ) : (
-            <span className="text-amber-800">
-              нет основного фото{mediaCount > 0 ? ` · ${mediaCount} загружено` : ''}
-            </span>
-          )}
-          <button type="button" className="admin-link" onClick={onGoPhotos}>
-            {hasPrimaryImage ? 'Управление фото' : 'Добавить'}
-          </button>
         </div>
+      </section>
+      ) : null}
 
+      {show('copy') ? (
+      <section className="sf-pe-card">
+        <div className="sf-pe-card__head">
+          <span className="sf-pe-card__index">5</span>
+          <div>
+            <h2>Описание</h2>
+            <p className="sf-pe-card__lead">Короткий текст для каталога и полное описание для карточки.</p>
+          </div>
+        </div>
+        <div className="sf-pe-card__body grid max-w-2xl gap-4">
         <label className="admin-field" data-section="shortDescription">
           <span>Короткое описание</span>
           <textarea
@@ -366,8 +388,21 @@ export function ProductEditorMainTab(props: Props) {
             }}
           />
         </label>
+        </div>
+      </section>
+      ) : null}
 
-        <div className="grid gap-4 lg:grid-cols-2">
+      {show('audience') ? (
+      <section className="sf-pe-card">
+        <div className="sf-pe-card__head">
+          <span className="sf-pe-card__index">6</span>
+          <div>
+            <h2>Кому подходит</h2>
+            <p className="sf-pe-card__lead">Повод и получатель — множественный выбор с поиском.</p>
+          </div>
+        </div>
+        <div className="sf-pe-card__body grid gap-4 lg:grid-cols-2">
+        <div className="contents">
           <TaxonomyQuickPick
             kind="occasions"
             legend="Повод"
@@ -464,74 +499,37 @@ export function ProductEditorMainTab(props: Props) {
             onCreated={(item) => onTaxonomyCreated('colors', item)}
           />
         </details>
-
-        <div className="admin-subsection space-y-3">
-          <h3 className="admin-subsection__title">Статус</h3>
-          <p className="admin-status-row text-sm">
-            <span className={lifecycleChipClass(server.lifecycle)}>
-              {lifecycleLabel(server.lifecycle)}
-            </span>
-            <span className={availabilityChipClass(publication.availability)}>
-              {availabilityLabel(publication.availability)}
-            </span>
-          </p>
-          <label className="admin-field max-w-sm">
-            <span>Наличие</span>
-            <select
-              className="admin-select"
-              value={publication.availability}
-              disabled={!canUpdate}
-              onChange={(event) => {
-                setPublication((prev) => ({
-                  ...prev,
-                  availability: event.target.value as CommercialAvailability,
-                }));
-                touch();
-              }}
-            >
-              {COMMERCIAL_AVAILABILITIES.map((value) => (
-                <option key={value} value={value}>
-                  {availabilityLabel(value)}
-                </option>
-              ))}
-            </select>
-          </label>
-          <div className="flex flex-wrap items-center gap-2">
-            {canPublish ? (
-              <>
-                <button
-                  type="button"
-                  className="admin-btn"
-                  disabled={pending || server.lifecycle === 'PUBLISHED'}
-                  onClick={onPublish}
-                >
-                  Опубликовать
-                </button>
-                <button
-                  type="button"
-                  className="admin-btn-ghost"
-                  disabled={pending || server.lifecycle !== 'PUBLISHED'}
-                  onClick={onUnpublish}
-                >
-                  Снять с витрины
-                </button>
-                <button
-                  type="button"
-                  className="admin-btn-ghost"
-                  disabled={pending || server.lifecycle === 'ARCHIVED'}
-                  onClick={onArchive}
-                >
-                  В архив
-                </button>
-              </>
-            ) : (
-              <p className="admin-help">Публикацией управляет роль с правом публикации.</p>
-            )}
-          </div>
         </div>
-      </div>
+      </section>
+      ) : null}
 
-      <ProductPlacementPanel productId={server.id} refreshKey={server.version} />
-    </section>
+      {show('status') ? (
+        <section className="sf-pe-card">
+          <div className="sf-pe-card__body space-y-3">
+            <label className="admin-field max-w-sm">
+              <span>Наличие</span>
+              <select
+                className="admin-select"
+                value={publication.availability}
+                disabled={!canUpdate}
+                onChange={(event) => {
+                  setPublication((prev) => ({
+                    ...prev,
+                    availability: event.target.value as CommercialAvailability,
+                  }));
+                  touch();
+                }}
+              >
+                {COMMERCIAL_AVAILABILITIES.map((value) => (
+                  <option key={value} value={value}>
+                    {availabilityLabel(value)}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
+        </section>
+      ) : null}
+    </div>
   );
 }

@@ -912,6 +912,22 @@ export class PublicProductListQueryDto extends ProductFacetQueryDto {
   sort?: ProductSort = 'recommended';
 }
 
+export class DeleteProductDto extends ExpectedVersionDto {
+  @IsString()
+  @MinLength(1)
+  @MaxLength(200)
+  confirmName!: string;
+
+  @IsOptional()
+  @IsBoolean()
+  detach?: boolean;
+}
+
+export class LinkRelatedProductDto {
+  @IsUUID()
+  productId!: string;
+}
+
 export class RelatedProductsQueryDto {
   @IsOptional()
   @Type(() => Number)

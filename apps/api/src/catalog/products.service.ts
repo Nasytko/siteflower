@@ -25,6 +25,9 @@ import {
   type ProductKind,
   type ProductListItemDto,
   categoryPublicHref,
+  evaluateProductDeleteImpact,
+  resolveRelatedProductLink,
+  type ProductDeleteImpactDto,
   type ProductPlacementDto,
   type ProductPlacementEntryDto,
   type ProductPublicDto,
@@ -57,6 +60,7 @@ import {
 } from './product-duplicate.util';
 import type {
   CreateProductDto,
+  DeleteProductDto,
   ProductListQueryDto,
   PublishProductDto,
   ReorderProductMediaDto,
@@ -928,6 +932,270 @@ export class ProductsService {
     });
 
     return this.finishAdminMutation(id);
+  }
+
+  async restore(
+    id: string,
+    expectedVersion: number,
+    actor: ActorContext,
+  ): Promise<ProductAdminDto> {
+    const product = await this.products.findById(id);
+    if (!product) throw new NotFoundException('Product not found');
+    if (product.lifecycle !== 'ARCHIVED') {
+      throw new BadRequestException('Восстановить можно только архивный товар');
+    }
+    await this.prisma.client.$transaction(async (tx) => {
+      await this.guardVersion(tx, id, expectedVersion, {
+        lifecycle: 'DRAFT',
+        publishAt: null,
+        unpublishAt: null,
+      });
+      await this.recordAudit(tx, actor, 'PRODUCT_RESTORED', id, { previousLifecycle: 'ARCHIVED' });
+    });
+    return this.finishAdminMutation(id);
+  }
+
+  async getDeleteImpact(id: string): Promise<ProductDeleteImpactDto> {
+    const product = await this.products.findById(id);
+    if (!product) throw new NotFoundException('Product not found');
+    return this.buildDeleteImpact(id, product.name, product.slug);
+  }
+
+  async removePermanently(
+    id: string,
+    input: DeleteProductDto,
+    actor: ActorContext,
+  ): Promise<{ deleted: true; id: string; slug: string }> {
+    const product = await this.products.findById(id);
+    if (!product) throw new NotFoundException('Product not found');
+    if (product.version !== input.expectedVersion) {
+      throw new ConflictException('Товар изменён в другом окне');
+    }
+    if (input.confirmName.trim() !== product.name.trim()) {
+      throw new BadRequestException('Введите точное название товара для подтверждения удаления');
+    }
+
+    const impact = await this.buildDeleteImpact(id, product.name, product.slug);
+    if (!impact.canDelete) {
+      throw new BadRequestException({
+        message: impact.blockers[0]?.message ?? 'Удаление запрещено',
+        error: 'CatalogDeleteBlocked',
+        code: 'HAS_ORDERS',
+        ordersCount: impact.blockers[0]?.count,
+        blockers: impact.blockers,
+        detachable: impact.detachable,
+      });
+    }
+    if (impact.detachable.length > 0 && !input.detach) {
+      throw new BadRequestException({
+        message: 'Сначала подтвердите отвязку связанных записей',
+        error: 'CatalogDeleteNeedsDetach',
+        code: 'NEEDS_DETACH',
+        blockers: impact.blockers,
+        detachable: impact.detachable,
+      });
+    }
+
+    const slug = product.slug;
+    const mediaAssetIds = [...new Set(product.media.map((row) => row.mediaAssetId))];
+
+    await this.prisma.client.$transaction(async (tx) => {
+      await tx.product.delete({ where: { id } });
+      for (const mediaAssetId of mediaAssetIds) {
+        const productRefs = await tx.productMedia.count({ where: { mediaAssetId } });
+        const navRefs = await tx.navigationMenuItem.count({ where: { mediaAssetId } });
+        await tx.mediaAsset.update({
+          where: { id: mediaAssetId },
+          data: { orphanedAt: productRefs + navRefs === 0 ? new Date() : null },
+        });
+      }
+      await this.recordAudit(tx, actor, 'PRODUCT_DELETED', id, {
+        name: product.name,
+        slug,
+        detached: impact.detachable.map((row) => row.code),
+      });
+    });
+
+    await this.bumpStorefrontCache(slug);
+    return { deleted: true, id, slug };
+  }
+
+  async suggestRelatedProducts(id: string): Promise<
+    Array<{
+      id: string;
+      name: string;
+      slug: string;
+      heightCm: number | null;
+      priceMinor: string | null;
+      alreadyLinked: boolean;
+    }>
+  > {
+    const product = await this.products.findById(id);
+    if (!product) throw new NotFoundException('Product not found');
+    const seed =
+      product.components.find((row) => row.role === 'PRIMARY')?.flowerItem ??
+      product.components[0]?.flowerItem;
+    if (!seed) return [];
+
+    const familyId = product.familyMember?.familyId ?? null;
+    const rows = await this.prisma.client.product.findMany({
+      where: {
+        id: { not: id },
+        lifecycle: { not: 'ARCHIVED' },
+        components: {
+          some: {
+            flowerItem: {
+              flowerTypeId: seed.flowerTypeId,
+              flowerFormId: seed.flowerFormId,
+              flowerVarietyId: seed.flowerVarietyId,
+            },
+          },
+        },
+      },
+      take: 8,
+      orderBy: { updatedAt: 'desc' },
+      include: {
+        variants: { where: { status: 'ACTIVE' }, orderBy: { sortOrder: 'asc' }, take: 1 },
+        familyMember: true,
+      },
+    });
+
+    return rows.map((row) => ({
+      id: row.id,
+      name: row.name,
+      slug: row.slug,
+      heightCm: row.bouquetHeightCm,
+      priceMinor: row.variants[0] ? row.variants[0].priceMinor.toString() : null,
+      alreadyLinked: Boolean(familyId && row.familyMember?.familyId === familyId),
+    }));
+  }
+
+  async linkRelatedProduct(
+    id: string,
+    relatedProductId: string,
+    actor: ActorContext,
+  ): Promise<ProductAdminDto> {
+    if (id === relatedProductId) {
+      throw new BadRequestException('Нельзя связать товар с самим собой');
+    }
+    const [left, right] = await Promise.all([
+      this.products.findById(id),
+      this.products.findById(relatedProductId),
+    ]);
+    if (!left || !right) throw new NotFoundException('Product not found');
+
+    const decision = resolveRelatedProductLink(
+      left.familyMember?.familyId,
+      right.familyMember?.familyId,
+    );
+    if (decision.type === 'conflict') {
+      throw new ConflictException(
+        'Товары уже входят в разные линейки. Снимите одну из связей, затем свяжите заново.',
+      );
+    }
+
+    await this.prisma.client.$transaction(async (tx) => {
+      let familyId = decision.type === 'create' ? '' : decision.familyId;
+      if (decision.type === 'create') {
+        const created = await tx.productFamily.create({
+          data: { name: `${left.name} / ${right.name}`.slice(0, 200) },
+        });
+        familyId = created.id;
+      }
+      await this.families.setProductFamilyInTx(tx, id, familyId);
+      await this.families.setProductFamilyInTx(tx, relatedProductId, familyId);
+      await this.recordAudit(tx, actor, 'PRODUCT_UPDATED', id, {
+        relatedProductId,
+        familyId,
+        related: 'link',
+      });
+    });
+
+    return this.finishAdminMutation(id);
+  }
+
+  async unlinkRelatedProduct(
+    id: string,
+    relatedProductId: string,
+    actor: ActorContext,
+  ): Promise<ProductAdminDto> {
+    const product = await this.products.findById(id);
+    if (!product) throw new NotFoundException('Product not found');
+    const familyId = product.familyMember?.familyId;
+    if (!familyId) {
+      throw new BadRequestException('У товара нет связанных карточек');
+    }
+
+    await this.prisma.client.$transaction(async (tx) => {
+      await this.families.setProductFamilyInTx(tx, relatedProductId, null);
+      const remaining = await tx.productFamilyMember.count({ where: { familyId } });
+      if (remaining <= 1) {
+        await tx.productFamilyMember.deleteMany({ where: { familyId } });
+        await tx.productFamily.delete({ where: { id: familyId } });
+      }
+      await this.recordAudit(tx, actor, 'PRODUCT_UPDATED', id, {
+        relatedProductId,
+        related: 'unlink',
+      });
+    });
+
+    return this.finishAdminMutation(id);
+  }
+
+  private async buildDeleteImpact(
+    id: string,
+    name: string,
+    slug: string,
+  ): Promise<ProductDeleteImpactDto> {
+    const [
+      orderItemsCount,
+      familyMembersCount,
+      promotionCount,
+      bestsellerLinksCount,
+      catalogPinsCount,
+      catalogExcludeCount,
+      seoPinsCount,
+      seoExcludeCount,
+      mediaCount,
+    ] = await Promise.all([
+      this.prisma.client.orderItem.count({ where: { productId: id } }),
+      this.countOtherFamilyMembers(id),
+      this.prisma.client.productPromotion.count({ where: { productId: id } }),
+      this.prisma.client.bestsellerGroupProduct.count({ where: { productId: id } }),
+      this.prisma.client.catalogPageProduct.count({ where: { productId: id } }),
+      this.prisma.client.catalogPageExclude.count({ where: { productId: id } }),
+      this.prisma.client.seoLandingPageProduct.count({ where: { productId: id } }),
+      this.prisma.client.seoLandingPageExclude.count({ where: { productId: id } }),
+      this.prisma.client.productMedia.count({ where: { productId: id } }),
+    ]);
+
+    return evaluateProductDeleteImpact({
+      productId: id,
+      name,
+      slug,
+      orderItemsCount,
+      familyMembersCount,
+      hasPromotion: promotionCount > 0,
+      bestsellerLinksCount,
+      catalogPinsCount: catalogPinsCount + catalogExcludeCount + seoPinsCount + seoExcludeCount,
+      mediaCount,
+    });
+  }
+
+  private async familyIdsFor(productId: string): Promise<string[]> {
+    const member = await this.prisma.client.productFamilyMember.findUnique({
+      where: { productId },
+      select: { familyId: true },
+    });
+    return member ? [member.familyId] : [];
+  }
+
+  private async countOtherFamilyMembers(productId: string): Promise<number> {
+    const familyIds = await this.familyIdsFor(productId);
+    if (familyIds.length === 0) return 0;
+    return this.prisma.client.productFamilyMember.count({
+      where: { familyId: { in: familyIds }, productId: { not: productId } },
+    });
   }
 
   async addMedia(

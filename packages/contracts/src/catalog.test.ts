@@ -17,6 +17,11 @@ import {
   defaultProductSeoTitle,
   productCardSubtitle,
   flowerItemDisplayName,
+  quoteFlowerVariety,
+  suggestStemProductName,
+  isPlaceholderProductName,
+  evaluateProductDeleteImpact,
+  resolveRelatedProductLink,
   flowerItemIdentityKey,
   assertComponentFlowerRefXor,
   defaultFilterKeysForPreset,
@@ -53,18 +58,27 @@ test('flowerItemIdentityKey and display name', () => {
       originName: 'Эквадор',
       heightCm: 60,
     }),
-    'Роза Мондиаль 60 см Эквадор',
+    'Роза «Мондиаль», 60 см',
   );
   assert.equal(
     flowerItemDisplayName({
       typeName: 'Роза',
-      formName: 'Классическая',
-      varietyName: 'Мондиаль',
+      formName: 'кустовая',
+      varietyName: 'Жизель',
       originName: 'Эквадор',
       stemLengthCm: 60,
     }),
-    'Роза Мондиаль 60 см Эквадор',
-    'form is omitted from retail canonical name',
+    'Роза кустовая «Жизель», 60 см',
+  );
+  assert.equal(
+    flowerItemDisplayName({
+      typeName: 'Роза кустовая',
+      formName: 'кустовая',
+      varietyName: 'Жизель',
+      stemLengthCm: 60,
+    }),
+    'Роза кустовая «Жизель», 60 см',
+    'form is not repeated when already in the type name',
   );
   assert.equal(
     flowerItemDisplayName({
@@ -73,15 +87,27 @@ test('flowerItemIdentityKey and display name', () => {
       originName: 'Голландия',
       stemLengthCm: 50,
     }),
-    'Гербера 50 см Голландия',
+    'Гербера, 50 см',
   );
   assert.equal(
     flowerItemDisplayName({
       typeName: 'Тюльпан',
       stemLengthCm: 50,
     }),
-    'Тюльпан 50 см',
+    'Тюльпан, 50 см',
   );
+  assert.equal(quoteFlowerVariety('«Жизель»'), '«Жизель»');
+  assert.equal(
+    suggestStemProductName({
+      typeName: 'Роза',
+      formName: 'кустовая',
+      varietyName: 'Жизель',
+      stemLengthCm: 60,
+    }),
+    'Роза кустовая «Жизель», 60 см',
+  );
+  assert.equal(isPlaceholderProductName('Новый букет', 'BOUQUET'), true);
+  assert.equal(isPlaceholderProductName('Осенний закат', 'BOUQUET'), false);
 });
 
 test('deriveCompositionKind scenarios (mono / mixed / greenery / unknown)', () => {
@@ -396,30 +422,30 @@ test('suggestProductNameFromComposition', () => {
         varietyName: 'Бигуди',
       },
     ]),
-    'Букет из хризантем Бигуди',
+    'Букет из хризантем «Бигуди»',
   );
   assert.equal(
     suggestProductNameFromComposition([
-      { displayName: 'Роза Мондиаль 60 см Эквадор', quantity: 1 },
+      { displayName: 'Роза «Мондиаль», 60 см', quantity: 1 },
     ]),
-    'Роза Мондиаль',
+    'Роза «Мондиаль»',
   );
   assert.equal(
     suggestProductNameFromComposition([
       {
-        displayName: 'Роза Мондиаль 60 см Эквадор',
+        displayName: 'Роза «Мондиаль», 60 см',
         quantity: 15,
         typeName: 'Роза',
         varietyName: 'Мондиаль',
       },
     ]),
-    'Букет из роз Мондиаль',
+    'Букет из роз «Мондиаль»',
   );
   assert.equal(
     suggestProductNameFromComposition([
-      { displayName: 'Роза Мондиаль 60 см Эквадор', quantity: null },
+      { displayName: 'Роза «Мондиаль», 60 см', quantity: null },
     ]),
-    'Роза Мондиаль',
+    'Роза «Мондиаль»',
   );
   assert.equal(
     suggestProductNameFromComposition([
@@ -444,7 +470,7 @@ test('suggestProductNameFromComposition', () => {
         varietyName: 'Жизель',
       },
     ]),
-    'Букет из роз Мондиаль и Жизель',
+    'Букет из роз «Мондиаль» и «Жизель»',
   );
   assert.equal(
     suggestProductNameFromComposition([
@@ -695,4 +721,48 @@ test('defaultFilterKeysForPreset seeds category filter pools', () => {
   assert.ok(defaultFilterKeysForPreset('FLOWERS').includes('stem_height'));
   assert.ok(defaultFilterKeysForPreset('BOUQUETS').includes('occasion'));
   assert.equal(defaultFilterKeysForPreset('CARDS').includes('stem_height'), false);
+});
+
+test('evaluateProductDeleteImpact blocks historical orders and lists detachable links', () => {
+  const blocked = evaluateProductDeleteImpact({
+    productId: 'p1',
+    name: 'Роза',
+    slug: 'roza',
+    orderItemsCount: 3,
+    familyMembersCount: 1,
+    hasPromotion: true,
+    bestsellerLinksCount: 0,
+    catalogPinsCount: 0,
+    mediaCount: 2,
+  });
+  assert.equal(blocked.canDelete, false);
+  assert.equal(blocked.blockers[0]?.code, 'ORDERS');
+  assert.equal(blocked.detachable.some((row) => row.code === 'FAMILY_MEMBERS'), true);
+
+  const free = evaluateProductDeleteImpact({
+    productId: 'p2',
+    name: 'Пион',
+    slug: 'pion',
+    orderItemsCount: 0,
+    familyMembersCount: 0,
+    hasPromotion: false,
+    bestsellerLinksCount: 0,
+    catalogPinsCount: 0,
+    mediaCount: 0,
+  });
+  assert.equal(free.canDelete, true);
+  assert.equal(free.blockers.length, 0);
+  assert.equal(free.detachable.length, 0);
+});
+
+test('resolveRelatedProductLink is mutual and rejects family merge', () => {
+  assert.deepEqual(resolveRelatedProductLink(null, null), { type: 'create' });
+  assert.deepEqual(resolveRelatedProductLink('a', null), { type: 'join', familyId: 'a' });
+  assert.deepEqual(resolveRelatedProductLink(null, 'b'), { type: 'join', familyId: 'b' });
+  assert.deepEqual(resolveRelatedProductLink('a', 'a'), { type: 'already', familyId: 'a' });
+  assert.deepEqual(resolveRelatedProductLink('a', 'b'), {
+    type: 'conflict',
+    leftFamilyId: 'a',
+    rightFamilyId: 'b',
+  });
 });

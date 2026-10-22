@@ -52,20 +52,24 @@ const NAV_GROUPS: NavGroup[] = [
     items: [
       { href: '/admin/catalog/products', label: 'Товары', permission: 'CATALOG_READ' },
       {
-        href: '/admin/catalog/dictionaries',
-        label: 'Справочники',
+        href: '/admin/catalog/flower-structure',
+        label: 'Справочник цветов',
         permission: 'CATALOG_READ',
         isActive: isDictionaryPath,
       },
       {
         href: '/admin/promotions',
-        label: 'Акции и подборки',
+        label: 'Акции',
         permission: 'CATALOG_READ',
         isActive: (pathname) =>
-          pathname === '/admin/promotions' ||
-          pathname.startsWith('/admin/promotions/') ||
-          pathname === '/admin/bestsellers' ||
-          pathname.startsWith('/admin/bestsellers/'),
+          pathname === '/admin/promotions' || pathname.startsWith('/admin/promotions/'),
+      },
+      {
+        href: '/admin/bestsellers',
+        label: 'Подборки',
+        permission: 'CATALOG_READ',
+        isActive: (pathname) =>
+          pathname === '/admin/bestsellers' || pathname.startsWith('/admin/bestsellers/'),
       },
     ],
   },
@@ -99,14 +103,6 @@ const NAV_GROUPS: NavGroup[] = [
           pathname === '/admin/seo/landings' ||
           pathname.startsWith('/admin/seo/landings/'),
       },
-      {
-        href: '/admin/seo',
-        label: 'Диагностика SEO',
-        permission: 'SEO_READ',
-        isActive: (pathname) =>
-          pathname === '/admin/seo' ||
-          (pathname.startsWith('/admin/seo/') && !pathname.startsWith('/admin/seo/landings')),
-      },
     ],
   },
   {
@@ -123,6 +119,13 @@ const NAV_GROUPS: NavGroup[] = [
         label: 'Настройки магазина',
         permission: 'SETTINGS_READ',
       },
+    ],
+  },
+  {
+    id: 'admin',
+    label: 'Администрирование',
+    items: [
+      { href: '/admin/users', label: 'Пользователи', permission: 'USERS_READ' },
       {
         href: '/admin/legal',
         label: 'Юридическая информация',
@@ -130,15 +133,22 @@ const NAV_GROUPS: NavGroup[] = [
         isActive: (pathname) =>
           pathname === '/admin/legal' || pathname.startsWith('/admin/legal/'),
       },
-      { href: '/admin/users', label: 'Пользователи', permission: 'USERS_READ' },
     ],
   },
   {
     id: 'system',
-    label: 'Система',
+    label: 'Система и диагностика',
     tier: 'system',
     items: [
       { href: '/admin/audit', label: 'Журнал действий', permission: 'AUDIT_READ' },
+      {
+        href: '/admin/seo',
+        label: 'Диагностика SEO',
+        permission: 'SEO_READ',
+        isActive: (pathname) =>
+          pathname === '/admin/seo' ||
+          (pathname.startsWith('/admin/seo/') && !pathname.startsWith('/admin/seo/landings')),
+      },
       {
         href: '/admin/media-health',
         label: 'Состояние медиа',
