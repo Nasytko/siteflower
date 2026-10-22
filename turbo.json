@@ -1,5 +1,23 @@
 {
   "$schema": "https://turbo.build/schema.json",
+  "globalPassThroughEnv": [
+    "DATABASE_URL",
+    "NODE_ENV",
+    "NEXT_PUBLIC_SITE_URL",
+    "API_URL",
+    "CORS_ORIGINS",
+    "MEDIA_STORAGE",
+    "MEDIA_LOCAL_ROOT",
+    "MEDIA_PUBLIC_BASE_URL",
+    "S3_PUBLIC_BASE_URL",
+    "SESSION_HMAC_SECRET",
+    "SESSION_ABSOLUTE_TTL_SECONDS",
+    "SESSION_IDLE_TTL_SECONDS",
+    "ALLOW_INDEXING",
+    "SWAGGER_ENABLED",
+    "TRUST_PROXY",
+    "LOG_LEVEL"
+  ],
   "tasks": {
     "build": {
       "dependsOn": ["generate", "^build"],
