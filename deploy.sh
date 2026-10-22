@@ -165,15 +165,22 @@ bring_up() {
 }
 
 wait_healthy() {
-  log "Waiting for healthchecks"
-  local i
-  for i in $(seq 1 60); do
-    if "$SCRIPT_DIR/healthcheck.sh"; then
+  # Containers may need a short warm-up; domain/Nginx/TLS mistakes never self-heal.
+  local i rc max_attempts="${SHOPBUKET1_HEALTH_ATTEMPTS:-36}"
+  log "Waiting for healthchecks (up to ${max_attempts} attempts, 5s apart)"
+  for i in $(seq 1 "$max_attempts"); do
+    rc=0
+    "$SCRIPT_DIR/healthcheck.sh" || rc=$?
+    if [[ "$rc" -eq 0 ]]; then
       return 0
     fi
+    if [[ "$rc" -eq 2 ]]; then
+      die "Healthcheck failed with a non-retryable domain/Nginx/TLS error (attempt ${i}/${max_attempts}). Fix production.env and/or the shopbuket1 Nginx site for ${SHOPBUKET1_CANONICAL_PUBLIC_HOST:-buketnomer1.by}, then re-run ./deploy.sh. ERP was not modified."
+    fi
+    log "Healthcheck attempt ${i}/${max_attempts} not ready yet (exit ${rc}); retrying in 5s"
     sleep 5
   done
-  die "Healthchecks did not become ready in time"
+  die "Healthchecks did not become ready in time (${max_attempts} attempts). See FAIL lines above."
 }
 
 prune_old_shopbuket1_images() {

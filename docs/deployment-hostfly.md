@@ -316,9 +316,13 @@ See [media-production.md](./media-production.md) for lifecycle details.
 
 `provision-nginx.sh` / `deploy/lib/nginx.sh` `render_nginx_https` emits on the **443** server only:
 
-`Strict-Transport-Security: max-age=31536000`
+`Strict-Transport-Security: max-age=300`
 
-No `includeSubDomains`, no `preload` (one apex FQDN, `buketnomer1.by`; preload is irreversible without ops ownership). `www.buketnomer1.by` is not added automatically and is not covered by this HSTS header. HTTP `:80` remains ACME + 301 redirect only — no HSTS on plaintext responses. After TLS changes: preview the rendered site, then `sudo ./provision-nginx.sh` and `nginx -t && systemctl reload nginx`.
+First stage uses a short `max-age` so a bad pin expires quickly. No `includeSubDomains`, no `preload` (apex `buketnomer1.by` only; preload is irreversible without ops ownership). `www.buketnomer1.by` is optional beside the apex and is not covered by this HSTS header unless it is listed in the same `server_name` and browsers receive the header on that host too.
+
+`healthcheck.sh` validates the **shopbuket1** Nginx site that actually serves `buketnomer1.by` (prefers `sites-enabled/shopbuket1-domain` over legacy `shopbuket1`). It does **not** require HSTS on a retired `shop.nasytko.ru` vhost and never inspects `erpbuket1*`. Live HTTPS responses must also send HSTS.
+
+HTTP `:80` remains ACME + 301 redirect only — no HSTS on plaintext responses. Do **not** run `sudo ./provision-nginx.sh` blindly when `shopbuket1-domain` already serves the apex: preview the target file first, add HSTS there, `nginx -t`, then reload.
 
 ## Related docs
 

@@ -125,12 +125,16 @@ validate_production_env() {
   [[ -n "${NEXT_PUBLIC_SITE_URL:-}" ]] || die "NEXT_PUBLIC_SITE_URL is required"
   [[ "${NEXT_PUBLIC_SITE_URL}" == https://* ]] || log "WARN: NEXT_PUBLIC_SITE_URL is not https:// — OK only before TLS is ready"
 
+  assert_storefront_domain_settings
   local public_domain
-  public_domain="$(resolve_public_domain)"
+  public_domain="$(resolve_required_storefront_domain)"
   assert_valid_public_domain "$public_domain"
   if [[ "${NEXT_PUBLIC_SITE_URL}" == *"YOUR_DOMAIN"* ]] \
     || [[ "${CORS_ORIGINS:-}" == *"YOUR_DOMAIN"* ]]; then
     die "NEXT_PUBLIC_SITE_URL / CORS_ORIGINS still contain YOUR_DOMAIN placeholder"
+  fi
+  if [[ "${CORS_ORIGINS:-}" == *"shop.nasytko.ru"* ]]; then
+    die "CORS_ORIGINS still references retired shop.nasytko.ru — set CORS_ORIGINS=https://${SHOPBUKET1_CANONICAL_PUBLIC_HOST}"
   fi
 
   [[ -n "${POSTGRES_USER:-}" ]] || die "POSTGRES_USER is required"

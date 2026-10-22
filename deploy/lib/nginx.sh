@@ -10,9 +10,24 @@ SHOPBUKET1_NGINX_SNIPPET_DST="${SHOPBUKET1_NGINX_SNIPPET_DST:-/etc/nginx/snippet
 SHOPBUKET1_NGINX_MAP_SRC="${SHOPBUKET1_NGINX_MAP_SRC:-deploy/nginx/shopbuket1-map.conf}"
 SHOPBUKET1_NGINX_MAP_DST="${SHOPBUKET1_NGINX_MAP_DST:-/etc/nginx/conf.d/shopbuket1-map.conf}"
 SHOPBUKET1_ACME_WEBROOT="${SHOPBUKET1_ACME_WEBROOT:-/var/www/html}"
+SHOPBUKET1_NGINX_SITES_ENABLED="${SHOPBUKET1_NGINX_SITES_ENABLED:-/etc/nginx/sites-enabled}"
+SHOPBUKET1_NGINX_SITES_AVAILABLE="${SHOPBUKET1_NGINX_SITES_AVAILABLE:-/etc/nginx/sites-available}"
 
-# Apex of the public shop. www is not implied and is not covered by HSTS.
+# Apex of the public shop. www is optional beside the apex and is not covered by HSTS preload.
 SHOPBUKET1_CANONICAL_PUBLIC_HOST="${SHOPBUKET1_CANONICAL_PUBLIC_HOST:-buketnomer1.by}"
+# First-stage HSTS: short max-age, apex only — never includeSubDomains / preload here.
+SHOPBUKET1_HSTS_MAX_AGE="${SHOPBUKET1_HSTS_MAX_AGE:-300}"
+
+# Strip scheme/path/port; lowercase. Empty if unset.
+normalize_hostname() {
+  local raw="${1:-}"
+  raw="$(printf '%s' "$raw" | tr -d '\r' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')"
+  raw="${raw#https://}"
+  raw="${raw#http://}"
+  raw="${raw%%/*}"
+  raw="${raw%%:*}"
+  printf '%s' "$raw" | tr '[:upper:]' '[:lower:]'
+}
 
 # Resolve hostname from PUBLIC_DOMAIN, else host of NEXT_PUBLIC_SITE_URL.
 # Prints domain only (no scheme/path/port). Empty if unset.
@@ -21,31 +36,126 @@ resolve_public_domain() {
   if [[ -z "$raw" ]]; then
     raw="${NEXT_PUBLIC_SITE_URL:-}"
   fi
-  raw="$(printf '%s' "$raw" | tr -d '\r' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')"
-  raw="${raw#https://}"
-  raw="${raw#http://}"
-  raw="${raw%%/*}"
-  raw="${raw%%:*}"
-  printf '%s\n' "$raw"
+  normalize_hostname "$raw"
+  printf '\n'
 }
 
 # Retired storefront host. It must not be the required healthcheck or server_name.
 is_retired_shop_host() {
   local lower
-  lower="$(printf '%s' "${1:-}" | tr '[:upper:]' '[:lower:]')"
+  lower="$(normalize_hostname "${1:-}")"
   [[ "$lower" == "shop.nasytko.ru" ]]
 }
 
-# Host that healthcheck and Nginx provisioning must use.
-# A retired host in env is replaced by the canonical shop domain.
+# PUBLIC_DOMAIN and NEXT_PUBLIC_SITE_URL must agree; retired hosts are rejected.
+# Call from deploy validation and healthcheck — clear error, no silent remap.
+assert_storefront_domain_settings() {
+  local from_public from_site domain
+  from_public="$(normalize_hostname "${PUBLIC_DOMAIN:-}")"
+  from_site="$(normalize_hostname "${NEXT_PUBLIC_SITE_URL:-}")"
+
+  if [[ -n "$from_public" && -n "$from_site" && "$from_public" != "$from_site" ]]; then
+    die "PUBLIC_DOMAIN (${from_public}) and NEXT_PUBLIC_SITE_URL host (${from_site}) disagree. Set both to ${SHOPBUKET1_CANONICAL_PUBLIC_HOST}."
+  fi
+
+  domain="${from_public:-$from_site}"
+  if is_retired_shop_host "$domain"; then
+    die "Storefront host ${domain} is retired. Set NEXT_PUBLIC_SITE_URL=https://${SHOPBUKET1_CANONICAL_PUBLIC_HOST}, CORS_ORIGINS=https://${SHOPBUKET1_CANONICAL_PUBLIC_HOST}, and PUBLIC_DOMAIN=${SHOPBUKET1_CANONICAL_PUBLIC_HOST} in ${SHOPBUKET1_ENV_FILE:-/etc/shopbuket1/production.env}."
+  fi
+}
+
+# Host that healthcheck and Nginx provisioning must use (after assert_storefront_domain_settings).
 resolve_required_storefront_domain() {
   local domain
   domain="$(resolve_public_domain)"
+  if is_placeholder_domain "$domain" || [[ -z "$domain" ]]; then
+    printf '%s\n' ""
+    return 0
+  fi
   if is_retired_shop_host "$domain"; then
+    # Caller should have asserted; keep canonical for diagnostics only.
     printf '%s\n' "$SHOPBUKET1_CANONICAL_PUBLIC_HOST"
     return 0
   fi
   printf '%s\n' "$domain"
+}
+
+# True if an nginx site file's server_name list includes the hostname.
+site_file_covers_domain() {
+  local file="$1"
+  local domain="$2"
+  [[ -f "$file" ]] || return 1
+  grep -Eq "server_name[[:space:]]+([^;]*[[:space:]])?${domain}([[:space:]]|;)" "$file"
+}
+
+# Resolve a readable path for a sites-enabled entry (follow symlink when possible).
+nginx_site_realpath() {
+  local f="$1" target dir
+  if [[ -L "$f" ]]; then
+    target="$(readlink -f "$f" 2>/dev/null || true)"
+    if [[ -n "$target" && -e "$target" ]]; then
+      printf '%s\n' "$target"
+      return 0
+    fi
+    target="$(readlink "$f" 2>/dev/null || true)"
+    if [[ -n "$target" ]]; then
+      if [[ "$target" != /* ]]; then
+        dir="$(cd "$(dirname "$f")" && pwd)"
+        target="${dir}/${target}"
+      fi
+      printf '%s\n' "$target"
+      return 0
+    fi
+  fi
+  printf '%s\n' "$f"
+}
+
+# Find the shopbuket1 Nginx site that actually serves <domain>.
+# Prefers sites-enabled/shopbuket1-domain, then other shopbuket1-*, then shopbuket1.
+# Never considers erpbuket1* files.
+find_nginx_site_for_domain() {
+  local domain="$1"
+  local enabled_dir="${SHOPBUKET1_NGINX_SITES_ENABLED}"
+  local candidates=()
+  local f real base
+
+  [[ -n "$domain" ]] || return 1
+
+  if [[ -d "$enabled_dir" ]]; then
+    if [[ -e "${enabled_dir}/shopbuket1-domain" ]]; then
+      candidates+=("${enabled_dir}/shopbuket1-domain")
+    fi
+    # shellcheck disable=SC2231
+    for f in "${enabled_dir}"/shopbuket1-*; do
+      [[ -e "$f" ]] || continue
+      base="$(basename "$f")"
+      [[ "$base" == "shopbuket1-domain" ]] && continue
+      [[ "$base" == erpbuket1* ]] && continue
+      candidates+=("$f")
+    done
+    if [[ -e "${enabled_dir}/shopbuket1" ]]; then
+      candidates+=("${enabled_dir}/shopbuket1")
+    fi
+  fi
+
+  for f in "${candidates[@]}"; do
+    base="$(basename "$f")"
+    [[ "$base" == "${SHOPBUKET1_PROJECT_NAME:-shopbuket1}"* ]] || continue
+    [[ "$base" == erpbuket1* ]] && continue
+    real="$(nginx_site_realpath "$f")"
+    if site_file_covers_domain "$real" "$domain"; then
+      printf '%s\n' "$real"
+      return 0
+    fi
+  done
+
+  if [[ -f "${SHOPBUKET1_NGINX_AVAILABLE}" ]] \
+    && site_file_covers_domain "${SHOPBUKET1_NGINX_AVAILABLE}" "$domain"; then
+    printf '%s\n' "${SHOPBUKET1_NGINX_AVAILABLE}"
+    return 0
+  fi
+
+  return 1
 }
 
 is_placeholder_domain() {
@@ -125,17 +235,70 @@ validate_nginx_site_file() {
     fi
     # HSTS belongs on the TLS vhost only (not the port-80 redirect server).
     # includeSubDomains would also pin every child hostname; preload cannot be undone here.
-    if ! grep -Eq 'Strict-Transport-Security' "$file"; then
-      log "Nginx HTTPS site missing Strict-Transport-Security: $file"
-      return 1
-    fi
-    if grep -Ei 'add_header[[:space:]]+Strict-Transport-Security' "$file" \
-      | grep -Eqi 'includeSubDomains|preload'; then
-      log "Nginx HSTS must not set includeSubDomains or preload: $file"
+    if ! validate_hsts_add_header_line "$file"; then
       return 1
     fi
   fi
 
+  return 0
+}
+
+# Validate add_header Strict-Transport-Security in a site file.
+# Requires max-age >= SHOPBUKET1_HSTS_MAX_AGE (default 300); rejects includeSubDomains/preload.
+validate_hsts_add_header_line() {
+  local file="$1"
+  local line age
+
+  if ! grep -Eq 'Strict-Transport-Security' "$file"; then
+    log "Nginx HTTPS site missing Strict-Transport-Security: $file"
+    return 1
+  fi
+
+  line="$(grep -Ei 'add_header[[:space:]]+Strict-Transport-Security' "$file" | head -n1 || true)"
+  if [[ -z "$line" ]]; then
+    log "Nginx HTTPS site has Strict-Transport-Security mention but no add_header: $file"
+    return 1
+  fi
+  if printf '%s' "$line" | grep -Eqi 'includeSubDomains|preload'; then
+    log "Nginx HSTS must not set includeSubDomains or preload: $file"
+    return 1
+  fi
+  if [[ ! "$line" =~ max-age=([0-9]+) ]]; then
+    log "Nginx HSTS add_header missing max-age=: $file"
+    return 1
+  fi
+  age="${BASH_REMATCH[1]}"
+  if [[ "$age" -lt "${SHOPBUKET1_HSTS_MAX_AGE}" ]]; then
+    log "Nginx HSTS max-age=${age} is below minimum ${SHOPBUKET1_HSTS_MAX_AGE}: $file"
+    return 1
+  fi
+  return 0
+}
+
+# Parse Strict-Transport-Security from raw HTTP response headers (curl -sI).
+# Returns 0 when a safe apex HSTS header is present.
+validate_hsts_response_headers() {
+  local headers="$1"
+  local line age
+
+  line="$(printf '%s\n' "$headers" | grep -i '^strict-transport-security:' | head -n1 || true)"
+  if [[ -z "$line" ]]; then
+    log "HTTPS response missing Strict-Transport-Security header"
+    return 1
+  fi
+  if printf '%s' "$line" | grep -Eqi 'includeSubDomains|preload'; then
+    log "HTTPS HSTS must not set includeSubDomains or preload"
+    return 1
+  fi
+  if [[ ! "$line" =~ [Mm][Aa][Xx]-[Aa][Gg][Ee]=([0-9]+) ]]; then
+    log "HTTPS HSTS header missing max-age="
+    return 1
+  fi
+  age="${BASH_REMATCH[1]}"
+  if [[ "$age" -lt "${SHOPBUKET1_HSTS_MAX_AGE}" ]]; then
+    log "HTTPS HSTS max-age=${age} is below minimum ${SHOPBUKET1_HSTS_MAX_AGE}"
+    return 1
+  fi
   return 0
 }
 
@@ -203,27 +366,50 @@ server {
     ssl_session_cache shared:SSL:10m;
     ssl_protocols TLSv1.2 TLSv1.3;
 
-    # HSTS on HTTPS responses only. Single-host shopbuket1 FQDN — do not broaden to
-    # child hostnames; do not use HSTS preload (irreversocable without ops ownership).
-    add_header Strict-Transport-Security "max-age=31536000" always;
+    # HSTS on HTTPS responses only. Apex FQDN — do not broaden to child hostnames;
+    # do not use HSTS preload. First stage uses a short max-age (default 300).
+    add_header Strict-Transport-Security "max-age=${SHOPBUKET1_HSTS_MAX_AGE}" always;
 
     include ${SHOPBUKET1_NGINX_SNIPPET_DST};
 }
 EOF
 }
 
+# Write site config for domain. Reuses an existing shopbuket1* site that already
+# serves the domain (e.g. sites-available/shopbuket1-domain) instead of creating
+# a second conflicting server block. Never touches erpbuket1*.
 write_nginx_site_for_domain() {
   local domain="$1"
-  local tmp
+  local tmp target base enabled_link existing
   tmp="$(mktemp)"
   if [[ "$domain" != "_" ]] && tls_cert_present "$domain"; then
     render_nginx_https "$domain" "$tmp"
   else
     render_nginx_http_only "$domain" "$tmp"
   fi
-  install -m 644 "$tmp" "$SHOPBUKET1_NGINX_AVAILABLE"
+
+  target="$SHOPBUKET1_NGINX_AVAILABLE"
+  if [[ "$domain" != "_" ]]; then
+    existing="$(find_nginx_site_for_domain "$domain" || true)"
+    if [[ -n "$existing" ]]; then
+      target="$existing"
+      log "Updating existing shopbuket1 Nginx site for ${domain}: ${target}"
+    fi
+  fi
+
+  base="$(basename "$target")"
+  if [[ "$base" == erpbuket1* ]] || [[ "$base" != "${SHOPBUKET1_PROJECT_NAME:-shopbuket1}"* ]]; then
+    rm -f "$tmp"
+    die "Refusing to write Nginx site outside shopbuket1 ownership: $target"
+  fi
+
+  install -d -m 755 "$(dirname "$target")"
+  install -m 644 "$tmp" "$target"
   rm -f "$tmp"
-  ln -sfn "$SHOPBUKET1_NGINX_AVAILABLE" "$SHOPBUKET1_NGINX_ENABLED"
+
+  enabled_link="${SHOPBUKET1_NGINX_SITES_ENABLED}/${base}"
+  install -d -m 755 "$SHOPBUKET1_NGINX_SITES_ENABLED"
+  ln -sfn "$target" "$enabled_link"
   rm -f /etc/nginx/sites-enabled/default
 }
 
@@ -308,12 +494,11 @@ provision_nginx() {
     set +a
   fi
 
-  domain="$(resolve_public_domain)"
-  if is_retired_shop_host "$domain"; then
-    log "WARN: ${domain} is retired. Required storefront host is ${SHOPBUKET1_CANONICAL_PUBLIC_HOST}."
-    log "WARN: set NEXT_PUBLIC_SITE_URL, CORS_ORIGINS and PUBLIC_DOMAIN to https://${SHOPBUKET1_CANONICAL_PUBLIC_HOST} before provisioning."
-    domain="$SHOPBUKET1_CANONICAL_PUBLIC_HOST"
+  if [[ "$mode" != "bootstrap" ]]; then
+    assert_storefront_domain_settings
   fi
+
+  domain="$(resolve_required_storefront_domain)"
 
   if is_placeholder_domain "$domain" || [[ -z "$domain" ]]; then
     if [[ "$mode" == "bootstrap" ]]; then
@@ -330,16 +515,23 @@ provision_nginx() {
   write_nginx_site_for_domain "$domain"
   nginx_test_and_reload
 
+  local site_file
+  site_file="$(find_nginx_site_for_domain "$domain" 2>/dev/null || true)"
+  if [[ -z "$site_file" ]]; then
+    site_file="$SHOPBUKET1_NGINX_AVAILABLE"
+  fi
+
   if [[ "$domain" != "_" ]]; then
     ensure_letsencrypt_cert "$domain"
     if tls_cert_present "$domain"; then
       write_nginx_site_for_domain "$domain"
       nginx_test_and_reload
-      validate_nginx_site_file "$SHOPBUKET1_NGINX_AVAILABLE" "$domain" 1 \
-        || die "Nginx site validation failed after TLS provisioning"
+      site_file="$(find_nginx_site_for_domain "$domain" || printf '%s\n' "$SHOPBUKET1_NGINX_AVAILABLE")"
+      validate_nginx_site_file "$site_file" "$domain" 1 \
+        || die "Nginx site validation failed after TLS provisioning ($site_file)"
     else
-      validate_nginx_site_file "$SHOPBUKET1_NGINX_AVAILABLE" "$domain" 0 \
-        || die "Nginx site validation failed"
+      validate_nginx_site_file "$site_file" "$domain" 0 \
+        || die "Nginx site validation failed ($site_file)"
       log "HTTP site active for ${domain}; TLS pending (DNS + CERTBOT_EMAIL)"
     fi
   else
@@ -347,5 +539,5 @@ provision_nginx() {
       || die "Nginx bootstrap site validation failed"
   fi
 
-  log "Nginx provisioned (server_name=${domain})"
+  log "Nginx provisioned (server_name=${domain}, site=${site_file})"
 }
