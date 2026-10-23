@@ -1,17 +1,14 @@
 'use client';
 
-import { FormEvent, useEffect, useState, useTransition } from 'react';
+import { useEffect, useId, useRef, useState, useTransition, type ReactNode } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import {
-  BULK_PRODUCTS_MAX_ITEMS,
   COMMERCIAL_AVAILABILITIES,
   COMPOSITION_KINDS,
   DEFAULT_NEW_PRODUCT_NAMES,
   PRIMARY_PRODUCT_KINDS,
   PRODUCT_LIFECYCLES,
-  type BulkProductOperation,
-  type BulkProductOperationResultDto,
   type CommercialAvailability,
   type CompositionKind,
   type PaginatedResponse,
@@ -19,10 +16,7 @@ import {
   type ProductListItemDto,
 } from '@bouquet-one/contracts';
 import { adminDelete, adminPatch, adminPost, AdminRequestError, errorMessage } from '@/lib/admin-client';
-import {
-  buildProductAvailabilityPatchBody,
-  buildProductsBulkBody,
-} from '@/lib/admin-catalog-contract';
+import { buildProductAvailabilityPatchBody } from '@/lib/admin-catalog-contract';
 import { adminEndpoints } from '@/lib/admin-endpoints';
 import {
   availabilityLabel,
@@ -61,10 +55,6 @@ type Props = {
   canDelete?: boolean;
 };
 
-type BulkConfirm =
-  | { kind: 'PUBLISH' | 'UNPUBLISH' }
-  | { kind: 'SET_AVAILABILITY'; availability: CommercialAvailability };
-
 type AvailabilityPatchResult = {
   id: string;
   availability: CommercialAvailability;
@@ -84,6 +74,222 @@ const COMPOSITION_FILTER_KINDS = COMPOSITION_KINDS.filter(
   (value): value is Exclude<CompositionKind, 'UNKNOWN'> => value !== 'UNKNOWN',
 );
 
+const SEARCH_DEBOUNCE_MS = 320;
+
+function IconSearch({ className }: { className?: string }) {
+  return (
+    <svg className={className} width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden>
+      <circle cx="11" cy="11" r="7" stroke="currentColor" strokeWidth="1.75" />
+      <path d="M20 20l-3.5-3.5" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+function IconSliders({ className }: { className?: string }) {
+  return (
+    <svg className={className} width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden>
+      <path d="M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" />
+      <path d="M1 14h6M9 8h6M17 16h6" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+function IconPlus({ className }: { className?: string }) {
+  return (
+    <svg className={className} width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden>
+      <path d="M12 5v14M5 12h14" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+function IconMore({ className }: { className?: string }) {
+  return (
+    <svg className={className} width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden>
+      <circle cx="12" cy="5" r="1.5" fill="currentColor" />
+      <circle cx="12" cy="12" r="1.5" fill="currentColor" />
+      <circle cx="12" cy="19" r="1.5" fill="currentColor" />
+    </svg>
+  );
+}
+
+function countExtraFilters(filters: ProductFilters): number {
+  let n = 0;
+  if (filters.flowerTypeId) n += 1;
+  if (filters.compositionKind) n += 1;
+  if (filters.promotionalOnly === 'true') n += 1;
+  if (filters.catalogCategoryId) n += 1;
+  if (filters.bestsellerGroupIds) n += 1;
+  if (filters.sort) n += 1;
+  return n;
+}
+
+function storefrontHref(item: ProductListItemDto): string {
+  return `/bukety/${item.slug}`;
+}
+
+function ProductThumb({ item }: { item: ProductListItemDto }) {
+  if (item.primaryImageUrl) {
+    return (
+      <img
+        src={toSameOriginMediaUrl(item.primaryImageUrl) ?? item.primaryImageUrl}
+        alt=""
+        className="admin-products-thumb"
+      />
+    );
+  }
+  return <div className="admin-products-thumb admin-products-thumb--empty" title="Нет фото" />;
+}
+
+function PriceCell({ item }: { item: ProductListItemDto }) {
+  if (item.promotion) {
+    return (
+      <span className="admin-products-price admin-products-price--sale">
+        <span className="admin-products-price__sale">{item.promotion.salePrice.label}</span>
+        <span className="admin-products-price__old">{item.promotion.originalPrice.label}</span>
+      </span>
+    );
+  }
+  return <span className="admin-products-price">{item.price?.label ?? '—'}</span>;
+}
+
+type RowActionsProps = {
+  item: ProductListItemDto;
+  canCreate: boolean;
+  canPublish: boolean;
+  canDelete: boolean;
+  duplicating: boolean;
+  onDuplicate: () => void;
+  onArchive: () => void;
+  onRestore: () => void;
+  onDelete: () => void;
+};
+
+function ProductRowActions({
+  item,
+  canCreate,
+  canPublish,
+  canDelete,
+  duplicating,
+  onDuplicate,
+  onArchive,
+  onRestore,
+  onDelete,
+}: RowActionsProps) {
+  const [open, setOpen] = useState(false);
+  const rootRef = useRef<HTMLDivElement>(null);
+  const menuId = useId();
+
+  useEffect(() => {
+    if (!open) return;
+    function onPointerDown(event: MouseEvent) {
+      if (!rootRef.current?.contains(event.target as Node)) setOpen(false);
+    }
+    function onKey(event: KeyboardEvent) {
+      if (event.key === 'Escape') setOpen(false);
+    }
+    document.addEventListener('mousedown', onPointerDown);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('mousedown', onPointerDown);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [open]);
+
+  const viewHref =
+    item.lifecycle === 'PUBLISHED' ? storefrontHref(item) : `/admin/catalog/products/${item.id}/preview`;
+
+  return (
+    <div className="admin-products-menu" ref={rootRef}>
+      <button
+        type="button"
+        className="admin-products-menu__trigger"
+        aria-haspopup="menu"
+        aria-expanded={open}
+        aria-controls={menuId}
+        aria-label={`Действия: ${item.name}`}
+        onClick={() => setOpen((value) => !value)}
+      >
+        <IconMore />
+      </button>
+      {open ? (
+        <div id={menuId} role="menu" className="admin-products-menu__panel">
+          <Link
+            role="menuitem"
+            href={`/admin/catalog/products/${item.id}`}
+            className="admin-products-menu__item"
+            onClick={() => setOpen(false)}
+          >
+            Редактировать
+          </Link>
+          <Link
+            role="menuitem"
+            href={viewHref}
+            className="admin-products-menu__item"
+            target={item.lifecycle === 'PUBLISHED' ? '_blank' : undefined}
+            rel={item.lifecycle === 'PUBLISHED' ? 'noreferrer' : undefined}
+            onClick={() => setOpen(false)}
+          >
+            Посмотреть на сайте
+          </Link>
+          {canCreate ? (
+            <button
+              type="button"
+              role="menuitem"
+              className="admin-products-menu__item"
+              disabled={duplicating}
+              onClick={() => {
+                setOpen(false);
+                onDuplicate();
+              }}
+            >
+              Дублировать
+            </button>
+          ) : null}
+          {canPublish && item.lifecycle !== 'ARCHIVED' ? (
+            <button
+              type="button"
+              role="menuitem"
+              className="admin-products-menu__item"
+              onClick={() => {
+                setOpen(false);
+                onArchive();
+              }}
+            >
+              Архивировать
+            </button>
+          ) : null}
+          {canPublish && item.lifecycle === 'ARCHIVED' ? (
+            <button
+              type="button"
+              role="menuitem"
+              className="admin-products-menu__item"
+              onClick={() => {
+                setOpen(false);
+                onRestore();
+              }}
+            >
+              Восстановить
+            </button>
+          ) : null}
+          {canDelete ? (
+            <button
+              type="button"
+              role="menuitem"
+              className="admin-products-menu__item admin-products-menu__item--danger"
+              onClick={() => {
+                setOpen(false);
+                onDelete();
+              }}
+            >
+              Удалить навсегда
+            </button>
+          ) : null}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 export function ProductsManager({
   data,
   filters,
@@ -102,7 +308,6 @@ export function ProductsManager({
   const [requestId, setRequestId] = useState<string | null>(null);
   const [retryable, setRetryable] = useState(false);
   const [creating, setCreating] = useState(false);
-  const [createKind, setCreateKind] = useState<ProductKind>('BOUQUET');
   const [duplicateTarget, setDuplicateTarget] = useState<ProductListItemDto | null>(null);
   const [duplicating, setDuplicating] = useState(false);
   const [duplicateSuccessId, setDuplicateSuccessId] = useState<string | null>(null);
@@ -113,29 +318,61 @@ export function ProductsManager({
     id: string;
     availability: CommercialAvailability;
   } | null>(null);
-  const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
-  const [bulkConfirm, setBulkConfirm] = useState<BulkConfirm | null>(null);
-  const [bulkRunning, setBulkRunning] = useState(false);
-  const [bulkSummary, setBulkSummary] = useState<string | null>(null);
-  const [bulkProblems, setBulkProblems] = useState<Array<{ name: string; message: string }>>(
-    [],
-  );
-  const [showBulkProblems, setShowBulkProblems] = useState(false);
+  const [searchDraft, setSearchDraft] = useState(filters.search);
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  const filtersPanelRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     setRows(data.items);
-    setSelectedIds(new Set());
-    setBulkConfirm(null);
   }, [data.items]);
 
-  const canBulk = canPublish || canUpdate;
-  const selectedRows = rows.filter((row) => selectedIds.has(row.id));
-  const allVisibleSelected = rows.length > 0 && rows.every((row) => selectedIds.has(row.id));
+  useEffect(() => {
+    setSearchDraft(filters.search);
+  }, [filters.search]);
+
+  useEffect(() => {
+    if (searchDraft === filters.search) return;
+    const timer = window.setTimeout(() => {
+      const params = new URLSearchParams(searchParams.toString());
+      const value = searchDraft.trim();
+      if (!value) params.delete('search');
+      else params.set('search', value);
+      params.delete('page');
+      startTransition(() => {
+        router.push(`/admin/catalog/products?${params.toString()}`);
+      });
+    }, SEARCH_DEBOUNCE_MS);
+    return () => window.clearTimeout(timer);
+  }, [searchDraft, filters.search, searchParams, router, startTransition]);
+
+  useEffect(() => {
+    if (!filtersOpen) return;
+    function onPointerDown(event: MouseEvent) {
+      if (!filtersPanelRef.current?.contains(event.target as Node)) setFiltersOpen(false);
+    }
+    function onKey(event: KeyboardEvent) {
+      if (event.key === 'Escape') setFiltersOpen(false);
+    }
+    document.addEventListener('mousedown', onPointerDown);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('mousedown', onPointerDown);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [filtersOpen]);
+
   const showGiftSubtype = filters.productKind === 'GIFT' && giftSubtypes.length > 0;
   const showCompositionKind =
     filters.productKind === 'BOUQUET' ||
     filters.productKind === 'COMPOSITION' ||
     filters.productKind === '';
+  const extraFilterCount = countExtraFilters(filters);
+  const hasAnyFilter =
+    filters.search.length > 0 ||
+    filters.productKind.length > 0 ||
+    filters.lifecycle.length > 0 ||
+    filters.availability.length > 0 ||
+    extraFilterCount > 0;
 
   function pushFilters(patch: Record<string, string | null>) {
     const params = new URLSearchParams(searchParams.toString());
@@ -153,9 +390,7 @@ export function ProductsManager({
     if (key === 'productKind') {
       pushFilters({
         productKind: value,
-        // Gift subtype only applies to gifts; clear when leaving GIFT.
         catalogCategoryId: value === 'GIFT' ? filters.catalogCategoryId : null,
-        // Composition kind is bouquet/composition-only.
         compositionKind:
           value === 'BOUQUET' || value === 'COMPOSITION' || value === ''
             ? filters.compositionKind
@@ -172,19 +407,16 @@ export function ProductsManager({
     return `/admin/catalog/products?${params.toString()}`;
   }
 
-  async function onCreate(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (!canCreate) return;
-    const form = new FormData(event.currentTarget);
-    const typed = String(form.get('name') ?? '').trim();
-    const name = typed || DEFAULT_NEW_PRODUCT_NAMES[createKind];
+  async function onCreate() {
+    if (!canCreate || creating) return;
     setCreating(true);
     setError(null);
     setRequestId(null);
     try {
+      const kind: ProductKind = 'BOUQUET';
       const created = await adminPost<{ id: string }>(adminEndpoints.products, {
-        name,
-        productKind: createKind,
+        name: DEFAULT_NEW_PRODUCT_NAMES[kind],
+        productKind: kind,
       });
       router.push(`/admin/catalog/products/${created.id}?created=1`);
     } catch (err) {
@@ -203,12 +435,10 @@ export function ProductsManager({
     setRetryable(false);
     setDuplicateSuccessId(null);
     try {
-      const created = await adminPost<{
-        id: string;
-        slug: string;
-        lifecycle: string;
-        version: number;
-      }>(adminEndpoints.productDuplicate(duplicateTarget.id), {});
+      const created = await adminPost<{ id: string }>(
+        adminEndpoints.productDuplicate(duplicateTarget.id),
+        {},
+      );
       setDuplicateTarget(null);
       setDuplicateSuccessId(created.id);
       router.push(`/admin/catalog/products/${created.id}`);
@@ -221,10 +451,7 @@ export function ProductsManager({
     }
   }
 
-  async function onAvailabilityChange(
-    item: ProductListItemDto,
-    next: CommercialAvailability,
-  ) {
+  async function onAvailabilityChange(item: ProductListItemDto, next: CommercialAvailability) {
     if (!canUpdate || next === item.availability || savingAvailabilityId) return;
     const previous = item;
     setSavingAvailabilityId(item.id);
@@ -256,9 +483,7 @@ export function ProductsManager({
       );
       setAvailabilitySuccessId(item.id);
     } catch (err) {
-      setRows((current) =>
-        current.map((row) => (row.id === item.id ? previous : row)),
-      );
+      setRows((current) => current.map((row) => (row.id === item.id ? previous : row)));
       const conflict =
         err instanceof AdminRequestError && err.kind === 'conflict'
           ? 'Товар был изменён в другом окне. Обновите данные.'
@@ -279,139 +504,118 @@ export function ProductsManager({
     await onAvailabilityChange(row, pendingAvailabilityRetry.availability);
   }
 
-  function toggleSelectAllVisible() {
-    if (allVisibleSelected) {
-      setSelectedIds(new Set());
-      return;
-    }
-    setSelectedIds(new Set(rows.map((row) => row.id)));
-  }
-
-  function toggleSelectRow(id: string) {
-    setSelectedIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
-  }
-
-  function requestBulk(confirm: BulkConfirm) {
-    if (selectedRows.length === 0 || bulkRunning) return;
-    if (selectedRows.length > BULK_PRODUCTS_MAX_ITEMS) {
-      setError(`Можно выбрать не более ${BULK_PRODUCTS_MAX_ITEMS} товаров.`);
-      return;
-    }
-    setBulkConfirm(confirm);
-    setBulkSummary(null);
-    setBulkProblems([]);
-    setShowBulkProblems(false);
-  }
-
-  async function runBulk() {
-    if (!bulkConfirm || selectedRows.length === 0 || bulkRunning) return;
-    const operation: BulkProductOperation = bulkConfirm.kind;
-    if (operation === 'SET_AVAILABILITY' && !canUpdate) return;
-    if ((operation === 'PUBLISH' || operation === 'UNPUBLISH') && !canPublish) return;
-
-    setBulkRunning(true);
-    setError(null);
-    setRequestId(null);
-    setRetryable(false);
-    setAvailabilitySuccessId(null);
-    setDuplicateSuccessId(null);
-    try {
-      const body = buildProductsBulkBody(
-        operation,
-        selectedRows.map((row) => ({ productId: row.id, expectedVersion: row.version })),
-        bulkConfirm.kind === 'SET_AVAILABILITY' ? bulkConfirm.availability : undefined,
-      );
-      const result = await adminPost<BulkProductOperationResultDto>(
-        adminEndpoints.productsBulk,
-        body,
-      );
-      const byId = new Map(result.results.map((row) => [row.productId, row]));
-      setRows((current) =>
-        current.map((row) => {
-          const item = byId.get(row.id);
-          if (!item || item.status !== 'SUCCESS') return row;
-          return {
-            ...row,
-            version: item.version ?? row.version,
-            availability: item.availability ?? row.availability,
-            lifecycle: item.lifecycle ?? row.lifecycle,
-          };
-        }),
-      );
-      const problems = result.results
-        .filter((row) => row.status !== 'SUCCESS')
-        .map((row) => {
-          const product = selectedRows.find((item) => item.id === row.productId);
-          return {
-            name: product?.name ?? row.productId,
-            message: row.message ?? 'Не удалось обновить',
-          };
-        });
-      setBulkProblems(problems);
-      if (result.failed === 0) {
-        setBulkSummary(`✓ ${result.succeeded} выполнено`);
-        setSelectedIds(new Set());
-      } else if (result.succeeded === 0) {
-        setBulkSummary(`⚠ Не удалось обновить товары (${result.failed})`);
-        setShowBulkProblems(true);
-      } else {
-        setBulkSummary(
-          `✓ ${result.succeeded} выполнено · ⚠ ${result.failed} не выполнено`,
-        );
-        setShowBulkProblems(true);
-        setSelectedIds(
-          new Set(
-            result.results
-              .filter((row) => row.status !== 'SUCCESS')
-              .map((row) => row.productId),
+  function runLifecycle(item: ProductListItemDto, action: 'archive' | 'restore') {
+    void adminPost(adminEndpoints.productLifecycle(item.id, action), {
+      expectedVersion: item.version,
+    })
+      .then(() => router.refresh())
+      .catch((err) =>
+        setError(
+          errorMessage(
+            err,
+            action === 'archive' ? 'Не удалось архивировать товар' : 'Не удалось восстановить товар',
           ),
-        );
-      }
-      setBulkConfirm(null);
-    } catch (err) {
-      setError(errorMessage(err, 'Не удалось выполнить массовое действие'));
-      setRequestId(err instanceof AdminRequestError ? err.requestId ?? null : null);
-      setRetryable(err instanceof AdminRequestError ? err.retryable : false);
-    } finally {
-      setBulkRunning(false);
-    }
+        ),
+      );
+  }
+
+  function runDelete(item: ProductListItemDto) {
+    const confirmName = window.prompt(
+      `Удалить навсегда «${item.name}»? Введите точное название товара для подтверждения.`,
+    );
+    if (confirmName == null) return;
+    void adminDelete(adminEndpoints.product(item.id), {
+      expectedVersion: item.version,
+      confirmName,
+      detach: true,
+    })
+      .then(() => router.refresh())
+      .catch((err) => setError(errorMessage(err, 'Не удалось удалить товар')));
   }
 
   const pages = Math.max(1, Math.ceil(data.total / Math.max(1, data.pageSize)));
-  const hasFilters =
-    filters.search.length > 0 ||
-    filters.productKind.length > 0 ||
-    filters.flowerTypeId.length > 0 ||
-    filters.compositionKind.length > 0 ||
-    filters.lifecycle.length > 0 ||
-    filters.availability.length > 0 ||
-    filters.promotionalOnly === 'true' ||
-    filters.catalogCategoryId.length > 0 ||
-    filters.bestsellerGroupIds.length > 0;
-  const colCount = 8 + (canBulk ? 1 : 0);
+
+  function renderAvailability(item: ProductListItemDto): ReactNode {
+    const savingAvailability = savingAvailabilityId === item.id;
+    if (!canUpdate) {
+      return (
+        <span className={availabilityChipClass(item.availability)}>
+          {availabilityLabel(item.availability)}
+        </span>
+      );
+    }
+    return (
+      <label className="admin-products-availability">
+        <span className="sr-only">Наличие: {item.name}</span>
+        <select
+          className={`admin-select admin-products-availability__select ${
+            item.availability === 'AVAILABLE' ? '' : 'admin-products-availability__select--warn'
+          }`}
+          value={item.availability}
+          disabled={savingAvailability || Boolean(savingAvailabilityId)}
+          aria-busy={savingAvailability}
+          onChange={(event) => {
+            void onAvailabilityChange(item, event.target.value as CommercialAvailability);
+          }}
+        >
+          {COMMERCIAL_AVAILABILITIES.map((value) => (
+            <option key={value} value={value}>
+              {availabilityLabel(value)}
+            </option>
+          ))}
+        </select>
+        {savingAvailability ? (
+          <span className="admin-products-availability__hint">Сохранение…</span>
+        ) : null}
+      </label>
+    );
+  }
+
+  function renderRowActions(item: ProductListItemDto) {
+    return (
+      <ProductRowActions
+        item={item}
+        canCreate={canCreate}
+        canPublish={canPublish}
+        canDelete={canDelete}
+        duplicating={duplicating}
+        onDuplicate={() => {
+          setDuplicateSuccessId(null);
+          setDuplicateTarget(item);
+        }}
+        onArchive={() => runLifecycle(item, 'archive')}
+        onRestore={() => runLifecycle(item, 'restore')}
+        onDelete={() => runDelete(item)}
+      />
+    );
+  }
 
   return (
-    <div className={`space-y-5 ${navigating ? 'opacity-70' : ''}`}>
+    <div className={`admin-products ${navigating ? 'admin-products--loading' : ''}`}>
+      <header className="admin-products-header">
+        <div>
+          <h1 className="admin-page-title">Товары</h1>
+          <p className="admin-page-lead">Управление ассортиментом магазина</p>
+        </div>
+        {canCreate ? (
+          <button
+            type="button"
+            className="admin-btn admin-products-header__create"
+            disabled={creating}
+            onClick={() => void onCreate()}
+          >
+            <IconPlus />
+            {creating ? 'Создаём…' : 'Добавить товар'}
+          </button>
+        ) : null}
+      </header>
+
       {error ? (
         <div role="alert" className="admin-error">
           <p>{error}</p>
-          {requestId ? (
-            <details>
-              <summary>Технические детали</summary>
-              Код запроса: {requestId}
-            </details>
-          ) : null}
+          {requestId ? <p className="text-xs text-[var(--admin-muted)]">Код: {requestId}</p> : null}
           {retryable && pendingAvailabilityRetry ? (
-            <button
-              type="button"
-              className="admin-link mt-2 block text-sm"
-              onClick={() => void onRetryAvailability()}
-            >
+            <button type="button" className="admin-link mt-2 block text-sm" onClick={() => void onRetryAvailability()}>
               Повторить
             </button>
           ) : null}
@@ -424,155 +628,10 @@ export function ProductsManager({
         </p>
       ) : null}
 
-      {bulkSummary ? (
-        <div role="status" className="admin-notice admin-notice--success">
-          <p>{bulkSummary}</p>
-          {bulkProblems.length > 0 ? (
-            <div className="mt-2">
-              <button
-                type="button"
-                className="admin-link text-sm"
-                onClick={() => setShowBulkProblems((open) => !open)}
-              >
-                {showBulkProblems ? 'Скрыть проблемы' : 'Посмотреть проблемы'}
-              </button>
-              {showBulkProblems ? (
-                <ul className="mt-2 list-disc space-y-1 pl-5 text-[var(--admin-ink)]">
-                  {bulkProblems.map((problem) => (
-                    <li key={`${problem.name}-${problem.message}`}>
-                      «{problem.name}» — {problem.message}
-                    </li>
-                  ))}
-                </ul>
-              ) : null}
-            </div>
-          ) : null}
-        </div>
-      ) : null}
-
-      {canBulk && selectedIds.size > 0 ? (
-        <div className="admin-bulkbar">
-          <span className="text-sm font-medium text-[var(--admin-ink)]">
-            Выбрано: {selectedIds.size}
-            <span className="ml-1 font-normal text-[var(--admin-muted)]">
-              (на этой странице)
-            </span>
-          </span>
-          {bulkRunning ? (
-            <span className="text-sm text-[var(--admin-muted)]">
-              Обновление {selectedIds.size} товаров…
-            </span>
-          ) : (
-            <>
-              {canPublish ? (
-                <>
-                  <button
-                    type="button"
-                    className="admin-btn"
-                    disabled={bulkRunning}
-                    onClick={() => requestBulk({ kind: 'PUBLISH' })}
-                  >
-                    Опубликовать
-                  </button>
-                  <button
-                    type="button"
-                    className="admin-btn-ghost"
-                    disabled={bulkRunning}
-                    onClick={() => requestBulk({ kind: 'UNPUBLISH' })}
-                  >
-                    Снять с публикации
-                  </button>
-                </>
-              ) : null}
-              {canUpdate ? (
-                <label className="admin-field mb-0">
-                  <span className="sr-only">Изменить доступность</span>
-                  <select
-                    className="admin-select text-sm"
-                    defaultValue=""
-                    disabled={bulkRunning}
-                    onChange={(event) => {
-                      const value = event.target.value as CommercialAvailability | '';
-                      if (!value) return;
-                      requestBulk({ kind: 'SET_AVAILABILITY', availability: value });
-                      event.currentTarget.value = '';
-                    }}
-                  >
-                    <option value="" disabled>
-                      Изменить наличие
-                    </option>
-                    {COMMERCIAL_AVAILABILITIES.map((value) => (
-                      <option key={value} value={value}>
-                        {availabilityLabel(value)}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-              ) : null}
-              <button
-                type="button"
-                className="admin-btn-ghost"
-                disabled={bulkRunning}
-                onClick={() => setSelectedIds(new Set())}
-              >
-                Снять выбор
-              </button>
-            </>
-          )}
-        </div>
-      ) : null}
-
-      {bulkConfirm ? (
-        <div
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="bulk-confirm-title"
-          className="admin-panel space-y-3 border border-[var(--admin-brand)]/30 p-4"
-        >
-          <h2 id="bulk-confirm-title" className="text-base font-semibold text-[var(--admin-ink)]">
-            {bulkConfirm.kind === 'PUBLISH'
-              ? `Опубликовать ${selectedIds.size} товаров?`
-              : bulkConfirm.kind === 'UNPUBLISH'
-                ? `Снять с публикации ${selectedIds.size} товаров?`
-                : `Изменить доступность у ${selectedIds.size} товаров?`}
-          </h2>
-          <p className="text-sm text-[var(--admin-muted)]">
-            {bulkConfirm.kind === 'PUBLISH'
-              ? 'Будут применены текущие правила публикации каждого товара. Товары, которые не проходят проверку, не будут опубликованы.'
-              : bulkConfirm.kind === 'UNPUBLISH'
-                ? 'Товары вернутся в черновик. Архивация не выполняется.'
-                : bulkConfirm.kind === 'SET_AVAILABILITY'
-                  ? `Новое наличие: ${availabilityLabel(bulkConfirm.availability)}.`
-                  : null}
-          </p>
-          <div className="flex flex-wrap gap-2">
-            <button
-              type="button"
-              disabled={bulkRunning}
-              onClick={() => void runBulk()}
-              className="admin-btn"
-            >
-              {bulkRunning ? 'Обновление…' : 'Подтвердить'}
-            </button>
-            <button
-              type="button"
-              className="admin-btn-ghost"
-              disabled={bulkRunning}
-              onClick={() => setBulkConfirm(null)}
-            >
-              Отмена
-            </button>
-          </div>
-        </div>
-      ) : null}
-
       {duplicateSuccessId ? (
         <p role="status" className="admin-notice admin-notice--success">
           Товар создан как черновик.{' '}
-          <Link
-            href={`/admin/catalog/products/${duplicateSuccessId}`}
-            className="admin-link font-semibold"
-          >
+          <Link href={`/admin/catalog/products/${duplicateSuccessId}`} className="admin-link font-semibold">
             Открыть товар
           </Link>
         </p>
@@ -589,8 +648,8 @@ export function ProductsManager({
             Дублировать товар?
           </h2>
           <p className="text-sm text-[var(--admin-muted)]">
-            Будет создан новый черновик на основе «{duplicateTarget.name}». Акции и группы
-            бестселлеров не будут перенесены.
+            Будет создан новый черновик на основе «{duplicateTarget.name}». Акции и подборки не
+            переносятся.
           </p>
           <div className="flex flex-wrap gap-2">
             <button
@@ -613,70 +672,33 @@ export function ProductsManager({
         </div>
       ) : null}
 
-      {canCreate ? (
-        <form id="create-product" onSubmit={onCreate} className="admin-toolbar">
-          <label className="admin-field">
-            <span>Тип</span>
-            <select
-              className="admin-select"
-              value={createKind}
-              onChange={(event) => setCreateKind(event.target.value as ProductKind)}
-            >
-              {PRIMARY_PRODUCT_KINDS.map((value) => (
-                <option key={value} value={value}>
-                  {productKindLabel(value)}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="admin-field">
-            <span>Название</span>
-            <input
-              name="name"
-              className="admin-input w-64"
-              placeholder="Можно оставить пустым — подставится из состава"
-            />
-          </label>
-          <button type="submit" disabled={creating} className="admin-btn">
-            {creating ? 'Создаём…' : 'Добавить товар'}
-          </button>
-          <p className="admin-toolbar__hint">
-            Черновик откроется сразу — фото, цену и состав заполните в карточке.
-          </p>
-        </form>
-      ) : null}
+      <div className="admin-products-toolbar">
+        <label className="admin-products-search">
+          <IconSearch className="admin-products-search__icon" />
+          <span className="sr-only">Поиск</span>
+          <input
+            className="admin-products-search__input"
+            value={searchDraft}
+            onChange={(event) => setSearchDraft(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter') {
+                event.preventDefault();
+                pushFilters({ search: searchDraft.trim() || null });
+              }
+            }}
+            placeholder="Поиск по названию или адресу…"
+            autoComplete="off"
+          />
+        </label>
 
-      <div className="admin-toolbar">
-        <form
-          className="flex flex-wrap items-end gap-2"
-          onSubmit={(event) => {
-            event.preventDefault();
-            const form = new FormData(event.currentTarget);
-            setFilter('search', String(form.get('search') ?? '').trim());
-          }}
-        >
-          <label className="admin-field">
-            <span>Поиск</span>
-            <input
-              name="search"
-              defaultValue={filters.search}
-              className="admin-input w-52"
-              placeholder="Название или адрес"
-            />
-          </label>
-          <button type="submit" className="admin-btn-ghost">
-            Найти
-          </button>
-        </form>
-
-        <label className="admin-field">
-          <span>Тип товара</span>
+        <label className="admin-products-select">
+          <span className="sr-only">Тип</span>
           <select
             className="admin-select"
             value={filters.productKind}
             onChange={(event) => setFilter('productKind', event.target.value)}
           >
-            <option value="">Любой</option>
+            <option value="">Тип</option>
             {PRIMARY_PRODUCT_KINDS.map((value) => (
               <option key={value} value={value}>
                 {productKindLabel(value)}
@@ -685,68 +707,14 @@ export function ProductsManager({
           </select>
         </label>
 
-        {flowerTypes.length > 0 ? (
-          <label className="admin-field">
-            <span>Вид цветка</span>
-            <select
-              className="admin-select"
-              value={filters.flowerTypeId}
-              onChange={(event) => setFilter('flowerTypeId', event.target.value)}
-            >
-              <option value="">Любой</option>
-              {flowerTypes.map((option) => (
-                <option key={option.id} value={option.id}>
-                  {option.name}
-                </option>
-              ))}
-            </select>
-          </label>
-        ) : null}
-
-        {showCompositionKind ? (
-          <label className="admin-field">
-            <span>Тип состава</span>
-            <select
-              className="admin-select"
-              value={filters.compositionKind}
-              onChange={(event) => setFilter('compositionKind', event.target.value)}
-            >
-              <option value="">Любой</option>
-              {COMPOSITION_FILTER_KINDS.map((value) => (
-                <option key={value} value={value}>
-                  {compositionKindLabel(value)}
-                </option>
-              ))}
-            </select>
-          </label>
-        ) : null}
-
-        {showGiftSubtype ? (
-          <label className="admin-field">
-            <span>Подтип подарка</span>
-            <select
-              className="admin-select"
-              value={filters.catalogCategoryId}
-              onChange={(event) => setFilter('catalogCategoryId', event.target.value)}
-            >
-              <option value="">Любой</option>
-              {giftSubtypes.map((option) => (
-                <option key={option.id} value={option.id}>
-                  {option.name}
-                </option>
-              ))}
-            </select>
-          </label>
-        ) : null}
-
-        <label className="admin-field">
-          <span>Публикация</span>
+        <label className="admin-products-select">
+          <span className="sr-only">Статус</span>
           <select
             className="admin-select"
             value={filters.lifecycle}
             onChange={(event) => setFilter('lifecycle', event.target.value)}
           >
-            <option value="">Любая</option>
+            <option value="">Статус</option>
             {PRODUCT_LIFECYCLES.map((value) => (
               <option key={value} value={value}>
                 {lifecycleLabel(value)}
@@ -755,14 +723,14 @@ export function ProductsManager({
           </select>
         </label>
 
-        <label className="admin-field">
-          <span>Наличие</span>
+        <label className="admin-products-select">
+          <span className="sr-only">Наличие</span>
           <select
             className="admin-select"
             value={filters.availability}
             onChange={(event) => setFilter('availability', event.target.value)}
           >
-            <option value="">Любое</option>
+            <option value="">Наличие</option>
             {COMMERCIAL_AVAILABILITIES.map((value) => (
               <option key={value} value={value}>
                 {availabilityLabel(value)}
@@ -771,329 +739,278 @@ export function ProductsManager({
           </select>
         </label>
 
-        <label className="admin-field">
-          <span>Акция</span>
-          <select
-            className="admin-select"
-            value={filters.promotionalOnly}
-            onChange={(event) => setFilter('promotionalOnly', event.target.value)}
+        <div className="admin-products-filters" ref={filtersPanelRef}>
+          <button
+            type="button"
+            className={`admin-products-filters__btn ${extraFilterCount > 0 ? 'admin-products-filters__btn--active' : ''}`}
+            aria-expanded={filtersOpen}
+            onClick={() => setFiltersOpen((value) => !value)}
           >
-            <option value="">Не важно</option>
-            <option value="true">Идёт сейчас</option>
-          </select>
-        </label>
+            <IconSliders />
+            Фильтры
+            {extraFilterCount > 0 ? (
+              <span className="admin-products-filters__count">{extraFilterCount}</span>
+            ) : null}
+          </button>
+          {filtersOpen ? (
+            <div className="admin-products-filters__panel" role="dialog" aria-label="Дополнительные фильтры">
+              {flowerTypes.length > 0 ? (
+                <label className="admin-field">
+                  <span>Вид цветка</span>
+                  <select
+                    className="admin-select"
+                    value={filters.flowerTypeId}
+                    onChange={(event) => setFilter('flowerTypeId', event.target.value)}
+                  >
+                    <option value="">Любой</option>
+                    {flowerTypes.map((option) => (
+                      <option key={option.id} value={option.id}>
+                        {option.name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              ) : null}
 
-        {bestsellerGroups.length > 0 ? (
-          <label className="admin-field">
-            <span>Подборки</span>
-            <select
-              className="admin-select"
-              value={filters.bestsellerGroupIds}
-              onChange={(event) => setFilter('bestsellerGroupIds', event.target.value)}
-            >
-              <option value="">Все товары</option>
-              {bestsellerGroups.map((group) => (
-                <option key={group.id} value={group.id}>
-                  {group.name}
-                </option>
-              ))}
-            </select>
-          </label>
-        ) : null}
+              {showCompositionKind ? (
+                <label className="admin-field">
+                  <span>Тип состава</span>
+                  <select
+                    className="admin-select"
+                    value={filters.compositionKind}
+                    onChange={(event) => setFilter('compositionKind', event.target.value)}
+                  >
+                    <option value="">Любой</option>
+                    {COMPOSITION_FILTER_KINDS.map((value) => (
+                      <option key={value} value={value}>
+                        {compositionKindLabel(value)}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              ) : null}
 
-        <label className="admin-field">
-          <span>Сортировка</span>
-          <select
-            className="admin-select"
-            value={filters.sort}
-            onChange={(event) => setFilter('sort', event.target.value)}
-          >
-            {SORTS.map(([value, label]) => (
-              <option key={value || 'default'} value={value}>
-                {label}
-              </option>
-            ))}
-          </select>
-        </label>
+              {showGiftSubtype ? (
+                <label className="admin-field">
+                  <span>Подтип подарка</span>
+                  <select
+                    className="admin-select"
+                    value={filters.catalogCategoryId}
+                    onChange={(event) => setFilter('catalogCategoryId', event.target.value)}
+                  >
+                    <option value="">Любой</option>
+                    {giftSubtypes.map((option) => (
+                      <option key={option.id} value={option.id}>
+                        {option.name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              ) : null}
 
-        {hasFilters ? (
-          <Link href="/admin/catalog/products" className="admin-btn-ghost">
+              <label className="admin-field">
+                <span>Акция</span>
+                <select
+                  className="admin-select"
+                  value={filters.promotionalOnly}
+                  onChange={(event) => setFilter('promotionalOnly', event.target.value)}
+                >
+                  <option value="">Не важно</option>
+                  <option value="true">Идёт сейчас</option>
+                </select>
+              </label>
+
+              {bestsellerGroups.length > 0 ? (
+                <label className="admin-field">
+                  <span>Подборки</span>
+                  <select
+                    className="admin-select"
+                    value={filters.bestsellerGroupIds}
+                    onChange={(event) => setFilter('bestsellerGroupIds', event.target.value)}
+                  >
+                    <option value="">Все товары</option>
+                    {bestsellerGroups.map((group) => (
+                      <option key={group.id} value={group.id}>
+                        {group.name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              ) : null}
+
+              <label className="admin-field">
+                <span>Сортировка</span>
+                <select
+                  className="admin-select"
+                  value={filters.sort}
+                  onChange={(event) => setFilter('sort', event.target.value)}
+                >
+                  {SORTS.map(([value, label]) => (
+                    <option key={value || 'default'} value={value}>
+                      {label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              <div className="admin-products-filters__footer">
+                <button type="button" className="admin-btn-ghost" onClick={() => setFiltersOpen(false)}>
+                  Готово
+                </button>
+              </div>
+            </div>
+          ) : null}
+        </div>
+
+        {hasAnyFilter ? (
+          <Link href="/admin/catalog/products" className="admin-btn-ghost admin-products-reset">
             Сбросить
           </Link>
         ) : null}
       </div>
 
-      <div className="admin-panel admin-table-wrap admin-table-wrap--cards">
-        <table className="admin-table admin-table--compact">
-          <thead>
-            <tr>
-              {canBulk ? (
-                <th className="w-10">
-                  <label className="inline-flex items-center gap-1">
-                    <input
-                      type="checkbox"
-                      checked={allVisibleSelected}
-                      disabled={rows.length === 0 || bulkRunning}
-                      onChange={toggleSelectAllVisible}
-                      aria-label="Выбрать все на этой странице"
-                    />
-                    <span className="sr-only">Все на странице</span>
-                  </label>
-                </th>
+      <div className="admin-products-meta">
+        <span>
+          {navigating
+            ? 'Обновляем…'
+            : data.total === 0
+              ? 'Нет товаров'
+              : `Найдено: ${data.total}`}
+        </span>
+      </div>
+
+      {rows.length === 0 ? (
+        <div className="admin-products-empty">
+          {hasAnyFilter ? (
+            <>
+              <p>Ничего не найдено</p>
+              <p className="text-sm text-[var(--admin-muted)]">
+                Измените поиск или сбросьте фильтры.
+              </p>
+              <Link href="/admin/catalog/products" className="admin-btn-ghost">
+                Сбросить фильтры
+              </Link>
+            </>
+          ) : (
+            <>
+              <p>Товаров пока нет</p>
+              <p className="text-sm text-[var(--admin-muted)]">
+                Создайте первый товар — откроется карточка для фото, цены и состава.
+              </p>
+              {canCreate ? (
+                <button type="button" className="admin-btn" disabled={creating} onClick={() => void onCreate()}>
+                  Добавить товар
+                </button>
               ) : null}
-              <th className="w-14">Фото</th>
-              <th>Название</th>
-              <th className="w-36">Тип</th>
-              <th>Состав</th>
-              <th className="w-28">Цена</th>
-              <th className="w-28">Публикация</th>
-              <th className="w-40">Наличие</th>
-              <th className="w-36">Действия</th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.length === 0 ? (
-              <tr>
-                <td colSpan={colCount}>
-                  {hasFilters ? (
-                    <div className="admin-empty admin-empty--action">
-                      <p>Ничего не найдено по текущим фильтрам.</p>
-                      <p className="text-sm text-[var(--admin-muted)]">
-                        Измените поиск или сбросьте фильтры, чтобы увидеть все товары.
-                      </p>
-                      <Link href="/admin/catalog/products" className="admin-btn-ghost">
-                        Сбросить фильтры
-                      </Link>
-                    </div>
-                  ) : (
-                    <div className="admin-empty admin-empty--action">
-                      <p>Товаров пока нет.</p>
-                      <p className="text-sm text-[var(--admin-muted)]">
-                        Добавьте первый товар — выберите тип и название выше.
-                      </p>
-                    </div>
-                  )}
-                </td>
-              </tr>
-            ) : (
-              rows.map((item) => {
-                const savingAvailability = savingAvailabilityId === item.id;
-                const kind = item.productKind ?? 'BOUQUET';
-                const summary = item.compositionSummary?.trim() || 'Состав не указан';
-                return (
-                  <tr key={item.id}>
-                    {canBulk ? (
-                      <td data-hide-mobile>
-                        <input
-                          type="checkbox"
-                          checked={selectedIds.has(item.id)}
-                          disabled={bulkRunning}
-                          onChange={() => toggleSelectRow(item.id)}
-                          aria-label={`Выбрать ${item.name}`}
-                        />
+            </>
+          )}
+        </div>
+      ) : (
+        <>
+          <div className="admin-products-table-wrap">
+            <table className="admin-products-table">
+              <thead>
+                <tr>
+                  <th>Товар</th>
+                  <th>Тип</th>
+                  <th className="admin-products-table__price">Цена</th>
+                  <th>Статус</th>
+                  <th>Наличие</th>
+                  <th className="admin-products-table__actions">
+                    <span className="sr-only">Действия</span>
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((item) => {
+                  const kind = item.productKind ?? 'BOUQUET';
+                  return (
+                    <tr key={item.id}>
+                      <td>
+                        <div className="admin-products-identity">
+                          <ProductThumb item={item} />
+                          <div className="min-w-0">
+                            <Link
+                              href={`/admin/catalog/products/${item.id}`}
+                              className="admin-products-identity__name"
+                            >
+                              {item.name}
+                            </Link>
+                            <p className="admin-products-identity__slug">/{item.slug}</p>
+                          </div>
+                        </div>
                       </td>
-                    ) : null}
-                    <td data-hide-mobile>
-                      {item.primaryImageUrl ? (
-                        <img
-                          src={toSameOriginMediaUrl(item.primaryImageUrl) ?? item.primaryImageUrl}
-                          alt=""
-                          className="h-12 w-12 rounded-lg object-cover"
-                        />
-                      ) : (
-                        <div className="admin-thumb-empty" title="Нет фото" />
-                      )}
-                    </td>
-                    <td data-primary>
+                      <td className="admin-products-table__muted">{productKindLabel(kind)}</td>
+                      <td className="admin-products-table__price">
+                        <PriceCell item={item} />
+                      </td>
+                      <td>
+                        <span className={lifecycleChipClass(item.lifecycle)}>
+                          {lifecycleLabel(item.lifecycle)}
+                        </span>
+                      </td>
+                      <td>{renderAvailability(item)}</td>
+                      <td className="admin-products-table__actions">{renderRowActions(item)}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+
+          <ul className="admin-products-cards">
+            {rows.map((item) => {
+              const kind = item.productKind ?? 'BOUQUET';
+              return (
+                <li key={item.id} className="admin-products-card">
+                  <div className="admin-products-card__top">
+                    <ProductThumb item={item} />
+                    <div className="min-w-0 flex-1">
                       <Link
                         href={`/admin/catalog/products/${item.id}`}
-                        className="font-semibold text-[var(--admin-ink)] underline-offset-2 hover:text-[var(--admin-brand)] hover:underline"
+                        className="admin-products-identity__name"
                       >
                         {item.name}
                       </Link>
-                      <p className="text-xs text-[var(--admin-muted)]">/{item.slug}</p>
-                      {item.promotion ? (
-                        <span className="admin-chip admin-chip--sale mt-1 inline-flex">
-                          {item.promotion.percentOff
-                            ? `−${item.promotion.percentOff}%`
-                            : 'Акция'}
-                        </span>
-                      ) : null}
-                    </td>
-                    <td data-label="Тип" className="text-sm text-[var(--admin-ink)]">{productKindLabel(kind)}</td>
-                    <td data-label="Состав" className="max-w-[14rem] text-sm text-[var(--admin-muted)]">
-                      <span className="line-clamp-2" title={summary}>
-                        {summary}
-                      </span>
-                    </td>
-                    <td data-label="Цена" className="tabular-nums">
-                      {item.promotion ? (
-                        <span className="admin-price-stack">
-                          <span className="admin-price-sale">{item.promotion.salePrice.label}</span>
-                          <span className="admin-price-old">
-                            {item.promotion.originalPrice.label}
-                          </span>
-                        </span>
-                      ) : (
-                        (item.price?.label ?? '—')
-                      )}
-                    </td>
-                    <td data-label="Публикация">
-                      <span className={lifecycleChipClass(item.lifecycle)}>
-                        {lifecycleLabel(item.lifecycle)}
-                      </span>
-                    </td>
-                    <td data-label="Наличие">
-                      {canUpdate ? (
-                        <label className="block min-w-[9.5rem]">
-                          <span className="sr-only">Наличие: {item.name}</span>
-                          <select
-                            className={`admin-select w-full max-w-[11rem] text-sm ${
-                              item.availability === 'AVAILABLE' ? '' : 'border-amber-300'
-                            }`}
-                            value={item.availability}
-                            disabled={
-                              savingAvailability ||
-                              Boolean(savingAvailabilityId) ||
-                              bulkRunning
-                            }
-                            aria-busy={savingAvailability}
-                            onChange={(event) => {
-                              void onAvailabilityChange(
-                                item,
-                                event.target.value as CommercialAvailability,
-                              );
-                            }}
-                          >
-                            {COMMERCIAL_AVAILABILITIES.map((value) => (
-                              <option key={value} value={value}>
-                                {availabilityLabel(value)}
-                              </option>
-                            ))}
-                          </select>
-                          {savingAvailability ? (
-                            <span className="mt-1 block text-xs text-[var(--admin-muted)]">
-                              Сохранение…
-                            </span>
-                          ) : null}
-                        </label>
-                      ) : (
-                        <span className={availabilityChipClass(item.availability)}>
-                          {availabilityLabel(item.availability)}
-                        </span>
-                      )}
-                    </td>
-                    <td data-label="Действия">
-                      <div className="flex flex-col items-start gap-1">
-                        <Link
-                          href={`/admin/catalog/products/${item.id}`}
-                          className="admin-link text-sm"
-                        >
-                          Открыть
-                        </Link>
-                        <Link
-                          href={`/admin/catalog/products/${item.id}/preview`}
-                          className="admin-link text-sm"
-                        >
-                          Предпросмотр
-                        </Link>
-                        {canCreate ? (
-                          <button
-                            type="button"
-                            className="admin-link text-sm"
-                            disabled={duplicating}
-                            onClick={() => {
-                              setDuplicateSuccessId(null);
-                              setDuplicateTarget(item);
-                            }}
-                          >
-                            Дублировать
-                          </button>
-                        ) : null}
-                        {canPublish && item.lifecycle !== 'ARCHIVED' ? (
-                          <button
-                            type="button"
-                            className="admin-link text-sm"
-                            onClick={() => {
-                              void adminPost(adminEndpoints.productLifecycle(item.id, 'archive'), {
-                                expectedVersion: item.version,
-                              })
-                                .then(() => router.refresh())
-                                .catch((err) =>
-                                  setError(errorMessage(err, 'Не удалось архивировать товар')),
-                                );
-                            }}
-                          >
-                            Архивировать
-                          </button>
-                        ) : null}
-                        {canPublish && item.lifecycle === 'ARCHIVED' ? (
-                          <button
-                            type="button"
-                            className="admin-link text-sm"
-                            onClick={() => {
-                              void adminPost(adminEndpoints.productLifecycle(item.id, 'restore'), {
-                                expectedVersion: item.version,
-                              })
-                                .then(() => router.refresh())
-                                .catch((err) =>
-                                  setError(errorMessage(err, 'Не удалось восстановить товар')),
-                                );
-                            }}
-                          >
-                            Восстановить
-                          </button>
-                        ) : null}
-                        {canDelete ? (
-                          <button
-                            type="button"
-                            className="admin-link text-sm"
-                            onClick={() => {
-                              const confirmName = window.prompt(
-                                `Удалить навсегда «${item.name}»? Введите название товара.`,
-                              );
-                              if (confirmName == null) return;
-                              void adminDelete(adminEndpoints.product(item.id), {
-                                expectedVersion: item.version,
-                                confirmName,
-                                detach: true,
-                              })
-                                .then(() => router.refresh())
-                                .catch((err) =>
-                                  setError(errorMessage(err, 'Не удалось удалить товар')),
-                                );
-                            }}
-                          >
-                            Удалить навсегда
-                          </button>
-                        ) : null}
-                      </div>
-                    </td>
-                  </tr>
-                );
-              })
-            )}
-          </tbody>
-        </table>
-      </div>
+                      <p className="admin-products-identity__slug">
+                        {productKindLabel(kind)} · /{item.slug}
+                      </p>
+                    </div>
+                    {renderRowActions(item)}
+                  </div>
+                  <div className="admin-products-card__meta">
+                    <PriceCell item={item} />
+                    <span className={lifecycleChipClass(item.lifecycle)}>
+                      {lifecycleLabel(item.lifecycle)}
+                    </span>
+                  </div>
+                  <div className="admin-products-card__availability">{renderAvailability(item)}</div>
+                </li>
+              );
+            })}
+          </ul>
+        </>
+      )}
 
       {data.total > 0 || pages > 1 ? (
-        <div className="flex items-center gap-3 text-sm text-[var(--admin-muted)]">
+        <div className="admin-products-pagination">
           <span>
             {pages > 1
-              ? `Стр. ${data.page} из ${pages} · всего ${data.total}`
-              : `Всего ${data.total}`}
+              ? `Стр. ${data.page} из ${pages}`
+              : null}
           </span>
-          {data.page > 1 ? (
-            <Link href={pageHref(data.page - 1)} className="admin-link">
-              Назад
-            </Link>
-          ) : null}
-          {data.page < pages ? (
-            <Link href={pageHref(data.page + 1)} className="admin-link">
-              Далее
-            </Link>
-          ) : null}
+          <div className="flex gap-3">
+            {data.page > 1 ? (
+              <Link href={pageHref(data.page - 1)} className="admin-link">
+                Назад
+              </Link>
+            ) : null}
+            {data.page < pages ? (
+              <Link href={pageHref(data.page + 1)} className="admin-link">
+                Далее
+              </Link>
+            ) : null}
+          </div>
         </div>
       ) : null}
     </div>

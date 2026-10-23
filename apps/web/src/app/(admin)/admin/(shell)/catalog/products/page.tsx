@@ -10,7 +10,6 @@ import {
   giftSubtypeOptions,
 } from '@/lib/admin-catalog-picker-labels';
 import { requireAdminPermission } from '@/lib/admin-page-auth';
-import { AdminPageHeader } from '@/components/admin/admin-page-header';
 import { ProductsManager, type ProductFilters } from '@/components/admin/products-manager';
 
 type SearchParams = Promise<Record<string, string | string[] | undefined>>;
@@ -81,19 +80,16 @@ export default async function AdminProductsPage({
   const categories = categoryPickerOptions(structure.categories);
 
   return (
-    <main id="main-content" className="space-y-6">
-      <AdminPageHeader
-        title="Товары"
-        lead="Найдите товар по типу и составу, измените наличие или откройте карточку."
-        actions={
-          canCreate ? (
-            <a href="#create-product" className="admin-btn">
-              Добавить товар
-            </a>
-          ) : undefined
+    <main id="main-content">
+      <Suspense
+        fallback={
+          <div className="admin-products">
+            <div className="admin-products-skeleton" aria-busy="true">
+              Загрузка списка товаров…
+            </div>
+          </div>
         }
-      />
-      <Suspense fallback={<p className="admin-empty">Загрузка списка товаров…</p>}>
+      >
         <ProductsManager
           data={data}
           filters={filters}

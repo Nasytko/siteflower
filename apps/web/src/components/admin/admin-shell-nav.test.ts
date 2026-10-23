@@ -88,6 +88,18 @@ test('product list route mounts ProductsManager', () => {
   assert.match(source, /ProductsManager/);
 });
 
+test('products list UI stays compact: one create CTA, row menu, no composition column', () => {
+  const managerPath = path.join(here, 'products-manager.tsx');
+  const source = readFileSync(managerPath, 'utf8');
+  assert.match(source, /Добавить товар/);
+  assert.match(source, /admin-products-menu/);
+  assert.match(source, /admin-products-cards/);
+  assert.match(source, /SEARCH_DEBOUNCE_MS/);
+  assert.doesNotMatch(source, /id="create-product"/);
+  assert.doesNotMatch(source, />Состав</);
+  assert.doesNotMatch(source, /admin-bulkbar/);
+});
+
 test('product editor exposes redesigned sections used by the live card', () => {
   const editorPath = path.join(here, 'product-editor.tsx');
   const source = readFileSync(editorPath, 'utf8');

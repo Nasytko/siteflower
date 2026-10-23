@@ -123,7 +123,7 @@ export default async function AdminDashboardPage() {
         </div>
         {canCreateCatalog ? (
           <div className="admin-page-header__actions">
-            <Link href="/admin/catalog/products#create-product" className="admin-btn">
+            <Link href="/admin/catalog/products" className="admin-btn">
               Новый товар
             </Link>
           </div>
