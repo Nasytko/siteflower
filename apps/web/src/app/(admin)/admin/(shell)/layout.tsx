@@ -32,12 +32,9 @@ export default async function AdminShellLayout({ children }: { children: ReactNo
           </Link>
         </div>
 
-        <details className="admin-aside__menu">
-          <summary>Меню разделов</summary>
-          <div className="admin-aside__nav">
-            <AdminShellNav role={me.user.role} />
-          </div>
-        </details>
+        <div className="admin-aside__nav">
+          <AdminShellNav role={me.user.role} />
+        </div>
 
         <div className="admin-aside__user">
           <p className="admin-aside__user-name">{me.user.displayName}</p>

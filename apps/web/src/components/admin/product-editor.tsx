@@ -1498,7 +1498,12 @@ export function ProductEditor({
         </div>
       </details>
 
-      <details className="admin-disclosure" open={seoManualOpen} data-section="seo">
+      <details
+        className="admin-disclosure"
+        open={seoManualOpen}
+        data-section="seo"
+        onToggle={(event) => setSeoManualOpen(event.currentTarget.open)}
+      >
         <summary>SEO</summary>
         <div className="admin-disclosure__body space-y-3">
           <p className="admin-help">
