@@ -183,17 +183,28 @@ export class BestsellersService {
 
   async remove(id: string, expectedVersion: number, actor: ActorContext): Promise<void> {
     await this.prisma.client.$transaction(async (tx) => {
+      const current = await tx.bestsellerGroup.findUnique({ where: { id } });
+      if (!current) {
+        throw new NotFoundException('Bestseller group not found');
+      }
+      if (current.slug === 'podarki') {
+        throw new BadRequestException({
+          message:
+            'Системную подборку «Подарки» нельзя удалить: она питает блок на главной. Скройте её или уберите товары.',
+          error: 'CatalogDeleteBlocked',
+          code: 'SYSTEM_GROUP',
+        });
+      }
+      if (current.version !== expectedVersion) {
+        throw new ConflictException(OCC_CONFLICT_MESSAGE);
+      }
       const deleted = await tx.bestsellerGroup.deleteMany({
         where: { id, version: expectedVersion },
       });
       if (deleted.count === 0) {
-        const exists = await tx.bestsellerGroup.findUnique({ where: { id }, select: { id: true } });
-        if (exists) {
-          throw new ConflictException(OCC_CONFLICT_MESSAGE);
-        }
-        throw new NotFoundException('Bestseller group not found');
+        throw new ConflictException(OCC_CONFLICT_MESSAGE);
       }
-      await this.recordAudit(tx, actor, id, { deleted: true });
+      await this.recordAudit(tx, actor, id, { deleted: true, slug: current.slug, name: current.name });
     });
   }
 

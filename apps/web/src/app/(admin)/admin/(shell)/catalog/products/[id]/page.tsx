@@ -37,12 +37,12 @@ export default async function AdminProductEditPage({ params, searchParams }: Pro
 
   return (
     <main id="main-content" className="space-y-6">
-      <header className="space-y-1">
-        <h1 className="admin-page-title">{product.name}</h1>
-        <p className="admin-page-lead text-sm text-[var(--admin-muted)]">
-          /bukety/{product.slug}
-        </p>
-        <div className="admin-meta">
+      <details className="admin-disclosure">
+        <summary>Техническая информация</summary>
+        <div className="admin-disclosure__body admin-meta">
+          <span className="admin-meta__item">
+            Адрес: <strong>/bukety/{product.slug}</strong>
+          </span>
           <span className="admin-meta__item">
             Создан: <strong>{formatAdminDateTime(product.createdAt)}</strong>
           </span>
@@ -55,7 +55,7 @@ export default async function AdminProductEditPage({ params, searchParams }: Pro
             </span>
           ) : null}
         </div>
-      </header>
+      </details>
       <ProductEditor
         product={product}
         justCreated={justCreated}

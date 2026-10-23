@@ -18,13 +18,13 @@ export default async function AdminShellLayout({ children }: { children: ReactNo
       <aside className="admin-aside">
         <div className="admin-aside__brand">
           <Link href="/admin" className="admin-aside__brand-link">
-            <span className="admin-aside__eyebrow">Админка</span>
+            <span className="admin-aside__eyebrow">БУКЕТ №1</span>
             <Image
               src="/brand/logo.png"
-              alt="BUKET №1"
+              alt=""
               width={125}
               height={78}
-              className="mt-1 h-10 w-auto rounded-sm"
+              className="mt-1 h-9 w-auto rounded-sm"
             />
           </Link>
           <Link href="/" className="admin-aside__storefront" target="_blank" rel="noreferrer">
@@ -32,9 +32,12 @@ export default async function AdminShellLayout({ children }: { children: ReactNo
           </Link>
         </div>
 
-        <div className="admin-aside__nav">
-          <AdminShellNav role={me.user.role} />
-        </div>
+        <details className="admin-aside__menu">
+          <summary>Меню разделов</summary>
+          <div className="admin-aside__nav">
+            <AdminShellNav role={me.user.role} />
+          </div>
+        </details>
 
         <div className="admin-aside__user">
           <p className="admin-aside__user-name">{me.user.displayName}</p>

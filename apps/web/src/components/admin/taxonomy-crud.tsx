@@ -2,10 +2,21 @@
 
 import { FormEvent, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import type { PaginatedResponse, TaxonomyVisibility } from '@bouquet-one/contracts';
+import type {
+  PaginatedResponse,
+  TaxonomyDeleteImpactDto,
+  TaxonomyVisibility,
+} from '@bouquet-one/contracts';
 import { normalizeSlug } from '@bouquet-one/contracts';
 import { Button } from '@bouquet-one/ui';
-import { adminGet, adminPatch, adminPost, AdminRequestError, errorMessage } from '@/lib/admin-client';
+import {
+  adminDelete,
+  adminGet,
+  adminPatch,
+  adminPost,
+  AdminRequestError,
+  errorMessage,
+} from '@/lib/admin-client';
 import { adminEndpoints, withQuery, type TaxonomyKindMeta } from '@/lib/admin-endpoints';
 import { unwrapAdminList } from '@/lib/admin-list';
 import { formatAdminDate, visibilityLabel } from '@/lib/admin-labels';
@@ -25,6 +36,9 @@ export type TaxonomyRow = {
   seoTitle?: string | null;
   seoDescription?: string | null;
   noIndex?: boolean;
+  productsCount?: number;
+  flowerItemsCount?: number;
+  componentsCount?: number;
 };
 
 type Props = {
@@ -196,6 +210,24 @@ export function TaxonomyCrud({ meta, initial, canCreate, canUpdate }: Props) {
     );
   }
 
+  async function removeRow(row: TaxonomyRow) {
+    if (!canUpdate) return;
+    const impact = await adminGet<TaxonomyDeleteImpactDto>(
+      adminEndpoints.taxonomyDeleteImpact(meta.kind, row.id),
+    );
+    if (!impact.canDelete) {
+      setError(impact.blockers.map((item) => item.message).join(' '));
+      setPhase('server');
+      return;
+    }
+    if (!window.confirm(`Удалить «${row.name}» навсегда? Запись нигде не используется.`)) return;
+    await run(async () => {
+      await adminDelete(adminEndpoints.taxonomyItem(meta.kind, row.id), {
+        expectedVersion: row.version,
+      });
+    }, `«${row.name}» удалена`);
+  }
+
   /** Move one position and renumber the affected rows (10, 20, 30 …). */
   async function move(row: TaxonomyRow, direction: -1 | 1) {
     if (!canUpdate || searching) return;
@@ -281,13 +313,14 @@ export function TaxonomyCrud({ meta, initial, canCreate, canUpdate }: Props) {
           </p>
         </div>
       ) : (
-        <div className="admin-panel overflow-x-auto">
-          <table className="admin-table min-w-[720px]">
+        <div className="admin-panel admin-table-wrap admin-table-wrap--cards">
+          <table className="admin-table admin-table--compact">
             <thead>
               <tr>
                 <th className="w-20">Порядок</th>
                 <th>Название</th>
                 <th className="w-40">Витрина</th>
+                <th className="w-28">Связи</th>
                 <th className="w-32">Обновлён</th>
                 <th className="w-52">Действия</th>
               </tr>
@@ -298,7 +331,7 @@ export function TaxonomyCrud({ meta, initial, canCreate, canUpdate }: Props) {
                 const index = rows.findIndex((item) => item.id === row.id);
                 return (
                   <tr key={row.id} className={row.visibility === 'HIDDEN' ? 'admin-row--muted' : ''}>
-                    <td>
+                    <td data-hide-mobile>
                       <div className="admin-row-actions">
                         <button
                           type="button"
@@ -324,7 +357,7 @@ export function TaxonomyCrud({ meta, initial, canCreate, canUpdate }: Props) {
                         </button>
                       </div>
                     </td>
-                    <td>
+                    <td data-primary>
                       {editing ? (
                         <div className="grid gap-2">
                           <input
@@ -453,7 +486,7 @@ export function TaxonomyCrud({ meta, initial, canCreate, canUpdate }: Props) {
                         </div>
                       )}
                     </td>
-                    <td>
+                    <td data-label="Витрина">
                       <span
                         className={`admin-chip ${
                           row.visibility === 'VISIBLE' ? '' : 'admin-chip--muted'
@@ -462,8 +495,13 @@ export function TaxonomyCrud({ meta, initial, canCreate, canUpdate }: Props) {
                         {visibilityLabel(row.visibility)}
                       </span>
                     </td>
-                    <td className="text-[var(--admin-muted)]">{formatAdminDate(row.updatedAt)}</td>
-                    <td>
+                    <td data-label="Связи" className="text-sm tabular-nums">
+                      {(row.productsCount ?? 0) +
+                        (row.flowerItemsCount ?? 0) +
+                        (row.componentsCount ?? 0)}
+                    </td>
+                    <td data-label="Обновлён" className="text-[var(--admin-muted)]">{formatAdminDate(row.updatedAt)}</td>
+                    <td data-label="Действия">
                       {canUpdate ? (
                         <div className="admin-row-actions">
                           {editing ? (
@@ -503,6 +541,14 @@ export function TaxonomyCrud({ meta, initial, canCreate, canUpdate }: Props) {
                               >
                                 {row.visibility === 'VISIBLE' ? 'Скрыть' : 'Показать'}
                               </button>
+                              <button
+                                type="button"
+                                className="admin-btn-ghost text-[var(--admin-danger)]"
+                                disabled={pending}
+                                onClick={() => void removeRow(row)}
+                              >
+                                Удалить
+                              </button>
                             </>
                           )}
                         </div>
@@ -519,8 +565,8 @@ export function TaxonomyCrud({ meta, initial, canCreate, canUpdate }: Props) {
       )}
 
       <p className="admin-help">
-        Скрытая запись не удаляется: она исчезает из подбора на витрине, но остаётся у товаров и в
-        истории заказов.
+        Скрытая запись пропадает из подбора на витрине, но остаётся у товаров. Удалить можно только
+        свободную запись — товары и заказы каскадно не трогаем.
       </p>
     </div>
   );

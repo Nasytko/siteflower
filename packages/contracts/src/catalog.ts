@@ -943,6 +943,143 @@ export function evaluateProductDeleteImpact(input: {
   };
 }
 
+export type CatalogUsageBlockerDto = {
+  code: string;
+  message: string;
+  count: number;
+};
+
+export type TaxonomyDeleteImpactDto = {
+  canDelete: boolean;
+  blockers: CatalogUsageBlockerDto[];
+  productsCount: number;
+  flowerItemsCount: number;
+  componentsCount: number;
+};
+
+/** Safe hard-delete only when nothing still points at the dictionary row. */
+export function evaluateTaxonomyDeleteImpact(input: {
+  productsCount: number;
+  flowerItemsCount?: number;
+  componentsCount?: number;
+}): TaxonomyDeleteImpactDto {
+  const flowerItemsCount = input.flowerItemsCount ?? 0;
+  const componentsCount = input.componentsCount ?? 0;
+  const blockers: CatalogUsageBlockerDto[] = [];
+  if (input.productsCount > 0) {
+    blockers.push({
+      code: 'PRODUCTS',
+      message: `Запись указана у ${input.productsCount} товаров. Товары не удаляются — скройте запись или снимите её с товаров.`,
+      count: input.productsCount,
+    });
+  }
+  if (flowerItemsCount > 0) {
+    blockers.push({
+      code: 'FLOWER_ITEMS',
+      message: `Цвет указан у ${flowerItemsCount} позиций справочника цветов. Сначала смените цвет там.`,
+      count: flowerItemsCount,
+    });
+  }
+  if (componentsCount > 0) {
+    blockers.push({
+      code: 'COMPONENTS',
+      message: `Цвет стоит в составе ${componentsCount} товаров. Состав не меняется каскадно.`,
+      count: componentsCount,
+    });
+  }
+  return {
+    canDelete: blockers.length === 0,
+    blockers,
+    productsCount: input.productsCount,
+    flowerItemsCount,
+    componentsCount,
+  };
+}
+
+export type FlowerFormDeleteImpactDto = {
+  canDelete: boolean;
+  blockers: CatalogUsageBlockerDto[];
+  itemsCount: number;
+};
+
+export function evaluateFlowerFormDeleteImpact(itemsCount: number): FlowerFormDeleteImpactDto {
+  const blockers: CatalogUsageBlockerDto[] =
+    itemsCount > 0
+      ? [
+          {
+            code: 'FLOWER_ITEMS',
+            message: `Форма используется в ${itemsCount} цветах. Скройте форму или смените её у позиций.`,
+            count: itemsCount,
+          },
+        ]
+      : [];
+  return { canDelete: blockers.length === 0, blockers, itemsCount };
+}
+
+export type CatalogPageDeleteImpactDto = {
+  canDelete: boolean;
+  canUnpublish: boolean;
+  blockers: CatalogUsageBlockerDto[];
+  childrenCount: number;
+  navigationCount: number;
+  assignedProductsCount: number;
+};
+
+export function evaluateCatalogPageDeleteImpact(input: {
+  pageKind: CatalogPageKind;
+  isSystem: boolean;
+  status: SeoLandingStatus | 'LIVE';
+  childrenCount: number;
+  navigationCount: number;
+  assignedProductsCount: number;
+}): CatalogPageDeleteImpactDto {
+  const blockers: CatalogUsageBlockerDto[] = [];
+  if (input.isSystem || input.pageKind === 'SYSTEM_HUB') {
+    blockers.push({
+      code: 'SYSTEM',
+      message: 'Системный раздел каталога нельзя удалить. Он нужен витрине и адресам SEO.',
+      count: 1,
+    });
+  }
+  if (input.childrenCount > 0) {
+    blockers.push({
+      code: 'CHILDREN',
+      message: `Есть ${input.childrenCount} дочерних страниц. Сначала перенесите или удалите их.`,
+      count: input.childrenCount,
+    });
+  }
+  if (input.navigationCount > 0) {
+    blockers.push({
+      code: 'NAVIGATION',
+      message: `Страница указана в ${input.navigationCount} пунктах меню сайта. Сначала уберите её из меню.`,
+      count: input.navigationCount,
+    });
+  }
+  if (input.assignedProductsCount > 0) {
+    blockers.push({
+      code: 'PRODUCTS',
+      message: `К странице привязано ${input.assignedProductsCount} товаров (подтип подарка). Переназначьте товары.`,
+      count: input.assignedProductsCount,
+    });
+  }
+  const published = input.status === 'PUBLISHED' || input.status === 'LIVE';
+  if (published) {
+    blockers.push({
+      code: 'PUBLISHED',
+      message: 'Опубликованный адрес нельзя удалить сразу. Снимите страницу с публикации.',
+      count: 1,
+    });
+  }
+  return {
+    canDelete: blockers.length === 0,
+    canUnpublish: input.pageKind === 'THEMATIC' && input.status === 'PUBLISHED',
+    blockers,
+    childrenCount: input.childrenCount,
+    navigationCount: input.navigationCount,
+    assignedProductsCount: input.assignedProductsCount,
+  };
+}
+
 /** Stable uniqueness key for FlowerItem (null parts → `_`). */
 export function flowerItemIdentityKey(input: {
   flowerTypeId: string;
@@ -1521,6 +1658,12 @@ export type TaxonomyAdminDto = {
   noIndex: boolean;
   createdAt: string;
   updatedAt: string;
+  /** Direct product links (occasion/recipient/color palette). */
+  productsCount?: number;
+  /** Color on FlowerItem rows. */
+  flowerItemsCount?: number;
+  /** Color snapshot on ProductComponent. */
+  componentsCount?: number;
 };
 
 export type ColorAdminDto = TaxonomyAdminDto & {

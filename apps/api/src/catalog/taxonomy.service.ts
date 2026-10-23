@@ -5,8 +5,10 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import {
+  evaluateTaxonomyDeleteImpact,
   normalizeSlug,
   type ColorAdminDto,
+  type TaxonomyDeleteImpactDto,
   type PaginatedResponse,
   type SlugEntityType,
   type TaxonomyAdminDto,
@@ -90,6 +92,7 @@ type TaxonomyDelegate = {
     where: { id: string; version: number };
     data: TaxonomyWriteData & { version: { increment: number } };
   }): Promise<{ count: number }>;
+  deleteMany(args: { where: { id: string; version: number } }): Promise<{ count: number }>;
 };
 
 export type TaxonomyListQuery = {
@@ -153,8 +156,9 @@ export class TaxonomyService {
       delegate.count({ where }),
     ]);
 
+    const usage = await this.usageByIds(kind, items.map((row) => row.id));
     return {
-      items: items.map((row) => this.toDto(kind, row)),
+      items: items.map((row) => this.toDto(kind, row, usage.get(row.id))),
       total,
       page,
       pageSize,
@@ -166,7 +170,60 @@ export class TaxonomyService {
     if (!row) {
       throw new NotFoundException('Taxonomy entry not found');
     }
-    return this.toDto(kind, row);
+    const usage = await this.usageByIds(kind, [id]);
+    return this.toDto(kind, row, usage.get(id));
+  }
+
+  async deleteImpact(kind: TaxonomyKind, id: string): Promise<TaxonomyDeleteImpactDto> {
+    const row = await this.delegate(kind).findUnique({ where: { id } });
+    if (!row) {
+      throw new NotFoundException('Taxonomy entry not found');
+    }
+    const usage = await this.usageByIds(kind, [id]);
+    const counts = usage.get(id) ?? { productsCount: 0, flowerItemsCount: 0, componentsCount: 0 };
+    return evaluateTaxonomyDeleteImpact(counts);
+  }
+
+  async deleteEmpty(
+    kind: TaxonomyKind,
+    id: string,
+    expectedVersion: number,
+    actor: ActorContext,
+  ): Promise<{ deleted: true; id: string }> {
+    const current = await this.delegate(kind).findUnique({ where: { id } });
+    if (!current) {
+      throw new NotFoundException('Taxonomy entry not found');
+    }
+    if (current.version !== expectedVersion) {
+      throw new ConflictException(OCC_CONFLICT_MESSAGE);
+    }
+    const impact = await this.deleteImpact(kind, id);
+    if (!impact.canDelete) {
+      throw new BadRequestException({
+        message: impact.blockers[0]?.message ?? 'Запись используется и не может быть удалена',
+        error: 'CatalogDeleteBlocked',
+        code: impact.blockers[0]?.code ?? 'IN_USE',
+        blockers: impact.blockers,
+        productsCount: impact.productsCount,
+        flowerItemsCount: impact.flowerItemsCount,
+        componentsCount: impact.componentsCount,
+      });
+    }
+
+    await this.prisma.client.$transaction(async (tx) => {
+      const delegate = this.delegate(kind, tx);
+      const result = await delegate.deleteMany({ where: { id, version: expectedVersion } });
+      if (result.count === 0) {
+        throw new ConflictException(OCC_CONFLICT_MESSAGE);
+      }
+      await this.recordAudit(tx, kind, actor, 'TAXONOMY_DELETED', id, {
+        slug: current.slug,
+        name: current.name,
+      });
+    });
+
+    await this.revalidate.ping({ tags: ['catalog'], paths: ['/', '/bukety'] });
+    return { deleted: true, id };
   }
 
   async create(
@@ -271,11 +328,93 @@ export class TaxonomyService {
     return dto;
   }
 
-  private toDto(kind: TaxonomyKind, row: TaxonomyRow): TaxonomyEntryDto {
+  private toDto(
+    kind: TaxonomyKind,
+    row: TaxonomyRow,
+    usage?: { productsCount: number; flowerItemsCount: number; componentsCount: number },
+  ): TaxonomyEntryDto {
+    const counts = {
+      productsCount: usage?.productsCount ?? 0,
+      flowerItemsCount: usage?.flowerItemsCount ?? 0,
+      componentsCount: usage?.componentsCount ?? 0,
+    };
     if (kind === 'colors') {
-      return toColorAdminDto({ ...row, swatch: row.swatch ?? null });
+      return { ...toColorAdminDto({ ...row, swatch: row.swatch ?? null }), ...counts };
     }
-    return toTaxonomyAdminDto(row);
+    return { ...toTaxonomyAdminDto(row), ...counts };
+  }
+
+  private async usageByIds(
+    kind: TaxonomyKind,
+    ids: string[],
+  ): Promise<Map<string, { productsCount: number; flowerItemsCount: number; componentsCount: number }>> {
+    const empty = {
+      productsCount: 0,
+      flowerItemsCount: 0,
+      componentsCount: 0,
+    };
+    const map = new Map(ids.map((id) => [id, { ...empty }]));
+    if (ids.length === 0) return map;
+
+    if (kind === 'occasions') {
+      const rows = await this.prisma.client.productOccasion.groupBy({
+        by: ['occasionId'],
+        where: { occasionId: { in: ids } },
+        _count: { _all: true },
+      });
+      for (const row of rows) {
+        const current = map.get(row.occasionId) ?? { ...empty };
+        current.productsCount = row._count._all;
+        map.set(row.occasionId, current);
+      }
+    } else if (kind === 'recipients') {
+      const rows = await this.prisma.client.productRecipient.groupBy({
+        by: ['recipientId'],
+        where: { recipientId: { in: ids } },
+        _count: { _all: true },
+      });
+      for (const row of rows) {
+        const current = map.get(row.recipientId) ?? { ...empty };
+        current.productsCount = row._count._all;
+        map.set(row.recipientId, current);
+      }
+    } else {
+      const [products, flowerItems, components] = await Promise.all([
+        this.prisma.client.productColor.groupBy({
+          by: ['colorId'],
+          where: { colorId: { in: ids } },
+          _count: { _all: true },
+        }),
+        this.prisma.client.flowerItem.groupBy({
+          by: ['colorId'],
+          where: { colorId: { in: ids } },
+          _count: { _all: true },
+        }),
+        this.prisma.client.productComponent.groupBy({
+          by: ['colorId'],
+          where: { colorId: { in: ids } },
+          _count: { _all: true },
+        }),
+      ]);
+      for (const row of products) {
+        const current = map.get(row.colorId) ?? { ...empty };
+        current.productsCount = row._count._all;
+        map.set(row.colorId, current);
+      }
+      for (const row of flowerItems) {
+        if (!row.colorId) continue;
+        const current = map.get(row.colorId) ?? { ...empty };
+        current.flowerItemsCount = row._count._all;
+        map.set(row.colorId, current);
+      }
+      for (const row of components) {
+        if (!row.colorId) continue;
+        const current = map.get(row.colorId) ?? { ...empty };
+        current.componentsCount = row._count._all;
+        map.set(row.colorId, current);
+      }
+    }
+    return map;
   }
 
   private delegate(kind: TaxonomyKind, tx?: Prisma.TransactionClient): TaxonomyDelegate {
@@ -292,7 +431,7 @@ export class TaxonomyService {
     tx: Prisma.TransactionClient,
     kind: TaxonomyKind,
     actor: ActorContext,
-    action: 'TAXONOMY_CREATED' | 'TAXONOMY_UPDATED',
+    action: 'TAXONOMY_CREATED' | 'TAXONOMY_UPDATED' | 'TAXONOMY_DELETED',
     entityId: string,
     metadata?: Record<string, unknown>,
   ): Promise<void> {

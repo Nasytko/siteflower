@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
   PRIMARY_PRODUCT_KINDS,
+  type CatalogPageDeleteImpactDto,
   type CatalogPageDto,
   type CatalogPageKind,
   type FlowerTypeAdminDto,
@@ -10,7 +11,7 @@ import {
   type ProductTraitDefinitionDto,
 } from '@bouquet-one/contracts';
 import { FormSaveStatus, type FormSavePhase } from '@/components/admin/form-status';
-import { adminGet, adminPatch, adminPost, errorMessage } from '@/lib/admin-client';
+import { adminDelete, adminGet, adminPatch, adminPost, errorMessage } from '@/lib/admin-client';
 import { adminEndpoints, withQuery } from '@/lib/admin-endpoints';
 import { productKindLabel } from '@/lib/admin-labels';
 import { isMajorInputValid, majorInputToMinor, minorToMajorInput } from '@/lib/admin-money';
@@ -259,7 +260,7 @@ export function CatalogPagesManager({ canCreate, canUpdate, canPublish }: Props)
   const [phase, setPhase] = useState<FormSavePhase>('idle');
   const [q, setQ] = useState('');
   const [kindFilter, setKindFilter] = useState<'' | CatalogPageKind>('');
-  const [statusFilter, setStatusFilter] = useState<'' | 'PUBLISHED' | 'DRAFT'>('');
+  const [statusFilter, setStatusFilter] = useState<'' | 'PUBLISHED' | 'DRAFT' | 'ARCHIVED'>('');
   const [mode, setMode] = useState<EditorMode>('closed');
   const [editing, setEditing] = useState<CatalogPageDto | null>(null);
   const [draft, setDraft] = useState<PageDraft>(emptyDraft);
@@ -322,6 +323,9 @@ export function CatalogPagesManager({ canCreate, canUpdate, canPublish }: Props)
       }
       if (statusFilter === 'DRAFT') {
         return p.status !== 'PUBLISHED' && p.status !== 'LIVE' && p.status !== 'ARCHIVED';
+      }
+      if (statusFilter === 'ARCHIVED') {
+        return p.status === 'ARCHIVED';
       }
       return true;
     });
@@ -442,6 +446,54 @@ export function CatalogPagesManager({ canCreate, canUpdate, canPublish }: Props)
     }
   }
 
+  async function unpublish() {
+    if (!editing || !canPublish || editing.isSystem) return;
+    setPhase('saving');
+    setError(null);
+    try {
+      const updated = await adminPost<CatalogPageDto>(
+        adminEndpoints.catalogPageUnpublish(editing.id),
+        { expectedVersion: editing.version },
+      );
+      setEditing(updated);
+      setDraft(draftFromPage(updated, flowerTypes));
+      setPhase('saved');
+      await loadPages();
+    } catch (err) {
+      setError(errorMessage(err, 'Не удалось снять с публикации'));
+      setPhase('server');
+    }
+  }
+
+  async function removePage() {
+    if (!editing || !canUpdate || editing.isSystem) return;
+    setPhase('saving');
+    setError(null);
+    try {
+      const impact = await adminGet<CatalogPageDeleteImpactDto>(
+        adminEndpoints.catalogPageDeleteImpact(editing.id),
+      );
+      if (!impact.canDelete) {
+        setError(impact.blockers.map((row) => row.message).join(' '));
+        setPhase('server');
+        return;
+      }
+      if (!window.confirm(`Удалить страницу «${editing.name}»? Адрес больше не будет открываться.`)) {
+        setPhase('idle');
+        return;
+      }
+      await adminDelete(adminEndpoints.catalogPage(editing.id), {
+        expectedVersion: editing.version,
+      });
+      closeEditor();
+      setPhase('saved');
+      await loadPages();
+    } catch (err) {
+      setError(errorMessage(err, 'Не удалось удалить страницу'));
+      setPhase('server');
+    }
+  }
+
   const showEditor = mode !== 'closed';
   const editable = mode === 'create' || (mode === 'edit' && !editing?.isSystem);
   const authorialTrait = traits.find((t) => t.key === 'AUTHORIAL');
@@ -481,11 +533,14 @@ export function CatalogPagesManager({ canCreate, canUpdate, canPublish }: Props)
           <select
             className="admin-select"
             value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value as '' | 'PUBLISHED' | 'DRAFT')}
+            onChange={(e) =>
+              setStatusFilter(e.target.value as '' | 'PUBLISHED' | 'DRAFT' | 'ARCHIVED')
+            }
           >
             <option value="">Все</option>
             <option value="PUBLISHED">Опубликовано</option>
             <option value="DRAFT">Черновики</option>
+            <option value="ARCHIVED">Снятые с публикации</option>
           </select>
         </label>
         <button type="button" className="admin-btn-ghost" onClick={() => void loadPages()}>
@@ -768,8 +823,28 @@ export function CatalogPagesManager({ canCreate, canUpdate, canPublish }: Props)
                     Опубликовать
                   </button>
                 ) : null}
-                {editing?.status === 'PUBLISHED' || editing?.status === 'LIVE' ? (
-                  <span className="text-sm text-emerald-700">Уже на сайте</span>
+                {editing && canPublish && editable && editing.status === 'PUBLISHED' ? (
+                  <button
+                    type="button"
+                    className="admin-btn-ghost"
+                    disabled={phase === 'saving'}
+                    onClick={() => void unpublish()}
+                  >
+                    Снять с публикации
+                  </button>
+                ) : null}
+                {editing && canUpdate && editable && !editing.isSystem ? (
+                  <button
+                    type="button"
+                    className="admin-btn-ghost"
+                    disabled={phase === 'saving'}
+                    onClick={() => void removePage()}
+                  >
+                    Удалить
+                  </button>
+                ) : null}
+                {editing?.status === 'LIVE' ? (
+                  <span className="text-sm text-emerald-700">Системный раздел</span>
                 ) : null}
                 {editing?.productsCount != null ? (
                   <span className="text-sm text-[var(--admin-muted)]">
@@ -844,8 +919,8 @@ function PageTable({
   systemOnly?: boolean;
 }) {
   return (
-    <div className="admin-panel overflow-x-auto">
-      <table className="admin-table min-w-[720px]">
+    <div className="admin-panel admin-table-wrap admin-table-wrap--cards">
+      <table className="admin-table admin-table--compact">
         <thead>
           <tr>
             <th>Название</th>
@@ -860,21 +935,21 @@ function PageTable({
         <tbody>
           {pages.map((page) => (
             <tr key={page.id}>
-              <td className="font-medium">{page.name}</td>
-              <td className="text-sm">{kindLabel(page.pageKind)}</td>
-              <td className="max-w-[16rem] text-xs text-[var(--admin-muted)]">
+              <td data-primary className="font-medium">{page.name}</td>
+              <td data-label="Тип" className="text-sm">{kindLabel(page.pageKind)}</td>
+              <td data-label="Правило" className="max-w-[16rem] text-xs text-[var(--admin-muted)]">
                 {humanRulesSummary(page, flowerTypes)}
               </td>
-              <td className="text-sm tabular-nums">
+              <td data-label="Товаров" className="text-sm tabular-nums">
                 {page.productsCount == null ? '—' : page.productsCount}
               </td>
-              <td className="text-sm">{statusLabel(page)}</td>
-              <td className="text-xs">
+              <td data-label="Статус" className="text-sm">{statusLabel(page)}</td>
+              <td data-label="URL" className="text-xs">
                 <a href={page.publicPath} className="admin-link" target="_blank" rel="noreferrer">
                   {page.publicPath}
                 </a>
               </td>
-              <td>
+              <td data-label="Действия">
                 <button
                   type="button"
                   className="admin-btn-ghost text-xs"

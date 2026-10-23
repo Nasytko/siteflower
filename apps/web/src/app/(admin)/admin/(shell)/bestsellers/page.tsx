@@ -12,8 +12,8 @@ export default async function AdminBestsellersPage() {
   return (
     <main id="main-content" className="space-y-6">
       <AdminPageHeader
-        title="Бестселлеры"
-        lead="Подборки товаров для главной страницы — вручную, без правил."
+        title="Подборки"
+        lead="Товары на главной и в маркетинговых блоках. Это не связанные товары в карточке."
         actions={
           <Link href="/admin/promotions" className="admin-btn-ghost">
             Акции

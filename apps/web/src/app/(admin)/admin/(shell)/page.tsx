@@ -1,24 +1,27 @@
 import Link from 'next/link';
 import {
+  orderStatusLabel,
   roleHasPermission,
   seoStatusEmoji,
+  type OrderAdminListItemDto,
   type SeoHealthSummary,
 } from '@bouquet-one/contracts';
 import { fetchAdminMe, adminFetch } from '@/lib/admin-api';
 import { fetchTotal } from '@/lib/admin-catalog-api';
 import { adminEndpoints } from '@/lib/admin-endpoints';
+import { formatPriceFromMinor } from '@/lib/media';
 
 const SHORTCUTS = [
   {
     href: '/admin/catalog/products',
     label: 'Товары',
-    hint: 'Найти, наличие, публикация',
+    hint: 'Создать или найти',
     permission: 'CATALOG_READ' as const,
   },
   {
     href: '/admin/orders',
     label: 'Заказы',
-    hint: 'Список на дату выполнения',
+    hint: 'Сегодня и новые',
     permission: 'ORDERS_READ' as const,
   },
   {
@@ -43,7 +46,7 @@ function Metric({
   emphasize?: boolean;
 }) {
   const urgent = Boolean(emphasize && value !== null && value > 0);
-  const cardClass = `admin-card${href ? ' admin-card--link' : ''}${urgent ? ' admin-card--urgent' : ''}`;
+  const cardClass = `admin-card admin-card--kpi${href ? ' admin-card--link' : ''}${urgent ? ' admin-card--urgent' : ''}`;
   const body = (
     <>
       <p className="admin-card__label">{label}</p>
@@ -62,6 +65,14 @@ function Metric({
   );
 }
 
+function formatToday(): string {
+  return new Intl.DateTimeFormat('ru-BY', {
+    weekday: 'long',
+    day: 'numeric',
+    month: 'long',
+  }).format(new Date());
+}
+
 export default async function AdminDashboardPage() {
   const me = await fetchAdminMe();
   const role = me?.user.role;
@@ -70,33 +81,44 @@ export default async function AdminDashboardPage() {
   const canCreateCatalog = Boolean(role && roleHasPermission(role, 'CATALOG_CREATE'));
   const canReadSeo = Boolean(role && roleHasPermission(role, 'SEO_READ'));
 
-  const [ordersToday, ordersTomorrow, ordersNew, publishedProducts, promotedProducts, seoSummary] =
-    await Promise.all([
-      canReadOrders ? fetchTotal(adminEndpoints.orders, { date: 'today' }) : null,
-      canReadOrders ? fetchTotal(adminEndpoints.orders, { date: 'tomorrow' }) : null,
-      canReadOrders
-        ? fetchTotal(adminEndpoints.orders, { date: 'all', status: 'RECEIVED' })
-        : null,
-      canReadCatalog
-        ? fetchTotal(adminEndpoints.products, { lifecycle: 'PUBLISHED' })
-        : null,
-      canReadCatalog ? fetchTotal(adminEndpoints.products, { promotionalOnly: true }) : null,
-      canReadSeo
-        ? adminFetch<{ summary: SeoHealthSummary }>(adminEndpoints.seoSummary).catch(() => null)
-        : null,
-    ]);
+  const [
+    ordersToday,
+    ordersNew,
+    publishedProducts,
+    promotedProducts,
+    recentOrders,
+    seoSummary,
+  ] = await Promise.all([
+    canReadOrders ? fetchTotal(adminEndpoints.orders, { date: 'today' }) : null,
+    canReadOrders
+      ? fetchTotal(adminEndpoints.orders, { date: 'all', status: 'RECEIVED' })
+      : null,
+    canReadCatalog ? fetchTotal(adminEndpoints.products, { lifecycle: 'PUBLISHED' }) : null,
+    canReadCatalog ? fetchTotal(adminEndpoints.products, { promotionalOnly: true }) : null,
+    canReadOrders
+      ? adminFetch<{ items: OrderAdminListItemDto[] }>(
+          `${adminEndpoints.orders}?date=all&page=1&pageSize=5`,
+        ).catch(() => ({ items: [] as OrderAdminListItemDto[] }))
+      : null,
+    canReadSeo
+      ? adminFetch<{ summary: SeoHealthSummary }>(adminEndpoints.seoSummary).catch(() => null)
+      : null,
+  ]);
 
   const shortcuts = SHORTCUTS.filter((item) => role && roleHasPermission(role, item.permission));
   const seoNeedsAttention =
     seoSummary && (seoSummary.summary.attention > 0 || seoSummary.summary.improve > 0);
+  const firstName = me?.user.displayName?.trim().split(/\s+/)[0] ?? '';
 
   return (
     <main id="main-content" className="space-y-8">
       <header className="admin-page-header">
         <div className="admin-page-header__text">
-          <h1 className="admin-page-title">Сводка</h1>
+          <h1 className="admin-page-title">
+            {firstName ? `Добро пожаловать, ${firstName}` : 'Сводка'}
+          </h1>
           <p className="admin-page-lead">
-            {me?.user.displayName ? `${me.user.displayName}, ` : ''}что нужно сделать сейчас.
+            {formatToday()}. {canCreateCatalog ? 'Начните с товара или заказов.' : 'Что нужно сделать сейчас.'}
           </p>
         </div>
         {canCreateCatalog ? (
@@ -108,54 +130,98 @@ export default async function AdminDashboardPage() {
         ) : null}
       </header>
 
-      {canReadOrders ? (
-        <section className="space-y-3">
-          <h2 className="admin-section__eyebrow">Заказы</h2>
-          <div className="grid gap-4 sm:grid-cols-3">
+      {canReadOrders || canReadCatalog ? (
+        <section className="admin-kpi-grid">
+          {canReadOrders ? (
             <Metric
-              label="Требуют внимания"
+              label="Новые заказы"
               value={ordersNew}
-              hint="Новые, ещё не подтверждены"
+              hint="Ещё не подтверждены"
               href="/admin/orders?date=all&status=RECEIVED"
               emphasize
             />
-            <Metric
-              label="На сегодня"
-              value={ordersToday}
-              hint="Выдача и доставка сегодня"
-              href="/admin/orders?date=today"
-            />
-            <Metric
-              label="На завтра"
-              value={ordersTomorrow}
-              hint="Готовим заранее"
-              href="/admin/orders?date=tomorrow"
-            />
-          </div>
-        </section>
-      ) : null}
-
-      {canReadCatalog ? (
-        <section className="space-y-3">
-          <h2 className="admin-section__eyebrow">Каталог</h2>
-          <div className="grid gap-4 sm:grid-cols-2">
+          ) : null}
+          {canReadCatalog ? (
             <Metric
               label="Товары на витрине"
               value={publishedProducts}
-              hint="Опубликованные товары"
+              hint="Опубликованные"
               href="/admin/catalog/products?lifecycle=PUBLISHED"
             />
+          ) : null}
+          {canReadOrders ? (
             <Metric
-              label="Товары в акции"
+              label="На сегодня"
+              value={ordersToday}
+              hint="Выдача и доставка"
+              href="/admin/orders?date=today"
+            />
+          ) : null}
+          {canReadCatalog ? (
+            <Metric
+              label="В акции"
               value={promotedProducts}
-              hint="Скидка активна сейчас"
+              hint="Скидка сейчас"
               href="/admin/promotions"
             />
+          ) : null}
+        </section>
+      ) : null}
+
+      {canReadOrders && recentOrders ? (
+        <section className="space-y-3">
+          <div className="flex items-end justify-between gap-3">
+            <h2 className="admin-section__eyebrow">Последние заказы</h2>
+            <Link href="/admin/orders?date=all" className="admin-link text-sm">
+              Все заказы
+            </Link>
+          </div>
+          <div className="admin-panel admin-table-wrap admin-table-wrap--cards">
+            <table className="admin-table admin-table--compact">
+              <thead>
+                <tr>
+                  <th>Номер</th>
+                  <th>Дата</th>
+                  <th>Клиент</th>
+                  <th>Сумма</th>
+                  <th>Статус</th>
+                </tr>
+              </thead>
+              <tbody>
+                {recentOrders.items.length === 0 ? (
+                  <tr>
+                    <td colSpan={5}>
+                      <p className="admin-empty">Заказов пока нет.</p>
+                    </td>
+                  </tr>
+                ) : (
+                  recentOrders.items.map((order) => (
+                    <tr key={order.id}>
+                      <td data-primary>
+                        <Link href={`/admin/orders/${order.id}`} className="font-semibold">
+                          {order.orderNumber}
+                        </Link>
+                      </td>
+                      <td data-label="Дата" className="tabular-nums">
+                        {order.fulfillmentDate}
+                      </td>
+                      <td data-label="Клиент">{order.purchaserName}</td>
+                      <td data-label="Сумма" className="tabular-nums">
+                        {formatPriceFromMinor(order.totalMinor, order.currency)}
+                      </td>
+                      <td data-label="Статус">
+                        <span className="admin-chip">{orderStatusLabel(order.status)}</span>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
           </div>
         </section>
       ) : null}
 
-      {canReadSeo && seoNeedsAttention ? (
+      {canReadSeo && seoNeedsAttention && seoSummary ? (
         <section className="space-y-3">
           <h2 className="admin-section__eyebrow">SEO</h2>
           <Link href="/admin/seo" className="admin-card admin-card--link block max-w-xl">
@@ -197,6 +263,7 @@ export default async function AdminDashboardPage() {
           </ul>
         </section>
       ) : null}
+
     </main>
   );
 }

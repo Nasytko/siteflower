@@ -144,8 +144,8 @@ export function OrdersManager({ items, total, page, pageSize, filters }: Props) 
         </form>
       </div>
 
-      <div className="admin-panel overflow-x-auto">
-        <table className="admin-table min-w-[720px]">
+      <div className="admin-panel admin-table-wrap admin-table-wrap--cards">
+        <table className="admin-table admin-table--compact">
           <thead>
             <tr>
               <th>Номер</th>
@@ -174,7 +174,7 @@ export function OrdersManager({ items, total, page, pageSize, filters }: Props) 
             ) : (
               items.map((order) => (
                 <tr key={order.id}>
-                  <td>
+                  <td data-primary>
                     <Link
                       href={`/admin/orders/${order.id}`}
                       className="font-semibold text-[var(--admin-ink)] underline-offset-2 hover:text-[var(--admin-brand)] hover:underline"
@@ -182,14 +182,14 @@ export function OrdersManager({ items, total, page, pageSize, filters }: Props) 
                       {order.orderNumber}
                     </Link>
                   </td>
-                  <td className="tabular-nums">{order.fulfillmentDate}</td>
-                  <td>{order.timeWindowLabel}</td>
-                  <td>
+                  <td data-label="Дата" className="tabular-nums">{order.fulfillmentDate}</td>
+                  <td data-label="Время">{order.timeWindowLabel}</td>
+                  <td data-label="Тип">
                     <span className="admin-chip admin-chip--muted">
                       {order.fulfillmentType === 'DELIVERY' ? 'Доставка' : 'Самовывоз'}
                     </span>
                   </td>
-                  <td>
+                  <td data-label="Клиент">
                     <span className="block">{order.purchaserName}</span>
                     {order.recipientName && order.recipientName !== order.purchaserName ? (
                       <span className="block text-xs text-[var(--admin-muted)]">
@@ -197,10 +197,10 @@ export function OrdersManager({ items, total, page, pageSize, filters }: Props) 
                       </span>
                     ) : null}
                   </td>
-                  <td>
+                  <td data-label="Статус">
                     <span className="admin-chip">{orderStatusLabel(order.status)}</span>
                   </td>
-                  <td className="tabular-nums font-semibold">
+                  <td data-label="Сумма" className="tabular-nums font-semibold">
                     {formatPriceFromMinor(order.totalMinor, order.currency)}
                   </td>
                 </tr>

@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   Param,
   ParseEnumPipe,
@@ -214,5 +215,26 @@ export class TaxonomyController {
     @Req() req: Request,
   ) {
     return this.taxonomy.update(kind, id, body, actorFrom(admin, req));
+  }
+
+  @Get(':kind/:id/delete-impact')
+  @RequirePermissions('CATALOG_READ')
+  deleteImpact(
+    @Param('kind', new ParseEnumPipe(TAXONOMY_KINDS)) kind: TaxonomyKind,
+    @Param('id', ParseUUIDPipe) id: string,
+  ) {
+    return this.taxonomy.deleteImpact(kind, id);
+  }
+
+  @Delete(':kind/:id')
+  @RequirePermissions('CATALOG_UPDATE')
+  remove(
+    @Param('kind', new ParseEnumPipe(TAXONOMY_KINDS)) kind: TaxonomyKind,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() body: ExpectedVersionDto,
+    @CurrentAdmin() admin: AuthenticatedAdmin,
+    @Req() req: Request,
+  ) {
+    return this.taxonomy.deleteEmpty(kind, id, body.expectedVersion, actorFrom(admin, req));
   }
 }

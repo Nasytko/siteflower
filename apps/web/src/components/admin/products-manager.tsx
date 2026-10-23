@@ -785,7 +785,7 @@ export function ProductsManager({
 
         {bestsellerGroups.length > 0 ? (
           <label className="admin-field">
-            <span>Бестселлеры</span>
+            <span>Подборки</span>
             <select
               className="admin-select"
               value={filters.bestsellerGroupIds}
@@ -823,8 +823,8 @@ export function ProductsManager({
         ) : null}
       </div>
 
-      <div className="admin-panel overflow-x-auto">
-        <table className="admin-table min-w-[720px]">
+      <div className="admin-panel admin-table-wrap admin-table-wrap--cards">
+        <table className="admin-table admin-table--compact">
           <thead>
             <tr>
               {canBulk ? (
@@ -883,7 +883,7 @@ export function ProductsManager({
                 return (
                   <tr key={item.id}>
                     {canBulk ? (
-                      <td>
+                      <td data-hide-mobile>
                         <input
                           type="checkbox"
                           checked={selectedIds.has(item.id)}
@@ -893,7 +893,7 @@ export function ProductsManager({
                         />
                       </td>
                     ) : null}
-                    <td>
+                    <td data-hide-mobile>
                       {item.primaryImageUrl ? (
                         <img
                           src={toSameOriginMediaUrl(item.primaryImageUrl) ?? item.primaryImageUrl}
@@ -904,7 +904,7 @@ export function ProductsManager({
                         <div className="admin-thumb-empty" title="Нет фото" />
                       )}
                     </td>
-                    <td>
+                    <td data-primary>
                       <Link
                         href={`/admin/catalog/products/${item.id}`}
                         className="font-semibold text-[var(--admin-ink)] underline-offset-2 hover:text-[var(--admin-brand)] hover:underline"
@@ -920,13 +920,13 @@ export function ProductsManager({
                         </span>
                       ) : null}
                     </td>
-                    <td className="text-sm text-[var(--admin-ink)]">{productKindLabel(kind)}</td>
-                    <td className="max-w-[14rem] text-sm text-[var(--admin-muted)]">
+                    <td data-label="Тип" className="text-sm text-[var(--admin-ink)]">{productKindLabel(kind)}</td>
+                    <td data-label="Состав" className="max-w-[14rem] text-sm text-[var(--admin-muted)]">
                       <span className="line-clamp-2" title={summary}>
                         {summary}
                       </span>
                     </td>
-                    <td className="tabular-nums">
+                    <td data-label="Цена" className="tabular-nums">
                       {item.promotion ? (
                         <span className="admin-price-stack">
                           <span className="admin-price-sale">{item.promotion.salePrice.label}</span>
@@ -938,12 +938,12 @@ export function ProductsManager({
                         (item.price?.label ?? '—')
                       )}
                     </td>
-                    <td>
+                    <td data-label="Публикация">
                       <span className={lifecycleChipClass(item.lifecycle)}>
                         {lifecycleLabel(item.lifecycle)}
                       </span>
                     </td>
-                    <td>
+                    <td data-label="Наличие">
                       {canUpdate ? (
                         <label className="block min-w-[9.5rem]">
                           <span className="sr-only">Наличие: {item.name}</span>
@@ -983,7 +983,7 @@ export function ProductsManager({
                         </span>
                       )}
                     </td>
-                    <td>
+                    <td data-label="Действия">
                       <div className="flex flex-col items-start gap-1">
                         <Link
                           href={`/admin/catalog/products/${item.id}`}

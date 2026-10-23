@@ -8,6 +8,7 @@ import {
   buildProductAvailabilityPatchBody,
   buildProductBestsellerGroupsBody,
   buildProductListQueryParams,
+  buildProductPromotionBody,
   buildProductsBulkBody,
 } from './admin-catalog-contract';
 import { adminEndpoints, withQuery } from './admin-endpoints';
@@ -151,6 +152,23 @@ test('withQuery joins string arrays for Nest toStringList', () => {
     bestsellerGroupIds: ['aaa', 'bbb'],
   });
   assert.equal(url, '/api/v1/admin/catalog/products?bestsellerGroupIds=aaa%2Cbbb');
+});
+
+test('promotion body uses product version and percent fields', () => {
+  const body = buildProductPromotionBody({
+    expectedVersion: 4,
+    enabled: true,
+    type: 'PERCENT',
+    percentOff: 15,
+    startsAt: null,
+    endsAt: '2026-12-31T21:00:00.000Z',
+  });
+  assert.equal(body.expectedVersion, 4);
+  assert.equal(body.type, 'PERCENT');
+  assert.equal(body.percentOff, 15);
+  assert.equal(body.startsAt, null);
+  assert.equal(body.endsAt, '2026-12-31T21:00:00.000Z');
+  assert.equal('variantSalePrices' in body, false);
 });
 
 test('product editor save posts variant ids and omits promotions and collections', () => {

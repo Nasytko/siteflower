@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import {
+  evaluateFlowerFormDeleteImpact,
   flowerItemDisplayName,
   type ColorAdminDto,
   type FlowerFormAdminDto,
@@ -47,6 +48,7 @@ type Draft = {
 };
 
 type InlineKind = 'type' | 'form' | 'variety' | 'origin';
+type InlineMode = 'create' | 'rename';
 
 const EMPTY_DRAFT: Draft = {
   flowerTypeId: '',
@@ -136,6 +138,7 @@ export function FlowerStructureManager({
   const [showUsedIn, setShowUsedIn] = useState(false);
 
   const [inlineKind, setInlineKind] = useState<InlineKind | null>(null);
+  const [inlineMode, setInlineMode] = useState<InlineMode>('create');
   const [inlineName, setInlineName] = useState('');
 
   const [duplicateExistingId, setDuplicateExistingId] = useState<string | null>(null);
@@ -262,6 +265,7 @@ export function FlowerStructureManager({
     setUsedIn([]);
     setShowUsedIn(false);
     setInlineKind(null);
+    setInlineMode('create');
     setInlineName('');
     setDuplicateExistingId(null);
     setError(null);
@@ -278,6 +282,7 @@ export function FlowerStructureManager({
       setDraft(draftFromItem(seed));
     }
     setInlineKind(null);
+    setInlineMode('create');
     setInlineName('');
     setDuplicateExistingId(null);
     setError(null);
@@ -299,6 +304,7 @@ export function FlowerStructureManager({
     setUsedIn([]);
     setShowUsedIn(false);
     setInlineKind(null);
+    setInlineMode('create');
   }
 
   function setTypeAndResetChildren(flowerTypeId: string) {
@@ -393,8 +399,128 @@ export function FlowerStructureManager({
         setDraft((prev) => ({ ...prev, flowerOriginId: created.id }));
       }
       setInlineKind(null);
+      setInlineMode('create');
       setInlineName('');
     }, `Добавлено: ${name}`);
+  }
+
+  async function renameInline() {
+    const name = inlineName.trim();
+    if (!name || !inlineKind) return;
+    await run(async () => {
+      if (inlineKind === 'form') {
+        const current = forms.find((item) => item.id === draft.flowerFormId);
+        if (!current) throw new Error('Форма не выбрана');
+        await adminPatch(adminEndpoints.flowerForm(current.id), {
+          expectedVersion: current.version,
+          name,
+        });
+      } else if (inlineKind === 'type') {
+        const current = types.find((item) => item.id === draft.flowerTypeId);
+        if (!current) throw new Error('Вид не выбран');
+        await adminPatch(adminEndpoints.flowerType(current.id), {
+          expectedVersion: current.version,
+          name,
+        });
+      } else if (inlineKind === 'variety') {
+        const current = varieties.find((item) => item.id === draft.flowerVarietyId);
+        if (!current) throw new Error('Сорт не выбран');
+        await adminPatch(adminEndpoints.flowerVariety(current.id), {
+          expectedVersion: current.version,
+          name,
+        });
+      } else if (inlineKind === 'origin') {
+        const current = origins.find((item) => item.id === draft.flowerOriginId);
+        if (!current) throw new Error('Происхождение не выбрано');
+        await adminPatch(adminEndpoints.flowerOrigin(current.id), {
+          expectedVersion: current.version,
+          name,
+        });
+      }
+      setInlineKind(null);
+      setInlineMode('create');
+      setInlineName('');
+    }, `Переименовано: ${name}`);
+  }
+
+  async function deleteSelectedRef(kind: InlineKind) {
+    const selected =
+      kind === 'type'
+        ? types.find((item) => item.id === draft.flowerTypeId)
+        : kind === 'form'
+          ? forms.find((item) => item.id === draft.flowerFormId)
+          : kind === 'variety'
+            ? varieties.find((item) => item.id === draft.flowerVarietyId)
+            : origins.find((item) => item.id === draft.flowerOriginId);
+    if (!selected) return;
+    if (kind === 'form') {
+      const impact = evaluateFlowerFormDeleteImpact(
+        'itemsCount' in selected ? (selected.itemsCount ?? 0) : 0,
+      );
+      if (!impact.canDelete) {
+        setError(impact.blockers[0]?.message ?? 'Форму нельзя удалить');
+        setPhase('server');
+        return;
+      }
+    }
+    if (!window.confirm(`Удалить «${selected.name}»? Только если запись нигде не используется.`)) {
+      return;
+    }
+    await run(async () => {
+      if (kind === 'type') {
+        await adminDelete(adminEndpoints.flowerType(selected.id), {
+          expectedVersion: selected.version,
+        });
+        setDraft((prev) => ({ ...prev, flowerTypeId: '', flowerFormId: '', flowerVarietyId: '' }));
+      } else if (kind === 'form') {
+        await adminDelete(adminEndpoints.flowerForm(selected.id), {
+          expectedVersion: selected.version,
+        });
+        setDraft((prev) => ({ ...prev, flowerFormId: '' }));
+      } else if (kind === 'variety') {
+        await adminDelete(adminEndpoints.flowerVariety(selected.id), {
+          expectedVersion: selected.version,
+        });
+        setDraft((prev) => ({ ...prev, flowerVarietyId: '' }));
+      } else {
+        await adminDelete(adminEndpoints.flowerOrigin(selected.id), {
+          expectedVersion: selected.version,
+        });
+        setDraft((prev) => ({ ...prev, flowerOriginId: '' }));
+      }
+    }, `«${selected.name}» удалена`);
+  }
+
+  async function toggleRefVisibility(kind: 'type' | 'variety' | 'origin') {
+    const current =
+      kind === 'type'
+        ? types.find((item) => item.id === draft.flowerTypeId)
+        : kind === 'variety'
+          ? varieties.find((item) => item.id === draft.flowerVarietyId)
+          : origins.find((item) => item.id === draft.flowerOriginId);
+    if (!current) return;
+    const next = current.visibility === 'VISIBLE' ? 'HIDDEN' : 'VISIBLE';
+    const path =
+      kind === 'type'
+        ? adminEndpoints.flowerType(current.id)
+        : kind === 'variety'
+          ? adminEndpoints.flowerVariety(current.id)
+          : adminEndpoints.flowerOrigin(current.id);
+    await run(async () => {
+      await adminPatch(path, { expectedVersion: current.version, visibility: next });
+    }, next === 'HIDDEN' ? `«${current.name}» скрыта` : `«${current.name}» снова доступна`);
+  }
+
+  async function toggleFormVisibility() {
+    const current = forms.find((item) => item.id === draft.flowerFormId);
+    if (!current) return;
+    const next = current.visibility === 'VISIBLE' ? 'HIDDEN' : 'VISIBLE';
+    await run(async () => {
+      await adminPatch(adminEndpoints.flowerForm(current.id), {
+        expectedVersion: current.version,
+        visibility: next,
+      });
+    }, next === 'HIDDEN' ? `Форма «${current.name}» скрыта` : `Форма «${current.name}» снова доступна`);
   }
 
   // Keep filter form/variety coherent when type filter changes.
@@ -464,18 +590,54 @@ export function FlowerStructureManager({
                   </option>
                 ))}
             </select>
-            {canCreate ? (
-              <button
-                type="button"
-                className="admin-btn-ghost mt-1 text-xs"
-                onClick={() => {
-                  setInlineKind('type');
-                  setInlineName('');
-                }}
-              >
-                + Добавить вид
-              </button>
-            ) : null}
+            <div className="mt-1 flex flex-wrap gap-2">
+              {canCreate ? (
+                <button
+                  type="button"
+                  className="admin-btn-ghost text-xs"
+                  onClick={() => {
+                    setInlineKind('type');
+                    setInlineMode('create');
+                    setInlineName('');
+                  }}
+                >
+                  + Добавить вид
+                </button>
+              ) : null}
+              {canUpdate && draft.flowerTypeId ? (
+                <button
+                  type="button"
+                  className="admin-btn-ghost text-xs"
+                  onClick={() => {
+                    setInlineKind('type');
+                    setInlineMode('rename');
+                    setInlineName(types.find((item) => item.id === draft.flowerTypeId)?.name ?? '');
+                  }}
+                >
+                  Изменить вид
+                </button>
+              ) : null}
+              {canUpdate && draft.flowerTypeId ? (
+                <button
+                  type="button"
+                  className="admin-btn-ghost text-xs"
+                  onClick={() => void toggleRefVisibility('type')}
+                >
+                  {types.find((item) => item.id === draft.flowerTypeId)?.visibility === 'HIDDEN'
+                    ? 'Показать вид'
+                    : 'Скрыть вид'}
+                </button>
+              ) : null}
+              {canUpdate && draft.flowerTypeId ? (
+                <button
+                  type="button"
+                  className="admin-btn-ghost text-xs"
+                  onClick={() => void deleteSelectedRef('type')}
+                >
+                  Удалить вид
+                </button>
+              ) : null}
+            </div>
           </label>
 
           <label className="admin-field">
@@ -493,18 +655,54 @@ export function FlowerStructureManager({
                 </option>
               ))}
             </select>
-            {canCreate && draft.flowerTypeId ? (
-              <button
-                type="button"
-                className="admin-btn-ghost mt-1 text-xs"
-                onClick={() => {
-                  setInlineKind('form');
-                  setInlineName('');
-                }}
-              >
-                + Добавить форму
-              </button>
-            ) : null}
+            <div className="mt-1 flex flex-wrap gap-2">
+              {canCreate && draft.flowerTypeId ? (
+                <button
+                  type="button"
+                  className="admin-btn-ghost text-xs"
+                  onClick={() => {
+                    setInlineKind('form');
+                    setInlineMode('create');
+                    setInlineName('');
+                  }}
+                >
+                  + Добавить форму
+                </button>
+              ) : null}
+              {canUpdate && draft.flowerFormId ? (
+                <button
+                  type="button"
+                  className="admin-btn-ghost text-xs"
+                  onClick={() => {
+                    setInlineKind('form');
+                    setInlineMode('rename');
+                    setInlineName(draftForms.find((item) => item.id === draft.flowerFormId)?.name ?? '');
+                  }}
+                >
+                  Изменить форму
+                </button>
+              ) : null}
+              {canUpdate && draft.flowerFormId ? (
+                <button
+                  type="button"
+                  className="admin-btn-ghost text-xs"
+                  onClick={() => void toggleFormVisibility()}
+                >
+                  {forms.find((item) => item.id === draft.flowerFormId)?.visibility === 'HIDDEN'
+                    ? 'Показать форму'
+                    : 'Скрыть форму'}
+                </button>
+              ) : null}
+              {canUpdate && draft.flowerFormId ? (
+                <button
+                  type="button"
+                  className="admin-btn-ghost text-xs"
+                  onClick={() => void deleteSelectedRef('form')}
+                >
+                  Удалить форму
+                </button>
+              ) : null}
+            </div>
           </label>
 
           <label className="admin-field">
@@ -522,18 +720,57 @@ export function FlowerStructureManager({
                 </option>
               ))}
             </select>
-            {canCreate && draft.flowerTypeId ? (
-              <button
-                type="button"
-                className="admin-btn-ghost mt-1 text-xs"
-                onClick={() => {
-                  setInlineKind('variety');
-                  setInlineName('');
-                }}
-              >
-                + Добавить сорт
-              </button>
-            ) : null}
+            <div className="mt-1 flex flex-wrap gap-2">
+              {canCreate && draft.flowerTypeId ? (
+                <button
+                  type="button"
+                  className="admin-btn-ghost text-xs"
+                  onClick={() => {
+                    setInlineKind('variety');
+                    setInlineMode('create');
+                    setInlineName('');
+                  }}
+                >
+                  + Добавить сорт
+                </button>
+              ) : null}
+              {canUpdate && draft.flowerVarietyId ? (
+                <button
+                  type="button"
+                  className="admin-btn-ghost text-xs"
+                  onClick={() => {
+                    setInlineKind('variety');
+                    setInlineMode('rename');
+                    setInlineName(
+                      draftVarieties.find((item) => item.id === draft.flowerVarietyId)?.name ?? '',
+                    );
+                  }}
+                >
+                  Изменить сорт
+                </button>
+              ) : null}
+              {canUpdate && draft.flowerVarietyId ? (
+                <button
+                  type="button"
+                  className="admin-btn-ghost text-xs"
+                  onClick={() => void toggleRefVisibility('variety')}
+                >
+                  {varieties.find((item) => item.id === draft.flowerVarietyId)?.visibility ===
+                  'HIDDEN'
+                    ? 'Показать сорт'
+                    : 'Скрыть сорт'}
+                </button>
+              ) : null}
+              {canUpdate && draft.flowerVarietyId ? (
+                <button
+                  type="button"
+                  className="admin-btn-ghost text-xs"
+                  onClick={() => void deleteSelectedRef('variety')}
+                >
+                  Удалить сорт
+                </button>
+              ) : null}
+            </div>
           </label>
 
           <label className="admin-field">
@@ -553,18 +790,54 @@ export function FlowerStructureManager({
                   </option>
                 ))}
             </select>
-            {canCreate ? (
-              <button
-                type="button"
-                className="admin-btn-ghost mt-1 text-xs"
-                onClick={() => {
-                  setInlineKind('origin');
-                  setInlineName('');
-                }}
-              >
-                + Добавить происхождение
-              </button>
-            ) : null}
+            <div className="mt-1 flex flex-wrap gap-2">
+              {canCreate ? (
+                <button
+                  type="button"
+                  className="admin-btn-ghost text-xs"
+                  onClick={() => {
+                    setInlineKind('origin');
+                    setInlineMode('create');
+                    setInlineName('');
+                  }}
+                >
+                  + Добавить происхождение
+                </button>
+              ) : null}
+              {canUpdate && draft.flowerOriginId ? (
+                <button
+                  type="button"
+                  className="admin-btn-ghost text-xs"
+                  onClick={() => {
+                    setInlineKind('origin');
+                    setInlineMode('rename');
+                    setInlineName(origins.find((item) => item.id === draft.flowerOriginId)?.name ?? '');
+                  }}
+                >
+                  Изменить происхождение
+                </button>
+              ) : null}
+              {canUpdate && draft.flowerOriginId ? (
+                <button
+                  type="button"
+                  className="admin-btn-ghost text-xs"
+                  onClick={() => void toggleRefVisibility('origin')}
+                >
+                  {origins.find((item) => item.id === draft.flowerOriginId)?.visibility === 'HIDDEN'
+                    ? 'Показать происхождение'
+                    : 'Скрыть происхождение'}
+                </button>
+              ) : null}
+              {canUpdate && draft.flowerOriginId ? (
+                <button
+                  type="button"
+                  className="admin-btn-ghost text-xs"
+                  onClick={() => void deleteSelectedRef('origin')}
+                >
+                  Удалить происхождение
+                </button>
+              ) : null}
+            </div>
           </label>
 
           <label className="admin-field">
@@ -641,14 +914,28 @@ export function FlowerStructureManager({
           {inlineKind ? (
             <div className="admin-panel space-y-2 border border-[var(--admin-border)] p-3">
               <p className="text-sm font-medium">
-                {inlineKind === 'type'
-                  ? 'Новый вид'
-                  : inlineKind === 'form'
-                    ? 'Новая форма'
-                    : inlineKind === 'variety'
-                      ? 'Новый сорт'
-                      : 'Новое происхождение'}
+                {inlineMode === 'rename'
+                  ? inlineKind === 'type'
+                    ? 'Переименовать вид'
+                    : inlineKind === 'form'
+                      ? 'Переименовать форму'
+                      : inlineKind === 'variety'
+                        ? 'Переименовать сорт'
+                        : 'Переименовать происхождение'
+                  : inlineKind === 'type'
+                    ? 'Новый вид'
+                    : inlineKind === 'form'
+                      ? 'Новая форма'
+                      : inlineKind === 'variety'
+                        ? 'Новый сорт'
+                        : 'Новое происхождение'}
               </p>
+              {inlineMode === 'rename' ? (
+                <p className="text-xs text-[var(--admin-muted)]">
+                  Название изменится во всех цветах и товарах, где используется эта запись
+                  справочника.
+                </p>
+              ) : null}
               <input
                 className="admin-input"
                 value={inlineName}
@@ -659,7 +946,8 @@ export function FlowerStructureManager({
                 onKeyDown={(e) => {
                   if (e.key === 'Enter') {
                     e.preventDefault();
-                    void createInline();
+                    if (inlineMode === 'rename') void renameInline();
+                    else void createInline();
                   }
                 }}
               />
@@ -668,9 +956,11 @@ export function FlowerStructureManager({
                   type="button"
                   className="admin-btn"
                   disabled={pending || !inlineName.trim()}
-                  onClick={() => void createInline()}
+                  onClick={() =>
+                    inlineMode === 'rename' ? void renameInline() : void createInline()
+                  }
                 >
-                  Создать
+                  {inlineMode === 'rename' ? 'Сохранить название' : 'Создать'}
                 </button>
                 <button
                   type="button"
@@ -678,6 +968,7 @@ export function FlowerStructureManager({
                   disabled={pending}
                   onClick={() => {
                     setInlineKind(null);
+                    setInlineMode('create');
                     setInlineName('');
                   }}
                 >
@@ -908,8 +1199,8 @@ export function FlowerStructureManager({
         </label>
       </div>
 
-      <div className="admin-panel overflow-x-auto">
-        <table className="admin-table min-w-[880px]">
+      <div className="admin-panel admin-table-wrap admin-table-wrap--cards">
+        <table className="admin-table admin-table--compact">
           <thead>
             <tr>
               <th>Цветок</th>
@@ -939,7 +1230,7 @@ export function FlowerStructureManager({
             ) : (
               items.map((item) => (
                 <tr key={item.id}>
-                  <td>
+                  <td data-primary>
                     <button
                       type="button"
                       className="text-left font-medium text-[var(--admin-brand)] underline-offset-2 hover:underline"
@@ -948,22 +1239,22 @@ export function FlowerStructureManager({
                       {item.name}
                     </button>
                   </td>
-                  <td className="text-sm">{item.flowerType.name}</td>
-                  <td className="text-sm">{item.flowerForm?.name ?? '—'}</td>
-                  <td className="text-sm">{item.flowerVariety?.name ?? '—'}</td>
-                  <td className="text-sm">
+                  <td data-label="Вид" className="text-sm">{item.flowerType.name}</td>
+                  <td data-label="Форма" className="text-sm">{item.flowerForm?.name ?? '—'}</td>
+                  <td data-label="Сорт" className="text-sm">{item.flowerVariety?.name ?? '—'}</td>
+                  <td data-label="Цвет" className="text-sm">
                     {item.color?.name ? (
                       <AdminColorSwatch name={item.color.name} swatch={item.color.swatch} />
                     ) : (
                       '—'
                     )}
                   </td>
-                  <td className="text-sm">{item.flowerOrigin?.name ?? '—'}</td>
-                  <td className="text-sm tabular-nums">
+                  <td data-label="Происхождение" className="text-sm">{item.flowerOrigin?.name ?? '—'}</td>
+                  <td data-label="Высота" className="text-sm tabular-nums">
                     {item.stemLengthCm != null ? `${item.stemLengthCm} см` : '—'}
                   </td>
-                  <td className="text-sm tabular-nums">{item.componentsCount}</td>
-                  <td className="text-sm">
+                  <td data-label="Товаров" className="text-sm tabular-nums">{item.componentsCount}</td>
+                  <td data-label="Статус" className="text-sm">
                     {item.visibility === 'HIDDEN' ? (
                       <span className="admin-chip">Архив</span>
                     ) : (

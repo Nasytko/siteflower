@@ -9,7 +9,7 @@ import type {
   ProductListItemDto,
 } from '@bouquet-one/contracts';
 import { Button } from '@bouquet-one/ui';
-import { adminGet, adminPatch, adminPost, adminPut, errorMessage } from '@/lib/admin-client';
+import { adminDelete, adminGet, adminPatch, adminPost, adminPut, errorMessage } from '@/lib/admin-client';
 import { buildBestsellerGroupProductsBody } from '@/lib/admin-catalog-contract';
 import { adminEndpoints, withQuery } from '@/lib/admin-endpoints';
 import { unwrapAdminList } from '@/lib/admin-list';
@@ -91,6 +91,28 @@ export function BestsellersManager({ initial, canCreate, canUpdate }: Props) {
       form.reset();
       await reloadGroups();
       if (created?.id) setSelectedId(created.id);
+    });
+  }
+
+  async function removeGroup(group: BestsellerGroupAdminDto) {
+    if (!canUpdate) return;
+    if (group.slug === 'podarki') {
+      setError(
+        'Системную подборку «Подарки» нельзя удалить: она питает блок на главной. Скройте её или уберите товары.',
+      );
+      return;
+    }
+    const count = group.products.length;
+    const extra =
+      count > 0
+        ? ` Из неё уберутся ${count} товар(ов); сами товары, цены и заказы останутся.`
+        : ' Товары каталога не затрагиваются.';
+    if (!window.confirm(`Удалить подборку «${group.name}»?${extra}`)) return;
+    await run(async () => {
+      await adminDelete(adminEndpoints.bestsellerGroup(group.id), {
+        expectedVersion: group.version,
+      });
+      await reloadGroups();
     });
   }
 
@@ -277,11 +299,21 @@ export function BestsellersManager({ initial, canCreate, canUpdate }: Props) {
                       {selected.active ? 'Скрыть' : 'Показать'}
                     </button>
                   ) : null}
+                  {canUpdate && selected.slug !== 'podarki' ? (
+                    <button
+                      type="button"
+                      className="admin-btn-ghost"
+                      disabled={pending}
+                      onClick={() => void removeGroup(selected)}
+                    >
+                      Удалить подборку
+                    </button>
+                  ) : null}
                 </div>
               </div>
 
-              <div className="admin-panel overflow-x-auto">
-                <table className="admin-table min-w-[640px]">
+              <div className="admin-panel admin-table-wrap admin-table-wrap--cards">
+                <table className="admin-table admin-table--compact">
                   <thead>
                     <tr>
                       <th className="w-16">№</th>
@@ -301,8 +333,8 @@ export function BestsellersManager({ initial, canCreate, canUpdate }: Props) {
                     ) : (
                       products.map((item, index) => (
                         <tr key={item.productId}>
-                          <td className="tabular-nums text-[var(--admin-muted)]">{index + 1}</td>
-                          <td>
+                          <td data-hide-mobile className="tabular-nums text-[var(--admin-muted)]">{index + 1}</td>
+                          <td data-hide-mobile>
                             {item.product?.primaryImageUrl ? (
                               <img
                                 src={
@@ -316,7 +348,7 @@ export function BestsellersManager({ initial, canCreate, canUpdate }: Props) {
                               <div className="admin-thumb-empty" />
                             )}
                           </td>
-                          <td>
+                          <td data-primary>
                             {item.product ? (
                               <>
                                 <Link
@@ -333,8 +365,8 @@ export function BestsellersManager({ initial, canCreate, canUpdate }: Props) {
                               <span className="text-[var(--admin-muted)]">Товар недоступен</span>
                             )}
                           </td>
-                          <td className="tabular-nums">{item.product?.price?.label ?? '—'}</td>
-                          <td>
+                          <td data-label="Цена" className="tabular-nums">{item.product?.price?.label ?? '—'}</td>
+                          <td data-label="Порядок">
                             <div className="admin-row-actions">
                               <button
                                 type="button"
@@ -426,7 +458,8 @@ export function BestsellersManager({ initial, canCreate, canUpdate }: Props) {
       </div>
 
       <p className="admin-help">
-        Подборки бестселлеров выводятся на главной. Порядок товаров задаёте вы — это не автоматика.
+        Подборки выводятся на главной и в маркетинговых блоках. Порядок задаёте вы — это не
+        связанные товары из карточки товара.
       </p>
     </div>
   );

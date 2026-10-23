@@ -26,7 +26,6 @@ const DICTIONARY_PATHS = [
   '/admin/catalog/dictionaries',
   '/admin/catalog/flower-structure',
   '/admin/catalog/categories',
-  '/admin/catalog/pages',
   ...TAXONOMY_KINDS.map((kind) => `/admin/catalog/${kind}`),
 ];
 
@@ -42,9 +41,15 @@ function isDictionaryPath(pathname: string): boolean {
  */
 const NAV_GROUPS: NavGroup[] = [
   {
-    id: 'work',
-    label: 'Работа',
-    items: [{ href: '/admin/orders', label: 'Заказы', permission: 'ORDERS_READ' }],
+    id: 'home',
+    label: 'Магазин',
+    items: [
+      {
+        href: '/admin',
+        label: 'Главная',
+        isActive: (pathname) => pathname === '/admin',
+      },
+    ],
   },
   {
     id: 'catalog',
@@ -53,7 +58,7 @@ const NAV_GROUPS: NavGroup[] = [
       { href: '/admin/catalog/products', label: 'Товары', permission: 'CATALOG_READ' },
       {
         href: '/admin/catalog/flower-structure',
-        label: 'Справочник цветов',
+        label: 'Цветы',
         permission: 'CATALOG_READ',
         isActive: isDictionaryPath,
       },
@@ -71,7 +76,22 @@ const NAV_GROUPS: NavGroup[] = [
         isActive: (pathname) =>
           pathname === '/admin/bestsellers' || pathname.startsWith('/admin/bestsellers/'),
       },
+      {
+        href: '/admin/catalog/pages',
+        label: 'Страницы каталога',
+        permission: 'CATALOG_READ',
+        isActive: (pathname) =>
+          pathname === '/admin/catalog/pages' ||
+          pathname.startsWith('/admin/catalog/pages/') ||
+          pathname === '/admin/seo/landings' ||
+          pathname.startsWith('/admin/seo/landings/'),
+      },
     ],
+  },
+  {
+    id: 'work',
+    label: 'Работа',
+    items: [{ href: '/admin/orders', label: 'Заказы', permission: 'ORDERS_READ' }],
   },
   {
     id: 'site',
@@ -92,16 +112,6 @@ const NAV_GROUPS: NavGroup[] = [
         isActive: (pathname) =>
           pathname === '/admin/storefront/navigation' ||
           pathname.startsWith('/admin/storefront/navigation/'),
-      },
-      {
-        href: '/admin/catalog/pages',
-        label: 'Страницы каталога',
-        permission: 'CATALOG_READ',
-        isActive: (pathname) =>
-          pathname === '/admin/catalog/pages' ||
-          pathname.startsWith('/admin/catalog/pages/') ||
-          pathname === '/admin/seo/landings' ||
-          pathname.startsWith('/admin/seo/landings/'),
       },
     ],
   },

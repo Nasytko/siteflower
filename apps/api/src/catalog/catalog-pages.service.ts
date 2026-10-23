@@ -6,9 +6,11 @@ import {
 } from '@nestjs/common';
 import {
   categoryPublicHref,
+  evaluateCatalogPageDeleteImpact,
   isCatalogListingKind,
   isCatalogPageKind,
   normalizeSlug,
+  type CatalogPageDeleteImpactDto,
   type CatalogListingKind,
   type CatalogPageDto,
   type CatalogPageKind,
@@ -25,6 +27,7 @@ import { StorefrontRevalidateService } from '../storefront/storefront-revalidate
 import { describeSeoLandingRules } from './placement-match.util';
 import { ProductsRepository } from './products.repository';
 import { rulesToFilters } from './seo-landings.service';
+import { SlugRedirectsService } from './slug-redirects.service';
 
 const PAGE_INCLUDE = {
   pinnedProducts: { select: { productId: true, sortOrder: true } },
@@ -41,6 +44,7 @@ export class CatalogPagesService {
     private readonly audit: AuditService,
     private readonly appConfig: AppConfigService,
     private readonly revalidate: StorefrontRevalidateService,
+    private readonly slugRedirects: SlugRedirectsService,
   ) {}
 
   async listAdmin(opts?: {
@@ -298,6 +302,109 @@ export class CatalogPagesService {
     });
     await this.revalidate.ping({ tags: ['catalog', 'sitemap'] });
     return this.getAdmin(id);
+  }
+
+  async unpublish(id: string, expectedVersion: number, actor: ActorContext): Promise<CatalogPageDto> {
+    const row = await this.prisma.client.catalogCategory.findUnique({ where: { id } });
+    if (!row) throw new NotFoundException('Страница не найдена');
+    if (row.pageKind !== 'THEMATIC') {
+      throw new BadRequestException('Снимать с публикации можно только тематические страницы');
+    }
+    if (row.version !== expectedVersion) {
+      throw new ConflictException('Страница изменена в другом окне');
+    }
+    await this.prisma.client.catalogCategory.updateMany({
+      where: { id, version: expectedVersion },
+      data: {
+        pageStatus: 'ARCHIVED',
+        visibility: 'HIDDEN',
+        navVisible: false,
+        version: { increment: 1 },
+      },
+    });
+    await this.audit.record({
+      actorAdminUserId: actor.actorId,
+      action: 'SEO_UPDATED',
+      entityType: 'CatalogPage',
+      entityId: id,
+      metadata: { unpublished: true, slug: row.slug },
+      requestId: actor.requestId,
+      ipHash: hashIp(actor.ip, this.appConfig.sessionHmacSecret),
+      userAgent: actor.userAgent,
+    });
+    await this.revalidate.ping({
+      tags: ['catalog', 'sitemap'],
+      paths: ['/', '/bukety', categoryPublicHref(row.slug)],
+    });
+    return this.getAdmin(id);
+  }
+
+  async deleteImpact(id: string): Promise<CatalogPageDeleteImpactDto> {
+    const dto = await this.getAdmin(id);
+    const [childrenCount, navigationCount, assignedProductsCount] = await Promise.all([
+      this.prisma.client.catalogCategory.count({ where: { parentId: id } }),
+      this.prisma.client.navigationMenuItem.count({
+        where: { targetType: 'CATEGORY', targetId: id },
+      }),
+      this.prisma.client.product.count({ where: { catalogCategoryId: id } }),
+    ]);
+    return evaluateCatalogPageDeleteImpact({
+      pageKind: dto.pageKind,
+      isSystem: dto.isSystem,
+      status: dto.status,
+      childrenCount,
+      navigationCount,
+      assignedProductsCount,
+    });
+  }
+
+  async deletePage(
+    id: string,
+    expectedVersion: number,
+    actor: ActorContext,
+  ): Promise<{ deleted: true; id: string; slug: string }> {
+    const existing = await this.prisma.client.catalogCategory.findUnique({ where: { id } });
+    if (!existing) throw new NotFoundException('Страница не найдена');
+    if (existing.version !== expectedVersion) {
+      throw new ConflictException('Страница изменена в другом окне');
+    }
+    const impact = await this.deleteImpact(id);
+    if (!impact.canDelete) {
+      throw new BadRequestException({
+        message: impact.blockers[0]?.message ?? 'Страницу нельзя удалить',
+        error: 'CatalogDeleteBlocked',
+        code: impact.blockers[0]?.code ?? 'IN_USE',
+        blockers: impact.blockers,
+      });
+    }
+
+    await this.prisma.client.$transaction(async (tx) => {
+      if (existing.publishedAt) {
+        await this.slugRedirects.record(tx, 'CATALOG_CATEGORY', existing.slug, 'bukety');
+      }
+      const deleted = await tx.catalogCategory.deleteMany({
+        where: { id, version: expectedVersion },
+      });
+      if (deleted.count === 0) throw new ConflictException('Страница изменена в другом окне');
+      await this.audit.record(
+        {
+          actorAdminUserId: actor.actorId,
+          action: 'SEO_UPDATED',
+          entityType: 'CatalogPage',
+          entityId: id,
+          metadata: { deleted: true, slug: existing.slug },
+          requestId: actor.requestId,
+          ipHash: hashIp(actor.ip, this.appConfig.sessionHmacSecret),
+          userAgent: actor.userAgent,
+        },
+        tx,
+      );
+    });
+    await this.revalidate.ping({
+      tags: ['catalog', 'sitemap'],
+      paths: ['/', '/bukety', categoryPublicHref(existing.slug)],
+    });
+    return { deleted: true, id, slug: existing.slug };
   }
 
   async listTraitDefinitions(): Promise<ProductTraitDefinitionDto[]> {

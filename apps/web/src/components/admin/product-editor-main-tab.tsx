@@ -330,6 +330,27 @@ export function ProductEditorMainTab(props: Props) {
                 }}
               />
             </label>
+            <label className="admin-field max-w-xs">
+              <span>Наличие</span>
+              <select
+                className="admin-select"
+                value={publication.availability}
+                disabled={!canUpdate}
+                onChange={(event) => {
+                  setPublication((prev) => ({
+                    ...prev,
+                    availability: event.target.value as CommercialAvailability,
+                  }));
+                  touch();
+                }}
+              >
+                {COMMERCIAL_AVAILABILITIES.map((value) => (
+                  <option key={value} value={value}>
+                    {availabilityLabel(value)}
+                  </option>
+                ))}
+              </select>
+            </label>
         </div>
         </div>
       </section>

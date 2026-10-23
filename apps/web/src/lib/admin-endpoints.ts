@@ -87,6 +87,8 @@ export const adminEndpoints = {
 
   taxonomy: (kind: TaxonomyKind) => `${ADMIN}/catalog/${kind}`,
   taxonomyItem: (kind: TaxonomyKind, id: string) => `${ADMIN}/catalog/${kind}/${id}`,
+  taxonomyDeleteImpact: (kind: TaxonomyKind, id: string) =>
+    `${ADMIN}/catalog/${kind}/${id}/delete-impact`,
 
   budgetRanges: `${ADMIN}/catalog/budget-ranges`,
   budgetRange: (id: string) => `${ADMIN}/catalog/budget-ranges/${id}`,
@@ -114,6 +116,8 @@ export const adminEndpoints = {
   catalogPages: `${ADMIN}/catalog/pages`,
   catalogPage: (id: string) => `${ADMIN}/catalog/pages/${id}`,
   catalogPagePublish: (id: string) => `${ADMIN}/catalog/pages/${id}/publish`,
+  catalogPageUnpublish: (id: string) => `${ADMIN}/catalog/pages/${id}/unpublish`,
+  catalogPageDeleteImpact: (id: string) => `${ADMIN}/catalog/pages/${id}/delete-impact`,
   catalogPageTraits: `${ADMIN}/catalog/pages/traits`,
 
   flowerTypes: `${ADMIN}/catalog/flower-refs/types`,
@@ -129,6 +133,7 @@ export const adminEndpoints = {
   flowerOriginReassignDelete: (id: string) =>
     `${ADMIN}/catalog/flower-refs/origins/${id}/reassign-and-delete`,
   flowerForms: `${ADMIN}/catalog/flower-refs/forms`,
+  flowerForm: (id: string) => `${ADMIN}/catalog/flower-refs/forms/${id}`,
   flowerItems: `${ADMIN}/catalog/flower-refs/items`,
   flowerItem: (id: string) => `${ADMIN}/catalog/flower-refs/items/${id}`,
 

@@ -7,6 +7,8 @@ import {
 import {
   normalizeSlug,
   flowerItemIdentityKey,
+  evaluateFlowerFormDeleteImpact,
+  type FlowerFormAdminDto,
   type FlowerItemAdminDto,
   type FlowerItemDto,
   type FlowerOriginAdminDto,
@@ -828,6 +830,123 @@ export class FlowerRefsService {
       version: created.version,
       itemsCount: created._count.items,
     };
+  }
+
+  async updateForm(
+    id: string,
+    input: {
+      expectedVersion: number;
+      name?: string;
+      slug?: string;
+      sortOrder?: number;
+      visibility?: TaxonomyVisibility;
+    },
+    actor?: ActorContext,
+  ): Promise<FlowerFormAdminDto> {
+    const current = await this.prisma.client.flowerForm.findUnique({
+      where: { id },
+      include: { _count: { select: { items: true } } },
+    });
+    if (!current) throw new NotFoundException('Форма не найдена');
+    if (current.version !== input.expectedVersion) {
+      throw new ConflictException('Форма изменена в другом окне');
+    }
+    const name = input.name !== undefined ? input.name.trim() : current.name;
+    if (!name) throw new BadRequestException('Укажите название формы');
+    const slug =
+      input.slug !== undefined ? normalizeSlug(input.slug.trim() || name) : current.slug;
+    if (!slug) throw new BadRequestException('Не удалось сформировать адрес формы');
+
+    const duplicate = await this.prisma.client.flowerForm.findFirst({
+      where: {
+        flowerTypeId: current.flowerTypeId,
+        NOT: { id },
+        OR: [{ slug }, { name: { equals: name, mode: 'insensitive' } }],
+      },
+    });
+    if (duplicate) {
+      throw new ConflictException(`Форма «${duplicate.name}» уже существует для этого вида`);
+    }
+
+    const bumped = await this.prisma.client.flowerForm.updateMany({
+      where: { id, version: input.expectedVersion },
+      data: {
+        name,
+        slug,
+        ...(input.sortOrder !== undefined ? { sortOrder: input.sortOrder } : {}),
+        ...(input.visibility !== undefined ? { visibility: input.visibility } : {}),
+        version: { increment: 1 },
+      },
+    });
+    if (bumped.count === 0) throw new ConflictException('Форма изменена в другом окне');
+
+    const updated = await this.prisma.client.flowerForm.findUniqueOrThrow({
+      where: { id },
+      include: { _count: { select: { items: true } } },
+    });
+    if (actor) {
+      await this.audit.record({
+        actorAdminUserId: actor.actorId,
+        action: 'TAXONOMY_UPDATED',
+        entityType: 'FlowerForm',
+        entityId: id,
+        metadata: { name: updated.name, visibility: updated.visibility },
+        requestId: actor.requestId,
+        ipHash: actor.ipHash,
+        userAgent: actor.userAgent,
+      });
+    }
+    await this.pingStorefront();
+    return {
+      id: updated.id,
+      flowerTypeId: updated.flowerTypeId,
+      slug: updated.slug,
+      name: updated.name,
+      sortOrder: updated.sortOrder,
+      visibility: updated.visibility,
+      version: updated.version,
+      itemsCount: updated._count.items,
+    };
+  }
+
+  async deleteFormEmpty(id: string, expectedVersion: number, actor?: ActorContext): Promise<void> {
+    await this.prisma.client.$transaction(async (tx) => {
+      const row = await tx.flowerForm.findUnique({
+        where: { id },
+        include: { _count: { select: { items: true } } },
+      });
+      if (!row) throw new NotFoundException('Форма не найдена');
+      if (row.version !== expectedVersion) {
+        throw new ConflictException('Форма изменена в другом окне');
+      }
+      const impact = evaluateFlowerFormDeleteImpact(row._count.items);
+      if (!impact.canDelete) {
+        throw new BadRequestException({
+          message: impact.blockers[0]?.message ?? 'Форму нельзя удалить',
+          error: 'CatalogDeleteBlocked',
+          code: impact.blockers[0]?.code ?? 'HAS_ITEMS',
+          itemsCount: impact.itemsCount,
+          blockers: impact.blockers,
+        });
+      }
+      await tx.flowerForm.delete({ where: { id } });
+      if (actor) {
+        await this.audit.record(
+          {
+            actorAdminUserId: actor.actorId,
+            action: 'TAXONOMY_DELETED',
+            entityType: 'FlowerForm',
+            entityId: id,
+            metadata: { slug: row.slug, name: row.name },
+            requestId: actor.requestId,
+            ipHash: actor.ipHash,
+            userAgent: actor.userAgent,
+          },
+          tx,
+        );
+      }
+    });
+    await this.pingStorefront();
   }
 
   async listItemsAdmin(options?: {

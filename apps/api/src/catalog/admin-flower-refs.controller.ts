@@ -341,6 +341,28 @@ export class AdminFlowerRefsController {
     return this.flowerRefs.createForm(body, actorFrom(admin, req));
   }
 
+  @Patch('forms/:id')
+  @RequirePermissions('CATALOG_UPDATE')
+  updateForm(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() body: UpdateFlowerRefDto,
+    @CurrentAdmin() admin: AuthenticatedAdmin,
+    @Req() req: Request,
+  ) {
+    return this.flowerRefs.updateForm(id, body, actorFrom(admin, req));
+  }
+
+  @Delete('forms/:id')
+  @RequirePermissions('CATALOG_UPDATE')
+  deleteForm(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() body: ExpectedVersionDto,
+    @CurrentAdmin() admin: AuthenticatedAdmin,
+    @Req() req: Request,
+  ) {
+    return this.flowerRefs.deleteFormEmpty(id, body.expectedVersion, actorFrom(admin, req));
+  }
+
   @Get('items')
   @RequirePermissions('CATALOG_READ')
   listItems(

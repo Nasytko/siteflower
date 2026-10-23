@@ -21,6 +21,9 @@ import {
   suggestStemProductName,
   isPlaceholderProductName,
   evaluateProductDeleteImpact,
+  evaluateTaxonomyDeleteImpact,
+  evaluateFlowerFormDeleteImpact,
+  evaluateCatalogPageDeleteImpact,
   resolveRelatedProductLink,
   flowerItemIdentityKey,
   assertComponentFlowerRefXor,
@@ -765,4 +768,55 @@ test('resolveRelatedProductLink is mutual and rejects family merge', () => {
     leftFamilyId: 'a',
     rightFamilyId: 'b',
   });
+});
+
+test('evaluateTaxonomyDeleteImpact allows unused rows and blocks live links', () => {
+  assert.equal(evaluateTaxonomyDeleteImpact({ productsCount: 0 }).canDelete, true);
+  const blocked = evaluateTaxonomyDeleteImpact({
+    productsCount: 2,
+    flowerItemsCount: 1,
+    componentsCount: 3,
+  });
+  assert.equal(blocked.canDelete, false);
+  assert.deepEqual(
+    blocked.blockers.map((row) => row.code),
+    ['PRODUCTS', 'FLOWER_ITEMS', 'COMPONENTS'],
+  );
+});
+
+test('evaluateFlowerFormDeleteImpact and catalog page delete', () => {
+  assert.equal(evaluateFlowerFormDeleteImpact(0).canDelete, true);
+  assert.equal(evaluateFlowerFormDeleteImpact(4).canDelete, false);
+
+  const hub = evaluateCatalogPageDeleteImpact({
+    pageKind: 'SYSTEM_HUB',
+    isSystem: true,
+    status: 'LIVE',
+    childrenCount: 0,
+    navigationCount: 0,
+    assignedProductsCount: 0,
+  });
+  assert.equal(hub.canDelete, false);
+  assert.equal(hub.canUnpublish, false);
+
+  const published = evaluateCatalogPageDeleteImpact({
+    pageKind: 'THEMATIC',
+    isSystem: false,
+    status: 'PUBLISHED',
+    childrenCount: 0,
+    navigationCount: 0,
+    assignedProductsCount: 0,
+  });
+  assert.equal(published.canDelete, false);
+  assert.equal(published.canUnpublish, true);
+
+  const draft = evaluateCatalogPageDeleteImpact({
+    pageKind: 'THEMATIC',
+    isSystem: false,
+    status: 'DRAFT',
+    childrenCount: 0,
+    navigationCount: 0,
+    assignedProductsCount: 0,
+  });
+  assert.equal(draft.canDelete, true);
 });

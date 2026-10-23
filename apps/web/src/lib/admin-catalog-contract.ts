@@ -113,3 +113,32 @@ export function buildProductsBulkBody(
 export function productsListPath(query: ProductListQuery = {}): string {
   return withQuery(adminEndpoints.products, buildProductListQueryParams(query));
 }
+
+/** Canonical body for PUT /admin/catalog/products/:id/promotion */
+export function buildProductPromotionBody(input: {
+  expectedVersion: number;
+  enabled: boolean;
+  type: 'PERCENT' | 'FIXED';
+  percentOff?: number | null;
+  startsAt?: string | null;
+  endsAt?: string | null;
+  variantSalePrices?: Array<{ variantId: string; salePriceMinor: string }>;
+}): {
+  expectedVersion: number;
+  enabled: boolean;
+  type: 'PERCENT' | 'FIXED';
+  percentOff?: number | null;
+  startsAt?: string | null;
+  endsAt?: string | null;
+  variantSalePrices?: Array<{ variantId: string; salePriceMinor: string }>;
+} {
+  return {
+    expectedVersion: input.expectedVersion,
+    enabled: input.enabled,
+    type: input.type,
+    ...(input.type === 'PERCENT' ? { percentOff: input.percentOff ?? null } : {}),
+    startsAt: input.startsAt ?? null,
+    endsAt: input.endsAt ?? null,
+    ...(input.variantSalePrices ? { variantSalePrices: input.variantSalePrices } : {}),
+  };
+}

@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   Param,
   ParseUUIDPipe,
@@ -208,5 +209,33 @@ export class AdminCatalogPagesController {
     @Req() req: Request,
   ) {
     return this.pages.publish(id, body.expectedVersion, actorFrom(admin, req));
+  }
+
+  @Post(':id/unpublish')
+  @RequirePermissions('CATALOG_PUBLISH')
+  unpublish(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() body: ExpectedVersionDto,
+    @CurrentAdmin() admin: AuthenticatedAdmin,
+    @Req() req: Request,
+  ) {
+    return this.pages.unpublish(id, body.expectedVersion, actorFrom(admin, req));
+  }
+
+  @Get(':id/delete-impact')
+  @RequirePermissions('CATALOG_READ')
+  deleteImpact(@Param('id', ParseUUIDPipe) id: string) {
+    return this.pages.deleteImpact(id);
+  }
+
+  @Delete(':id')
+  @RequirePermissions('CATALOG_UPDATE')
+  remove(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() body: ExpectedVersionDto,
+    @CurrentAdmin() admin: AuthenticatedAdmin,
+    @Req() req: Request,
+  ) {
+    return this.pages.deletePage(id, body.expectedVersion, actorFrom(admin, req));
   }
 }
