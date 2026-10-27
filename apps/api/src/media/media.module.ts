@@ -5,6 +5,7 @@ import { AppConfigService } from '../config/app-config.service';
 import { DatabaseModule } from '../database/database.module';
 import { AdminMediaAssetsController } from './admin-media-assets.controller';
 import { AdminMediaHealthController } from './admin-media-health.controller';
+import { AdminMediaUploadController } from './admin-media-upload.controller';
 import { LocalMediaStorage } from './local-media.storage';
 import { MediaHealthService } from './media-health.service';
 import { MediaOrphanService } from './media-orphan.service';
@@ -19,6 +20,7 @@ import { S3MediaStorage } from './s3-media.storage';
     MediaServeController,
     AdminMediaHealthController,
     AdminMediaAssetsController,
+    AdminMediaUploadController,
   ],
   providers: [
     MediaService,

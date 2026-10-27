@@ -16,6 +16,40 @@ import {
 } from 'class-validator';
 import { HOMEPAGE_SECTION_KINDS } from '@bouquet-one/contracts';
 
+export class LinkDestinationInputDto {
+  @IsIn(['system', 'catalog_page', 'category', 'product', 'custom'])
+  kind!: 'system' | 'catalog_page' | 'category' | 'product' | 'custom';
+
+  @IsOptional()
+  @ValidateIf((_, value) => value !== null)
+  @IsString()
+  @MaxLength(80)
+  ref?: string | null;
+
+  @IsOptional()
+  @ValidateIf((_, value) => value !== null)
+  @IsString()
+  @MaxLength(500)
+  href?: string | null;
+}
+
+export class CatalogSourceInputDto {
+  @IsIn(['auto', 'promotions', 'catalog_page', 'bestseller_group'])
+  kind!: 'auto' | 'promotions' | 'catalog_page' | 'bestseller_group';
+
+  @IsOptional()
+  @ValidateIf((_, value) => value !== null)
+  @IsString()
+  @MaxLength(80)
+  id?: string | null;
+
+  @IsOptional()
+  @ValidateIf((_, value) => value !== null)
+  @IsString()
+  @MaxLength(160)
+  slug?: string | null;
+}
+
 export class UpdateStorefrontSettingsDto {
   @Type(() => Number)
   @IsInt()
@@ -125,8 +159,8 @@ export class HomepageHeroInputDto {
   @MaxLength(200)
   title!: string;
 
+  /** May be blank when mirrored from a slide without subtitle. */
   @IsString()
-  @MinLength(1)
   @MaxLength(500)
   subtitle!: string;
 
@@ -183,6 +217,17 @@ export class HomepageSectionInputDto {
 
   @IsOptional()
   @ValidateIf((_, value) => value !== null)
+  @ValidateNested()
+  @Type(() => LinkDestinationInputDto)
+  viewAllDestination?: LinkDestinationInputDto | null;
+
+  @IsOptional()
+  @ValidateIf((_, value) => value !== null)
+  @IsIn(['auto', 'destination'])
+  viewAllMode?: 'auto' | 'destination' | null;
+
+  @IsOptional()
+  @ValidateIf((_, value) => value !== null)
   @Type(() => Number)
   @IsInt()
   @Min(1)
@@ -194,6 +239,12 @@ export class HomepageSectionInputDto {
   @IsString()
   @MaxLength(160)
   sourceSlug?: string | null;
+
+  @IsOptional()
+  @ValidateIf((_, value) => value !== null)
+  @ValidateNested()
+  @Type(() => CatalogSourceInputDto)
+  productSource?: CatalogSourceInputDto | null;
 
   @IsOptional()
   @ValidateIf((_, value) => value !== null)
@@ -242,6 +293,12 @@ export class HomepageHeroSlideInputDto {
   @MinLength(1)
   @MaxLength(500)
   ctaHref!: string;
+
+  @IsOptional()
+  @ValidateIf((_, value) => value !== null)
+  @ValidateNested()
+  @Type(() => LinkDestinationInputDto)
+  ctaDestination?: LinkDestinationInputDto | null;
 
   @IsBoolean()
   enabled!: boolean;
@@ -302,8 +359,14 @@ export class HomepageDiscoveryTileInputDto {
   @MaxLength(500)
   href!: string;
 
+  @IsOptional()
+  @ValidateIf((_, value) => value !== null)
+  @ValidateNested()
+  @Type(() => LinkDestinationInputDto)
+  destination?: LinkDestinationInputDto | null;
+
+  /** May be empty for disabled tiles; enabled tiles validated in service Zod. */
   @IsString()
-  @MinLength(1)
   @MaxLength(500)
   imageUrl!: string;
 

@@ -1,16 +1,22 @@
 'use client';
 
 import { FormEvent, useMemo, useState } from 'react';
-import Image from 'next/image';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import type {
+  CatalogSourceDto,
   HomepageConfigAdminDto,
   HomepageDiscoveryTileDto,
   HomepageHeroSlideDto,
   HomepagePerkDto,
   HomepageSectionDto,
   HomepageSectionKind,
+  LinkDestinationDto,
+} from '@bouquet-one/contracts';
+import {
+  catalogSourceDefaultViewAllHref,
+  inferCatalogSourceFromSlug,
+  inferLinkDestinationFromHref,
 } from '@bouquet-one/contracts';
 import { Button } from '@bouquet-one/ui';
 import {
@@ -25,6 +31,9 @@ import {
   phaseFromAdminError,
   type FormSavePhase,
 } from '@/components/admin/form-status';
+import { CatalogSourcePicker } from '@/components/admin/catalog-source-picker';
+import { ImagePicker } from '@/components/admin/image-picker';
+import { LinkDestinationPicker } from '@/components/admin/link-destination-picker';
 
 type Props = {
   initial: HomepageConfigAdminDto;
@@ -163,6 +172,11 @@ export function HomepageManager({ initial, canUpdate }: Props) {
   }
 
   function addSlide() {
+    const ctaDestination: LinkDestinationDto = {
+      kind: 'system',
+      ref: 'bouquets',
+      href: '/catalog/bouquets',
+    };
     setSlides((prev) => [
       ...prev,
       {
@@ -173,10 +187,35 @@ export function HomepageManager({ initial, canUpdate }: Props) {
         mobileImageUrl: null,
         ctaLabel: 'Смотреть',
         ctaHref: '/catalog/bouquets',
+        ctaDestination,
         enabled: false,
         sortOrder: (prev.length + 1) * 10,
         startsAt: null,
         endsAt: null,
+      },
+    ]);
+    markDirty();
+  }
+
+  function addShelf(kind: HomepageSectionKind = 'popular') {
+    const productSource = inferCatalogSourceFromSlug(null, kind);
+    setSections((prev) => [
+      ...prev,
+      {
+        id: newId(kind),
+        kind,
+        enabled: false,
+        heading: kind === 'roses' ? 'Розы' : 'Новая секция',
+        sortOrder: (prev.length + 1) * 10,
+        body: null,
+        viewAllHref: null,
+        viewAllMode: 'auto',
+        viewAllDestination: null,
+        limit: 8,
+        sourceSlug: null,
+        productSource,
+        theme: null,
+        imageUrl: null,
       },
     ]);
     markDirty();
@@ -191,27 +230,36 @@ export function HomepageManager({ initial, canUpdate }: Props) {
     setSavedAt(null);
     setPhase('saving');
 
-    const orderedSlides = slides.map((slide, index) => ({
-      ...slide,
-      title: slide.title.trim(),
-      subtitle: slide.subtitle.trim(),
-      imageUrl: slide.imageUrl?.trim() || null,
-      mobileImageUrl: slide.mobileImageUrl?.trim() || null,
-      ctaLabel: slide.ctaLabel.trim() || 'Смотреть',
-      ctaHref: slide.ctaHref.trim() || '/catalog/bouquets',
-      sortOrder: (index + 1) * 10,
-      startsAt: slide.startsAt?.trim() || null,
-      endsAt: slide.endsAt?.trim() || null,
-    }));
+    const orderedSlides = slides.map((slide, index) => {
+      const ctaDestination =
+        slide.ctaDestination ?? inferLinkDestinationFromHref(slide.ctaHref);
+      return {
+        ...slide,
+        title: slide.title.trim(),
+        subtitle: slide.subtitle.trim(),
+        imageUrl: slide.imageUrl?.trim() || null,
+        mobileImageUrl: slide.mobileImageUrl?.trim() || null,
+        ctaLabel: slide.ctaLabel.trim() || 'Смотреть',
+        ctaHref: slide.ctaHref.trim() || '/catalog/bouquets',
+        ctaDestination,
+        sortOrder: (index + 1) * 10,
+        startsAt: slide.startsAt?.trim() || null,
+        endsAt: slide.endsAt?.trim() || null,
+      };
+    });
 
-    const orderedTiles = tiles.map((tile, index) => ({
-      ...tile,
-      label: tile.label.trim(),
-      href: tile.href.trim(),
-      imageUrl: tile.imageUrl.trim(),
-      imageAlt: tile.imageAlt.trim() || tile.label.trim(),
-      sortOrder: (index + 1) * 10,
-    }));
+    const orderedTiles = tiles.map((tile, index) => {
+      const destination = tile.destination ?? inferLinkDestinationFromHref(tile.href);
+      return {
+        ...tile,
+        label: tile.label.trim(),
+        href: tile.href.trim(),
+        destination,
+        imageUrl: (tile.imageUrl ?? '').trim(),
+        imageAlt: tile.imageAlt.trim() || tile.label.trim(),
+        sortOrder: (index + 1) * 10,
+      };
+    });
 
     const orderedPerks = perks.map((perk, index) => ({
       ...perk,
@@ -219,21 +267,44 @@ export function HomepageManager({ initial, canUpdate }: Props) {
       sortOrder: (index + 1) * 10,
     }));
 
+    // Keep local draft on failure — never call applyServer in catch.
     try {
       const updated = await adminPatch<HomepageConfigAdminDto>(adminEndpoints.homepage, {
         expectedVersion: version,
         hero: primaryHeroFromSlides(orderedSlides),
         heroSlides: orderedSlides,
-        sections: sections.map((section) => ({
-          ...section,
-          heading: section.heading.trim(),
-          body: section.body?.trim() || null,
-          viewAllHref: section.viewAllHref?.trim() || null,
-          sourceSlug: section.sourceSlug?.trim() || null,
-          imageUrl: section.imageUrl?.trim() || null,
-          limit: section.limit ?? null,
-          theme: section.theme ?? null,
-        })),
+        sections: sections.map((section) => {
+          const productSource: CatalogSourceDto =
+            section.productSource ??
+            inferCatalogSourceFromSlug(section.sourceSlug, section.kind);
+          const viewAllMode = section.viewAllMode ?? 'destination';
+          const autoHref = catalogSourceDefaultViewAllHref(
+            productSource,
+            section.sourceSlug,
+          );
+          const viewAllHref =
+            viewAllMode === 'auto'
+              ? autoHref
+              : section.viewAllHref?.trim() || null;
+          const viewAllDestination =
+            viewAllMode === 'auto'
+              ? null
+              : section.viewAllDestination ??
+                (viewAllHref ? inferLinkDestinationFromHref(viewAllHref) : null);
+          return {
+            ...section,
+            heading: section.heading.trim(),
+            body: section.body?.trim() || null,
+            viewAllHref,
+            viewAllDestination,
+            viewAllMode,
+            sourceSlug: section.sourceSlug?.trim() || null,
+            productSource,
+            imageUrl: section.imageUrl?.trim() || null,
+            limit: section.limit ?? null,
+            theme: section.theme ?? null,
+          };
+        }),
         discoveryTiles: orderedTiles,
         perks: orderedPerks,
       });
@@ -341,24 +412,7 @@ export function HomepageManager({ initial, canUpdate }: Props) {
                   </label>
                 </div>
 
-                <div className="flex flex-col gap-4 md:flex-row">
-                  <div className="relative h-36 w-full shrink-0 overflow-hidden rounded-md border border-[var(--admin-border)] bg-[var(--admin-bg)] md:w-56">
-                    {slide.imageUrl ? (
-                      <Image
-                        src={slide.imageUrl}
-                        alt=""
-                        fill
-                        className="object-cover"
-                        sizes="224px"
-                        unoptimized={slide.imageUrl.startsWith('http')}
-                      />
-                    ) : (
-                      <span className="flex h-full items-center justify-center text-xs text-[var(--admin-muted)]">
-                        Нет фото
-                      </span>
-                    )}
-                  </div>
-                  <div className="grid flex-1 gap-3 sm:grid-cols-2">
+                <div className="grid flex-1 gap-3 sm:grid-cols-2">
                     <label className="admin-field sm:col-span-2">
                       <span>Заголовок</span>
                       <input
@@ -377,27 +431,22 @@ export function HomepageManager({ initial, canUpdate }: Props) {
                         onChange={(e) => updateSlide(index, { subtitle: e.target.value })}
                       />
                     </label>
-                    <label className="admin-field sm:col-span-2">
-                      <span>Фото (desktop)</span>
-                      <input
-                        className="admin-input"
-                        value={slide.imageUrl ?? ''}
+                    <div className="sm:col-span-2">
+                      <ImagePicker
+                        label="Фото (desktop)"
+                        value={slide.imageUrl}
                         disabled={!canUpdate || pending}
-                        placeholder="/categories/… или URL медиа"
-                        onChange={(e) => updateSlide(index, { imageUrl: e.target.value || null })}
+                        onChange={(url) => updateSlide(index, { imageUrl: url })}
                       />
-                    </label>
-                    <label className="admin-field sm:col-span-2">
-                      <span>Фото (mobile, необязательно)</span>
-                      <input
-                        className="admin-input"
-                        value={slide.mobileImageUrl ?? ''}
+                    </div>
+                    <div className="sm:col-span-2">
+                      <ImagePicker
+                        label="Фото (mobile, необязательно)"
+                        value={slide.mobileImageUrl ?? null}
                         disabled={!canUpdate || pending}
-                        onChange={(e) =>
-                          updateSlide(index, { mobileImageUrl: e.target.value || null })
-                        }
+                        onChange={(url) => updateSlide(index, { mobileImageUrl: url })}
                       />
-                    </label>
+                    </div>
                     <label className="admin-field">
                       <span>Текст кнопки</span>
                       <input
@@ -407,15 +456,19 @@ export function HomepageManager({ initial, canUpdate }: Props) {
                         onChange={(e) => updateSlide(index, { ctaLabel: e.target.value })}
                       />
                     </label>
-                    <label className="admin-field">
-                      <span>Ссылка кнопки</span>
-                      <input
-                        className="admin-input"
-                        value={slide.ctaHref}
+                    <div className="sm:col-span-2">
+                      <LinkDestinationPicker
+                        label="Ссылка кнопки"
+                        value={
+                          slide.ctaDestination ?? inferLinkDestinationFromHref(slide.ctaHref)
+                        }
+                        hrefFallback={slide.ctaHref}
                         disabled={!canUpdate || pending}
-                        onChange={(e) => updateSlide(index, { ctaHref: e.target.value })}
+                        onChange={(dest, href) =>
+                          updateSlide(index, { ctaDestination: dest, ctaHref: href })
+                        }
                       />
-                    </label>
+                    </div>
                     <label className="admin-field">
                       <span>Показ с (ISO, необяз.)</span>
                       <input
@@ -437,7 +490,6 @@ export function HomepageManager({ initial, canUpdate }: Props) {
                       />
                     </label>
                   </div>
-                </div>
 
                 {canUpdate ? (
                   <div className="flex flex-wrap gap-2">
@@ -506,6 +558,11 @@ export function HomepageManager({ initial, canUpdate }: Props) {
                     id: newId('tile'),
                     label: 'Новая плитка',
                     href: '/catalog/bouquets',
+                    destination: {
+                      kind: 'system',
+                      ref: 'bouquets',
+                      href: '/catalog/bouquets',
+                    },
                     imageUrl: '/categories/discovery-sbornye.png',
                     imageAlt: 'Новая плитка',
                     enabled: true,
@@ -522,24 +579,7 @@ export function HomepageManager({ initial, canUpdate }: Props) {
           <ul className="space-y-4">
             {tiles.map((tile, index) => (
               <li key={tile.id} className="admin-card p-4">
-                <div className="flex flex-col gap-4 md:flex-row">
-                  <div className="relative h-28 w-28 shrink-0 overflow-hidden rounded-md border border-[var(--admin-border)] bg-[var(--admin-bg)]">
-                    {tile.imageUrl ? (
-                      <Image
-                        src={tile.imageUrl}
-                        alt={tile.imageAlt || tile.label}
-                        fill
-                        className="object-cover"
-                        sizes="112px"
-                        unoptimized={tile.imageUrl.startsWith('http')}
-                      />
-                    ) : (
-                      <span className="flex h-full items-center justify-center text-xs text-[var(--admin-muted)]">
-                        Нет фото
-                      </span>
-                    )}
-                  </div>
-                  <div className="grid flex-1 gap-3 sm:grid-cols-2">
+                <div className="grid flex-1 gap-3 sm:grid-cols-2">
                     <label className="admin-field">
                       <span>Название</span>
                       <input
@@ -547,24 +587,6 @@ export function HomepageManager({ initial, canUpdate }: Props) {
                         value={tile.label}
                         disabled={!canUpdate || pending}
                         onChange={(e) => updateTile(index, { label: e.target.value })}
-                      />
-                    </label>
-                    <label className="admin-field">
-                      <span>Ссылка</span>
-                      <input
-                        className="admin-input"
-                        value={tile.href}
-                        disabled={!canUpdate || pending}
-                        onChange={(e) => updateTile(index, { href: e.target.value })}
-                      />
-                    </label>
-                    <label className="admin-field sm:col-span-2">
-                      <span>Фото</span>
-                      <input
-                        className="admin-input"
-                        value={tile.imageUrl}
-                        disabled={!canUpdate || pending}
-                        onChange={(e) => updateTile(index, { imageUrl: e.target.value })}
                       />
                     </label>
                     <label className="admin-field">
@@ -576,6 +598,25 @@ export function HomepageManager({ initial, canUpdate }: Props) {
                         onChange={(e) => updateTile(index, { imageAlt: e.target.value })}
                       />
                     </label>
+                    <div className="sm:col-span-2">
+                      <LinkDestinationPicker
+                        label="Ссылка"
+                        value={tile.destination ?? inferLinkDestinationFromHref(tile.href)}
+                        hrefFallback={tile.href}
+                        disabled={!canUpdate || pending}
+                        onChange={(dest, href) =>
+                          updateTile(index, { destination: dest, href })
+                        }
+                      />
+                    </div>
+                    <div className="sm:col-span-2">
+                      <ImagePicker
+                        label="Фото"
+                        value={tile.imageUrl || null}
+                        disabled={!canUpdate || pending}
+                        onChange={(url) => updateTile(index, { imageUrl: url ?? '' })}
+                      />
+                    </div>
                     <label className="flex items-center gap-2 self-end pb-2 text-sm">
                       <input
                         type="checkbox"
@@ -585,7 +626,6 @@ export function HomepageManager({ initial, canUpdate }: Props) {
                       />
                       Показывать
                     </label>
-                  </div>
                 </div>
                 {canUpdate ? (
                   <div className="mt-3 flex flex-wrap gap-2">
@@ -639,12 +679,32 @@ export function HomepageManager({ initial, canUpdate }: Props) {
 
       {tab === 'shelves' ? (
         <section className="space-y-4">
-          <p className="max-w-2xl text-sm text-[var(--admin-muted)]">
-            Источник товаров — существующая страница каталога или группа бестселлеров. Акции
-            берутся из раздела «Акции», а не назначаются вручную здесь.
-          </p>
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <p className="max-w-2xl text-sm text-[var(--admin-muted)]">
+              Источник товаров и ссылка «Смотреть все» настраиваются отдельно. Акции берутся из
+              раздела «Акции».
+            </p>
+            {canUpdate ? (
+              <button
+                type="button"
+                className="admin-btn-ghost"
+                disabled={pending}
+                onClick={() => addShelf('popular')}
+              >
+                Добавить секцию
+              </button>
+            ) : null}
+          </div>
+          {shelfSections.length === 0 ? (
+            <p className="text-sm text-[var(--admin-muted)]">Секций нет. Добавьте первую.</p>
+          ) : null}
           <ul className="space-y-4">
-            {shelfSections.map((section) => (
+            {shelfSections.map((section) => {
+              const productSource =
+                section.productSource ??
+                inferCatalogSourceFromSlug(section.sourceSlug, section.kind);
+              const viewAllMode = section.viewAllMode ?? 'destination';
+              return (
               <li key={section.id} className="admin-card space-y-3 p-4">
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <div>
@@ -689,38 +749,85 @@ export function HomepageManager({ initial, canUpdate }: Props) {
                       }
                     />
                   </label>
-                  {section.kind !== 'promotions' ? (
-                    <label className="admin-field">
-                      <span>Источник (slug страницы / группы)</span>
-                      <input
-                        className="admin-input"
-                        value={section.sourceSlug ?? ''}
+                  <div className="sm:col-span-2">
+                    {section.kind === 'promotions' ? (
+                      <p className="admin-help">
+                        Источник: действующие акции.{' '}
+                        <Link href="/admin/promotions" className="underline">
+                          Открыть акции
+                        </Link>
+                      </p>
+                    ) : (
+                      <CatalogSourcePicker
+                        sectionKind={section.kind}
+                        value={productSource}
+                        sourceSlugFallback={section.sourceSlug}
                         disabled={!canUpdate || pending}
-                        placeholder={section.kind === 'roses' ? 'rozy' : 'bukety'}
-                        onChange={(e) =>
-                          updateSection(section.id, { sourceSlug: e.target.value || null })
+                        onChange={(source, resolvedSlug, autoViewAllHref) => {
+                          updateSection(section.id, {
+                            productSource: source,
+                            sourceSlug: resolvedSlug,
+                            ...(viewAllMode === 'auto'
+                              ? { viewAllHref: autoViewAllHref }
+                              : {}),
+                          });
+                        }}
+                      />
+                    )}
+                  </div>
+                  <label className="admin-field">
+                    <span>Кнопка «Смотреть все»</span>
+                    <select
+                      className="admin-input"
+                      value={viewAllMode}
+                      disabled={!canUpdate || pending}
+                      onChange={(e) => {
+                        const mode = e.target.value as 'auto' | 'destination';
+                        if (mode === 'auto') {
+                          const href = catalogSourceDefaultViewAllHref(
+                            productSource,
+                            section.sourceSlug,
+                          );
+                          updateSection(section.id, {
+                            viewAllMode: mode,
+                            viewAllHref: href,
+                            viewAllDestination: null,
+                          });
+                        } else {
+                          updateSection(section.id, { viewAllMode: mode });
+                        }
+                      }}
+                    >
+                      <option value="auto">Автоматически по источнику</option>
+                      <option value="destination">Другая страница / ссылка</option>
+                    </select>
+                  </label>
+                  {viewAllMode === 'destination' ? (
+                    <div className="sm:col-span-2">
+                      <LinkDestinationPicker
+                        label="Ссылка «Смотреть все»"
+                        value={
+                          section.viewAllDestination ??
+                          (section.viewAllHref
+                            ? inferLinkDestinationFromHref(section.viewAllHref)
+                            : null)
+                        }
+                        hrefFallback={section.viewAllHref ?? ''}
+                        disabled={!canUpdate || pending}
+                        onChange={(dest, href) =>
+                          updateSection(section.id, {
+                            viewAllDestination: dest,
+                            viewAllHref: href,
+                            viewAllMode: 'destination',
+                          })
                         }
                       />
-                    </label>
+                    </div>
                   ) : (
-                    <p className="admin-help self-end sm:col-span-1">
-                      Источник: действующие акции.{' '}
-                      <Link href="/admin/promotions" className="underline">
-                        Открыть акции
-                      </Link>
+                    <p className="admin-help self-end text-sm text-[var(--admin-muted)]">
+                      Сейчас: {section.viewAllHref || 'скрыта (нет пути у источника)'}
                     </p>
                   )}
-                  <label className="admin-field">
-                    <span>Ссылка «Смотреть все»</span>
-                    <input
-                      className="admin-input"
-                      value={section.viewAllHref ?? ''}
-                      disabled={!canUpdate || pending}
-                      onChange={(e) =>
-                        updateSection(section.id, { viewAllHref: e.target.value || null })
-                      }
-                    />
-                  </label>
                   {section.kind === 'autumn' ? (
                     <>
                       <label className="admin-field sm:col-span-2">
@@ -753,8 +860,25 @@ export function HomepageManager({ initial, canUpdate }: Props) {
                     </>
                   ) : null}
                 </div>
+                {canUpdate ? (
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      className="admin-btn-ghost text-xs"
+                      disabled={pending}
+                      onClick={() => {
+                        if (!window.confirm('Удалить секцию с главной?')) return;
+                        setSections((prev) => prev.filter((s) => s.id !== section.id));
+                        markDirty();
+                      }}
+                    >
+                      Удалить
+                    </button>
+                  </div>
+                ) : null}
               </li>
-            ))}
+              );
+            })}
           </ul>
         </section>
       ) : null}
@@ -843,17 +967,12 @@ export function HomepageManager({ initial, canUpdate }: Props) {
                     onChange={(e) => updateSection(section.id, { body: e.target.value || null })}
                   />
                 </label>
-                <label className="admin-field">
-                  <span>Фото</span>
-                  <input
-                    className="admin-input"
-                    value={section.imageUrl ?? ''}
-                    disabled={!canUpdate || pending}
-                    onChange={(e) =>
-                      updateSection(section.id, { imageUrl: e.target.value || null })
-                    }
-                  />
-                </label>
+                <ImagePicker
+                  label="Фото"
+                  value={section.imageUrl ?? null}
+                  disabled={!canUpdate || pending}
+                  onChange={(url) => updateSection(section.id, { imageUrl: url })}
+                />
               </div>
             ))}
           </div>

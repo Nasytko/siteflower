@@ -4,11 +4,18 @@ import {
   Injectable,
 } from '@nestjs/common';
 import {
+  catalogSourceDefaultViewAllHref,
   defaultHomepageConfig,
   defaultHomepageDiscoveryTiles,
   defaultHomepageHeroSlides,
   defaultHomepagePerks,
   HOMEPAGE_SECTION_KINDS,
+  inferCatalogSourceFromSlug,
+  inferLinkDestinationFromHref,
+  normalizeCatalogSource,
+  normalizeLinkDestination,
+  resolveCatalogSourceSlug,
+  resolveLinkDestinationHref,
   type HomepageConfigAdminDto,
   type HomepageConfigDto,
   type HomepageDiscoveryTileDto,
@@ -17,6 +24,7 @@ import {
   type HomepageSectionDto,
   type HomepageSectionKind,
   type UpdateHomepageConfigDto,
+  validateCustomHref,
 } from '@bouquet-one/contracts';
 import type { Prisma } from '@bouquet-one/database';
 import { z } from 'zod';
@@ -33,10 +41,31 @@ const OCC_CONFLICT_MESSAGE =
 
 type HomepageConfigRow = Prisma.HomepageConfigGetPayload<object>;
 
+const linkDestinationSchema = z
+  .object({
+    kind: z.enum(['system', 'catalog_page', 'category', 'product', 'custom']),
+    ref: z.string().trim().max(80).nullable().optional(),
+    href: z.string().trim().max(500).nullable().optional(),
+  })
+  .strict()
+  .nullable()
+  .optional();
+
+const catalogSourceSchema = z
+  .object({
+    kind: z.enum(['auto', 'promotions', 'catalog_page', 'bestseller_group']),
+    id: z.string().trim().max(80).nullable().optional(),
+    slug: z.string().trim().max(160).nullable().optional(),
+  })
+  .strict()
+  .nullable()
+  .optional();
+
 const heroSchema = z
   .object({
     title: z.string().trim().min(1).max(200),
-    subtitle: z.string().trim().min(1).max(500),
+    // Allow empty: slides often have optional subtitle; primary hero mirrors them.
+    subtitle: z.string().trim().max(500).default(''),
     imageUrl: z.string().trim().min(1).max(500).nullable(),
     ctaLabel: z.string().trim().min(1).max(80),
     ctaHref: z.string().trim().min(1).max(500),
@@ -52,6 +81,7 @@ const heroSlideSchema = z
     mobileImageUrl: z.string().trim().min(1).max(500).nullable().optional(),
     ctaLabel: z.string().trim().min(1).max(80),
     ctaHref: z.string().trim().min(1).max(500),
+    ctaDestination: linkDestinationSchema,
     enabled: z.boolean(),
     sortOrder: z.number().int().min(0).max(10_000),
     startsAt: z.string().trim().max(40).nullable().optional(),
@@ -68,8 +98,11 @@ const sectionSchema = z
     sortOrder: z.number().int().min(0).max(10_000),
     body: z.string().trim().max(500).nullable().optional(),
     viewAllHref: z.string().trim().max(500).nullable().optional(),
+    viewAllDestination: linkDestinationSchema,
+    viewAllMode: z.enum(['auto', 'destination']).nullable().optional(),
     limit: z.number().int().min(1).max(48).nullable().optional(),
     sourceSlug: z.string().trim().max(160).nullable().optional(),
+    productSource: catalogSourceSchema,
     theme: z.enum(['default', 'autumn']).nullable().optional(),
     imageUrl: z.string().trim().max(500).nullable().optional(),
   })
@@ -80,12 +113,22 @@ const discoveryTileSchema = z
     id: z.string().trim().min(1).max(80),
     label: z.string().trim().min(1).max(120),
     href: z.string().trim().min(1).max(500),
-    imageUrl: z.string().trim().min(1).max(500),
+    destination: linkDestinationSchema,
+    imageUrl: z.string().trim().max(500).default(''),
     imageAlt: z.string().trim().min(1).max(200),
     enabled: z.boolean(),
     sortOrder: z.number().int().min(0).max(10_000),
   })
-  .strict();
+  .strict()
+  .superRefine((tile, ctx) => {
+    if (tile.enabled && !tile.imageUrl.trim()) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'У включённой плитки должно быть изображение',
+        path: ['imageUrl'],
+      });
+    }
+  });
 
 const perkSchema = z
   .object({
@@ -116,7 +159,17 @@ const LEGACY_SECTION_KINDS: Record<string, HomepageSectionKind> = {
   collections: 'promotions',
 };
 
-export function migrateLegacyHomepageConfig(value: unknown): unknown {
+export type MigrateHomepageMode = 'read' | 'write';
+
+/**
+ * Normalize legacy homepage JSON.
+ * - `read`: fill missing defaults so the admin UI / storefront never crash.
+ * - `write`: do NOT re-inflate deleted slides or force-add sections the admin removed.
+ */
+export function migrateLegacyHomepageConfig(
+  value: unknown,
+  mode: MigrateHomepageMode = 'read',
+): unknown {
   if (!value || typeof value !== 'object') return value;
   const raw = value as {
     sections?: unknown;
@@ -153,50 +206,13 @@ export function migrateLegacyHomepageConfig(value: unknown): unknown {
       }
     }
 
-    const ensureSection = (
-      kind: HomepageSectionKind,
-      defaults: Record<string, unknown>,
-    ) => {
-      if (migratedKinds.has(kind) || ids.has(kind)) return;
-      sections.push({ id: kind, kind, enabled: true, ...defaults });
-      migratedKinds.add(kind);
-      ids.add(kind);
-    };
-
-    ensureSection('autumn', {
-      heading: 'Вдохновение осени',
-      body: 'Тёплые букеты сезона',
-      sortOrder: 20,
-      viewAllHref: '/catalog/bouquets-with-roses',
-      sourceSlug: 'bukety-s-rozami',
-      limit: 5,
-      theme: 'autumn',
-    });
-    ensureSection('popular', {
-      heading: 'Популярные букеты',
-      sortOrder: 30,
-      viewAllHref: '/catalog/bouquets',
-      limit: 10,
-    });
-    ensureSection('roses', {
-      heading: 'Розы',
-      sortOrder: 40,
-      viewAllHref: '/catalog/roses',
-      sourceSlug: 'rozy',
-      limit: 5,
-    });
-
-    if (!migratedKinds.has('gifts') && !ids.has('gifts')) {
-      sections.push({
-        id: 'gifts',
-        kind: 'gifts',
-        enabled: false,
-        heading: 'Подарки',
-        sortOrder: 91,
-      });
-    }
-
+    // Do NOT force-add autumn/popular/roses/gifts on read — that resurrected
+    // blocks the admin intentionally deleted. Missing `sections` key is handled below.
     base.sections = sections;
+  } else if (mode === 'read') {
+    base.sections = defaultHomepageConfig().sections;
+  } else {
+    base.sections = [];
   }
 
   if (!Array.isArray(raw.discoveryTiles)) {
@@ -207,7 +223,9 @@ export function migrateLegacyHomepageConfig(value: unknown): unknown {
     base.perks = defaultHomepagePerks();
   }
 
-  if (!Array.isArray(raw.heroSlides) || raw.heroSlides.length === 0) {
+  // Synthesize slides only when the key is missing (pre-multi-slide legacy).
+  // An explicit empty array means the admin cleared the hero — keep it empty.
+  if (mode === 'read' && !Array.isArray(raw.heroSlides)) {
     const hero =
       raw.hero && typeof raw.hero === 'object'
         ? (raw.hero as Record<string, unknown>)
@@ -231,9 +249,11 @@ export function migrateLegacyHomepageConfig(value: unknown): unknown {
     } else {
       base.heroSlides = defaultHomepageHeroSlides();
     }
+  } else if (!Array.isArray(raw.heroSlides)) {
+    base.heroSlides = [];
   }
 
-  const slides = base.heroSlides as Array<Record<string, unknown>>;
+  const slides = (base.heroSlides as Array<Record<string, unknown>>) ?? [];
   const firstEnabled =
     slides.find((s) => s.enabled !== false) ?? slides[0] ?? null;
   if (firstEnabled) {
@@ -244,14 +264,38 @@ export function migrateLegacyHomepageConfig(value: unknown): unknown {
       ctaLabel: firstEnabled.ctaLabel,
       ctaHref: firstEnabled.ctaHref,
     };
+  } else if (mode === 'write' && (!base.hero || typeof base.hero !== 'object')) {
+    base.hero = {
+      title: 'Букеты',
+      subtitle: ' ',
+      imageUrl: null,
+      ctaLabel: 'Смотреть',
+      ctaHref: '/catalog/bouquets',
+    };
   }
 
   return base;
 }
 
+function assertCustomHref(href: string, label: string): void {
+  const check = validateCustomHref(href);
+  if (!check.ok) {
+    throw new BadRequestException(`${label}: ${check.message}`);
+  }
+}
+
+export type HomepageResolveContext = {
+  catalogSlugById?: ReadonlyMap<string, string> | Record<string, string>;
+  productSlugById?: ReadonlyMap<string, string> | Record<string, string>;
+};
+
 /** Constrained homepage JSON — known fields only, no HTML blobs. */
-export function parseHomepageConfig(value: unknown): HomepageConfigDto {
-  const result = homepageConfigSchema.safeParse(migrateLegacyHomepageConfig(value));
+export function parseHomepageConfig(
+  value: unknown,
+  mode: MigrateHomepageMode = 'read',
+  resolveCtx?: HomepageResolveContext,
+): HomepageConfigDto {
+  const result = homepageConfigSchema.safeParse(migrateLegacyHomepageConfig(value, mode));
   if (!result.success) {
     throw new BadRequestException(
       result.error.issues.map(
@@ -281,45 +325,105 @@ export function parseHomepageConfig(value: unknown): HomepageConfigDto {
     throw new BadRequestException('perks[].id must be unique');
   }
 
-  const sections: HomepageSectionDto[] = result.data.sections.map((section) => ({
-    id: section.id,
-    kind: section.kind,
-    enabled: section.enabled,
-    heading: section.heading,
-    sortOrder: section.sortOrder,
-    body: section.body ?? null,
-    viewAllHref: section.viewAllHref ?? null,
-    limit: section.limit ?? null,
-    sourceSlug: section.sourceSlug ?? null,
-    theme: section.theme ?? null,
-    imageUrl: section.imageUrl ?? null,
-  }));
+  // Empty heroSlides is allowed: storefront hides the hero. Write-mode migrate
+  // must not re-inflate slides (that previously undid admin deletes → 500/conflict).
 
-  const discoveryTiles: HomepageDiscoveryTileDto[] = result.data.discoveryTiles.map(
-    (tile) => ({
+  const sections: HomepageSectionDto[] = result.data.sections.map((section) => {
+    const productSource =
+      normalizeCatalogSource(section.productSource, section.sourceSlug, section.kind) ??
+      inferCatalogSourceFromSlug(section.sourceSlug, section.kind);
+    const sourceSlug = resolveCatalogSourceSlug(productSource, section.sourceSlug, {
+      slugById: resolveCtx?.catalogSlugById,
+    });
+    const productSourceResolved = {
+      ...productSource,
+      slug: sourceSlug,
+    };
+
+    const viewAllMode = section.viewAllMode ?? (section.viewAllHref ? 'destination' : 'auto');
+    let viewAllDestination = normalizeLinkDestination(
+      section.viewAllDestination,
+      section.viewAllHref,
+    );
+    let viewAllHref = section.viewAllHref ?? null;
+
+    if (viewAllMode === 'auto') {
+      viewAllHref = catalogSourceDefaultViewAllHref(productSourceResolved, sourceSlug);
+      viewAllDestination = viewAllHref ? inferLinkDestinationFromHref(viewAllHref) : null;
+    } else if (viewAllDestination) {
+      viewAllHref = resolveLinkDestinationHref(viewAllDestination, viewAllHref, resolveCtx);
+      viewAllDestination = { ...viewAllDestination, href: viewAllHref };
+      if (viewAllDestination.kind === 'custom' && viewAllHref) {
+        assertCustomHref(viewAllHref, `sections.${section.id}.viewAllHref`);
+      }
+    } else if (viewAllHref) {
+      viewAllDestination = inferLinkDestinationFromHref(viewAllHref);
+      if (viewAllHref.startsWith('http')) {
+        assertCustomHref(viewAllHref, `sections.${section.id}.viewAllHref`);
+      }
+    }
+
+    return {
+      id: section.id,
+      kind: section.kind,
+      enabled: section.enabled,
+      heading: section.heading,
+      sortOrder: section.sortOrder,
+      body: section.body ?? null,
+      viewAllHref,
+      viewAllDestination,
+      viewAllMode,
+      limit: section.limit ?? null,
+      sourceSlug,
+      productSource: productSourceResolved,
+      theme: section.theme ?? null,
+      imageUrl: section.imageUrl?.trim() ? section.imageUrl.trim() : null,
+    };
+  });
+
+  const discoveryTiles: HomepageDiscoveryTileDto[] = result.data.discoveryTiles.map((tile) => {
+    const destination =
+      normalizeLinkDestination(tile.destination, tile.href) ??
+      inferLinkDestinationFromHref(tile.href);
+    const href = resolveLinkDestinationHref(destination, tile.href, resolveCtx);
+    if (destination.kind === 'custom') {
+      assertCustomHref(href, `discoveryTiles.${tile.id}.href`);
+    }
+    return {
       id: tile.id,
       label: tile.label,
-      href: tile.href,
-      imageUrl: tile.imageUrl,
+      href,
+      destination: { ...destination, href },
+      imageUrl: tile.imageUrl.trim(),
       imageAlt: tile.imageAlt,
       enabled: tile.enabled,
       sortOrder: tile.sortOrder,
-    }),
-  );
+    };
+  });
 
-  const heroSlides: HomepageHeroSlideDto[] = result.data.heroSlides.map((slide) => ({
-    id: slide.id,
-    title: slide.title,
-    subtitle: slide.subtitle,
-    imageUrl: slide.imageUrl,
-    mobileImageUrl: slide.mobileImageUrl ?? null,
-    ctaLabel: slide.ctaLabel,
-    ctaHref: slide.ctaHref,
-    enabled: slide.enabled,
-    sortOrder: slide.sortOrder,
-    startsAt: slide.startsAt ?? null,
-    endsAt: slide.endsAt ?? null,
-  }));
+  const heroSlides: HomepageHeroSlideDto[] = result.data.heroSlides.map((slide) => {
+    const ctaDestination =
+      normalizeLinkDestination(slide.ctaDestination, slide.ctaHref) ??
+      inferLinkDestinationFromHref(slide.ctaHref);
+    const ctaHref = resolveLinkDestinationHref(ctaDestination, slide.ctaHref, resolveCtx);
+    if (ctaDestination.kind === 'custom') {
+      assertCustomHref(ctaHref, `heroSlides.${slide.id}.ctaHref`);
+    }
+    return {
+      id: slide.id,
+      title: slide.title,
+      subtitle: slide.subtitle,
+      imageUrl: slide.imageUrl,
+      mobileImageUrl: slide.mobileImageUrl ?? null,
+      ctaLabel: slide.ctaLabel,
+      ctaHref,
+      ctaDestination: { ...ctaDestination, href: ctaHref },
+      enabled: slide.enabled,
+      sortOrder: slide.sortOrder,
+      startsAt: slide.startsAt ?? null,
+      endsAt: slide.endsAt ?? null,
+    };
+  });
 
   const perks: HomepagePerkDto[] = result.data.perks.map((perk) => ({
     id: perk.id,
@@ -333,16 +437,25 @@ export function parseHomepageConfig(value: unknown): HomepageConfigDto {
   );
   const primary = sortedSlides.find((s) => s.enabled) ?? sortedSlides[0];
 
+  const heroSubtitle = (primary?.subtitle ?? result.data.hero.subtitle ?? '').trim();
+
   return {
     hero: primary
       ? {
           title: primary.title,
-          subtitle: primary.subtitle,
+          // Nest DTO still requires MinLength(1) on hero.subtitle — keep a space if empty.
+          subtitle: heroSubtitle.length > 0 ? heroSubtitle : ' ',
           imageUrl: primary.imageUrl,
           ctaLabel: primary.ctaLabel,
           ctaHref: primary.ctaHref,
         }
-      : result.data.hero,
+      : {
+          ...result.data.hero,
+          subtitle:
+            result.data.hero.subtitle.trim().length > 0
+              ? result.data.hero.subtitle.trim()
+              : ' ',
+        },
     heroSlides: sortedSlides,
     sections: [...sections].sort((a, b) => a.sortOrder - b.sortOrder || a.id.localeCompare(b.id)),
     discoveryTiles: [...discoveryTiles].sort(
@@ -368,8 +481,9 @@ export class HomepageConfigService {
 
   async getAdmin(): Promise<HomepageConfigAdminDto> {
     const row = await this.getOrCreate();
+    const config = await this.configFromRow(row);
     return {
-      ...this.configFromRow(row),
+      ...config,
       version: row.version,
       updatedAt: row.updatedAt.toISOString(),
     };
@@ -380,50 +494,64 @@ export class HomepageConfigService {
     actor: ActorContext,
   ): Promise<HomepageConfigAdminDto> {
     await this.getOrCreate();
-    const config = parseHomepageConfig({
+    const incoming = {
       hero: input.hero,
       heroSlides: input.heroSlides,
       sections: input.sections,
       discoveryTiles: input.discoveryTiles,
       perks: input.perks,
-    });
-
-    await this.prisma.client.$transaction(async (tx) => {
-      const result = await tx.homepageConfig.updateMany({
-        where: { id: SINGLETON_ID, version: input.expectedVersion },
-        data: {
-          config: config as Prisma.InputJsonValue,
-          version: { increment: 1 },
-        },
-      });
-      if (result.count === 0) {
-        throw new ConflictException(OCC_CONFLICT_MESSAGE);
-      }
-
-      await this.audit.record(
-        {
-          actorAdminUserId: actor.actorId,
-          action: 'HOMEPAGE_CONFIG_UPDATED',
-          entityType: 'HomepageConfig',
-          entityId: String(SINGLETON_ID),
-          metadata: {
-            sectionCount: config.sections.length,
-            slideCount: config.heroSlides.length,
-            discoveryTileCount: config.discoveryTiles.length,
-            perkCount: config.perks.length,
-          },
-          requestId: actor.requestId,
-          ipHash: hashIp(actor.ip, this.appConfig.sessionHmacSecret),
-          userAgent: actor.userAgent,
-        },
-        tx,
+    };
+    const resolveCtx = await this.loadResolveContext(incoming);
+    let config: HomepageConfigDto;
+    try {
+      config = parseHomepageConfig(incoming, 'write', resolveCtx);
+    } catch (err) {
+      if (err instanceof BadRequestException) throw err;
+      throw new BadRequestException(
+        err instanceof Error ? err.message : 'Некорректная конфигурация главной',
       );
-    });
+    }
 
-    return this.getAdmin().then(async (dto) => {
-      await this.revalidate.ping({ tags: ['storefront', 'homepage'], paths: ['/'] });
-      return dto;
-    });
+    try {
+      await this.prisma.client.$transaction(async (tx) => {
+        const result = await tx.homepageConfig.updateMany({
+          where: { id: SINGLETON_ID, version: input.expectedVersion },
+          data: {
+            config: config as Prisma.InputJsonValue,
+            version: { increment: 1 },
+          },
+        });
+        if (result.count === 0) {
+          throw new ConflictException(OCC_CONFLICT_MESSAGE);
+        }
+
+        await this.audit.record(
+          {
+            actorAdminUserId: actor.actorId,
+            action: 'HOMEPAGE_CONFIG_UPDATED',
+            entityType: 'HomepageConfig',
+            entityId: String(SINGLETON_ID),
+            metadata: {
+              sectionCount: config.sections.length,
+              slideCount: config.heroSlides.length,
+              discoveryTileCount: config.discoveryTiles.length,
+              perkCount: config.perks.length,
+            },
+            requestId: actor.requestId,
+            ipHash: hashIp(actor.ip, this.appConfig.sessionHmacSecret),
+            userAgent: actor.userAgent,
+          },
+          tx,
+        );
+      });
+    } catch (err) {
+      if (err instanceof ConflictException || err instanceof BadRequestException) throw err;
+      throw err;
+    }
+
+    const dto = await this.getAdmin();
+    await this.revalidate.ping({ tags: ['storefront', 'homepage'], paths: ['/'] });
+    return dto;
   }
 
   private async getOrCreate(): Promise<HomepageConfigRow> {
@@ -453,11 +581,60 @@ export class HomepageConfigService {
     }
   }
 
-  private configFromRow(row: HomepageConfigRow): HomepageConfigDto {
+  private async configFromRow(row: HomepageConfigRow): Promise<HomepageConfigDto> {
     try {
-      return parseHomepageConfig(row.config);
+      // Resolve kind+id → current slug on every read so storefront links stay fresh
+      // after catalog slug renames without requiring a homepage re-save.
+      const resolveCtx = await this.loadResolveContext(row.config);
+      return parseHomepageConfig(row.config, 'read', resolveCtx);
     } catch {
       return defaultHomepageConfig();
     }
+  }
+
+  /** Collect product destination refs so we only query those rows. */
+  private collectProductIds(config: unknown): string[] {
+    if (!config || typeof config !== 'object') return [];
+    const raw = config as {
+      heroSlides?: Array<{ ctaDestination?: { kind?: string; ref?: string | null } }>;
+      discoveryTiles?: Array<{ destination?: { kind?: string; ref?: string | null } }>;
+      sections?: Array<{ viewAllDestination?: { kind?: string; ref?: string | null } }>;
+    };
+    const ids = new Set<string>();
+    const take = (dest: { kind?: string; ref?: string | null } | undefined) => {
+      if (dest?.kind === 'product' && dest.ref?.trim()) ids.add(dest.ref.trim());
+    };
+    for (const slide of raw.heroSlides ?? []) take(slide.ctaDestination);
+    for (const tile of raw.discoveryTiles ?? []) take(tile.destination);
+    for (const section of raw.sections ?? []) take(section.viewAllDestination);
+    return [...ids];
+  }
+
+  /**
+   * Resolve stable destination/source ids → current public slugs.
+   * Used on both save and read (public + admin).
+   */
+  private async loadResolveContext(config?: unknown): Promise<HomepageResolveContext> {
+    // Catalog pages are CatalogCategory rows (pageKind); categories share the same table.
+    const productIds = this.collectProductIds(config);
+    const [categories, groups, products] = await Promise.all([
+      this.prisma.client.catalogCategory.findMany({ select: { id: true, slug: true } }),
+      this.prisma.client.bestsellerGroup.findMany({ select: { id: true, slug: true } }),
+      productIds.length > 0
+        ? this.prisma.client.product.findMany({
+            where: { id: { in: productIds } },
+            select: { id: true, slug: true },
+          })
+        : Promise.resolve([] as Array<{ id: string; slug: string }>),
+    ]);
+    const catalogSlugById: Record<string, string> = {};
+    for (const row of [...categories, ...groups]) {
+      catalogSlugById[row.id] = row.slug;
+    }
+    const productSlugById: Record<string, string> = {};
+    for (const row of products) {
+      productSlugById[row.id] = row.slug;
+    }
+    return { catalogSlugById, productSlugById };
   }
 }

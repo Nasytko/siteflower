@@ -3,9 +3,13 @@
  */
 
 import type { ProductSort } from './catalog';
+import type { CatalogSourceDto } from './catalog-source';
+import type { LinkDestinationDto } from './link-destination';
 
 export type { ProductSort };
 /** `PRODUCT_SORTS` / `isProductSort` live in ./catalog and are re-exported by the package index. */
+export type { CatalogSourceDto } from './catalog-source';
+export type { LinkDestinationDto } from './link-destination';
 
 export const TAXONOMY_LANDING_KINDS = ['flower', 'occasion', 'recipient', 'color'] as const;
 export type TaxonomyLandingKind = (typeof TAXONOMY_LANDING_KINDS)[number];
@@ -45,7 +49,10 @@ export type HomepageHeroSlideDto = {
   /** Optional tighter crop for small screens. */
   mobileImageUrl?: string | null;
   ctaLabel: string;
+  /** Resolved public href (storefront reads this). */
   ctaHref: string;
+  /** Stable CTA target; resolved into ctaHref on save. */
+  ctaDestination?: LinkDestinationDto | null;
   enabled: boolean;
   sortOrder: number;
   /** ISO date — optional schedule window. */
@@ -63,15 +70,24 @@ export type HomepageSectionDto = {
   sortOrder: number;
   /** Short supporting line under the heading. */
   body?: string | null;
-  /** «Смотреть все» destination. */
+  /** «Смотреть все» destination (resolved href). */
   viewAllHref?: string | null;
+  /** Stable «Смотреть все» target; resolved into viewAllHref on save. */
+  viewAllDestination?: LinkDestinationDto | null;
+  /**
+   * view-all link mode: auto from product source, or explicit destination/custom.
+   * Omitted = treat as custom when viewAllHref set.
+   */
+  viewAllMode?: 'auto' | 'destination' | null;
   /** Max products to show (shelf sections). */
   limit?: number | null;
   /**
-   * Product source: CatalogCategory / CatalogPage slug, or BestsellerGroup slug
+   * Product source slug: CatalogCategory / CatalogPage, or BestsellerGroup
    * (popular/autumn). Empty = built-in default for the kind.
    */
   sourceSlug?: string | null;
+  /** Structured product source (preferred over raw sourceSlug). */
+  productSource?: CatalogSourceDto | null;
   theme?: HomepageSectionTheme | null;
   /** Optional media for help / decorative blocks. */
   imageUrl?: string | null;
@@ -81,7 +97,10 @@ export type HomepageSectionDto = {
 export type HomepageDiscoveryTileDto = {
   id: string;
   label: string;
+  /** Resolved public href (storefront reads this). */
   href: string;
+  /** Stable tile target; resolved into href on save. */
+  destination?: LinkDestinationDto | null;
   /** Public media URL or site-relative path (e.g. /categories/…). */
   imageUrl: string;
   imageAlt: string;

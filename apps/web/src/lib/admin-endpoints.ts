@@ -178,6 +178,8 @@ export const adminEndpoints = {
   mediaHealthProbe: `${ADMIN}/media/health/probe`,
   mediaAssets: `${ADMIN}/media/assets`,
   mediaAssetPurge: (id: string) => `${ADMIN}/media/assets/${id}/purge`,
+  mediaUpload: `${ADMIN}/media/upload`,
+  mediaLibrary: `${ADMIN}/media/library`,
   seoSummary: `${ADMIN}/seo/summary`,
   seoHealth: `${ADMIN}/seo/health`,
   seoLandings: `${ADMIN}/seo/landings`,

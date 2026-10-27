@@ -123,5 +123,7 @@ export * from './integration';
 export * from './legal';
 export * from './orders';
 export * from './storefront';
+export * from './link-destination';
+export * from './catalog-source';
 export * from './seo-health';
 export * from './media-health';

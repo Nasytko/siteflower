@@ -18,7 +18,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "lint": "eslint .",
     "clean": "rimraf dist",
-    "test": "node --import tsx --test src/index.test.ts src/catalog.test.ts src/catalog-page-rules.test.ts src/orders.test.ts src/legal.test.ts src/seo-health.test.ts src/legacy-url-migrate.test.ts"
+    "test": "node --import tsx --test src/index.test.ts src/catalog.test.ts src/catalog-page-rules.test.ts src/orders.test.ts src/legal.test.ts src/seo-health.test.ts src/legacy-url-migrate.test.ts src/link-destination.test.ts src/catalog-source.test.ts"
   },
   "devDependencies": {
     "@bouquet-one/config": "workspace:*",
