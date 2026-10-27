@@ -611,6 +611,6 @@ export class CatalogCategoriesService {
   }
 
   private async pingStorefront() {
-    await this.revalidate.ping({ tags: ['catalog', 'categories'], paths: ['/', '/bukety'] });
+    await this.revalidate.ping({ tags: ['catalog', 'categories'], paths: ['/', '/catalog', '/catalog/bouquets'] });
   }
 }

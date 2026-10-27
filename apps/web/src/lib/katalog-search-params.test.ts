@@ -67,7 +67,7 @@ test('katalogStateToQuery omits defaults', () => {
 test('katalogHref resets page on filter patch', () => {
   assert.equal(
     katalogHref('rozy', parseKatalogSearchParams({ page: '3' }), { colors: ['belyy'] }),
-    '/katalog/rozy?color=belyy',
+    '/catalog/roses?color=belyy',
   );
 });
 

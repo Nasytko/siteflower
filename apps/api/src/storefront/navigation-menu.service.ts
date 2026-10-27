@@ -142,18 +142,18 @@ export class NavigationMenuService {
           select: { id: true, name: true, slug: true },
         });
         return [
-          { id: 'bestsellers', label: 'Бестселлеры (каталог)', href: '/bukety' },
+          { id: 'bestsellers', label: 'Бестселлеры (каталог)', href: '/catalog/bouquets' },
           ...groups.map((row) => ({
             id: row.id,
             label: row.name,
-            href: `/bukety?bestseller=${encodeURIComponent(row.slug)}`,
+            href: `/catalog/bouquets?bestseller=${encodeURIComponent(row.slug)}`,
           })),
         ];
       }
       case 'PAGE':
         return [
-          { id: 'bukety', label: 'Букеты', href: '/bukety' },
-          { id: 'cvety', label: 'Цветы', href: '/cvety' },
+          { id: 'bukety', label: 'Букеты', href: '/catalog/bouquets' },
+          { id: 'cvety', label: 'Цветы', href: '/catalog/stems' },
           { id: 'povod', label: 'Повод', href: '/povod' },
           { id: 'akcii', label: 'Акции', href: '/akcii' },
           { id: 'dostavka', label: 'Доставка', href: '/dostavka' },
@@ -174,7 +174,7 @@ export class NavigationMenuService {
         return rows.map((row) => ({
           id: row.id,
           label: row.lifecycle === 'PUBLISHED' ? row.name : `${row.name} (черновик)`,
-          href: `/bukety/${encodeURIComponent(row.slug)}`,
+          href: `/products/${encodeURIComponent(row.slug)}`,
         }));
       }
       default:
@@ -869,7 +869,7 @@ export class NavigationMenuService {
         }
         return {
           ...row,
-          href: `/bukety/${encodeURIComponent(product.slug)}`,
+          href: `/products/${encodeURIComponent(product.slug)}`,
           imageUrl,
           targetLabel: `Товар · ${product.name}`,
           unavailable: product.lifecycle !== 'PUBLISHED',
@@ -895,7 +895,7 @@ export class NavigationMenuService {
           if (!group) {
             return {
               ...row,
-              href: '/bukety',
+              href: '/catalog/bouquets',
               imageUrl,
               targetLabel: 'Бестселлеры · (удалена)',
               unavailable: true,
@@ -904,7 +904,7 @@ export class NavigationMenuService {
           }
           return {
             ...row,
-            href: `/bukety?bestseller=${encodeURIComponent(group.slug)}`,
+            href: `/catalog/bouquets?bestseller=${encodeURIComponent(group.slug)}`,
             imageUrl,
             targetLabel: `Бестселлеры · ${group.name}`,
             unavailable: false,
@@ -913,7 +913,7 @@ export class NavigationMenuService {
         }
         return {
           ...row,
-          href: '/bukety',
+          href: '/catalog/bouquets',
           imageUrl,
           targetLabel: 'Бестселлеры',
           unavailable: false,

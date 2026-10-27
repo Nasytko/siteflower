@@ -22,6 +22,7 @@ import {
 import { AuditService } from '../audit/audit.service';
 import { PrismaService } from '../database/prisma.service';
 import { StorefrontRevalidateService } from '../storefront/storefront-revalidate.service';
+import { CatalogMatchService } from './catalog-match.service';
 import {
   buildFlowerItemFields,
   FLOWER_ITEM_INCLUDE,
@@ -43,7 +44,13 @@ export class FlowerRefsService {
     private readonly prisma: PrismaService,
     private readonly audit: AuditService,
     private readonly revalidate: StorefrontRevalidateService,
+    private readonly catalogMatch: CatalogMatchService,
   ) {}
+
+  /** Taxonomy slug/id changes must refresh catalog rule resolution cache. */
+  private bumpMatchLookup(): void {
+    this.catalogMatch.invalidateLookupCache();
+  }
 
   async listTypes(visibleOnly = false): Promise<FlowerTypeDto[]> {
     const rows = await this.prisma.client.flowerType.findMany({
@@ -1682,6 +1689,7 @@ export class FlowerRefsService {
   }
 
   private async pingStorefront() {
-    await this.revalidate.ping({ tags: ['catalog', 'flower-refs'], paths: ['/', '/bukety'] });
+    this.bumpMatchLookup();
+    await this.revalidate.ping({ tags: ['catalog', 'flower-refs'], paths: ['/', '/catalog/bouquets'] });
   }
 }

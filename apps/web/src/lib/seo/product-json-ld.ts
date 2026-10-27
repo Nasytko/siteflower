@@ -23,7 +23,7 @@ function mapAvailability(availability: ProductPublicDto['availability']): string
  * Prices are the effective (post-promotion) amounts a customer actually pays.
  */
 export function buildProductJsonLd(product: ProductPublicDto): JsonLd {
-  const url = absoluteUrl(`/bukety/${product.slug}`);
+  const url = absoluteUrl(`/products/${product.slug}`);
   const images = product.media
     .map((m) => pickDerivativeUrl(m, 1200) ?? m.url)
     .filter(Boolean);

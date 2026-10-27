@@ -167,7 +167,7 @@ export function migrateLegacyHomepageConfig(value: unknown): unknown {
       heading: 'Вдохновение осени',
       body: 'Тёплые букеты сезона',
       sortOrder: 20,
-      viewAllHref: '/katalog/bukety-s-rozami',
+      viewAllHref: '/catalog/bouquets-with-roses',
       sourceSlug: 'bukety-s-rozami',
       limit: 5,
       theme: 'autumn',
@@ -175,13 +175,13 @@ export function migrateLegacyHomepageConfig(value: unknown): unknown {
     ensureSection('popular', {
       heading: 'Популярные букеты',
       sortOrder: 30,
-      viewAllHref: '/bukety',
+      viewAllHref: '/catalog/bouquets',
       limit: 10,
     });
     ensureSection('roses', {
       heading: 'Розы',
       sortOrder: 40,
-      viewAllHref: '/katalog/rozy',
+      viewAllHref: '/catalog/roses',
       sourceSlug: 'rozy',
       limit: 5,
     });
@@ -221,7 +221,7 @@ export function migrateLegacyHomepageConfig(value: unknown): unknown {
           imageUrl: typeof hero.imageUrl === 'string' ? hero.imageUrl : null,
           mobileImageUrl: null,
           ctaLabel: typeof hero.ctaLabel === 'string' ? hero.ctaLabel : 'Смотреть',
-          ctaHref: typeof hero.ctaHref === 'string' ? hero.ctaHref : '/bukety',
+          ctaHref: typeof hero.ctaHref === 'string' ? hero.ctaHref : '/catalog/bouquets',
           enabled: true,
           sortOrder: 10,
           startsAt: null,

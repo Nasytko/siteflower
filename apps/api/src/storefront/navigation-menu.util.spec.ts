@@ -6,9 +6,9 @@ import {
 
 describe('navigation menu helpers', () => {
   it('builds category hrefs with legacy hubs', () => {
-    expect(categoryPublicHref('rozy')).toBe('/katalog/rozy');
-    expect(categoryPublicHref('bukety')).toBe('/bukety');
-    expect(categoryPublicHref('cvety')).toBe('/cvety');
+    expect(categoryPublicHref('rozy')).toBe('/catalog/roses');
+    expect(categoryPublicHref('bukety')).toBe('/catalog/bouquets');
+    expect(categoryPublicHref('cvety')).toBe('/catalog/stems');
   });
 
   it('accepts internal paths and https urls', () => {

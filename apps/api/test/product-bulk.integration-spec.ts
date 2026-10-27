@@ -52,6 +52,9 @@ describe('Product bulk operations (integration)', () => {
       );
     }
 
+    await pool.query(
+      `DELETE FROM product_components WHERE product_id IN (SELECT id FROM products WHERE slug LIKE 'bulk-%')`,
+    );
     await pool.query('DELETE FROM product_media');
     await pool.query('DELETE FROM product_variants');
     await pool.query(`DELETE FROM products WHERE slug LIKE 'bulk-%'`);
@@ -150,6 +153,33 @@ describe('Product bulk operations (integration)', () => {
       .send({
         expectedVersion: product.body.version,
         variants: [{ name: 'Std', priceMinor: '9900', sortOrder: 0, status: 'ACTIVE' }],
+      })
+      .expect(200);
+
+    const flowerType = await http
+      .post('/api/v1/admin/catalog/flower-refs/types')
+      .set('Origin', origin)
+      .send({ name: `BulkRose ${slug}`, slug: `bulk-rose-${slug}` })
+      .expect(201);
+    const flowerItem = await http
+      .post('/api/v1/admin/catalog/flower-refs/items')
+      .set('Origin', origin)
+      .send({ flowerTypeId: flowerType.body.id, heightCm: 50 })
+      .expect(201);
+    product = await http
+      .put(`/api/v1/admin/catalog/products/${product.body.id}/components`)
+      .set('Origin', origin)
+      .send({
+        expectedVersion: product.body.version,
+        components: [
+          {
+            flowerItemId: flowerItem.body.id,
+            displayName: 'Rose',
+            quantity: 9,
+            unit: 'STEM',
+            sortOrder: 0,
+          },
+        ],
       })
       .expect(200);
 

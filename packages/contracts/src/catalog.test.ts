@@ -156,8 +156,9 @@ test('resolveStoredCompositionKind: STEM/gift never store mono', () => {
 test('productKindsForListingKind and canonical hubs', () => {
   assert.deepEqual(productKindsForListingKind('BOUQUETS'), ['BOUQUET']);
   assert.deepEqual(productKindsForListingKind('FLOWERS'), ['STEM']);
-  assert.equal(isCanonicalListingHub({ slug: 'bukety', listingKind: 'BOUQUETS' }), true);
-  assert.equal(isCanonicalListingHub({ slug: 'rozy', listingKind: 'FLOWERS' }), false);
+  assert.equal(isCanonicalListingHub({ slug: 'bouquets', listingKind: 'BOUQUETS' }), true);
+  assert.equal(isCanonicalListingHub({ slug: 'bukety', listingKind: 'BOUQUETS' }), false);
+  assert.equal(isCanonicalListingHub({ slug: 'roses', listingKind: 'FLOWERS' }), false);
   assert.equal(isCanonicalListingHub({ slug: 'otkrytki', listingKind: 'GIFTS' }), false);
 });
 
@@ -216,21 +217,21 @@ test('resolveCatalogCategoryIdForProductKind: gifts keep GIFTS subtype, reject f
 
 test('resolveCategoryListingScope: hubs are productKind-only (no stale category OR)', () => {
   assert.deepEqual(
-    resolveCategoryListingScope({ slug: 'bukety', parentId: null, listingKind: 'BOUQUETS' }),
+    resolveCategoryListingScope({ slug: 'bouquets', parentId: null, listingKind: 'BOUQUETS' }),
     {
       useCategoryTree: false,
       productKinds: ['BOUQUET'],
     },
   );
   assert.deepEqual(
-    resolveCategoryListingScope({ slug: 'tsvety', parentId: null, listingKind: 'FLOWERS' }),
+    resolveCategoryListingScope({ slug: 'stems', parentId: null, listingKind: 'FLOWERS' }),
     {
       useCategoryTree: false,
       productKinds: ['STEM'],
     },
   );
   assert.deepEqual(
-    resolveCategoryListingScope({ slug: 'podarki', parentId: null, listingKind: 'GIFTS' }),
+    resolveCategoryListingScope({ slug: 'gifts', parentId: null, listingKind: 'GIFTS' }),
     {
       useCategoryTree: false,
       productKinds: ['GIFT'],
@@ -238,13 +239,13 @@ test('resolveCategoryListingScope: hubs are productKind-only (no stale category 
   );
 });
 
-test('resolveCategoryListingScope: flower leaf and monobukety use composition, not category', () => {
+test('resolveCategoryListingScope: flower leaf does not bind page slug to FlowerType', () => {
   assert.deepEqual(
     resolveCategoryListingScope({ slug: 'rozy', parentId: 'tsvety-id', listingKind: 'FLOWERS' }),
     {
       useCategoryTree: false,
       productKinds: ['STEM'],
-      scopeFlowerTypeSlugs: ['rozy'],
+      resolveFlowerTypeFromPageSlug: true,
     },
   );
   assert.deepEqual(

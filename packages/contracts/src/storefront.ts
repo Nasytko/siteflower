@@ -251,7 +251,7 @@ export function defaultHomepageDiscoveryTiles(): HomepageDiscoveryTileDto[] {
     {
       id: 'cvety-pcs',
       label: 'Цветы поштучно',
-      href: '/cvety',
+      href: '/catalog/stems',
       imageUrl: '/categories/discovery-roza.png',
       imageAlt: 'Цветы поштучно',
       enabled: true,
@@ -260,7 +260,7 @@ export function defaultHomepageDiscoveryTiles(): HomepageDiscoveryTileDto[] {
     {
       id: 'bukety-iz-roz',
       label: 'Букеты из роз',
-      href: '/katalog/bukety-iz-roz',
+      href: '/catalog/rose-bouquets',
       imageUrl: '/categories/discovery-buket-roz.png',
       imageAlt: 'Букеты из роз',
       enabled: true,
@@ -269,7 +269,7 @@ export function defaultHomepageDiscoveryTiles(): HomepageDiscoveryTileDto[] {
     {
       id: 'bukety',
       label: 'Букеты цветов',
-      href: '/bukety',
+      href: '/catalog/bouquets',
       imageUrl: '/categories/discovery-sbornye.png',
       imageAlt: 'Букеты цветов',
       enabled: true,
@@ -278,7 +278,7 @@ export function defaultHomepageDiscoveryTiles(): HomepageDiscoveryTileDto[] {
     {
       id: 'kompozicii',
       label: 'Композиции из цветов',
-      href: '/katalog/kompozicii',
+      href: '/catalog/compositions',
       imageUrl: '/categories/discovery-kompozicii.png',
       imageAlt: 'Цветочные композиции',
       enabled: true,
@@ -296,7 +296,7 @@ export function defaultHomepageDiscoveryTiles(): HomepageDiscoveryTileDto[] {
     {
       id: 'shary',
       label: 'Воздушные шары',
-      href: '/katalog/podarki',
+      href: '/catalog/gifts',
       imageUrl: '/categories/discovery-podarki.png',
       imageAlt: 'Воздушные шары',
       enabled: true,
@@ -305,7 +305,7 @@ export function defaultHomepageDiscoveryTiles(): HomepageDiscoveryTileDto[] {
     {
       id: 'otkrytki',
       label: 'Открытки',
-      href: '/katalog/otkrytki',
+      href: '/catalog/otkrytki',
       imageUrl: '/categories/discovery-den-rozhdeniya.png',
       imageAlt: 'Открытки',
       enabled: true,
@@ -352,7 +352,7 @@ export function defaultHomepageHeroSlides(): HomepageHeroSlideDto[] {
       imageUrl: '/categories/autumn-bouquet-warm.jpg',
       mobileImageUrl: null,
       ctaLabel: 'Смотреть коллекцию',
-      ctaHref: '/bukety',
+      ctaHref: '/catalog/bouquets',
       enabled: true,
       sortOrder: 10,
       startsAt: null,
@@ -390,7 +390,7 @@ export function defaultHomepageConfig(): HomepageConfigDto {
         heading: 'Вдохновение осени',
         body: 'Тёплые букеты сезона — янтарь, бордо и сухая зелень.',
         sortOrder: 20,
-        viewAllHref: '/katalog/bukety-s-rozami',
+        viewAllHref: '/catalog/bouquets-with-roses',
         sourceSlug: 'bukety-s-rozami',
         limit: 5,
         theme: 'autumn',
@@ -401,7 +401,7 @@ export function defaultHomepageConfig(): HomepageConfigDto {
         enabled: true,
         heading: 'Популярные букеты',
         sortOrder: 30,
-        viewAllHref: '/bukety',
+        viewAllHref: '/catalog/bouquets',
         limit: 10,
       },
       {
@@ -410,7 +410,7 @@ export function defaultHomepageConfig(): HomepageConfigDto {
         enabled: true,
         heading: 'Розы',
         sortOrder: 40,
-        viewAllHref: '/katalog/rozy',
+        viewAllHref: '/catalog/roses',
         sourceSlug: 'rozy',
         limit: 5,
       },
@@ -618,8 +618,8 @@ export type NavigationTargetOptionDto = {
 };
 
 const PAGE_HREFS: Record<NavigationPageKey, string> = {
-  bukety: '/bukety',
-  cvety: '/cvety',
+  bukety: '/catalog/bouquets',
+  cvety: '/catalog/stems',
   povod: '/povod',
   dostavka: '/dostavka',
   'o-nas': '/o-nas',
@@ -669,9 +669,5 @@ export function validateNavigationCustomHref(raw: string): string {
   }
 }
 
-/** Category slug → storefront path (legacy hubs preserved). */
-export function categoryPublicHref(slug: string): string {
-  if (slug === 'bukety') return '/bukety';
-  if (slug === 'cvety') return '/cvety';
-  return `/katalog/${encodeURIComponent(slug)}`;
-}
+/** @deprecated Re-export — prefer catalogPublicHref from public-routes. */
+export { categoryPublicHref, catalogPublicHref, productPublicHref } from './public-routes';

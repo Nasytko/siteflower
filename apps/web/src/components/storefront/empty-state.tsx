@@ -12,7 +12,7 @@ type Props = {
 export function EmptyState({
   title,
   description,
-  actionHref = '/bukety',
+  actionHref = '/catalog/bouquets',
   actionLabel = 'Смотреть каталог',
   children,
 }: Props) {

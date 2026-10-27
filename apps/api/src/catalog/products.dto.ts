@@ -120,7 +120,7 @@ export class EditorPromotionInputDto {
   @IsIn(PROMOTION_TYPES)
   type!: PromotionType;
 
-  @ValidateIf((o: EditorPromotionInputDto) => o.type === 'PERCENT')
+  @ValidateIf((o: EditorPromotionInputDto) => o.enabled && o.type === 'PERCENT')
   @Type(() => Number)
   @IsInt()
   @Min(1)
@@ -565,7 +565,7 @@ export class UpsertProductPromotionDto extends ExpectedVersionDto {
   type!: PromotionType;
 
   /** Required for PERCENT (1–99) — matches DB product_promotions_type_fields. */
-  @ValidateIf((o: UpsertProductPromotionDto) => o.type === 'PERCENT')
+  @ValidateIf((o: UpsertProductPromotionDto) => o.enabled && o.type === 'PERCENT')
   @Type(() => Number)
   @IsInt()
   @Min(1)

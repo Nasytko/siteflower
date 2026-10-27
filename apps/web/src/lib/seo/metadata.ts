@@ -97,10 +97,10 @@ export function buildPageMetadata(input: PageSeoInput): Metadata {
  * Storefront entity path map:
  *
  * Home           → `/`
- * Catalog        → `/bukety` (filtered URLs: same canonical, noIndex true)
- * Product        → `/bukety/${slug}`
+ * Catalog        → `/catalog/bouquets` (filtered URLs: same canonical, noIndex true)
+ * Product        → `/products/${slug}`
  * Promotions     → `/akcii`
- * Flower hub     → `/cvety`, flower landing → `/cvety/${slug}`
+ * Stem hub       → `/catalog/stems` (flower discovery via filters, not thin landings)
  * Occasion hub   → `/povod`, occasion landing → `/povod/${slug}`
  * Recipient      → `/komu/${slug}`
  * Delivery/About → `/dostavka`, `/o-nas`

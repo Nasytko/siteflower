@@ -11,6 +11,9 @@ import { validateEnv } from './env.validation';
       isGlobal: true,
       cache: true,
       validate: validateEnv,
+      // Integration tests spawn the API with an explicit env; do not let local
+      // .env (often a stale Docker :5433 URL) override DATABASE_URL / ports.
+      ignoreEnvFile: process.env.NODE_ENV === 'test',
       envFilePath: ['.env', '../../.env'],
     }),
   ],

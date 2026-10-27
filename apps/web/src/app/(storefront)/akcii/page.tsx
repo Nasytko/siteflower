@@ -32,7 +32,7 @@ export default async function PromotionsPage() {
           pageSize: promoList.length,
         }
       : await listProducts({
-          categorySlug: 'bukety',
+          categorySlug: 'bouquets',
           promotion: true,
           pageSize: PAGE_SIZE,
           sort: 'recommended',
@@ -58,7 +58,7 @@ export default async function PromotionsPage() {
           <p className="sf-body max-w-md text-muted">
             Новые предложения появляются регулярно. А пока — весь каталог букетов.
           </p>
-          <Link href="/bukety" className="sf-cta mt-2">
+          <Link href="/catalog/bouquets" className="sf-cta mt-2">
             Смотреть букеты
           </Link>
         </div>

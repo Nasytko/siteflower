@@ -14,6 +14,10 @@ import {
   type CatalogListingKind,
   type CatalogPageDto,
   type CatalogPageKind,
+  type CatalogPageProductMatchDto,
+  type CatalogPageMatchReasonDto,
+  type PaginatedResponse,
+  type ProductListItemDto,
   type ProductTraitDefinitionDto,
   type SeoLandingStatus,
 } from '@bouquet-one/contracts';
@@ -23,10 +27,18 @@ import { hashIp } from '../auth/crypto.util';
 import type { ActorContext } from '../common/actor.util';
 import { AppConfigService } from '../config/app-config.service';
 import { PrismaService } from '../database/prisma.service';
+import { MediaService } from '../media/media.service';
 import { StorefrontRevalidateService } from '../storefront/storefront-revalidate.service';
+import { CatalogCategoriesService } from './catalog-categories.service';
+import { CatalogMatchService } from './catalog-match.service';
+import {
+  mergeListingIntoFilters,
+  resolveCategoryListingFilters,
+} from './catalog-listing.util';
+import { isEffectivelyPublished } from './catalog.logic';
+import { toProductListItemDto } from './catalog.mapper';
 import { describeSeoLandingRules } from './placement-match.util';
 import { ProductsRepository } from './products.repository';
-import { rulesToFilters } from './seo-landings.service';
 import { SlugRedirectsService } from './slug-redirects.service';
 
 const PAGE_INCLUDE = {
@@ -45,7 +57,12 @@ export class CatalogPagesService {
     private readonly appConfig: AppConfigService,
     private readonly revalidate: StorefrontRevalidateService,
     private readonly slugRedirects: SlugRedirectsService,
+    private readonly catalogMatch: CatalogMatchService,
+    private readonly media: MediaService,
+    private readonly categories: CatalogCategoriesService,
   ) {}
+
+  private readonly urlFor = (storageKey: string) => this.media.getPublicUrl(storageKey);
 
   async listAdmin(opts?: {
     pageKind?: CatalogPageKind;
@@ -334,7 +351,7 @@ export class CatalogPagesService {
     });
     await this.revalidate.ping({
       tags: ['catalog', 'sitemap'],
-      paths: ['/', '/bukety', categoryPublicHref(row.slug)],
+      paths: ['/', '/catalog/bouquets', categoryPublicHref(row.slug)],
     });
     return this.getAdmin(id);
   }
@@ -380,7 +397,7 @@ export class CatalogPagesService {
 
     await this.prisma.client.$transaction(async (tx) => {
       if (existing.publishedAt) {
-        await this.slugRedirects.record(tx, 'CATALOG_CATEGORY', existing.slug, 'bukety');
+        await this.slugRedirects.record(tx, 'CATALOG_CATEGORY', existing.slug, 'bouquets');
       }
       const deleted = await tx.catalogCategory.deleteMany({
         where: { id, version: expectedVersion },
@@ -402,7 +419,7 @@ export class CatalogPagesService {
     });
     await this.revalidate.ping({
       tags: ['catalog', 'sitemap'],
-      paths: ['/', '/bukety', categoryPublicHref(existing.slug)],
+      paths: ['/', '/catalog/bouquets', categoryPublicHref(existing.slug)],
     });
     return { deleted: true, id, slug: existing.slug };
   }
@@ -423,26 +440,264 @@ export class CatalogPagesService {
 
   /** Whether product matches page (same engine as public listing). */
   async productMatchesPage(pageId: string, productId: string): Promise<boolean> {
+    const result = await this.diagnoseProductOnPage(pageId, productId);
+    return result.matches;
+  }
+
+  /**
+   * Admin: explain why a product does / does not appear on a catalog page.
+   * Uses the same filters as public listing + step-wise human reasons.
+   */
+  async diagnoseProductOnPage(
+    pageId: string,
+    productId: string,
+  ): Promise<CatalogPageProductMatchDto> {
     const page = await this.getAdmin(pageId);
-    if (page.excludedProductIds.includes(productId)) return false;
-    if (page.pinnedProductIds.includes(productId)) return true;
-    const { total } = await this.products.list({
+    const product = await this.products.findById(productId);
+    if (!product) throw new NotFoundException('Товар не найден');
+
+    const reasons: CatalogPageMatchReasonDto[] = [];
+    const listing = await this.listingForPage(page);
+    const ruleDiagnostics = listing.match?.diagnostics ?? [];
+
+    if (page.excludedProductIds.includes(productId)) {
+      return {
+        pageId: page.id,
+        pageSlug: page.slug,
+        productId,
+        matches: false,
+        publishedMatches: false,
+        reasons: [
+          {
+            code: 'EXCLUDED',
+            message: 'Товар вручную исключён из этой страницы',
+          },
+        ],
+        ruleDiagnostics,
+      };
+    }
+
+    if (page.pinnedProductIds.includes(productId)) {
+      const published = isEffectivelyPublished(product);
+      return {
+        pageId: page.id,
+        pageSlug: page.slug,
+        productId,
+        matches: true,
+        publishedMatches: published,
+        reasons: [
+          {
+            code: 'PINNED',
+            message: published
+              ? 'Товар закреплён на странице и попадает в выдачу'
+              : 'Товар закреплён, но не опубликован — на витрине не виден',
+          },
+        ],
+        ruleDiagnostics,
+      };
+    }
+
+    if (listing.match?.blocking) {
+      reasons.push({
+        code: 'RULES_BLOCKING',
+        message:
+          'Правила страницы ссылаются на неизвестный или неоднозначный справочник — выдача закрыта',
+        detail: ruleDiagnostics.map((d) => d.message).join('; ') || undefined,
+      });
+      return {
+        pageId: page.id,
+        pageSlug: page.slug,
+        productId,
+        matches: false,
+        publishedMatches: false,
+        reasons,
+        ruleDiagnostics,
+      };
+    }
+
+    const pageFilters = mergeListingIntoFilters(listing);
+    if (
+      Object.keys(pageFilters).length === 0 &&
+      page.pageKind !== 'SYSTEM_HUB' &&
+      page.pageKind !== 'GIFT_SUBTYPE'
+    ) {
+      reasons.push({
+        code: 'NO_RULES',
+        message: 'У страницы нет правил отбора товаров',
+      });
+    }
+
+    const now = new Date();
+    const { total: rawTotal } = await this.products.list({
+      filters: { ...pageFilters, includeProductIds: [productId] },
+      skip: 0,
+      take: 1,
+      sort: 'recommended',
+      now,
+    });
+    const matches = rawTotal > 0;
+
+    const { total: pubTotal } = await this.products.list({
       filters: {
-        ...this.filtersForPage(page),
+        ...pageFilters,
         includeProductIds: [productId],
+        publishedAt: now,
       },
       skip: 0,
       take: 1,
       sort: 'recommended',
-      now: new Date(),
+      now,
     });
-    return total > 0;
+    const publishedMatches = pubTotal > 0;
+
+    if (matches) {
+      reasons.push({
+        code: 'MATCHES',
+        message: publishedMatches
+          ? 'Товар соответствует правилам страницы и опубликован'
+          : 'Товар соответствует правилам, но не опубликован — на витрине не виден',
+      });
+      if (!publishedMatches) {
+        reasons.push({
+          code: 'NOT_PUBLISHED',
+          message: 'Опубликуйте товар, чтобы он появился в публичной выдаче',
+        });
+      }
+      return {
+        pageId: page.id,
+        pageSlug: page.slug,
+        productId,
+        matches: true,
+        publishedMatches,
+        reasons,
+        ruleDiagnostics,
+      };
+    }
+
+    // Step-wise mismatch explanations (admin-facing).
+    if (pageFilters.productKinds?.length) {
+      if (!pageFilters.productKinds.includes(product.productKind)) {
+        reasons.push({
+          code: 'PRODUCT_KIND',
+          message: `Тип товара «${product.productKind}» не подходит для этой страницы (нужно: ${pageFilters.productKinds.join(', ')})`,
+          detail: `productKind=${product.productKind}`,
+        });
+      }
+    }
+    if (pageFilters.compositionKinds?.length) {
+      if (!pageFilters.compositionKinds.includes(product.compositionKind)) {
+        reasons.push({
+          code: 'COMPOSITION_KIND',
+          message: `Состав «${product.compositionKind}» не подходит (страница ждёт: ${pageFilters.compositionKinds.join(', ')})`,
+          detail: `compositionKind=${product.compositionKind}`,
+        });
+      }
+    }
+    if (pageFilters.onlyFlowerTypeIds?.length || pageFilters.onlyFlowerTypeSlugs?.length) {
+      reasons.push({
+        code: 'ONLY_FLOWER_TYPE',
+        message:
+          'Страница требует монобукет только из указанного вида (PRIMARY). Зелень допускается, другие основные виды — нет',
+      });
+    } else if (pageFilters.flowerTypeIds?.length || pageFilters.flowerTypeSlugs?.length) {
+      reasons.push({
+        code: 'FLOWER_TYPE',
+        message: 'В составе нет нужного вида цветка (по справочнику FlowerType)',
+      });
+    }
+    if (pageFilters.flowerFormIds?.length || pageFilters.flowerFormSlugs?.length) {
+      reasons.push({
+        code: 'FLOWER_FORM',
+        message: 'Нет нужной формы цветка (например кустовая) в справочнике FlowerForm',
+      });
+    }
+    if (pageFilters.traitKeys?.length) {
+      reasons.push({
+        code: 'TRAIT',
+        message: `Нужен признак: ${pageFilters.traitKeys.join(', ')}`,
+      });
+    }
+    if (reasons.length === 0) {
+      reasons.push({
+        code: 'UNKNOWN',
+        message: 'Товар не проходит фильтры страницы (проверьте состав, цену и признаки)',
+      });
+    }
+
+    return {
+      pageId: page.id,
+      pageSlug: page.slug,
+      productId,
+      matches: false,
+      publishedMatches: false,
+      reasons,
+      ruleDiagnostics,
+    };
+  }
+
+  /** Live preview for unsaved constructor rules (same engine as public PLP). */
+  async previewRules(
+    input: {
+      rules?: Record<string, unknown>;
+      pinnedProductIds?: string[];
+      excludedProductIds?: string[];
+    },
+    query: { page?: number; pageSize?: number },
+  ): Promise<PaginatedResponse<ProductListItemDto> & { diagnostics: unknown[]; blocking: boolean }> {
+    const page = query.page ?? 1;
+    const pageSize = query.pageSize ?? 24;
+    const now = new Date();
+    const match = await this.catalogMatch.previewRulesFilters(input.rules ?? {}, {
+      pinnedProductIds: input.pinnedProductIds,
+      excludedProductIds: input.excludedProductIds,
+    });
+    const pinned = [...new Set(input.pinnedProductIds ?? [])];
+    const { items, total } = await this.products.list({
+      filters: {
+        ...match.filters,
+        publishedAt: now,
+        excludeProductIds: match.excludeProductIds.length
+          ? match.excludeProductIds
+          : undefined,
+      },
+      skip: Math.max(0, (page - 1) * pageSize),
+      take: pageSize,
+      sort: 'recommended',
+      now,
+    });
+
+    let pinnedItems: ProductListItemDto[] = [];
+    if (pinned.length > 0) {
+      const rows = await this.products.findManyByIds(pinned);
+      const byId = new Map(rows.map((row) => [row.id, row]));
+      pinnedItems = pinned
+        .map((id) => byId.get(id))
+        .filter((row): row is NonNullable<typeof row> => Boolean(row) && isEffectivelyPublished(row!, now))
+        .map((row) => toProductListItemDto(row!, this.urlFor, now));
+    }
+
+    const pinnedIds = new Set(pinnedItems.map((i) => i.id));
+    const rest = items
+      .filter((row) => !pinnedIds.has(row.id))
+      .map((row) => toProductListItemDto(row, this.urlFor, now));
+    const merged = [...pinnedItems, ...rest].slice(0, pageSize);
+
+    return {
+      items: merged,
+      total: total + pinnedItems.length,
+      page,
+      pageSize,
+      diagnostics: match.diagnostics,
+      blocking: match.blocking,
+    };
   }
 
   private async countMatching(page: CatalogPageDto, now: Date): Promise<number> {
+    const listing = await this.listingForPage(page);
+    const pageFilters = mergeListingIntoFilters(listing);
     const { total } = await this.products.list({
       filters: {
-        ...this.filtersForPage(page),
+        ...pageFilters,
         publishedAt: now,
         excludeProductIds: page.excludedProductIds.length
           ? page.excludedProductIds
@@ -456,21 +711,25 @@ export class CatalogPagesService {
     return total;
   }
 
-  private filtersForPage(page: CatalogPageDto) {
-    if (page.pageKind === 'SYSTEM_HUB') {
-      const kinds =
-        page.listingKind === 'BOUQUETS'
-          ? (['BOUQUET'] as const)
-          : page.listingKind === 'COMPOSITIONS'
-            ? (['COMPOSITION'] as const)
-            : page.listingKind === 'FLOWERS'
-              ? (['STEM'] as const)
-              : page.listingKind === 'GIFTS'
-                ? (['GIFT'] as const)
-                : undefined;
-      return { productKinds: kinds ? [...kinds] : undefined };
-    }
-    return rulesToFilters(page.rules as Prisma.JsonValue);
+  /** Same resolve path as PublicCatalogService / admin product list. */
+  private async listingForPage(page: CatalogPageDto) {
+    return resolveCategoryListingFilters({
+      category: {
+        id: page.id,
+        slug: page.slug,
+        parentId: page.parentId,
+        listingKind: page.listingKind,
+        pageKind: page.pageKind,
+        rules: page.rules,
+      },
+      catalogMatch: this.catalogMatch,
+      expandCategoryIds: (id, opts) => this.categories.expandCategoryIds(id, opts),
+      loadExcludeProductIds: async () => page.excludedProductIds,
+    });
+  }
+
+  private async filtersForPage(page: CatalogPageDto) {
+    return mergeListingIntoFilters(await this.listingForPage(page));
   }
 
   private toDto(row: PageRow): CatalogPageDto {

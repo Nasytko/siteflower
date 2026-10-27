@@ -37,7 +37,7 @@ export class StorefrontRevalidateService implements OnModuleInit {
         },
         body: JSON.stringify({
           tags: options?.tags ?? ['catalog', 'storefront'],
-          paths: options?.paths ?? ['/', '/bukety'],
+          paths: options?.paths ?? ['/', '/catalog/bouquets'],
         }),
         signal: AbortSignal.timeout(5_000),
       });

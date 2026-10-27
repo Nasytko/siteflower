@@ -40,7 +40,7 @@ export function ProductFamilySwitcher({ family, currentSlug }: Props) {
           return (
             <Link
               key={member.productId}
-              href={`/bukety/${member.slug}`}
+              href={`/products/${member.slug}`}
               className="sf-filter-pill text-sm"
               data-active="false"
             >

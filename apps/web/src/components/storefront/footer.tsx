@@ -8,10 +8,10 @@ type Props = {
 };
 
 const CATALOG_LINKS = [
-  { href: '/bukety', label: 'Букеты' },
-  { href: '/cvety', label: 'Цветы' },
-  { href: '/katalog/kompozicii', label: 'Композиции' },
-  { href: '/katalog/podarki', label: 'Подарки' },
+  { href: '/catalog/bouquets', label: 'Букеты' },
+  { href: '/catalog/stems', label: 'Цветы' },
+  { href: '/catalog/compositions', label: 'Композиции' },
+  { href: '/catalog/gifts', label: 'Подарки' },
   { href: '/povod', label: 'Поводы' },
   { href: '/akcii', label: 'Акции' },
 ] as const;

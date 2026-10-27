@@ -168,6 +168,34 @@ describe('Catalog (integration)', () => {
       })
       .expect(200);
 
+    const stamp = `ameli-${Date.now()}`;
+    const flowerType = await http
+      .post('/api/v1/admin/catalog/flower-refs/types')
+      .set('Origin', origin)
+      .send({ name: `Rose ${stamp}`, slug: `rose-${stamp}` })
+      .expect(201);
+    const flowerItem = await http
+      .post('/api/v1/admin/catalog/flower-refs/items')
+      .set('Origin', origin)
+      .send({ flowerTypeId: flowerType.body.id, heightCm: 50 })
+      .expect(201);
+    product = await http
+      .put(`/api/v1/admin/catalog/products/${created.body.id}/components`)
+      .set('Origin', origin)
+      .send({
+        expectedVersion: product.body.version,
+        components: [
+          {
+            flowerItemId: flowerItem.body.id,
+            displayName: 'Rose',
+            quantity: 7,
+            unit: 'STEM',
+            sortOrder: 0,
+          },
+        ],
+      })
+      .expect(200);
+
     product = await http
       .post(`/api/v1/admin/catalog/products/${created.body.id}/media`)
       .set('Origin', origin)
@@ -249,6 +277,34 @@ describe('Catalog (integration)', () => {
       .send({
         expectedVersion: product.body.version,
         variants: [{ name: 'Std', priceMinor: '5000', sortOrder: 0, status: 'ACTIVE' }],
+      })
+      .expect(200);
+
+    const redirectStamp = `redir-${Date.now()}`;
+    const redirectType = await http
+      .post('/api/v1/admin/catalog/flower-refs/types')
+      .set('Origin', origin)
+      .send({ name: `Type ${redirectStamp}`, slug: `ft-${redirectStamp}` })
+      .expect(201);
+    const redirectItem = await http
+      .post('/api/v1/admin/catalog/flower-refs/items')
+      .set('Origin', origin)
+      .send({ flowerTypeId: redirectType.body.id, heightCm: 40 })
+      .expect(201);
+    product = await http
+      .put(`/api/v1/admin/catalog/products/${created.body.id}/components`)
+      .set('Origin', origin)
+      .send({
+        expectedVersion: product.body.version,
+        components: [
+          {
+            flowerItemId: redirectItem.body.id,
+            displayName: 'Stem',
+            quantity: 3,
+            unit: 'STEM',
+            sortOrder: 0,
+          },
+        ],
       })
       .expect(200);
 

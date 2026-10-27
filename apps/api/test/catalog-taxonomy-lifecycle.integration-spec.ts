@@ -283,13 +283,15 @@ describe('Catalog taxonomy lifecycle (integration)', () => {
       .expect(400);
     expect(blockedChildren.body.message).toMatch(/child/i);
 
-    // Product on child.
+    // Product on child (category FK via SQL — PATCH no longer accepts catalogCategoryId;
+    // floral products resolve to hubs in the editor; this suite tests category delete guards).
     const product = await createDraftProduct(http, `Tax Product ${suffix}`);
-    const linked = await http
-      .patch(`/api/v1/admin/catalog/products/${product.id}`)
-      .set('Origin', origin)
-      .send({ expectedVersion: product.version, catalogCategoryId: child.body.id })
-      .expect(200);
+    await pool.query(
+      `UPDATE products SET catalog_category_id = $1, version = version + 1 WHERE id = $2`,
+      [child.body.id, product.id],
+    );
+    const linked = await http.get(`/api/v1/admin/catalog/products/${product.id}`).expect(200);
+    expect(linked.body.catalogCategoryId).toBe(child.body.id);
 
     // Delete child with products → blocked.
     const blockedProducts = await http
@@ -330,11 +332,10 @@ describe('Catalog taxonomy lifecycle (integration)', () => {
       .send({ name: `Orphan ${suffix}`, sortOrder: 50 })
       .expect(201);
     const prod2 = await createDraftProduct(http, `Tax Product 2 ${suffix}`);
-    await http
-      .patch(`/api/v1/admin/catalog/products/${prod2.id}`)
-      .set('Origin', origin)
-      .send({ expectedVersion: prod2.version, catalogCategoryId: orphan.body.id })
-      .expect(200);
+    await pool.query(
+      `UPDATE products SET catalog_category_id = $1, version = version + 1 WHERE id = $2`,
+      [orphan.body.id, prod2.id],
+    );
 
     await http
       .post(`/api/v1/admin/catalog/categories/${orphan.body.id}/reassign-and-delete`)
@@ -545,6 +546,7 @@ describe('Catalog taxonomy lifecycle (integration)', () => {
         shortDescription: editor.body.shortDescription,
         description: editor.body.description,
         availability: editor.body.availability,
+        productKind: editor.body.productKind,
         heightCm: null,
         catalogCategoryId: null,
         familyId: null,

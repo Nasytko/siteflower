@@ -41,7 +41,7 @@ export default async function AdminProductEditPage({ params, searchParams }: Pro
         <summary>Техническая информация</summary>
         <div className="admin-disclosure__body admin-meta">
           <span className="admin-meta__item">
-            Адрес: <strong>/bukety/{product.slug}</strong>
+            Адрес: <strong>/products/{product.slug}</strong>
           </span>
           <span className="admin-meta__item">
             Создан: <strong>{formatAdminDateTime(product.createdAt)}</strong>

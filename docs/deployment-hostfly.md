@@ -202,14 +202,24 @@ curl -fsSI https://buketnomer1.by/ | head
 
 Changing the public domain later is a config/cert change — not a volume recreate. Re-run `sudo ./provision-nginx.sh` after editing env.
 
-## F. First deploy
+## F. First deploy / ongoing releases
+
+Preferred two-stage flow (see `docs/release-runbook.md`):
 
 ```bash
 cd /opt/shopbuket1/repo   # or /opt/shopbuket1/current
-./deploy.sh
+git pull --ff-only origin main
+./scripts/release.sh preflight
+./scripts/release.sh deploy
+./scripts/release.sh seo-smoke
 ```
 
-Optional: `./deploy.sh <git-ref>`
+Legacy single-step (still supported; set `SHOPBUKET1_REQUIRE_PREFLIGHT=1` to enforce preflight):
+
+```bash
+./deploy.sh
+# or: ./deploy.sh <git-ref>
+```
 
 ## G. SUPER_ADMIN
 

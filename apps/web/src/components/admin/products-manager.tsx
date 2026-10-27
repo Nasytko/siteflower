@@ -124,7 +124,7 @@ function countExtraFilters(filters: ProductFilters): number {
 }
 
 function storefrontHref(item: ProductListItemDto): string {
-  return `/bukety/${item.slug}`;
+  return `/products/${item.slug}`;
 }
 
 function ProductThumb({ item }: { item: ProductListItemDto }) {

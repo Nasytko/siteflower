@@ -119,6 +119,9 @@ export const adminEndpoints = {
   catalogPageUnpublish: (id: string) => `${ADMIN}/catalog/pages/${id}/unpublish`,
   catalogPageDeleteImpact: (id: string) => `${ADMIN}/catalog/pages/${id}/delete-impact`,
   catalogPageTraits: `${ADMIN}/catalog/pages/traits`,
+  catalogPagePreviewRules: `${ADMIN}/catalog/pages/preview-rules`,
+  catalogPageProductMatch: (pageId: string, productId: string) =>
+    `${ADMIN}/catalog/pages/${pageId}/products/${productId}/match`,
 
   flowerTypes: `${ADMIN}/catalog/flower-refs/types`,
   flowerType: (id: string) => `${ADMIN}/catalog/flower-refs/types/${id}`,

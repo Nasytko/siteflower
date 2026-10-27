@@ -208,7 +208,7 @@ function FiltersPanelBody({
   controls,
   state,
   onApply,
-  clearHref = '/bukety',
+  clearHref = '/catalog/bouquets',
   priceBounds,
 }: {
   controls: Control[];
@@ -471,7 +471,7 @@ export function CatalogActiveFilters({
         </Link>
       ))}
       <Link
-        href="/bukety"
+        href="/catalog/bouquets"
         className="sf-small ml-1 text-muted underline-offset-2 hover:text-brand hover:underline"
       >
         Сбросить всё
@@ -494,11 +494,11 @@ export function CatalogEmptyState({ state }: { state: CatalogSearchState }) {
       </p>
       <div className="mt-2 flex flex-wrap items-center justify-center gap-3">
         {hasFilters ? (
-          <Link href="/bukety" className="sf-cta">
+          <Link href="/catalog/bouquets" className="sf-cta">
             Сбросить фильтры
           </Link>
         ) : null}
-        <Link href="/bukety" className="sf-cta-ghost">
+        <Link href="/catalog/bouquets" className="sf-cta-ghost">
           Все букеты
         </Link>
       </div>

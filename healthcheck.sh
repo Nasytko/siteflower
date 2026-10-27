@@ -6,6 +6,7 @@
 #   ./healthcheck.sh --startup       # containers + local HTTP only
 #   ./healthcheck.sh --preflight     # env + Nginx site/HSTS/cert (no containers)
 #   ./healthcheck.sh --production    # full gate
+#   ./healthcheck.sh --seo           # catalog URL / redirect / sitemap smoke
 #
 # Exit: 0 ok | 1 transient | 2 permanent
 
@@ -26,10 +27,11 @@ while [[ $# -gt 0 ]]; do
     --startup) MODE="startup" ;;
     --preflight) MODE="preflight" ;;
     --production) MODE="production" ;;
+    --seo) MODE="seo" ;;
     --quiet) SHOPBUKET1_HEALTH_QUIET=1 ;;
     -h|--help)
       cat <<'EOF'
-Usage: ./healthcheck.sh [--startup|--preflight|--production] [--quiet]
+Usage: ./healthcheck.sh [--startup|--preflight|--production|--seo] [--quiet]
 EOF
       exit 0
       ;;

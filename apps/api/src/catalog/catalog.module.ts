@@ -18,6 +18,7 @@ import { BestsellersService } from './bestsellers.service';
 import { BudgetRangesService } from './budget-ranges.service';
 import { CatalogCategoriesService } from './catalog-categories.service';
 import { CatalogFiltersService } from './catalog-filters.service';
+import { CatalogMatchService } from './catalog-match.service';
 import { FlowerRefsService } from './flower-refs.service';
 import { ProductFamiliesService } from './product-families.service';
 import { ProductsRepository } from './products.repository';
@@ -62,6 +63,7 @@ import { TaxonomyService } from './taxonomy.service';
     CatalogCategoriesService,
     CatalogPagesService,
     CatalogFiltersService,
+    CatalogMatchService,
     FlowerRefsService,
     ProductFamiliesService,
     PromotionsService,
@@ -76,6 +78,7 @@ import { TaxonomyService } from './taxonomy.service';
     PromotionsService,
     BestsellersService,
     SeoLandingsService,
+    CatalogMatchService,
   ],
 })
 export class CatalogModule {}

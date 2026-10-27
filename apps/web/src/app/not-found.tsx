@@ -21,7 +21,7 @@ export default function RootNotFound() {
           <Link href="/" className="sf-not-found__cta">
             На главную
           </Link>
-          <Link href="/bukety" className="sf-not-found__secondary">
+          <Link href="/catalog/bouquets" className="sf-not-found__secondary">
             В каталог
           </Link>
         </div>

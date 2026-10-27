@@ -116,6 +116,9 @@ export type ApiErrorBody = {
 };
 
 export * from './catalog';
+export * from './catalog-page-rules';
+export * from './public-routes';
+export * from './legacy-url-migrate';
 export * from './integration';
 export * from './legal';
 export * from './orders';

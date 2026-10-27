@@ -22,6 +22,7 @@ import { PrismaService } from '../database/prisma.service';
 import type { ActorContext } from '../common/actor.util';
 import { trimmedOrNull } from '../common/string.util';
 import { StorefrontRevalidateService } from '../storefront/storefront-revalidate.service';
+import { CatalogMatchService } from './catalog-match.service';
 import { OCC_CONFLICT_MESSAGE } from './catalog.logic';
 import {
   toColorAdminDto,
@@ -125,6 +126,7 @@ export class TaxonomyService {
     private readonly audit: AuditService,
     private readonly appConfig: AppConfigService,
     private readonly revalidate: StorefrontRevalidateService,
+    private readonly catalogMatch: CatalogMatchService,
   ) {}
 
   async list(
@@ -222,7 +224,8 @@ export class TaxonomyService {
       });
     });
 
-    await this.revalidate.ping({ tags: ['catalog'], paths: ['/', '/bukety'] });
+    this.catalogMatch.invalidateLookupCache();
+    await this.revalidate.ping({ tags: ['catalog'], paths: ['/', '/catalog/bouquets'] });
     return { deleted: true, id };
   }
 
@@ -260,7 +263,8 @@ export class TaxonomyService {
       return row;
     });
 
-    await this.revalidate.ping({ tags: ['catalog'], paths: ['/', '/bukety'] });
+    this.catalogMatch.invalidateLookupCache();
+    await this.revalidate.ping({ tags: ['catalog'], paths: ['/', '/catalog/bouquets'] });
     return this.toDto(kind, created);
   }
 
@@ -324,7 +328,8 @@ export class TaxonomyService {
     });
 
     const dto = await this.getById(kind, id);
-    await this.revalidate.ping({ tags: ['catalog'], paths: ['/', '/bukety'] });
+    this.catalogMatch.invalidateLookupCache();
+    await this.revalidate.ping({ tags: ['catalog'], paths: ['/', '/catalog/bouquets'] });
     return dto;
   }
 

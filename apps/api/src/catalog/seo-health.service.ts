@@ -170,20 +170,22 @@ export class SeoHealthService {
     ]);
 
     const sitemapPaths = new Set<string>([
-      '/bukety',
+      '/catalog',
+      '/catalog/bouquets',
+      '/catalog/stems',
       '/akcii',
-      ...sitemapProducts.map((p) => `/bukety/${p.slug}`),
-      ...sitemapFlowerTypes.map((f) => `/cvety/${f.slug}`),
+      ...sitemapProducts.map((p) => `/products/${p.slug}`),
       ...sitemapOccasions.map((o) => `/povod/${o.slug}`),
       ...sitemapRecipients.map((r) => `/komu/${r.slug}`),
-      ...sitemapLandings.map((l) => `/p/${l.slug}`),
+      ...sitemapLandings.map((l) => `/catalog/${l.slug}`),
     ]);
+    void sitemapFlowerTypes;
 
     const items: SeoEntityHealth[] = [];
 
     for (const product of products) {
       const effectivelyPublished = isEffectivelyPublished(product, now);
-      const path = `/bukety/${product.slug}`;
+      const path = `/products/${product.slug}`;
       const hasPrice = product.variants.length > 0;
       items.push(
         analyzeProductSeo({
@@ -255,26 +257,26 @@ export class SeoHealthService {
       }
     };
 
-    // FlowerType has no SEO columns — still surface /cvety landings for indexability.
+    // FlowerType discovery is filter-based — not a separate indexable SEO tree.
     pushTaxonomy(
       flowerTypes.map((row) => ({
         ...row,
         description: null,
-        noIndex: false,
+        noIndex: true,
         seoTitle: null,
         seoDescription: null,
       })),
       'flower',
-      (slug) => `/cvety/${slug}`,
+      () => null,
       'flower-refs',
-      true,
+      false,
     );
     pushTaxonomy(occasions, 'occasion', (slug) => `/povod/${slug}`, 'occasions', true);
     pushTaxonomy(recipients, 'recipient', (slug) => `/komu/${slug}`, 'recipients', true);
     pushTaxonomy(colors, 'color', () => null, 'colors', false);
 
     for (const landing of seoLandings) {
-      const path = `/p/${landing.slug}`;
+      const path = `/catalog/${landing.slug}`;
       const rules =
         landing.rules && typeof landing.rules === 'object' && !Array.isArray(landing.rules)
           ? (landing.rules as Record<string, unknown>)
@@ -472,15 +474,15 @@ export class SeoHealthService {
 
 const STATIC_PAGES = [
   {
-    id: 'static-bukety',
+    id: 'static-catalog-bouquets',
     name: 'Каталог букетов',
-    path: '/bukety',
+    path: '/catalog/bouquets',
     message: 'Каталог использует общую SEO-разметку витрины.',
   },
   {
-    id: 'static-cvety',
+    id: 'static-catalog-stems',
     name: 'Раздел «Цветы»',
-    path: '/cvety',
+    path: '/catalog/stems',
     message: 'Хаб цветов использует общую SEO-разметку витрины.',
   },
   {

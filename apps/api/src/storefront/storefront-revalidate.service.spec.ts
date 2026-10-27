@@ -68,7 +68,7 @@ describe('StorefrontRevalidateService', () => {
     });
     expect(JSON.parse(String(init.body))).toEqual({
       tags: ['catalog', 'storefront'],
-      paths: ['/', '/bukety'],
+      paths: ['/', '/catalog/bouquets'],
     });
     expect(init.signal).toBeInstanceOf(AbortSignal);
   });
@@ -80,11 +80,11 @@ describe('StorefrontRevalidateService', () => {
       'http://web:3000/api/revalidate',
       'revalidate-secret-16',
     );
-    await service.ping({ tags: ['catalog'], paths: ['/bukety/rose'] });
+    await service.ping({ tags: ['catalog'], paths: ['/products/rose'] });
     const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
     expect(JSON.parse(String(init.body))).toEqual({
       tags: ['catalog'],
-      paths: ['/bukety/rose'],
+      paths: ['/products/rose'],
     });
   });
 

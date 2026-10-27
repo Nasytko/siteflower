@@ -33,7 +33,7 @@ export function BestsellersSection({ heading, groups }: Props) {
   return (
     <section className="sf-band-surface py-12 md:py-16">
       <div className="sf-container-wide">
-        <SectionRail title={heading} href="/bukety" linkLabel="Смотреть все" />
+        <SectionRail title={heading} href="/catalog/bouquets" linkLabel="Смотреть все" />
 
         {usable.length > 1 ? (
           <div

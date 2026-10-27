@@ -3,6 +3,7 @@
  */
 
 import {
+  canonicalCatalogSlug,
   isCompositionKind,
   isHeightBandId,
   isProductSort,
@@ -276,7 +277,8 @@ export function katalogHref(
   state: KatalogSearchState,
   patch: Partial<KatalogSearchState> = {},
 ): string {
-  return `/katalog/${encodeURIComponent(categorySlug)}${katalogStateToQuery({
+  const slug = canonicalCatalogSlug(categorySlug);
+  return `/catalog/${encodeURIComponent(slug)}${katalogStateToQuery({
     ...state,
     ...patch,
     page: patch.page ?? 1,

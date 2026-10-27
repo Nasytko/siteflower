@@ -44,7 +44,7 @@ export function CartView() {
         <p className="sf-body mx-auto mt-3 max-w-sm text-muted">
           Выберите свежий букет — мы бережно соберём и доставим.
         </p>
-        <Link href="/bukety" className="sf-cta mt-8 inline-flex">
+        <Link href="/catalog/bouquets" className="sf-cta mt-8 inline-flex">
           Смотреть каталог
         </Link>
       </div>
@@ -69,7 +69,7 @@ export function CartView() {
               className="flex gap-4 rounded-[var(--radius-lg)] border border-border bg-surface p-3 transition-colors hover:border-border-strong sm:gap-5 sm:p-4"
             >
               <Link
-                href={`/bukety/${line.productSlug ?? ''}`}
+                href={`/products/${line.productSlug ?? ''}`}
                 className="relative h-28 w-24 shrink-0 overflow-hidden rounded-[var(--radius-md)] bg-surface-muted sm:h-32 sm:w-28"
               >
                 {line.primaryImageUrl ? (
@@ -87,7 +87,7 @@ export function CartView() {
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
                     <Link
-                      href={`/bukety/${line.productSlug ?? ''}`}
+                      href={`/products/${line.productSlug ?? ''}`}
                       className="sf-h3 text-foreground transition hover:text-brand"
                     >
                       {line.productName ?? 'Букет'}
@@ -179,7 +179,7 @@ export function CartView() {
         </Link>
         <div className="mt-4 flex flex-wrap items-center justify-between gap-2">
           <Link
-            href="/bukety"
+            href="/catalog/bouquets"
             className="sf-small text-brand-foreground/70 underline-offset-2 hover:text-white hover:underline"
           >
             ← В каталог

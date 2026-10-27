@@ -6,6 +6,7 @@
 #   startup    — containers + local API/web only (retryable while warming)
 #   preflight  — env domain + Nginx site/HSTS/cert/syntax (before migrate)
 #   production — startup checks + public HTTPS/HSTS (final gate)
+#   seo        — local catalog URL / redirect / sitemap checks (post-deploy)
 #
 # Exit codes:
 #   0 — ok
@@ -239,6 +240,49 @@ check_nginx_production() {
   fi
 }
 
+# Catalog cutover smoke (loopback web). Permanent failure if critical routes break.
+check_seo_local() {
+  local base="${SHOPBUKET1_SMOKE_BASE:-http://127.0.0.1:3000}"
+  local path code headers sm
+
+  for path in / /catalog /catalog/bouquets /catalog/stems /sitemap.xml /robots.txt; do
+    code="$(curl -fsS -o /dev/null -w '%{http_code}' --max-time 15 "${base}${path}" 2>/dev/null || true)"
+    if [[ "$code" =~ ^(200|301|302|307|308)$ ]]; then
+      health_ok "seo ${path} (HTTP ${code})"
+    elif is_transient_http_code "$code"; then
+      health_note_fail "seo ${path} (HTTP ${code:-000}, starting)"
+    else
+      health_note_fail "seo ${path} (HTTP ${code:-none})"
+      health_mark_permanent
+    fi
+  done
+
+  for path in /bukety /cvety /katalog; do
+    headers="$(curl -sS -D - -o /dev/null --max-time 15 "${base}${path}" 2>/dev/null || true)"
+    if echo "$headers" | grep -qiE '^HTTP/.* 30[12378]' \
+      && echo "$headers" | grep -qiE 'location:.*(catalog|products)'; then
+      health_ok "seo redirect ${path}"
+    elif is_transient_http_code "$(echo "$headers" | awk '/^HTTP/{print $2}' | tail -n1)"; then
+      health_note_fail "seo redirect ${path} (starting)"
+    else
+      health_note_fail "seo redirect ${path} missing/invalid"
+      health_mark_permanent
+    fi
+  done
+
+  sm="$(curl -fsS --max-time 20 "${base}/sitemap.xml" 2>/dev/null || true)"
+  if [[ -z "$sm" ]]; then
+    health_note_fail "seo sitemap empty/unreachable"
+    return 0
+  fi
+  if echo "$sm" | grep -qE '/bukety/|/katalog/|/cvety/'; then
+    health_note_fail "seo sitemap still lists legacy /bukety|/katalog|/cvety paths"
+    health_mark_permanent
+  else
+    health_ok "seo sitemap has no legacy catalog product paths"
+  fi
+}
+
 ensure_nginx_lib_loaded() {
   # Do not re-source in tests that override tls_cert_present / find helpers.
   if [[ "${SHOPBUKET1_NGINX_LIB_LOADED:-0}" == "1" ]]; then
@@ -277,8 +321,12 @@ run_healthcheck_mode() {
       check_local_web
       check_nginx_production
       ;;
+    seo)
+      require_cmd curl
+      check_seo_local
+      ;;
     *)
-      die "Unknown healthcheck mode: $mode (use startup|preflight|production)"
+      die "Unknown healthcheck mode: $mode (use startup|preflight|production|seo)"
       ;;
   esac
 

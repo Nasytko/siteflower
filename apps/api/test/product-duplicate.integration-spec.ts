@@ -16,7 +16,7 @@ const databaseUrl =
   'postgresql://bouquet:bouquet_dev_password@localhost:5433/bouquet_one?schema=public';
 const apiPort = String(3501 + Math.floor(Math.random() * 200));
 const origin = 'http://localhost:3000';
-const password = 'DupPass12!!';
+const password = 'DupPass12!!!!';
 const mediaRoot = './storage/media-test-duplicate';
 
 async function hashPassword(value: string): Promise<string> {
@@ -381,7 +381,7 @@ describe('Product duplicate (integration)', () => {
     await request(base).get(`/api/v1/catalog/products/${copy.slug}`).expect(404);
     const sitemap = await request(base).get('/api/v1/catalog/sitemap').expect(200);
     const paths = sitemap.body.map((entry: { path: string }) => entry.path);
-    expect(paths).not.toContain(`/bukety/${copy.slug}`);
+    expect(paths).not.toContain(`/products/${copy.slug}`);
   }, 120_000);
 
   it('keeps shared MediaAsset when one ProductMedia link is removed; orphan cleanup skips it', async () => {

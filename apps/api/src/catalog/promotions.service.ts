@@ -213,7 +213,7 @@ export class PromotionsService {
     const dto = toProductAdminDto(updated!, this.urlFor);
     await this.revalidate.ping({
       tags: ['catalog', 'storefront'],
-      paths: ['/', '/bukety', '/akcii', ...(dto.slug ? [`/bukety/${dto.slug}`] : [])],
+      paths: ['/', '/catalog/bouquets', '/akcii', ...(dto.slug ? [`/products/${dto.slug}`] : [])],
     });
     return dto;
   }
@@ -319,7 +319,7 @@ export class PromotionsService {
     const dto = toProductAdminDto(updated, this.urlFor);
     await this.revalidate.ping({
       tags: ['catalog', 'storefront'],
-      paths: ['/', '/bukety', '/akcii', ...(dto.slug ? [`/bukety/${dto.slug}`] : [])],
+      paths: ['/', '/catalog/bouquets', '/akcii', ...(dto.slug ? [`/products/${dto.slug}`] : [])],
     });
     return dto;
   }

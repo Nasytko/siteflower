@@ -18,6 +18,7 @@
     "admin:create": "tsx src/cli/admin-create.ts",
     "admin:reset-password": "tsx src/cli/admin-reset-password.ts",
     "seed:dev-catalog": "tsx scripts/seed-dev-catalog.ts",
+    "migrate:catalog-page-rules": "tsx scripts/migrate-catalog-page-rules.ts",
     "compliance:check": "tsx src/cli/compliance-check.ts",
     "media:check": "tsx src/cli/media-check.ts",
     "media:cleanup": "tsx src/cli/media-cleanup.ts",

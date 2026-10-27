@@ -19,7 +19,7 @@ export async function generateFlowerTypeMetadata(slug: string): Promise<Metadata
       return buildPageMetadata({
         title: 'Цветы',
         description: 'Подборка букетов',
-        path: `/cvety/${slug}`,
+        path: `/catalog/bouquets?flower=${encodeURIComponent(slug)}`,
         noIndex: true,
       });
     }
@@ -28,14 +28,14 @@ export async function generateFlowerTypeMetadata(slug: string): Promise<Metadata
       description:
         flowerType.seoDescription?.trim() ||
         `Букеты с ${flowerType.name.toLowerCase()} — доставка по Гродно.`,
-      path: `/cvety/${flowerType.slug}`,
+      path: `/catalog/bouquets?flower=${encodeURIComponent(flowerType.slug)}`,
       noIndex: flowerType.noIndex === true,
     });
   } catch {
     return buildPageMetadata({
       title: 'Цветы',
       description: 'Подборка букетов',
-      path: `/cvety/${slug}`,
+      path: `/catalog/bouquets?flower=${encodeURIComponent(slug)}`,
       noIndex: true,
     });
   }
@@ -55,13 +55,13 @@ export async function FlowerTypeLandingPage({ slug }: { slug: string }) {
   if (!flowerType) notFound();
 
   const products = await listProducts({
-    categorySlug: 'bukety',
+    categorySlug: 'bouquets',
     flowerTypeSlug: flowerType.slug,
     pageSize: 24,
     sort: 'recommended',
   }).catch(() => EMPTY_PRODUCT_PAGE);
 
-  const catalogHref = `/bukety?flower=${encodeURIComponent(flowerType.slug)}`;
+  const catalogHref = `/catalog/bouquets?flower=${encodeURIComponent(flowerType.slug)}`;
 
   return (
     <main id="main-content" className="sf-container-wide py-5 sm:py-7">
@@ -69,7 +69,7 @@ export async function FlowerTypeLandingPage({ slug }: { slug: string }) {
         className="mb-3"
         items={[
           { name: 'Главная', href: '/' },
-          { name: 'Цветы', href: '/cvety' },
+          { name: 'Цветы', href: '/catalog/stems' },
           { name: flowerType.name },
         ]}
       />
@@ -95,7 +95,7 @@ export async function FlowerTypeLandingPage({ slug }: { slug: string }) {
           <p className="sf-body max-w-md text-muted">
             Витрина обновляется каждый день — загляните в полный каталог.
           </p>
-          <Link href="/bukety" className="sf-cta mt-2">
+          <Link href="/catalog/bouquets" className="sf-cta mt-2">
             Все букеты
           </Link>
         </div>

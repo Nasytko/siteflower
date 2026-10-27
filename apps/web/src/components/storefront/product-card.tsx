@@ -105,7 +105,7 @@ export function ProductCard({
     <article className={`sf-product-card group ${compact ? 'sf-product-card--compact' : ''}`}>
       <div className="sf-product-card__media">
         <Link
-          href={`/bukety/${product.slug}`}
+          href={`/products/${product.slug}`}
           className="absolute inset-0 block outline-offset-4"
           aria-label={`${displayName}${priceLabel ? `, ${priceLabel}` : ''}`}
         >
@@ -146,7 +146,7 @@ export function ProductCard({
         {compact ? null : stock}
 
         <h3 className="sf-product-card__title">
-          <Link href={`/bukety/${product.slug}`}>{displayName}</Link>
+          <Link href={`/products/${product.slug}`}>{displayName}</Link>
         </h3>
 
         {product.cardSubtitle && !compact ? (
@@ -213,7 +213,7 @@ export function ProductCard({
             </button>
           ) : (
             <Link
-              href={`/bukety/${product.slug}`}
+              href={`/products/${product.slug}`}
               className="sf-product-card__cart"
               aria-label="Смотреть товар"
             >

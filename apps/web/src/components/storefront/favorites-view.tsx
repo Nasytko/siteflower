@@ -107,7 +107,7 @@ export function FavoritesView() {
       <EmptyState
         title="Здесь пока пусто"
         description="Сохраняйте букеты сердечком — они появятся на этой странице."
-        actionHref="/bukety"
+        actionHref="/catalog/bouquets"
         actionLabel="Открыть каталог"
       />
     );

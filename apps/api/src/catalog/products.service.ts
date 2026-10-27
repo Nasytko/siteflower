@@ -13,6 +13,7 @@ import {
   productKindNeedsComposition,
   productKindNeedsGiftSubtype,
   CANONICAL_LISTING_HUB_SLUGS,
+  canonicalCatalogSlug,
   isCanonicalListingHub,
   isCatalogListingKind,
   resolveCatalogCategoryIdForProductKind,
@@ -81,7 +82,11 @@ import {
   describeSeoLandingRules,
   flowerTypeSlugsFromRules,
 } from './placement-match.util';
-import { rulesToFilters } from './seo-landings.service';
+import { CatalogMatchService } from './catalog-match.service';
+import {
+  mergeListingIntoFilters,
+  resolveCategoryListingFilters,
+} from './catalog-listing.util';
 import { SlugRedirectsService } from './slug-redirects.service';
 
 type CatalogReference = 'occasion' | 'recipient' | 'color';
@@ -123,12 +128,13 @@ export class ProductsService {
     private readonly prisma: PrismaService,
     private readonly appConfig: AppConfigService,
     private readonly revalidate: StorefrontRevalidateService,
+    private readonly catalogMatch: CatalogMatchService,
   ) {}
 
   private async bumpStorefrontCache(productSlug?: string): Promise<void> {
     await this.revalidate.ping({
       tags: ['catalog', 'storefront', ...(productSlug ? [`product:${productSlug}`] : [])],
-      paths: ['/', '/bukety', ...(productSlug ? [`/bukety/${productSlug}`] : [])],
+      paths: ['/', '/catalog/bouquets', ...(productSlug ? [`/products/${productSlug}`] : [])],
     });
   }
 
@@ -145,6 +151,10 @@ export class ProductsService {
 
   private readonly urlFor = (storageKey: string) => this.media.getPublicUrl(storageKey);
 
+  /**
+   * Same category-scope engine as the public storefront (hubs = ProductKind,
+   * thematic = rules, flower leaves = ID resolve — never category-tree for hubs).
+   */
   private async resolveCatalogFilters(query: {
     catalogCategoryId?: string;
     categorySlug?: string;
@@ -157,23 +167,11 @@ export class ProductsService {
     heightBand?: string;
     familyId?: string;
   }) {
-    let catalogCategoryIds: string[] | undefined;
-    if (query.catalogCategoryId) {
-      catalogCategoryIds = await this.categories.expandCategoryIds(query.catalogCategoryId);
-    } else if (query.categorySlug) {
-      const category = await this.categories.getBySlug(query.categorySlug).catch(() => null);
-      if (category) {
-        catalogCategoryIds = await this.categories.expandCategoryIds(category.id);
-      } else {
-        catalogCategoryIds = ['00000000-0000-0000-0000-000000000000'];
-      }
-    }
     const heightCm =
       query.heightBand && isHeightBandId(query.heightBand)
         ? heightBandWhere(query.heightBand) ?? undefined
         : undefined;
-    return {
-      catalogCategoryIds,
+    const base = {
       flowerTypeIds: query.flowerTypeId,
       flowerTypeSlugs: query.flowerTypeSlug,
       flowerVarietyIds: query.flowerVarietyId,
@@ -183,6 +181,74 @@ export class ProductsService {
       heightCm: heightCm ?? undefined,
       familyId: query.familyId,
     };
+
+    if (query.catalogCategoryId) {
+      const catalogCategoryIds = await this.categories.expandCategoryIds(
+        query.catalogCategoryId,
+      );
+      return { ...base, catalogCategoryIds };
+    }
+
+    if (!query.categorySlug) {
+      return base;
+    }
+
+    const requestedSlug = query.categorySlug;
+    const resolvedSlug = canonicalCatalogSlug(requestedSlug);
+    let row = await this.prisma.client.catalogCategory.findUnique({
+      where: { slug: resolvedSlug },
+    });
+    if (!row && resolvedSlug !== requestedSlug) {
+      row = await this.prisma.client.catalogCategory.findUnique({
+        where: { slug: requestedSlug },
+      });
+    }
+    if (!row) {
+      // Fall back through SlugRedirect chain (post-rename aliases).
+      const redirectTarget = await this.slugRedirects.resolveChain(
+        'CATALOG_CATEGORY',
+        requestedSlug,
+      );
+      for (const candidate of redirectTarget) {
+        row = await this.prisma.client.catalogCategory.findUnique({ where: { slug: candidate } });
+        if (row) break;
+      }
+    }
+    if (!row) {
+      return {
+        ...base,
+        catalogCategoryIds: ['00000000-0000-0000-0000-000000000000'],
+      };
+    }
+
+    const listingKind =
+      row.listingKind && isCatalogListingKind(row.listingKind) ? row.listingKind : null;
+    const rules =
+      row.rules && typeof row.rules === 'object' && !Array.isArray(row.rules)
+        ? (row.rules as Record<string, unknown>)
+        : null;
+
+    const listing = await resolveCategoryListingFilters({
+      category: {
+        id: row.id,
+        slug: row.slug,
+        parentId: row.parentId,
+        listingKind,
+        pageKind: row.pageKind,
+        rules,
+      },
+      catalogMatch: this.catalogMatch,
+      expandCategoryIds: (id) => this.categories.expandCategoryIds(id),
+      loadExcludeProductIds: async (pageId) => {
+        const excludes = await this.prisma.client.catalogPageExclude.findMany({
+          where: { pageId },
+          select: { productId: true },
+        });
+        return excludes.map((e) => e.productId);
+      },
+    });
+
+    return mergeListingIntoFilters(listing, base);
   }
 
   async list(query: ProductListQueryDto): Promise<PaginatedResponse<ProductListItemDto>> {
@@ -1686,8 +1752,9 @@ export class ProductsService {
         const pinned = page.pinnedProducts.some((row) => row.productId === id);
         let matches = pinned;
         if (!matches) {
-          const filters = rulesToFilters(rules);
-          if (Object.keys(filters).length === 0 && !pinned) return null;
+          const { filters, blocking } = await this.catalogMatch.resolveRulesToFilters(rules);
+          if ((Object.keys(filters).length === 0 || blocking) && !pinned) return null;
+          if (blocking) return null;
           const { total } = await this.products.list({
             filters: {
               ...filters,

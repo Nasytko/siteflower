@@ -19,6 +19,23 @@ const imageEnv: MediaImageEnv = {
 const uniquePatterns = buildMediaRemotePatterns(imageEnv);
 const allowLocalImageIp = shouldAllowLocalImageIp(imageEnv);
 
+/** Keep in sync with packages/contracts/src/public-routes.ts LEGACY_PATH_REDIRECTS. */
+const LEGACY_PATH_REDIRECTS: Array<{
+  source: string;
+  destination: string;
+  permanent: true;
+}> = [
+  { source: '/bukety', destination: '/catalog/bouquets', permanent: true },
+  { source: '/bukety/:slug', destination: '/products/:slug', permanent: true },
+  { source: '/katalog', destination: '/catalog', permanent: true },
+  { source: '/katalog/:slug', destination: '/catalog/:slug', permanent: true },
+  { source: '/cvety', destination: '/catalog/stems', permanent: true },
+  { source: '/cvety/:slug', destination: '/catalog/bouquets?flower=:slug', permanent: true },
+  { source: '/p/:slug', destination: '/catalog/:slug', permanent: true },
+  { source: '/collections', destination: '/catalog/bouquets', permanent: true },
+  { source: '/collections/:slug', destination: '/catalog/bouquets', permanent: true },
+];
+
 const nextConfig: NextConfig = {
   reactStrictMode: true,
   poweredByHeader: false,
@@ -51,24 +68,26 @@ const nextConfig: NextConfig = {
   },
   async redirects() {
     return [
-      // Collections were retired: merchandising now lives on /akcii and homepage
-      // bestseller groups. Send the link equity to the catalog instead of
-      // keeping thin ghost pages alive.
+      ...LEGACY_PATH_REDIRECTS,
       {
-        source: '/collections',
-        destination: '/bukety',
-        permanent: true,
-      },
-      {
-        source: '/collections/:slug',
-        destination: '/bukety',
-        permanent: true,
-      },
-      // Legacy promo catalog URL → the dedicated promotions destination.
-      {
-        source: '/bukety',
+        source: '/catalog/bouquets',
         has: [{ type: 'query', key: 'featured' }],
         destination: '/akcii',
+        permanent: true,
+      },
+      { source: '/catalog/bukety', destination: '/catalog/bouquets', permanent: true },
+      { source: '/catalog/tsvety', destination: '/catalog/stems', permanent: true },
+      { source: '/catalog/cvety', destination: '/catalog/stems', permanent: true },
+      { source: '/catalog/rozy', destination: '/catalog/roses', permanent: true },
+      { source: '/catalog/monobukety', destination: '/catalog/mono-bouquets', permanent: true },
+      {
+        source: '/catalog/bukety-iz-roz',
+        destination: '/catalog/rose-bouquets',
+        permanent: true,
+      },
+      {
+        source: '/catalog/bukety-s-rozami',
+        destination: '/catalog/bouquets-with-roses',
         permanent: true,
       },
     ];

@@ -252,7 +252,7 @@ export function CheckoutForm() {
     return (
       <div className="space-y-4">
         <p className="sf-body text-muted">Корзина пуста</p>
-        <Link href="/bukety" className="text-sm font-medium text-brand hover:underline">
+        <Link href="/catalog/bouquets" className="text-sm font-medium text-brand hover:underline">
           В каталог
         </Link>
       </div>

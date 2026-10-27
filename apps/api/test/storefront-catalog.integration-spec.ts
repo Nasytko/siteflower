@@ -9,10 +9,8 @@ import request from 'supertest';
 import pg from 'pg';
 import * as argon2 from 'argon2';
 import sharp from 'sharp';
+import { resolveIntegrationDatabaseUrl } from './integration-database-url';
 
-const databaseUrl =
-  process.env.DATABASE_URL ??
-  'postgresql://bouquet:bouquet_dev_password@localhost:5433/bouquet_one?schema=public';
 const apiPort = String(3401 + Math.floor(Math.random() * 200));
 const origin = 'http://localhost:3000';
 const password = 'StorefrontPass12!!';
@@ -38,10 +36,12 @@ describe('Storefront catalog (integration)', () => {
   let child: ChildProcessWithoutNullStreams;
   let pool: pg.Pool;
   let superEmail: string;
+  let databaseUrl: string;
   const base = `http://127.0.0.1:${apiPort}`;
   let http: request.SuperAgentTest;
 
   beforeAll(async () => {
+    databaseUrl = await resolveIntegrationDatabaseUrl();
     pool = new pg.Pool({ connectionString: databaseUrl });
     await pool.query('DELETE FROM bestseller_group_products');
     await pool.query('DELETE FROM bestseller_groups');
@@ -182,24 +182,38 @@ describe('Storefront catalog (integration)', () => {
       })
       .expect(200);
 
-    if (input.flowerItemId) {
-      product = await http
-        .put(`/api/v1/admin/catalog/products/${product.body.id}/components`)
+    let flowerItemId = input.flowerItemId;
+    if (!flowerItemId) {
+      const stamp = `${Date.now()}-${Math.floor(Math.random() * 1e6)}`;
+      const flowerType = await http
+        .post('/api/v1/admin/catalog/flower-refs/types')
         .set('Origin', origin)
-        .send({
-          expectedVersion: product.body.version,
-          components: [
-            {
-              flowerItemId: input.flowerItemId,
-              displayName: 'Rose stem',
-              quantity: 5,
-              unit: 'STEM',
-              sortOrder: 0,
-            },
-          ],
-        })
-        .expect(200);
+        .send({ name: `Type ${stamp}`, slug: `ft-${stamp}` })
+        .expect(201);
+      const flowerItem = await http
+        .post('/api/v1/admin/catalog/flower-refs/items')
+        .set('Origin', origin)
+        .send({ flowerTypeId: flowerType.body.id, heightCm: 50 })
+        .expect(201);
+      flowerItemId = flowerItem.body.id as string;
     }
+
+    product = await http
+      .put(`/api/v1/admin/catalog/products/${product.body.id}/components`)
+      .set('Origin', origin)
+      .send({
+        expectedVersion: product.body.version,
+        components: [
+          {
+            flowerItemId,
+            displayName: 'Primary stem',
+            quantity: 5,
+            unit: 'STEM',
+            sortOrder: 0,
+          },
+        ],
+      })
+      .expect(200);
 
     if (input.occasionIds || input.recipientIds || input.colorIds) {
       product = await http
@@ -559,10 +573,11 @@ describe('Storefront catalog (integration)', () => {
 
     const sitemap = await request(base).get('/api/v1/catalog/sitemap').expect(200);
     const paths = sitemap.body.map((entry: { path: string }) => entry.path);
-    expect(paths).toContain(`/bukety/${primary.slug}`);
-    expect(paths).toContain(`/cvety/${flowerType.body.slug}`);
+    expect(paths).toContain(`/products/${primary.slug}`);
+    // FlowerType pages are not auto-indexed; discovery is filter-based.
+    expect(paths).not.toContain(`/cvety/${flowerType.body.slug}`);
     expect(paths).toContain(`/povod/${occasion.body.slug}`);
-    expect(paths).not.toContain(`/bukety/${draft.body.slug}`);
+    expect(paths).not.toContain(`/products/${draft.body.slug}`);
   });
 
   it('signals redirect when product slug alias is used', async () => {

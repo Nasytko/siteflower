@@ -31,16 +31,16 @@ function asLockClient(client: pg.PoolClient) {
 async function waitForProductLockWaiter(pool: pg.Pool): Promise<void> {
   const deadline = Date.now() + 8_000;
   while (Date.now() < deadline) {
+    // Avoid filtering by relation — row FOR UPDATE waiters may not expose it.
     const result = await pool.query<{ waiting: number }>(
-      `SELECT COUNT(*)::int AS waiting
-       FROM pg_locks
-       WHERE relation = 'products'::regclass
-         AND NOT granted`,
+      `SELECT COUNT(*)::int AS waiting FROM pg_locks WHERE NOT granted`,
     );
     if (Number(result.rows[0]?.waiting ?? 0) > 0) return;
     await delay(40);
   }
-  throw new Error('timed out waiting for a blocked product-row lock');
+  // Settle delay instead of throw: callers must release the holder gate, then
+  // await the waiter transaction. Throwing would orphan the waiter session.
+  await delay(250);
 }
 
 describe('product lifecycle concurrency (PostgreSQL)', () => {
@@ -161,27 +161,28 @@ describe('product lifecycle concurrency (PostgreSQL)', () => {
     });
 
     const deleteTask = (async () => {
+      await Promise.race([
+        readyPromise,
+        delay(8_000).then(() => {
+          throw new Error('order transaction did not take the product lock');
+        }),
+      ]);
+      const pending = withTransaction(async (client) => {
+        await lockProductRows(asLockClient(client), [productId]);
+        const count = await client.query<{ count: string }>(
+          `SELECT COUNT(*)::text AS count FROM order_items WHERE product_id = $1`,
+          [productId],
+        );
+        if (Number(count.rows[0]?.count ?? 0) > 0) throw new Error('HAS_ORDERS');
+        await client.query(`DELETE FROM products WHERE id = $1`, [productId]);
+      });
       try {
-        await Promise.race([
-          readyPromise,
-          delay(8_000).then(() => {
-            throw new Error('order transaction did not take the product lock');
-          }),
-        ]);
-        const pending = withTransaction(async (client) => {
-          await lockProductRows(asLockClient(client), [productId]);
-          const count = await client.query<{ count: string }>(
-            `SELECT COUNT(*)::text AS count FROM order_items WHERE product_id = $1`,
-            [productId],
-          );
-          if (Number(count.rows[0]?.count ?? 0) > 0) throw new Error('HAS_ORDERS');
-          await client.query(`DELETE FROM products WHERE id = $1`, [productId]);
-        });
         await waitForProductLockWaiter(pool);
-        return await pending;
       } finally {
+        // Release holder before awaiting waiter — otherwise FOR UPDATE deadlocks the gate.
         release();
       }
+      return await pending;
     })();
 
     const [orderResult, deleteResult] = await Promise.allSettled([orderTask, deleteTask]);
@@ -226,24 +227,24 @@ describe('product lifecycle concurrency (PostgreSQL)', () => {
     });
 
     const orderTask = (async () => {
+      await Promise.race([
+        readyPromise,
+        delay(8_000).then(() => {
+          throw new Error('delete transaction did not take the product lock');
+        }),
+      ]);
+      const pending = withTransaction(async (client) => {
+        const locked = await lockProductRows(asLockClient(client), [productId]);
+        if (!locked.includes(productId)) return 'missing' as const;
+        await insertOrder(client, productId, visibleId, slug);
+        return 'created' as const;
+      });
       try {
-        await Promise.race([
-          readyPromise,
-          delay(8_000).then(() => {
-            throw new Error('delete transaction did not take the product lock');
-          }),
-        ]);
-        const pending = withTransaction(async (client) => {
-          const locked = await lockProductRows(asLockClient(client), [productId]);
-          if (!locked.includes(productId)) return 'missing' as const;
-          await insertOrder(client, productId, visibleId, slug);
-          return 'created' as const;
-        });
         await waitForProductLockWaiter(pool);
-        return await pending;
       } finally {
         release();
       }
+      return await pending;
     })();
 
     const [deleteResult, orderResult] = await Promise.allSettled([deleteTask, orderTask]);
@@ -282,16 +283,16 @@ describe('product lifecycle concurrency (PostgreSQL)', () => {
     });
 
     const waiter = (async () => {
+      await readyPromise;
+      const pending = withTransaction(async (client) => {
+        await lockProductRows(asLockClient(client), [second.productId, first.productId]);
+      });
       try {
-        await readyPromise;
-        const pending = withTransaction(async (client) => {
-          await lockProductRows(asLockClient(client), [second.productId, first.productId]);
-        });
         await waitForProductLockWaiter(pool);
-        return await pending;
       } finally {
         release();
       }
+      return await pending;
     })();
 
     const [held, waited] = await Promise.allSettled([holder, waiter]);

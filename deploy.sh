@@ -275,6 +275,15 @@ main() {
   rev="$(printf '%s' "$rev" | tr -d '\n')"
   [[ "$rev" =~ ^[0-9a-f]{40}$ ]] || die "resolve_ref returned invalid revision: ${rev}"
   log "Deploying revision $rev"
+
+  # Prefer the two-stage path: ./scripts/release.sh preflight && ./scripts/release.sh deploy
+  # Direct ./deploy.sh still works; set SHOPBUKET1_REQUIRE_PREFLIGHT=1 to enforce.
+  if [[ "${SHOPBUKET1_REQUIRE_PREFLIGHT:-0}" == "1" ]]; then
+    # shellcheck source=deploy/lib/preflight.sh
+    source "${SCRIPT_DIR}/deploy/lib/preflight.sh"
+    require_preflight_pass "$rev" >/dev/null
+  fi
+
   tag_images "$rev"
 
   log "Stage: build images"

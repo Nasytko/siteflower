@@ -47,7 +47,7 @@ export async function POST(request: Request) {
   }
 
   const rawTags = Array.isArray(body.tags) ? body.tags : ['catalog', 'storefront'];
-  const rawPaths = Array.isArray(body.paths) ? body.paths : ['/', '/bukety'];
+  const rawPaths = Array.isArray(body.paths) ? body.paths : ['/', '/catalog/bouquets'];
 
   if (rawTags.length > MAX_TAGS || rawPaths.length > MAX_PATHS) {
     return NextResponse.json({ error: 'Too many tags or paths' }, { status: 400 });

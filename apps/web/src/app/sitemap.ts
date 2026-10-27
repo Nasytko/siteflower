@@ -5,9 +5,10 @@ import { getSiteUrl } from '@/lib/seo/site-url';
 
 const STATIC_PATHS = [
   '/',
-  '/bukety',
+  '/catalog',
+  '/catalog/bouquets',
+  '/catalog/stems',
   '/akcii',
-  '/cvety',
   '/povod',
   '/dostavka',
   '/o-nas',
@@ -28,8 +29,18 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const staticEntries: MetadataRoute.Sitemap = STATIC_PATHS.map((path) => ({
     url: path === '/' ? `${siteUrl}/` : `${siteUrl}${path}`,
     lastModified: new Date(),
-    changeFrequency: path === '/' || path === '/bukety' || path === '/akcii' ? 'daily' : 'weekly',
-    priority: path === '/' ? 1 : path === '/bukety' ? 0.9 : path === '/akcii' ? 0.8 : 0.6,
+    changeFrequency:
+      path === '/' || path === '/catalog' || path === '/catalog/bouquets' || path === '/akcii'
+        ? 'daily'
+        : 'weekly',
+    priority:
+      path === '/'
+        ? 1
+        : path === '/catalog' || path === '/catalog/bouquets'
+          ? 0.9
+          : path === '/akcii'
+            ? 0.8
+            : 0.6,
   }));
 
   let dynamicEntries: MetadataRoute.Sitemap = [];

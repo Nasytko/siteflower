@@ -136,7 +136,7 @@ export default async function StorefrontHomePage() {
         <p className="sf-body mt-4 text-muted">
           Витрина временно недоступна. Попробуйте обновить страницу чуть позже.
         </p>
-        <Link href="/bukety" className="sf-cta mt-8">
+        <Link href="/catalog/bouquets" className="sf-cta mt-8">
           Перейти в каталог
         </Link>
       </main>
@@ -231,7 +231,7 @@ export default async function StorefrontHomePage() {
             sourceSlug: autumnSection.sourceSlug,
             limit: autumnLimit,
             fallback: async () => {
-              const page = await listProducts({ categorySlug: 'bukety', pageSize: autumnLimit });
+              const page = await listProducts({ categorySlug: 'bouquets', pageSize: autumnLimit });
               return page.items;
             },
           }).catch(() => [])
@@ -246,13 +246,13 @@ export default async function StorefrontHomePage() {
                 (g) => g.slug !== 'podarki' && (g.products?.length ?? 0) > 0,
               );
               if (first?.products?.length) return first.products.slice(0, popularLimit);
-              const page = await listProducts({ categorySlug: 'bukety', pageSize: popularLimit });
+              const page = await listProducts({ categorySlug: 'bouquets', pageSize: popularLimit });
               return page.items;
             },
           }).catch(() => [])
         : Promise.resolve([] as ProductListItemDto[]),
       popularSection?.enabled
-        ? listProducts({ categorySlug: 'avtorskie-bukety', pageSize: popularLimit })
+        ? listProducts({ categorySlug: 'signature-bouquets', pageSize: popularLimit })
             .then((page) => page.items)
             .catch(() => [] as ProductListItemDto[])
         : Promise.resolve([] as ProductListItemDto[]),
@@ -347,7 +347,7 @@ export default async function StorefrontHomePage() {
       {popularSection?.enabled && popularProducts.length > 0 ? (
         <PopularShelf
           title={popularSection.heading || 'Популярные букеты'}
-          viewAllHref={popularSection.viewAllHref || '/bukety'}
+          viewAllHref={popularSection.viewAllHref || '/catalog/bouquets'}
           products={popularProducts}
           authorialProducts={authorialProducts}
           limit={popularLimit}
@@ -359,7 +359,7 @@ export default async function StorefrontHomePage() {
           <div className="sf-container-wide">
             <HomeSectionHead
               title={rosesSection.heading || 'Розы'}
-              href={rosesSection.viewAllHref || '/katalog/rozy'}
+              href={rosesSection.viewAllHref || '/catalog/roses'}
               subtitle={rosesSection.body || 'Классика, которая всегда актуальна'}
             />
             <ProductRow products={rosesProducts.slice(0, rosesLimit)} />
@@ -378,7 +378,7 @@ export default async function StorefrontHomePage() {
                     'Подскажем по поводу, бюджету и сроку — напишите или позвоните.'}
                 </p>
                 <div className="sf-help-band__actions">
-                  <Link href="/bukety" className="sf-home-btn">
+                  <Link href="/catalog/bouquets" className="sf-home-btn">
                     Получить подборку
                   </Link>
                   {telHref ? (

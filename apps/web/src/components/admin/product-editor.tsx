@@ -529,7 +529,7 @@ export function ProductEditor({
       mediaMissingAlt: server.media.filter((item) => !item.alt?.trim()).length,
       hasPrice: variants.some((variant) => majorInputToMinor(variant.priceMajor) !== null),
       jsonLdReady: variants.some((variant) => majorInputToMinor(variant.priceMajor) !== null),
-      path: `/bukety/${slug}`,
+      path: `/products/${slug}`,
       adminHref: `/admin/catalog/products/${server.id}`,
       inSitemap: effectivelyPublished && !seo.noIndex && Boolean(slug),
     });

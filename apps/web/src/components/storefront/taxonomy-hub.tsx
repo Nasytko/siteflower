@@ -28,7 +28,7 @@ export function TaxonomyHub({ title, description, pathPrefix, items, emptyMessag
       {items.length === 0 ? (
         <div className="sf-panel flex flex-col items-center gap-3 px-6 py-12 text-center">
           <p className="sf-body text-muted">{emptyMessage}</p>
-          <Link href="/bukety" className="sf-cta mt-1">
+          <Link href="/catalog/bouquets" className="sf-cta mt-1">
             Смотреть букеты
           </Link>
         </div>

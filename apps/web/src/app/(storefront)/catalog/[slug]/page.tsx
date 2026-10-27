@@ -54,14 +54,14 @@ export async function generateMetadata({
     return buildPageMetadata({
       title: filtered ? `${title} — подборка` : title,
       description,
-      path: `/katalog/${slug}`,
+      path: `/catalog/${slug}`,
       noIndex: filtered || category.noIndex,
     });
   } catch {
     return buildPageMetadata({
       title: 'Каталог',
       description: 'Категория каталога',
-      path: `/katalog/${slug}`,
+      path: `/catalog/${slug}`,
       noIndex: true,
     });
   }
@@ -89,7 +89,7 @@ export default async function KatalogCategoryPage({
   }
 
   if (category.redirectedFrom && category.canonicalSlug) {
-    permanentRedirect(`/katalog/${category.canonicalSlug}`);
+    permanentRedirect(`/catalog/${category.canonicalSlug}`);
   }
 
   const tree = await listCatalogCategoryTree().catch(() => [] as Awaited<ReturnType<typeof listCatalogCategoryTree>>);

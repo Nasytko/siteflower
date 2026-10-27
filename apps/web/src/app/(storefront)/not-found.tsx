@@ -24,7 +24,7 @@ export default function StorefrontNotFound() {
           <HistoryBackButton fallbackHref="/" className="sf-not-found__secondary">
             Вернуться назад
           </HistoryBackButton>
-          <Link href="/bukety" className="sf-not-found__secondary">
+          <Link href="/catalog/bouquets" className="sf-not-found__secondary">
             В каталог
           </Link>
         </div>

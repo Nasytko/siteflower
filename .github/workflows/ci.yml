@@ -77,6 +77,12 @@ jobs:
       - name: Deploy nginx unit tests
         run: bash deploy/test/nginx-provision.test.sh
 
+      - name: Deploy health unit tests
+        run: bash deploy/test/deploy-health.test.sh
+
+      - name: Release preflight unit tests
+        run: bash deploy/test/release-preflight.test.sh
+
       - name: Lint, typecheck, unit+integration tests, build
         # turbo `test` for @bouquet-one/api runs jest unit then jest-integration
         # against DATABASE_URL (this job's Postgres). Missing DB must fail, not skip-as-pass.

@@ -77,7 +77,7 @@ function primaryHeroFromSlides(slides: HomepageHeroSlideDto[]) {
       subtitle: '',
       imageUrl: null as string | null,
       ctaLabel: 'Смотреть',
-      ctaHref: '/bukety',
+      ctaHref: '/catalog/bouquets',
     };
   }
   return {
@@ -172,7 +172,7 @@ export function HomepageManager({ initial, canUpdate }: Props) {
         imageUrl: null,
         mobileImageUrl: null,
         ctaLabel: 'Смотреть',
-        ctaHref: '/bukety',
+        ctaHref: '/catalog/bouquets',
         enabled: false,
         sortOrder: (prev.length + 1) * 10,
         startsAt: null,
@@ -198,7 +198,7 @@ export function HomepageManager({ initial, canUpdate }: Props) {
       imageUrl: slide.imageUrl?.trim() || null,
       mobileImageUrl: slide.mobileImageUrl?.trim() || null,
       ctaLabel: slide.ctaLabel.trim() || 'Смотреть',
-      ctaHref: slide.ctaHref.trim() || '/bukety',
+      ctaHref: slide.ctaHref.trim() || '/catalog/bouquets',
       sortOrder: (index + 1) * 10,
       startsAt: slide.startsAt?.trim() || null,
       endsAt: slide.endsAt?.trim() || null,
@@ -505,7 +505,7 @@ export function HomepageManager({ initial, canUpdate }: Props) {
                   {
                     id: newId('tile'),
                     label: 'Новая плитка',
-                    href: '/bukety',
+                    href: '/catalog/bouquets',
                     imageUrl: '/categories/discovery-sbornye.png',
                     imageAlt: 'Новая плитка',
                     enabled: true,

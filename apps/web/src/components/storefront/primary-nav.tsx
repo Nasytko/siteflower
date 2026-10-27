@@ -39,10 +39,10 @@ export type PrimaryNavItem = {
  * Service pages (О нас / Доставка / Контакты) live in the top utility bar only.
  */
 export const PRIMARY_NAV: PrimaryNavItem[] = [
-  { id: 'bukety', label: 'Букеты', href: '/bukety', panelLayout: 'COLUMNS' },
-  { id: 'cvety', label: 'Цветы', href: '/cvety', panelLayout: 'COLUMNS' },
+  { id: 'bukety', label: 'Букеты', href: '/catalog/bouquets', panelLayout: 'COLUMNS' },
+  { id: 'cvety', label: 'Цветы', href: '/catalog/stems', panelLayout: 'COLUMNS' },
   { id: 'povod', label: 'Повод', href: '/povod', panelLayout: 'COLUMNS' },
-  { id: 'podarki', label: 'Подарки', href: '/bukety', panelLayout: 'COLUMNS' },
+  { id: 'podarki', label: 'Подарки', href: '/catalog/gifts', panelLayout: 'COLUMNS' },
   { id: 'akcii', label: 'Акции', href: '/akcii', accent: true, panelLayout: 'COLUMNS' },
 ];
 

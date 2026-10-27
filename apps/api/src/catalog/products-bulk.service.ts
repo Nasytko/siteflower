@@ -54,7 +54,7 @@ export class ProductsBulkService {
       // Fail-soft catalog-wide revalidation (no N× per-product HTTP).
       await this.revalidate.ping({
         tags: ['catalog', 'storefront'],
-        paths: ['/', '/bukety'],
+        paths: ['/', '/catalog/bouquets'],
       });
     }
 

@@ -740,7 +740,7 @@ export function NavigationMenuManager({ initial, canUpdate }: Props) {
                         const option = taxonomyOptions.find((row) => row.slug === slug);
                         const href =
                           urlBuilder === 'color'
-                            ? `/bukety?color=${encodeURIComponent(slug)}`
+                            ? `/catalog/bouquets?color=${encodeURIComponent(slug)}`
                             : `/povod/${encodeURIComponent(slug)}`;
                         setDraft({
                           ...draft,
@@ -763,7 +763,7 @@ export function NavigationMenuManager({ initial, canUpdate }: Props) {
                   <input
                     className="admin-input"
                     required
-                    placeholder="/bukety?color=krasnyy или /povod/den-rozhdeniya"
+                    placeholder="/catalog/bouquets?color=krasnyy или /povod/den-rozhdeniya"
                     value={draft.customHref}
                     onChange={(event) => setDraft({ ...draft, customHref: event.target.value })}
                   />

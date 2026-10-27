@@ -43,8 +43,8 @@ test('nav from category tree is category-only fallback (no static tail)', () => 
   const ids = items.map((item) => item.id);
   assert.ok(ids.includes('tsvety'));
   assert.equal(ids.includes('povod'), false);
-  assert.equal(items.find((item) => item.id === 'tsvety')?.href, '/katalog/tsvety');
-  assert.equal(items.find((item) => item.id === 'tsvety')?.children?.[0]?.href, '/katalog/rozy');
+  assert.equal(items.find((item) => item.id === 'tsvety')?.href, '/catalog/stems');
+  assert.equal(items.find((item) => item.id === 'tsvety')?.children?.[0]?.href, '/catalog/roses');
 });
 
 test('nav from NavigationMenu keeps Акции without CatalogCategory', () => {
@@ -52,7 +52,7 @@ test('nav from NavigationMenu keeps Акции without CatalogCategory', () => {
     {
       id: '1',
       label: 'Розы',
-      href: '/katalog/rozy',
+      href: '/catalog/roses',
       accent: false,
       openInNewTab: false,
       iconKey: null,
@@ -85,7 +85,7 @@ test('nav maps GROUP columns under a root item', () => {
     {
       id: 'root',
       label: 'Букеты',
-      href: '/bukety',
+      href: '/catalog/bouquets',
       accent: false,
       openInNewTab: false,
       iconKey: null,
@@ -107,7 +107,7 @@ test('nav maps GROUP columns under a root item', () => {
             {
               id: 'c1',
               label: 'Классика',
-              href: '/bukety?line=klassika',
+              href: '/catalog/bouquets?line=klassika',
               accent: false,
               openInNewTab: false,
               iconKey: null,
@@ -121,7 +121,7 @@ test('nav maps GROUP columns under a root item', () => {
         {
           id: 'direct',
           label: 'Все букеты',
-          href: '/bukety',
+          href: '/catalog/bouquets',
           accent: false,
           openInNewTab: false,
           iconKey: null,
@@ -138,7 +138,7 @@ test('nav maps GROUP columns under a root item', () => {
   assert.equal(items[0]?.groups?.length, 1);
   assert.equal(items[0]?.groups?.[0]?.label, 'По стилю');
   assert.equal(items[0]?.groups?.[0]?.iconKey, 'leaf');
-  assert.equal(items[0]?.groups?.[0]?.children[0]?.href, '/bukety?line=klassika');
+  assert.equal(items[0]?.groups?.[0]?.children[0]?.href, '/catalog/bouquets?line=klassika');
   assert.equal(items[0]?.children, undefined);
 });
 
@@ -155,7 +155,7 @@ test('admin preview mapper hides disabled/unavailable items', () => {
       panelLayout: 'COLUMNS',
       mediaAssetId: null,
       imageUrl: null,
-      href: '/bukety',
+      href: '/catalog/bouquets',
       sortOrder: 1,
       enabled: true,
       openInNewTab: false,
@@ -201,7 +201,7 @@ test('nav maps TILES root to flat children with imageUrl', () => {
     {
       id: 'root',
       label: 'Розы',
-      href: '/bukety',
+      href: '/catalog/bouquets',
       accent: false,
       openInNewTab: false,
       iconKey: null,
@@ -212,7 +212,7 @@ test('nav maps TILES root to flat children with imageUrl', () => {
         {
           id: 't1',
           label: 'Красная',
-          href: '/bukety?color=krasnaya',
+          href: '/catalog/bouquets?color=krasnaya',
           accent: false,
           openInNewTab: false,
           iconKey: null,
@@ -263,6 +263,6 @@ test('nav hides HIDDEN children and keeps legacy bukety href', () => {
   ];
   const items = navItemsFromCategoryTree(withBukety);
   const bukety = items.find((item) => item.id === 'bukety');
-  assert.equal(bukety?.href, '/bukety');
+  assert.equal(bukety?.href, '/catalog/bouquets');
   assert.equal(bukety?.children?.length ?? 0, 0);
 });

@@ -120,7 +120,7 @@ export function catalogStateToListParams(state: CatalogSearchState): CatalogList
     pageSize: CATALOG_PAGE_SIZE,
     search: state.search,
     /** Same hub resolver as /katalog/bukety — ProductKind BOUQUET only. */
-    categorySlug: 'bukety',
+    categorySlug: 'bouquets',
     budget: joinSlugList(state.budgets),
     occasion: joinSlugList(state.occasions),
     recipient: joinSlugList(state.recipients),
@@ -178,7 +178,7 @@ export function catalogHref(
   state: CatalogSearchState,
   patch: Partial<CatalogSearchState> = {},
 ): string {
-  return `/bukety${catalogStateToQuery({ ...state, ...patch, page: patch.page ?? 1 })}`;
+  return `/catalog/bouquets${catalogStateToQuery({ ...state, ...patch, page: patch.page ?? 1 })}`;
 }
 
 export const SORT_OPTIONS: Array<{ value: ProductSort; label: string }> = [

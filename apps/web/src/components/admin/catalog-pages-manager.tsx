@@ -6,8 +6,11 @@ import {
   type CatalogPageDeleteImpactDto,
   type CatalogPageDto,
   type CatalogPageKind,
+  type CatalogPageProductMatchDto,
   type FlowerTypeAdminDto,
+  type PaginatedResponse,
   type ProductKind,
+  type ProductListItemDto,
   type ProductTraitDefinitionDto,
 } from '@bouquet-one/contracts';
 import { FormSaveStatus, type FormSavePhase } from '@/components/admin/form-status';
@@ -149,7 +152,7 @@ function draftFromPage(page: CatalogPageDto, flowerTypes: FlowerTypeAdminDto[]):
 
 function buildRulesPayload(
   rules: RulesDraft,
-  flowerTypes: FlowerTypeAdminDto[],
+  _flowerTypes: FlowerTypeAdminDto[],
 ): Record<string, unknown> {
   if (!isMajorInputValid(rules.minMajor) || !isMajorInputValid(rules.maxMajor)) {
     throw new Error('Цена указывается в BYN, например 150 или 150,50');
@@ -157,12 +160,13 @@ function buildRulesPayload(
   const payload: Record<string, unknown> = {};
   if (rules.productKind) payload.productKinds = [rules.productKind];
 
-  const flowerType = flowerTypes.find((row) => row.id === rules.flowerTypeId);
-  if (rules.flowerTypeId && flowerType) {
+  // Persist stable IDs (page URL slug must never be used as FlowerType identity).
+  // Slug aliases remain only as transitional dual-read on the server.
+  if (rules.flowerTypeId) {
     if (rules.flowerMatchMode === 'only') {
-      payload.onlyFlowerType = flowerType.slug;
+      payload.onlyFlowerTypeIds = [rules.flowerTypeId];
     } else if (rules.flowerMatchMode === 'contains') {
-      payload.containsFlowerType = flowerType.slug;
+      payload.flowerTypeIds = [rules.flowerTypeId];
     }
   }
 
@@ -264,6 +268,10 @@ export function CatalogPagesManager({ canCreate, canUpdate, canPublish }: Props)
   const [mode, setMode] = useState<EditorMode>('closed');
   const [editing, setEditing] = useState<CatalogPageDto | null>(null);
   const [draft, setDraft] = useState<PageDraft>(emptyDraft);
+  const [previewItems, setPreviewItems] = useState<ProductListItemDto[]>([]);
+  const [previewTotal, setPreviewTotal] = useState<number | null>(null);
+  const [diagnoseProductId, setDiagnoseProductId] = useState('');
+  const [diagnoseResult, setDiagnoseResult] = useState<CatalogPageProductMatchDto | null>(null);
 
   async function loadPages() {
     setLoading(true);
@@ -465,6 +473,52 @@ export function CatalogPagesManager({ canCreate, canUpdate, canPublish }: Props)
     }
   }
 
+  async function previewRules() {
+    setPhase('saving');
+    setError(null);
+    try {
+      const rules = buildRulesPayload(draft.rules, flowerTypes);
+      const payload = await adminPost<
+        PaginatedResponse<ProductListItemDto> & { blocking?: boolean }
+      >(adminEndpoints.catalogPagePreviewRules, {
+        rules,
+        page: 1,
+        pageSize: 12,
+      });
+      setPreviewItems(payload.items);
+      setPreviewTotal(payload.total);
+      if (payload.blocking) {
+        setError('Правила ссылаются на неизвестный справочник — выдача пустая');
+      }
+      setPhase('idle');
+    } catch (err) {
+      setError(errorMessage(err, 'Не удалось выполнить предпросмотр'));
+      setPhase('server');
+    }
+  }
+
+  async function diagnoseProduct() {
+    if (!editing) return;
+    const id = diagnoseProductId.trim();
+    if (!id) {
+      setError('Укажите UUID товара для проверки');
+      return;
+    }
+    setPhase('saving');
+    setError(null);
+    try {
+      const result = await adminGet<CatalogPageProductMatchDto>(
+        adminEndpoints.catalogPageProductMatch(editing.id, id),
+      );
+      setDiagnoseResult(result);
+      setPhase('idle');
+    } catch (err) {
+      setDiagnoseResult(null);
+      setError(errorMessage(err, 'Не удалось проверить товар'));
+      setPhase('server');
+    }
+  }
+
   async function removePage() {
     if (!editing || !canUpdate || editing.isSystem) return;
     setPhase('saving');
@@ -619,7 +673,7 @@ export function CatalogPagesManager({ canCreate, canUpdate, canPublish }: Props)
                       disabled={!editable || (!canUpdate && mode !== 'create')}
                       onChange={(e) => setDraft((p) => ({ ...p, slug: e.target.value }))}
                     />
-                    <span className="admin-field__hint">Будет /katalog/…</span>
+                    <span className="admin-field__hint">Будет /catalog/…</span>
                   </label>
                   <label className="admin-field">
                     <span>Заголовок H1</span>
@@ -759,6 +813,74 @@ export function CatalogPagesManager({ canCreate, canUpdate, canPublish }: Props)
                     />
                   </label>
                 </div>
+              </section>
+
+              <section className="space-y-3">
+                <h3 className="text-xs font-semibold uppercase tracking-wide text-[var(--admin-muted)]">
+                  Предпросмотр и диагностика
+                </h3>
+                <div className="flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    className="admin-btn-ghost"
+                    disabled={phase === 'saving'}
+                    onClick={() => void previewRules()}
+                  >
+                    Показать подходящие товары
+                  </button>
+                  {previewTotal != null ? (
+                    <span className="text-sm text-[var(--admin-muted)]">
+                      Найдено: {previewTotal}
+                    </span>
+                  ) : null}
+                </div>
+                {previewItems.length > 0 ? (
+                  <ul className="space-y-1 text-sm">
+                    {previewItems.map((item) => (
+                      <li key={item.id}>
+                        {item.name}{' '}
+                        <span className="text-[var(--admin-muted)]">({item.slug})</span>
+                      </li>
+                    ))}
+                  </ul>
+                ) : null}
+                {editing && !editing.isSystem ? (
+                  <div className="space-y-2 rounded border border-[var(--admin-border)] p-3">
+                    <p className="text-sm text-[var(--admin-muted)]">
+                      Почему товар не на этой странице?
+                    </p>
+                    <div className="flex flex-wrap gap-2">
+                      <input
+                        className="admin-input min-w-[16rem] flex-1"
+                        placeholder="UUID товара"
+                        value={diagnoseProductId}
+                        onChange={(e) => setDiagnoseProductId(e.target.value)}
+                      />
+                      <button
+                        type="button"
+                        className="admin-btn-ghost"
+                        disabled={phase === 'saving'}
+                        onClick={() => void diagnoseProduct()}
+                      >
+                        Проверить
+                      </button>
+                    </div>
+                    {diagnoseResult ? (
+                      <ul className="space-y-1 text-sm">
+                        <li>
+                          {diagnoseResult.matches
+                            ? diagnoseResult.publishedMatches
+                              ? 'Попадает в выдачу'
+                              : 'Соответствует правилам, но не опубликован'
+                            : 'Не попадает на страницу'}
+                        </li>
+                        {diagnoseResult.reasons.map((reason) => (
+                          <li key={`${reason.code}-${reason.message}`}>{reason.message}</li>
+                        ))}
+                      </ul>
+                    ) : null}
+                  </div>
+                ) : null}
               </section>
 
               <section className="space-y-3">

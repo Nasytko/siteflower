@@ -173,6 +173,37 @@ export class AdminCatalogPagesController {
     return this.pages.listTraitDefinitions();
   }
 
+  @Post('preview-rules')
+  @RequirePermissions('CATALOG_READ')
+  previewRules(
+    @Body()
+    body: {
+      rules?: Record<string, unknown>;
+      pinnedProductIds?: string[];
+      excludedProductIds?: string[];
+      page?: number;
+      pageSize?: number;
+    },
+  ) {
+    return this.pages.previewRules(
+      {
+        rules: body.rules,
+        pinnedProductIds: body.pinnedProductIds,
+        excludedProductIds: body.excludedProductIds,
+      },
+      { page: body.page, pageSize: body.pageSize },
+    );
+  }
+
+  @Get(':id/products/:productId/match')
+  @RequirePermissions('CATALOG_READ')
+  diagnoseMatch(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('productId', ParseUUIDPipe) productId: string,
+  ) {
+    return this.pages.diagnoseProductOnPage(id, productId);
+  }
+
   @Get(':id')
   @RequirePermissions('CATALOG_READ')
   get(@Param('id', ParseUUIDPipe) id: string) {

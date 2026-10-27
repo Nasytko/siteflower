@@ -85,7 +85,7 @@ test('catalogStateToListParams joins each dimension with the API vocabulary', ()
   assert.equal(params.occasion, undefined);
   assert.equal(params.page, 3);
   assert.equal(params.sort, 'recommended');
-  assert.equal(params.categorySlug, 'bukety');
+  assert.equal(params.categorySlug, 'bouquets');
 });
 
 test('catalogStateToQuery omits default sort and page 1', () => {
@@ -104,7 +104,7 @@ test('catalogStateToQuery omits default sort and page 1', () => {
 
 test('catalogHref resets paging when a filter changes', () => {
   const state = { ...emptyCatalogSearchState(), page: 4, colors: ['belyy'] };
-  assert.equal(catalogHref(state, { colors: ['belyy', 'rozovyy'] }), '/bukety?color=belyy%2Crozovyy');
+  assert.equal(catalogHref(state, { colors: ['belyy', 'rozovyy'] }), '/catalog/bouquets?color=belyy%2Crozovyy');
 });
 
 test('catalogActiveFilterCount counts each selected value', () => {

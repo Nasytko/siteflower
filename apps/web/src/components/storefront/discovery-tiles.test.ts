@@ -7,21 +7,21 @@ const TILES: DiscoveryTile[] = [
   {
     id: 'cvety-pcs',
     label: 'Цветы поштучно',
-    href: '/cvety',
+    href: '/catalog/stems',
     imageSrc: '/x.png',
     imageAlt: 'x',
   },
   {
     id: 'rozy',
     label: 'Букеты из роз',
-    href: '/cvety/rozy',
+    href: '/catalog/bouquets?flower=rozy',
     imageSrc: '/x.png',
     imageAlt: 'x',
   },
   {
     id: 'bukety',
     label: 'Букеты',
-    href: '/bukety',
+    href: '/catalog/bouquets',
     imageSrc: '/x.png',
     imageAlt: 'x',
   },
@@ -42,7 +42,7 @@ const TILES: DiscoveryTile[] = [
   {
     id: 'kompozicii',
     label: 'Композиции',
-    href: '/katalog/kompozicii',
+    href: '/catalog/compositions',
     imageSrc: '/x.png',
     imageAlt: 'x',
   },
@@ -56,12 +56,12 @@ test('filterDiscoveryTiles keeps always-on catalog routes', () => {
     catalogSlugs: new Set<string>(),
   };
   const filtered = filterDiscoveryTiles(TILES, empty);
-  assert.ok(filtered.some((t) => t.href === '/cvety'));
-  assert.ok(filtered.some((t) => t.href === '/bukety'));
-  assert.ok(!filtered.some((t) => t.href === '/cvety/rozy'));
+  assert.ok(filtered.some((t) => t.href === '/catalog/stems'));
+  assert.ok(filtered.some((t) => t.href === '/catalog/bouquets'));
+  assert.ok(!filtered.some((t) => t.href === '/catalog/bouquets?flower=rozy'));
   assert.ok(!filtered.some((t) => t.href === '/komu/neveste'));
   assert.ok(!filtered.some((t) => t.href === '/povod/den-rozhdeniya'));
-  assert.ok(!filtered.some((t) => t.href === '/katalog/kompozicii'));
+  assert.ok(!filtered.some((t) => t.href === '/catalog/compositions'));
 });
 
 test('filterDiscoveryTiles keeps taxonomy tiles when slugs exist', () => {
@@ -69,7 +69,7 @@ test('filterDiscoveryTiles keeps taxonomy tiles when slugs exist', () => {
     flowerSlugs: new Set(['rozy']),
     recipientSlugs: new Set(['neveste']),
     occasionSlugs: new Set(['den-rozhdeniya']),
-    catalogSlugs: new Set(['kompozicii']),
+    catalogSlugs: new Set(['compositions']),
   });
   assert.ok(filtered.some((t) => t.id === 'rozy'));
   assert.ok(filtered.some((t) => t.id === 'neveste'));

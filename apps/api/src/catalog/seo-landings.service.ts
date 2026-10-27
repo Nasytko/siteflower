@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import {
   normalizeSlug,
+  parseCatalogPageRules,
   SEO_LANDING_STATUSES,
   type PaginatedResponse,
   type ProductListItemDto,
@@ -21,6 +22,7 @@ import { AppConfigService } from '../config/app-config.service';
 import { PrismaService } from '../database/prisma.service';
 import { MediaService } from '../media/media.service';
 import { StorefrontRevalidateService } from '../storefront/storefront-revalidate.service';
+import { CatalogMatchService, toProductListFilters } from './catalog-match.service';
 import { isEffectivelyPublished, OCC_CONFLICT_MESSAGE } from './catalog.logic';
 import { toProductListItemDto } from './catalog.mapper';
 import {
@@ -135,6 +137,7 @@ export class SeoLandingsService {
     private readonly appConfig: AppConfigService,
     private readonly slugRedirects: SlugRedirectsService,
     private readonly revalidate: StorefrontRevalidateService,
+    private readonly catalogMatch: CatalogMatchService,
   ) {}
 
   private readonly urlFor = (storageKey: string) => this.media.getPublicUrl(storageKey);
@@ -406,8 +409,11 @@ export class SeoLandingsService {
       .map((row) => row.productId)
       .filter((id) => !excludeIds.includes(id));
 
+    const { filters: ruleFilters } = await this.catalogMatch.resolveRulesToFilters(
+      landing.rules,
+    );
     const filters: ProductListFilters = {
-      ...rulesToFilters(landing.rules),
+      ...ruleFilters,
       excludeProductIds: [...new Set([...excludeIds, ...pinnedIds])],
       ...(publishedOnly ? { publishedAt: now } : {}),
     };
@@ -593,14 +599,14 @@ export class SeoLandingsService {
     const bySlug = new Map<string, { path: string; updatedAt: string }>();
     for (const row of legacy) {
       bySlug.set(row.slug, {
-        path: `/p/${row.slug}`,
+        path: `/catalog/${row.slug}`,
         updatedAt: row.updatedAt.toISOString(),
       });
     }
     for (const row of pages) {
-      // Prefer /katalog/[slug] for unified thematic pages (canonical storefront path).
+      // Prefer /catalog/[slug] for unified thematic pages (canonical storefront path).
       bySlug.set(row.slug, {
-        path: `/katalog/${row.slug}`,
+        path: `/catalog/${row.slug}`,
         updatedAt: row.updatedAt.toISOString(),
       });
     }
@@ -665,9 +671,9 @@ export class SeoLandingsService {
   }
 
   private async pingStorefront(slug: string, previousSlug?: string): Promise<void> {
-    const paths = [`/p/${slug}`, '/sitemap.xml'];
+    const paths = [`/catalog/${slug}`, '/sitemap.xml'];
     if (previousSlug && previousSlug !== slug) {
-      paths.push(`/p/${previousSlug}`);
+      paths.push(`/catalog/${previousSlug}`);
     }
     await this.revalidate.ping({
       tags: ['catalog', 'sitemap', 'seo-landings'],
@@ -781,111 +787,11 @@ function asStringArray(value: unknown): string[] | null {
   return null;
 }
 
-/** Merge slug/id aliases into one list (string or string[]). */
-function asStringOrArray(value: unknown): string[] | undefined {
-  if (typeof value === 'string' && value.trim()) return [value.trim()];
-  return asStringArray(value) ?? undefined;
-}
-
+/**
+ * Parse rules JSON into list filters (slug passthrough, no taxonomy lookup).
+ * Prefer CatalogMatchService.resolveRulesToFilters for public/admin/placement
+ * so flowerTypeIds win and page slugs like «rozy» resolve via aliases.
+ */
 export function rulesToFilters(rules: Prisma.JsonValue): ProductListFilters {
-  const record = asRulesRecord(rules);
-  const filters: ProductListFilters = {};
-
-  const flowerTypeIds = asStringArray(record.flowerTypeIds);
-  if (flowerTypeIds) filters.flowerTypeIds = flowerTypeIds;
-  const flowerTypeSlugs = [
-    ...(asStringArray(record.flowerTypeSlugs) ?? []),
-    ...(asStringOrArray(record.containsFlowerType) ?? []),
-    ...(asStringArray(record.containsFlowerTypeSlugs) ?? []),
-  ];
-  if (flowerTypeSlugs.length > 0) filters.flowerTypeSlugs = [...new Set(flowerTypeSlugs)];
-
-  const onlyFlowerTypeIds = asStringArray(record.onlyFlowerTypeIds);
-  if (onlyFlowerTypeIds) filters.onlyFlowerTypeIds = onlyFlowerTypeIds;
-  const onlyFlowerTypeSlugs = [
-    ...(asStringArray(record.onlyFlowerTypeSlugs) ?? []),
-    ...(asStringOrArray(record.onlyFlowerType) ?? []),
-  ];
-  if (onlyFlowerTypeSlugs.length > 0) {
-    filters.onlyFlowerTypeSlugs = [...new Set(onlyFlowerTypeSlugs)];
-  }
-
-  const flowerFormIds = asStringArray(record.flowerFormIds);
-  if (flowerFormIds) filters.flowerFormIds = flowerFormIds;
-  const flowerFormSlugs = asStringArray(record.flowerFormSlugs);
-  if (flowerFormSlugs) filters.flowerFormSlugs = flowerFormSlugs;
-
-  const flowerVarietyIds = asStringArray(record.flowerVarietyIds);
-  if (flowerVarietyIds) filters.flowerVarietyIds = flowerVarietyIds;
-  const flowerVarietySlugs = asStringArray(record.flowerVarietySlugs);
-  if (flowerVarietySlugs) filters.flowerVarietySlugs = flowerVarietySlugs;
-  const colorIds = asStringArray(record.colorIds);
-  if (colorIds) filters.colorIds = colorIds;
-  const colorSlugs = asStringArray(record.colorSlugs);
-  if (colorSlugs) filters.colorSlugs = colorSlugs;
-  const componentColorIds = asStringArray(record.componentColorIds);
-  if (componentColorIds) filters.componentColorIds = componentColorIds;
-  const componentColorSlugs = [
-    ...(asStringArray(record.componentColorSlugs) ?? []),
-    ...(asStringOrArray(record.flowerColor) ?? []),
-    ...(asStringArray(record.flowerColorSlugs) ?? []),
-  ];
-  if (componentColorSlugs.length > 0) {
-    filters.componentColorSlugs = [...new Set(componentColorSlugs)];
-  }
-  const occasionIds = asStringArray(record.occasionIds);
-  if (occasionIds) filters.occasionIds = occasionIds;
-  const occasionSlugs = asStringArray(record.occasionSlugs);
-  if (occasionSlugs) filters.occasionSlugs = occasionSlugs;
-  const recipientIds = asStringArray(record.recipientIds);
-  if (recipientIds) filters.recipientIds = recipientIds;
-  const recipientSlugs = asStringArray(record.recipientSlugs);
-  if (recipientSlugs) filters.recipientSlugs = recipientSlugs;
-
-  const kinds = asStringArray(record.compositionKinds) ?? asStringOrArray(record.compositionType);
-  if (kinds) {
-    filters.compositionKinds = kinds.filter((k): k is 'MONO' | 'MIXED' | 'UNKNOWN' =>
-      COMPOSITION_KINDS.has(k),
-    );
-  }
-
-  const productKinds = asStringArray(record.productKinds);
-  if (productKinds) {
-    filters.productKinds = productKinds.filter(
-      (
-        k,
-      ): k is 'BOUQUET' | 'COMPOSITION' | 'STEM' | 'PLANT' | 'GIFT' | 'OTHER' =>
-        PRODUCT_KINDS.has(k),
-    );
-  }
-
-  if (typeof record.minPriceMinor === 'string' && /^\d+$/.test(record.minPriceMinor)) {
-    filters.minPriceMinor = record.minPriceMinor;
-  }
-  if (typeof record.maxPriceMinor === 'string' && /^\d+$/.test(record.maxPriceMinor)) {
-    filters.maxPriceMinor = record.maxPriceMinor;
-  }
-
-  if (
-    typeof record.minFlowerTypeQuantity === 'number' &&
-    Number.isInteger(record.minFlowerTypeQuantity) &&
-    record.minFlowerTypeQuantity >= 1 &&
-    typeof record.flowerTypeQuantitySlug === 'string' &&
-    record.flowerTypeQuantitySlug.trim()
-  ) {
-    filters.minFlowerTypeQuantity = record.minFlowerTypeQuantity;
-    filters.flowerTypeQuantitySlug = record.flowerTypeQuantitySlug.trim();
-  }
-
-  if (
-    typeof record.dominantFlowerTypeSlug === 'string' &&
-    record.dominantFlowerTypeSlug.trim()
-  ) {
-    filters.dominantFlowerTypeSlug = record.dominantFlowerTypeSlug.trim();
-  }
-
-  const traitKeys = asStringArray(record.traitKeys);
-  if (traitKeys) filters.traitKeys = traitKeys;
-
-  return filters;
+  return toProductListFilters(parseCatalogPageRules(rules));
 }

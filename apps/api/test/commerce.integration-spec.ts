@@ -176,6 +176,34 @@ describe('Commerce orders (integration)', () => {
       })
       .expect(200);
 
+    const commerceStamp = `commerce-${Date.now()}`;
+    const flowerType = await http
+      .post('/api/v1/admin/catalog/flower-refs/types')
+      .set('Origin', origin)
+      .send({ name: `Rose ${commerceStamp}`, slug: `rose-${commerceStamp}` })
+      .expect(201);
+    const flowerItem = await http
+      .post('/api/v1/admin/catalog/flower-refs/items')
+      .set('Origin', origin)
+      .send({ flowerTypeId: flowerType.body.id, heightCm: 50 })
+      .expect(201);
+    product = await http
+      .put(`/api/v1/admin/catalog/products/${product.body.id}/components`)
+      .set('Origin', origin)
+      .send({
+        expectedVersion: product.body.version,
+        components: [
+          {
+            flowerItemId: flowerItem.body.id,
+            displayName: 'Rose',
+            quantity: 9,
+            unit: 'STEM',
+            sortOrder: 0,
+          },
+        ],
+      })
+      .expect(200);
+
     const png = await sharp({
       create: { width: 600, height: 600, channels: 3, background: { r: 180, g: 40, b: 90 } },
     })
@@ -523,6 +551,34 @@ describe('Commerce orders (integration)', () => {
       .send({
         expectedVersion: product.body.version,
         variants: [{ name: 'M', priceMinor: '20000', sortOrder: 0, status: 'ACTIVE' }],
+      })
+      .expect(200);
+
+    const promoStamp = `promo-${Date.now()}`;
+    const promoType = await http
+      .post('/api/v1/admin/catalog/flower-refs/types')
+      .set('Origin', origin)
+      .send({ name: `Rose ${promoStamp}`, slug: `rose-${promoStamp}` })
+      .expect(201);
+    const promoItem = await http
+      .post('/api/v1/admin/catalog/flower-refs/items')
+      .set('Origin', origin)
+      .send({ flowerTypeId: promoType.body.id, heightCm: 50 })
+      .expect(201);
+    product = await http
+      .put(`/api/v1/admin/catalog/products/${product.body.id}/components`)
+      .set('Origin', origin)
+      .send({
+        expectedVersion: product.body.version,
+        components: [
+          {
+            flowerItemId: promoItem.body.id,
+            displayName: 'Rose',
+            quantity: 11,
+            unit: 'STEM',
+            sortOrder: 0,
+          },
+        ],
       })
       .expect(200);
 

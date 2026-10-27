@@ -45,7 +45,7 @@ export async function generateMetadata({ params }: { params: Params }): Promise<
     return buildPageMetadata({
       title: product.seo.resolvedTitle,
       description: product.seo.resolvedDescription,
-      path: `/bukety/${resolved.canonicalSlug}`,
+      path: `/products/${resolved.canonicalSlug}`,
       imageUrl: image,
       noIndex: product.seo.noIndex,
     });
@@ -53,7 +53,7 @@ export async function generateMetadata({ params }: { params: Params }): Promise<
     return buildPageMetadata({
       title: 'Букет',
       description: 'Страница букета',
-      path: `/bukety/${slug}`,
+      path: `/products/${slug}`,
       noIndex: true,
     });
   }
@@ -73,7 +73,7 @@ export default async function ProductPage({ params }: { params: Params }) {
   }
 
   if (resolved.redirectedFrom) {
-    permanentRedirect(`/bukety/${resolved.canonicalSlug}`);
+    permanentRedirect(`/products/${resolved.canonicalSlug}`);
   }
 
   const product = resolved.product;
@@ -105,7 +105,7 @@ export default async function ProductPage({ params }: { params: Params }) {
         name: product.catalogCategory.name,
         path: categoryNavHref(product.catalogCategory.slug),
       }
-    : { name: 'Букеты', path: '/bukety' };
+    : { name: 'Букеты', path: '/catalog/bouquets' };
 
   const breadcrumbItems = [
     { name: 'Главная', href: '/' },
@@ -116,7 +116,7 @@ export default async function ProductPage({ params }: { params: Params }) {
   const breadcrumbLd = buildBreadcrumbJsonLd([
     { name: 'Главная', path: '/' },
     { name: catalogCrumb.name, path: catalogCrumb.path },
-    { name: product.name, path: `/bukety/${product.slug}` },
+    { name: product.name, path: `/products/${product.slug}` },
   ]);
 
   const city = settings?.city ?? null;

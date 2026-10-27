@@ -50,7 +50,7 @@ export function OrderSuccessView() {
           </Link>
         ) : null}
         <Link
-          href="/bukety"
+          href="/catalog/bouquets"
           className="inline-flex min-h-12 items-center justify-center rounded-[var(--radius-md)] border border-border px-6 py-3 text-sm font-medium text-foreground hover:bg-brand-soft"
         >
           В каталог

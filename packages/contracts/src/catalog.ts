@@ -184,6 +184,45 @@ export type ProductPlacementDto = {
   entries: ProductPlacementEntryDto[];
 };
 
+/** Why a product does / does not appear on a catalog page (admin diagnostics). */
+export type CatalogPageMatchReasonCode =
+  | 'MATCHES'
+  | 'PINNED'
+  | 'EXCLUDED'
+  | 'RULES_BLOCKING'
+  | 'PRODUCT_KIND'
+  | 'COMPOSITION_KIND'
+  | 'FLOWER_TYPE'
+  | 'ONLY_FLOWER_TYPE'
+  | 'FLOWER_FORM'
+  | 'TRAIT'
+  | 'NOT_PUBLISHED'
+  | 'NO_RULES'
+  | 'UNKNOWN';
+
+export type CatalogPageMatchReasonDto = {
+  code: CatalogPageMatchReasonCode;
+  message: string;
+  /** Optional field/value that failed (for engineers). */
+  detail?: string;
+};
+
+export type CatalogPageProductMatchDto = {
+  pageId: string;
+  pageSlug: string;
+  productId: string;
+  matches: boolean;
+  publishedMatches: boolean;
+  reasons: CatalogPageMatchReasonDto[];
+  /** Rule diagnostics from slug→id resolution (empty when rules use IDs). */
+  ruleDiagnostics: Array<{
+    code: string;
+    field: string;
+    value: string;
+    message: string;
+  }>;
+};
+
 /** ProductKinds that belong on a CatalogCategory listingKind hub. */
 export function productKindsForListingKind(
   listingKind: CatalogListingKind | null | undefined,
@@ -207,10 +246,10 @@ export function productKindsForListingKind(
  * Leaf categories (розы, игрушки) are merchandising/SEO — not a second product type.
  */
 export const CANONICAL_LISTING_HUB_SLUGS: Record<CatalogListingKind, string | null> = {
-  BOUQUETS: 'bukety',
-  COMPOSITIONS: 'kompozicii',
-  FLOWERS: 'tsvety',
-  GIFTS: 'podarki',
+  BOUQUETS: 'bouquets',
+  COMPOSITIONS: 'compositions',
+  FLOWERS: 'stems',
+  GIFTS: 'gifts',
   OTHER: null,
 };
 
@@ -222,23 +261,34 @@ export function isCanonicalListingHub(category: {
   return CANONICAL_LISTING_HUB_SLUGS[category.listingKind] === category.slug;
 }
 
-/** Known merchandising leaf → compositionKind (monobukety). */
+/** Known merchandising leaf → compositionKind (mono-bouquets). */
 export const COMPOSITION_KIND_CATEGORY_SLUGS: Record<string, CompositionKind> = {
+  'mono-bouquets': 'MONO',
   monobukety: 'MONO',
 };
 
 /**
  * How a public /katalog/[slug] page should select products.
  * Canonical hubs: ProductKind only (stale catalogCategoryId must not pollute).
- * Flower leaves / monobukety: composition rules, not category assignment.
+ * Flower leaves / monobukety / thematic: page rules via resolveCatalogPageRules —
+ * never treat CatalogCategory.slug as FlowerType.slug.
  * Other leaves (gift subtypes, merchandising): category tree only.
  */
 export type CategoryListingScope = {
   /** Include products whose catalogCategoryId is in the expanded category tree. */
   useCategoryTree: boolean;
   productKinds?: ProductKind[];
+  /**
+   * @deprecated Never set from category.slug. Kept optional for transitional callers;
+   * product selection must use CatalogCategory.rules + taxonomy IDs.
+   */
   scopeFlowerTypeSlugs?: string[];
   scopeCompositionKinds?: CompositionKind[];
+  /**
+   * When true, caller should build STEM rules from the page slug via the catalog
+   * match engine (aliases → FlowerType id), not pass the slug as a flower filter.
+   */
+  resolveFlowerTypeFromPageSlug?: boolean;
 };
 
 export function resolveCategoryListingScope(category: {
@@ -256,7 +306,7 @@ export function resolveCategoryListingScope(category: {
     };
   }
 
-  // Thematic pages with typed rules — product selection via rulesToFilters, not tree.
+  // Thematic pages with typed rules — product selection via rules engine, not tree.
   if (
     category.pageKind === 'THEMATIC' &&
     category.rules &&
@@ -270,7 +320,8 @@ export function resolveCategoryListingScope(category: {
     return {
       useCategoryTree: false,
       productKinds: ['STEM'],
-      scopeFlowerTypeSlugs: [category.slug],
+      // Page URL (e.g. rozy) ≠ FlowerType.slug (roza) — resolve via rules engine.
+      resolveFlowerTypeFromPageSlug: true,
     };
   }
 

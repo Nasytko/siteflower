@@ -3,12 +3,9 @@ import {
   gateListingFiltersByEnabledKeys,
   heightBandWhere,
   isHeightBandId,
-  resolveCategoryListingScope,
   type BestsellerGroupPublicDto,
   type BudgetRangePublicDto,
-  type CompositionKind,
   type PaginatedResponse,
-  type ProductKind,
   type ProductListItemDto,
   type ProductResolveDto,
   type SitemapEntryDto,
@@ -22,6 +19,11 @@ import { BestsellersService } from './bestsellers.service';
 import { BudgetRangesService } from './budget-ranges.service';
 import { CatalogCategoriesService } from './catalog-categories.service';
 import { CatalogFiltersService } from './catalog-filters.service';
+import { CatalogMatchService } from './catalog-match.service';
+import {
+  mergeListingIntoFilters,
+  resolveCategoryListingFilters,
+} from './catalog-listing.util';
 import { isEffectivelyPublished } from './catalog.logic';
 import {
   PRODUCT_INCLUDE,
@@ -36,7 +38,7 @@ import { ProductFamiliesService } from './product-families.service';
 import type { PublicProductListQueryDto } from './products.dto';
 import { effectivelyPublishedWhere, ProductsRepository } from './products.repository';
 import { PromotionsService } from './promotions.service';
-import { rulesToFilters, SeoLandingsService } from './seo-landings.service';
+import { SeoLandingsService } from './seo-landings.service';
 import { SlugRedirectsService } from './slug-redirects.service';
 
 /** Public landing-page taxonomies (flower types use /cvety via listFlowerTypes). */
@@ -65,62 +67,17 @@ export class PublicCatalogService {
     private readonly seoLandings: SeoLandingsService,
     private readonly media: MediaService,
     private readonly prisma: PrismaService,
+    private readonly catalogMatch: CatalogMatchService,
   ) {}
 
   private readonly urlFor = (storageKey: string) => this.media.getPublicUrl(storageKey);
 
   private async resolveCatalogFilters(query: PublicProductListQueryDto) {
-    let catalogCategoryIds: string[] | undefined;
-    let productKinds: ProductKind[] | undefined;
-    /** Category-scope composition (e.g. monobukety) — not Filter Pool gated. */
-    let scopeCompositionKinds: CompositionKind[] | undefined;
-    /** Category-scope flower type (e.g. /katalog/rozy) — not Filter Pool gated. */
-    let scopeFlowerTypeSlugs: string[] | undefined;
-    /** Thematic page rules merged into list filters (same engine as SEO landings). */
-    let pageRules: ReturnType<typeof rulesToFilters> | undefined;
-    let excludeProductIds: string[] | undefined;
-
-    if (query.catalogCategoryId) {
-      catalogCategoryIds = await this.categories.expandCategoryIds(query.catalogCategoryId, {
-        visibleOnly: true,
-      });
-    } else if (query.categorySlug) {
-      try {
-        const category = await this.categories.getBySlug(query.categorySlug);
-        const scope = resolveCategoryListingScope(category);
-        productKinds = scope.productKinds;
-        scopeCompositionKinds = scope.scopeCompositionKinds;
-        scopeFlowerTypeSlugs = scope.scopeFlowerTypeSlugs;
-        if (scope.useCategoryTree) {
-          catalogCategoryIds = await this.categories.expandCategoryIds(category.id, {
-            visibleOnly: true,
-          });
-        }
-        if (
-          category.pageKind === 'THEMATIC' &&
-          category.rules &&
-          Object.keys(category.rules).length > 0
-        ) {
-          pageRules = rulesToFilters(category.rules as Prisma.JsonValue);
-          const excludes = await this.prisma.client.catalogPageExclude.findMany({
-            where: { pageId: category.id },
-            select: { productId: true },
-          });
-          excludeProductIds = excludes.map((p) => p.productId);
-        }
-      } catch {
-        catalogCategoryIds = ['00000000-0000-0000-0000-000000000000'];
-      }
-    }
     const heightCm =
       query.heightBand && isHeightBandId(query.heightBand)
         ? heightBandWhere(query.heightBand) ?? undefined
         : undefined;
-    return {
-      catalogCategoryIds,
-      productKinds,
-      scopeCompositionKinds,
-      scopeFlowerTypeSlugs,
+    const facetBase = {
       flowerTypeIds: query.flowerTypeId,
       flowerTypeSlugs: query.flowerTypeSlug,
       flowerVarietyIds: query.flowerVarietyId,
@@ -129,9 +86,56 @@ export class PublicCatalogService {
       flowerOriginSlugs: query.flowerOriginSlug,
       heightCm: heightCm ?? undefined,
       familyId: query.familyId,
-      pageRules,
-      excludeProductIds,
     };
+
+    type CatalogFilterResolved = typeof facetBase & {
+      listing: Awaited<ReturnType<typeof resolveCategoryListingFilters>> | null;
+      catalogCategoryIds?: string[];
+    };
+
+    if (query.catalogCategoryId) {
+      const catalogCategoryIds = await this.categories.expandCategoryIds(
+        query.catalogCategoryId,
+        { visibleOnly: true },
+      );
+      return { ...facetBase, catalogCategoryIds, listing: null } satisfies CatalogFilterResolved;
+    }
+
+    if (!query.categorySlug) {
+      return {
+        ...facetBase,
+        listing: null,
+        catalogCategoryIds: undefined,
+      } satisfies CatalogFilterResolved;
+    }
+
+    try {
+      const category = await this.categories.getBySlug(query.categorySlug);
+      const listing = await resolveCategoryListingFilters({
+        category,
+        catalogMatch: this.catalogMatch,
+        expandCategoryIds: (id, opts) => this.categories.expandCategoryIds(id, opts),
+        loadExcludeProductIds: async (pageId) => {
+          const excludes = await this.prisma.client.catalogPageExclude.findMany({
+            where: { pageId },
+            select: { productId: true },
+          });
+          return excludes.map((p) => p.productId);
+        },
+        visibleOnly: true,
+      });
+      return {
+        ...facetBase,
+        listing,
+        catalogCategoryIds: listing.catalogCategoryIds,
+      } satisfies CatalogFilterResolved;
+    } catch {
+      return {
+        ...facetBase,
+        catalogCategoryIds: ['00000000-0000-0000-0000-000000000000'],
+        listing: null,
+      } satisfies CatalogFilterResolved;
+    }
   }
 
   async listProducts(
@@ -180,26 +184,16 @@ export class PublicCatalogService {
       }
     }
 
-    const mergedFlowerTypeSlugs = [
-      ...new Set([
-        ...(gatedFacet.flowerTypeSlugs ?? []),
-        ...(catalogFilters.scopeFlowerTypeSlugs ?? []),
-      ]),
-    ];
-    const mergedCompositionKinds =
-      gatedFacet.compositionKinds ?? catalogFilters.scopeCompositionKinds;
-
-    const pageRules = catalogFilters.pageRules ?? {};
-    const ruleFlowerSlugs = [
-      ...new Set([
-        ...mergedFlowerTypeSlugs,
-        ...(pageRules.flowerTypeSlugs ?? []),
-      ]),
-    ];
-    const ruleProductKinds =
-      catalogFilters.productKinds ?? pageRules.productKinds;
-    const ruleCompositionKinds =
-      mergedCompositionKinds ?? pageRules.compositionKinds;
+    const listingFilters = catalogFilters.listing
+      ? mergeListingIntoFilters(catalogFilters.listing, {
+          ...gatedFacet,
+          familyId: catalogFilters.familyId,
+        })
+      : {
+          ...gatedFacet,
+          familyId: catalogFilters.familyId,
+          catalogCategoryIds: catalogFilters.catalogCategoryIds,
+        };
 
     const { items, total } = await this.products.list({
       filters: {
@@ -208,21 +202,12 @@ export class PublicCatalogService {
         availability: query.availability,
         flowerSlugs: query.flowerSlugs,
         budgetRanges,
-        catalogCategoryIds: catalogFilters.catalogCategoryIds,
-        productKinds: ruleProductKinds,
-        familyId: catalogFilters.familyId,
-        ...gatedFacet,
-        ...pageRules,
-        flowerTypeSlugs: ruleFlowerSlugs.length > 0 ? ruleFlowerSlugs : undefined,
-        compositionKinds: ruleCompositionKinds,
-        excludeProductIds: catalogFilters.excludeProductIds,
-        onlyFlowerTypeSlugs: pageRules.onlyFlowerTypeSlugs,
-        onlyFlowerTypeIds: pageRules.onlyFlowerTypeIds,
-        traitKeys: pageRules.traitKeys,
-        flowerFormSlugs: pageRules.flowerFormSlugs,
-        flowerFormIds: pageRules.flowerFormIds,
-        componentColorIds: pageRules.componentColorIds ?? gatedFacet.componentColorIds,
-        componentColorSlugs: pageRules.componentColorSlugs ?? gatedFacet.componentColorSlugs,
+        ...listingFilters,
+        // Facet color overrides only when page rules did not set component color.
+        componentColorIds:
+          listingFilters.componentColorIds ?? gatedFacet.componentColorIds,
+        componentColorSlugs:
+          listingFilters.componentColorSlugs ?? gatedFacet.componentColorSlugs,
       },
       skip: (page - 1) * pageSize,
       take: pageSize,
@@ -397,57 +382,63 @@ export class PublicCatalogService {
 
   async getSitemap(): Promise<SitemapEntryDto[]> {
     const now = new Date();
-    const [products, flowerTypes, occasions, recipients, categories, seoLandings] =
-      await Promise.all([
-        this.prisma.client.product.findMany({
-          where: { ...effectivelyPublishedWhere(now), noIndex: false },
-          select: { slug: true, updatedAt: true },
-          orderBy: { updatedAt: 'desc' },
-        }),
-        this.prisma.client.flowerType.findMany({
-          where: { visibility: 'VISIBLE', noIndex: false },
-          select: { slug: true, updatedAt: true },
-          orderBy: { updatedAt: 'desc' },
-        }),
-        this.prisma.client.occasion.findMany({
-          where: { visibility: 'VISIBLE', noIndex: false },
-          select: { slug: true, updatedAt: true },
-          orderBy: { updatedAt: 'desc' },
-        }),
-        this.prisma.client.recipient.findMany({
-          where: { visibility: 'VISIBLE', noIndex: false },
-          select: { slug: true, updatedAt: true },
-          orderBy: { updatedAt: 'desc' },
-        }),
-        this.prisma.client.catalogCategory.findMany({
-          where: { visibility: 'VISIBLE', noIndex: false },
-          select: { slug: true, updatedAt: true },
-          orderBy: { updatedAt: 'desc' },
-        }),
-        this.seoLandings.listSitemapEntries(),
-      ]);
+    const [products, occasions, recipients, categories, seoLandings] = await Promise.all([
+      this.prisma.client.product.findMany({
+        where: { ...effectivelyPublishedWhere(now), noIndex: false },
+        select: { slug: true, updatedAt: true },
+        orderBy: { updatedAt: 'desc' },
+      }),
+      this.prisma.client.occasion.findMany({
+        where: { visibility: 'VISIBLE', noIndex: false },
+        select: { slug: true, updatedAt: true },
+        orderBy: { updatedAt: 'desc' },
+      }),
+      this.prisma.client.recipient.findMany({
+        where: { visibility: 'VISIBLE', noIndex: false },
+        select: { slug: true, updatedAt: true },
+        orderBy: { updatedAt: 'desc' },
+      }),
+      this.prisma.client.catalogCategory.findMany({
+        where: {
+          visibility: 'VISIBLE',
+          noIndex: false,
+          OR: [
+            { pageKind: 'SYSTEM_HUB' },
+            { pageKind: 'LEGACY' },
+            { pageKind: 'THEMATIC', pageStatus: 'PUBLISHED' },
+          ],
+        },
+        select: { slug: true, updatedAt: true, pageKind: true, pageStatus: true },
+        orderBy: { updatedAt: 'desc' },
+      }),
+      this.seoLandings.listSitemapEntries(),
+    ]);
 
     const newestProductUpdate = products[0]?.updatedAt.toISOString() ?? null;
-    // Keep legacy hubs for cvety/bukety; other visible categories land on /katalog/[slug].
-    const legacyNavSlugs = new Set(['cvety', 'bukety']);
 
-    return [
-      { path: '/bukety', updatedAt: newestProductUpdate },
+    const categoryPaths = categories
+      .filter((category) => {
+        if (category.pageKind === 'THEMATIC' && category.pageStatus !== 'PUBLISHED') {
+          return false;
+        }
+        return true;
+      })
+      .map((category) => ({
+        path: `/catalog/${category.slug}`,
+        updatedAt: category.updatedAt.toISOString(),
+      }));
+
+    // Dedupe: seoLandings also emit /catalog/{slug} for thematic pages.
+    const byPath = new Map<string, { path: string; updatedAt: string | null }>();
+    for (const entry of [
+      { path: '/catalog', updatedAt: newestProductUpdate },
+      { path: '/catalog/bouquets', updatedAt: newestProductUpdate },
       { path: '/akcii', updatedAt: newestProductUpdate },
       ...products.map((product) => ({
-        path: `/bukety/${product.slug}`,
+        path: `/products/${product.slug}`,
         updatedAt: product.updatedAt.toISOString(),
       })),
-      ...categories
-        .filter((category) => !legacyNavSlugs.has(category.slug))
-        .map((category) => ({
-          path: `/katalog/${category.slug}`,
-          updatedAt: category.updatedAt.toISOString(),
-        })),
-      ...flowerTypes.map((flowerType) => ({
-        path: `/cvety/${flowerType.slug}`,
-        updatedAt: flowerType.updatedAt.toISOString(),
-      })),
+      ...categoryPaths,
       ...occasions.map((occasion) => ({
         path: `/povod/${occasion.slug}`,
         updatedAt: occasion.updatedAt.toISOString(),
@@ -457,7 +448,13 @@ export class PublicCatalogService {
         updatedAt: recipient.updatedAt.toISOString(),
       })),
       ...seoLandings,
-    ];
+    ]) {
+      const prev = byPath.get(entry.path);
+      if (!prev || (entry.updatedAt && (!prev.updatedAt || entry.updatedAt > prev.updatedAt))) {
+        byPath.set(entry.path, entry);
+      }
+    }
+    return [...byPath.values()];
   }
 
   private async listVisibleTaxonomyRefs(kind: PublicTaxonomyKind): Promise<TaxonomyRefDto[]> {

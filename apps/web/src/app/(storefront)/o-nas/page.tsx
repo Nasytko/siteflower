@@ -53,7 +53,7 @@ export default async function AboutPage() {
       </ul>
 
       <p className="mt-12">
-        <Link href="/bukety" className="text-sm font-medium text-brand hover:underline">
+        <Link href="/catalog/bouquets" className="text-sm font-medium text-brand hover:underline">
           Смотреть букеты
         </Link>
       </p>

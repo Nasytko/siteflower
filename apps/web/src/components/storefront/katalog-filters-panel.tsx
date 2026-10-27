@@ -207,7 +207,7 @@ export function KatalogFiltersPanel({
   const router = useRouter();
   const [, startTransition] = useTransition();
   const hasFilters = katalogHasActiveFilters(state);
-  const clearHref = `/katalog/${encodeURIComponent(categorySlug)}`;
+  const clearHref = `/catalog/${encodeURIComponent(categorySlug)}`;
 
   const promoFilter = filters.find((f) => f.key === 'promo');
   const facetFilters = filters.filter((f) => f.key !== 'price' && f.key !== 'promo');

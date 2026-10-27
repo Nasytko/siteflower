@@ -19,8 +19,8 @@ const KIND_META: Record<
   { pathPrefix: string; filterKey: keyof CatalogListParams; hubLabel: string; hubHref: string }
 > = {
   occasion: { pathPrefix: '/povod', filterKey: 'occasion', hubLabel: 'Повод', hubHref: '/povod' },
-  recipient: { pathPrefix: '/komu', filterKey: 'recipient', hubLabel: 'Кому', hubHref: '/bukety' },
-  color: { pathPrefix: '/bukety', filterKey: 'color', hubLabel: 'Цвет', hubHref: '/bukety' },
+  recipient: { pathPrefix: '/komu', filterKey: 'recipient', hubLabel: 'Кому', hubHref: '/catalog/bouquets' },
+  color: { pathPrefix: '/catalog/bouquets', filterKey: 'color', hubLabel: 'Цвет', hubHref: '/catalog/bouquets' },
 };
 
 export async function generateTaxonomyMetadata(
@@ -66,14 +66,14 @@ export async function TaxonomyLandingPage({
   }
 
   const products = await listProducts({
-    categorySlug: 'bukety',
+    categorySlug: 'bouquets',
     [meta.filterKey]: taxonomy.slug,
     pageSize: 24,
     sort: 'recommended',
   }).catch(() => EMPTY_PRODUCT_PAGE);
 
   /** Deep-link into the catalog with this dimension preselected. */
-  const catalogHref = `/bukety?${meta.filterKey}=${encodeURIComponent(taxonomy.slug)}`;
+  const catalogHref = `/catalog/bouquets?${meta.filterKey}=${encodeURIComponent(taxonomy.slug)}`;
 
   return (
     <main id="main-content" className="sf-container-wide py-5 sm:py-7">
@@ -110,7 +110,7 @@ export async function TaxonomyLandingPage({
           <p className="sf-body max-w-md text-muted">
             Витрина обновляется каждый день — загляните в полный каталог.
           </p>
-          <Link href="/bukety" className="sf-cta mt-2">
+          <Link href="/catalog/bouquets" className="sf-cta mt-2">
             Все букеты
           </Link>
         </div>
