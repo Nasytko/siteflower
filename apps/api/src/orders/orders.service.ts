@@ -948,7 +948,8 @@ export class OrdersService {
     toStatus: OrderStatus,
     actor: { id: string; requestId?: string },
   ): Promise<OrderAdminDetailDto> {
-    return this.prisma.client.$transaction(async (tx) => {
+    // Load detail after commit: getAdmin uses the pool, not `tx`.
+    await this.prisma.client.$transaction(async (tx) => {
       const order = await tx.order.findUnique({ where: { id } });
       if (!order) throw new NotFoundException();
 
@@ -997,9 +998,8 @@ export class OrdersService {
         },
         tx,
       );
-
-      return this.getAdmin(id);
     });
+    return this.getAdmin(id);
   }
 
   async cancel(
@@ -1011,7 +1011,7 @@ export class OrdersService {
     if (trimmed.length < 3 || trimmed.length > 500) {
       throw new BadRequestException('Укажите причину отмены (3–500 символов)');
     }
-    return this.prisma.client.$transaction(async (tx) => {
+    await this.prisma.client.$transaction(async (tx) => {
       const order = await tx.order.findUnique({ where: { id } });
       if (!order) throw new NotFoundException();
       if (!isOrderTransitionAllowed(order.status, 'CANCELLED', order.fulfillmentType)) {
@@ -1058,9 +1058,8 @@ export class OrdersService {
         },
         tx,
       );
-
-      return this.getAdmin(id);
     });
+    return this.getAdmin(id);
   }
 }
 
