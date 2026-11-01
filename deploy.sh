@@ -372,9 +372,9 @@ main() {
       export SHOPBUKET1_CLEANUP_PLAN="$CLEANUP_PLAN"
     fi
     if [[ "$DRY_RUN" -eq 1 ]]; then
-      exec "${SCRIPT_DIR}/scripts/release.sh" dry-run ${REF:+"$REF"}
+      exec bash "${SCRIPT_DIR}/scripts/release.sh" dry-run ${REF:+"$REF"}
     fi
-    exec "${SCRIPT_DIR}/scripts/release.sh" production ${REF:+"$REF"}
+    exec bash "${SCRIPT_DIR}/scripts/release.sh" production ${REF:+"$REF"}
   fi
   if [[ -n "${CLEANUP_PLAN}" && "$MODE" != "production" ]]; then
     die "--cleanup-plan is only valid with: ./deploy.sh production --cleanup-plan <plan>"

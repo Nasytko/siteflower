@@ -67,7 +67,12 @@ bash "${ROOT}/scripts/release.sh" --help >/dev/null || fail "release.sh --help"
 pass "release.sh --help"
 
 # --- deploy.sh production --dry-run (no Docker) ---
-dry="$(bash "${ROOT}/deploy.sh" production --dry-run 2>&1)" || fail "deploy.sh production --dry-run"
+dry_rc=0
+dry="$(bash "${ROOT}/deploy.sh" production --dry-run 2>&1)" || dry_rc=$?
+if [[ "$dry_rc" -ne 0 ]]; then
+  printf '%s\n' "$dry" >&2
+  fail "deploy.sh production --dry-run (exit ${dry_rc})"
+fi
 echo "$dry" | grep -qi "DRY-RUN" || fail "production dry-run missing banner"
 echo "$dry" | grep -qi "erp_sku_registry" || fail "dry-run must mention erp_sku_registry gate"
 pass "deploy.sh production --dry-run"
