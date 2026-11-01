@@ -208,10 +208,26 @@ export class PublicCatalogService {
 
     const pinnedIds = [...new Set(catalogFilters.listing?.pinnedProductIds ?? [])];
     const excludedIds = [...new Set(catalogFilters.listing?.excludeProductIds ?? [])];
+
+    // Resolve published pins once — needed for every page's total and for overflow pages.
+    let publishedPinnedItems: ProductListItemDto[] = [];
+    if (pinnedIds.length > 0) {
+      const rows = await this.products.findManyByIds(pinnedIds);
+      const byId = new Map(rows.map((row) => [row.id, row]));
+      publishedPinnedItems = pinnedIds
+        .map((id) => byId.get(id))
+        .filter(
+          (row): row is NonNullable<typeof row> =>
+            Boolean(row) && isEffectivelyPublished(row!, now),
+        )
+        .filter((row) => !excludedIds.includes(row.id))
+        .map((row) => toProductListItemDto(row, this.urlFor, now));
+    }
+
     const pinWindow = pinAwareListWindow({
       page,
       pageSize,
-      pinCount: pinnedIds.length,
+      pinCount: publishedPinnedItems.length,
     });
 
     // Exclude both explicit excludes and pins from the rules query (pins merged back).
@@ -239,55 +255,45 @@ export class PublicCatalogService {
             sort: query.sort ?? 'recommended',
             now,
           })
-        : await this.products.list({
-            filters: {
-              publishedAt: now,
-              search: query.search,
-              availability: query.availability,
-              flowerSlugs: query.flowerSlugs,
-              budgetRanges,
-              ...listingFilters,
-              excludeProductIds: excludeFromRules.length ? excludeFromRules : undefined,
-              componentColorIds:
-                listingFilters.componentColorIds ?? gatedFacet.componentColorIds,
-              componentColorSlugs:
-                listingFilters.componentColorSlugs ?? gatedFacet.componentColorSlugs,
-            },
-            skip: 0,
-            take: 1,
-            sort: query.sort ?? 'recommended',
-            now,
-          }).then((result) => ({ items: [], total: result.total }));
+        : await this.products
+            .list({
+              filters: {
+                publishedAt: now,
+                search: query.search,
+                availability: query.availability,
+                flowerSlugs: query.flowerSlugs,
+                budgetRanges,
+                ...listingFilters,
+                excludeProductIds: excludeFromRules.length ? excludeFromRules : undefined,
+                componentColorIds:
+                  listingFilters.componentColorIds ?? gatedFacet.componentColorIds,
+                componentColorSlugs:
+                  listingFilters.componentColorSlugs ?? gatedFacet.componentColorSlugs,
+              },
+              skip: 0,
+              take: 1,
+              sort: query.sort ?? 'recommended',
+              now,
+            })
+            .then((result) => ({ items: [], total: result.total }));
 
     const { items, total } = ruleQuery;
-
-    let pinnedItems: ProductListItemDto[] = [];
-    if (pinWindow.includePins && pinnedIds.length > 0) {
-      const rows = await this.products.findManyByIds(pinnedIds);
-      const byId = new Map(rows.map((row) => [row.id, row]));
-      pinnedItems = pinnedIds
-        .map((id) => byId.get(id))
-        .filter(
-          (row): row is NonNullable<typeof row> =>
-            Boolean(row) && isEffectivelyPublished(row!, now),
-        )
-        .filter((row) => !excludedIds.includes(row.id))
-        .map((row) => toProductListItemDto(row, this.urlFor, now));
-    }
-
+    const pagePins = publishedPinnedItems.slice(
+      pinWindow.pinSkip,
+      pinWindow.pinSkip + pinWindow.pinTake,
+    );
     const ruleItems = items.map((product) =>
       toProductListItemDto(product, this.urlFor, now),
     );
     const merged = mergePinnedItems({
-      pinnedItems,
+      pinnedItems: pagePins,
       ruleItems,
-      includePins: pinWindow.includePins,
       pageSize,
     });
 
     return {
       items: merged,
-      total: combinedTotal(total, pinnedItems.length),
+      total: combinedTotal(total, publishedPinnedItems.length),
       page,
       pageSize,
     };

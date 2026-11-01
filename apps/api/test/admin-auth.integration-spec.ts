@@ -10,10 +10,9 @@ import request from 'supertest';
 import pg from 'pg';
 import * as argon2 from 'argon2';
 import { ADMIN_SESSION_COOKIE } from '@bouquet-one/contracts';
+import { openIntegrationDatabase } from './integration-database-url';
 
-const databaseUrl =
-  process.env.DATABASE_URL ??
-  'postgresql://bouquet:bouquet_dev_password@localhost:5433/bouquet_one?schema=public';
+let databaseUrl = '';
 const apiPort = String(3101 + Math.floor(Math.random() * 200));
 const origin = 'http://localhost:3000';
 const password = 'IntegrationPass1!';
@@ -35,7 +34,9 @@ describe('Admin auth (integration)', () => {
   const base = `http://127.0.0.1:${apiPort}`;
 
   beforeAll(async () => {
-    pool = new pg.Pool({ connectionString: databaseUrl });
+    const verified = await openIntegrationDatabase();
+    databaseUrl = verified.url;
+    pool = verified.pool;
     await pool.query('DELETE FROM audit_logs');
     await pool.query('DELETE FROM admin_sessions');
     await pool.query('DELETE FROM admin_users');

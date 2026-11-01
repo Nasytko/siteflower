@@ -1,7 +1,7 @@
 /**
  * Classification integration against real PostgreSQL.
  * Focus: slug alias rozy→roza, ID-first rules, no invented ids.
- * Requires DATABASE_URL (default localhost:5433). Never use production.
+ * Requires TEST_DATABASE_URL + TEST_DATABASE_ALLOW_INTEGRATION=1 (R21).
  */
 import pg from 'pg';
 import {
@@ -12,19 +12,19 @@ import {
 } from '@bouquet-one/contracts';
 
 import { randomUUID } from 'node:crypto';
-import { resolveIntegrationDatabaseUrl } from './integration-database-url';
+import { openIntegrationDatabase } from './integration-database-url';
 
 describe('Catalog match classification (integration)', () => {
   let pool: pg.Pool;
 
   beforeAll(async () => {
-    const databaseUrl = await resolveIntegrationDatabaseUrl();
-    pool = new pg.Pool({ connectionString: databaseUrl });
+    const verified = await openIntegrationDatabase();
+    pool = verified.pool;
     try {
       await pool.query('SELECT 1');
     } catch (err) {
       throw new Error(
-        `Integration tests require PostgreSQL at DATABASE_URL. ${(err as Error).message}`,
+        `Integration tests require verified TEST_DATABASE_URL. ${(err as Error).message}`,
       );
     }
     // Ensure canonical rose type exists (other suites may wipe flower_types).

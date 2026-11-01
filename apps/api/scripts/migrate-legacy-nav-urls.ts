@@ -16,9 +16,10 @@ config({ path: resolve(process.cwd(), '.env') });
 
 async function main() {
   const apply = process.argv.includes('--apply');
-  const connectionString =
-    process.env.DATABASE_URL ??
-    'postgresql://bouquet:bouquet_dev_password@127.0.0.1:5432/bouquet_one?schema=public';
+  const connectionString = process.env.DATABASE_URL?.trim();
+  if (!connectionString) {
+    throw new Error('DATABASE_URL is required (no bouquet_one fallback)');
+  }
   const prisma = await createPrismaClient({ connectionString });
 
   const rows = await prisma.navigationMenuItem.findMany({

@@ -10,10 +10,9 @@ import pg from 'pg';
 import * as argon2 from 'argon2';
 import sharp from 'sharp';
 import { defaultTimeWindows } from '@bouquet-one/contracts';
+import { openIntegrationDatabase } from './integration-database-url';
 
-const databaseUrl =
-  process.env.DATABASE_URL ??
-  'postgresql://bouquet:bouquet_dev_password@localhost:5433/bouquet_one?schema=public';
+let databaseUrl = '';
 const apiPort = String(3501 + Math.floor(Math.random() * 200));
 const origin = 'http://localhost:3000';
 const password = 'CommercePass12!!';
@@ -55,7 +54,9 @@ describe('Commerce orders (integration)', () => {
   let timeWindowId: string;
 
   beforeAll(async () => {
-    pool = new pg.Pool({ connectionString: databaseUrl });
+    const verified = await openIntegrationDatabase();
+    databaseUrl = verified.url;
+    pool = verified.pool;
 
     await pool.query('DELETE FROM outbox_events');
     await pool.query('DELETE FROM order_events');

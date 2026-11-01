@@ -15,10 +15,9 @@ import sharp from 'sharp';
 import { LocalMediaStorage } from '../src/media/local-media.storage';
 import { MediaService } from '../src/media/media.service';
 import type { MediaStorage } from '../src/media/media-storage';
+import { openIntegrationDatabase } from './integration-database-url';
 
-const databaseUrl =
-  process.env.DATABASE_URL ??
-  'postgresql://bouquet:bouquet_dev_password@localhost:5433/bouquet_one?schema=public';
+let databaseUrl = '';
 const apiPort = String(3401 + Math.floor(Math.random() * 200));
 const origin = 'http://localhost:3000';
 const password = 'MediaPass12!!';
@@ -62,7 +61,9 @@ describe('Media production hardening (integration)', () => {
   const base = `http://127.0.0.1:${apiPort}`;
 
   beforeAll(async () => {
-    pool = new pg.Pool({ connectionString: databaseUrl });
+    const verified = await openIntegrationDatabase();
+    databaseUrl = verified.url;
+    pool = verified.pool;
     await pool.query(
       `DELETE FROM product_media WHERE product_id IN (SELECT id FROM products WHERE slug LIKE 'media-hard-%')`,
     );

@@ -5,12 +5,7 @@
 import { randomUUID } from 'node:crypto';
 import pg from 'pg';
 import { computeBackoffMs, shouldMarkFailed } from '../src/integration/backoff';
-
-const databaseUrl =
-  process.env.DATABASE_URL ??
-  'postgresql://bouquet:bouquet_dev_password@localhost:5433/bouquet_one?schema=public';
-
-const hasDb = Boolean(databaseUrl);
+import { openIntegrationDatabase } from './integration-database-url';
 
 async function claimBatchForIds(
   client: pg.PoolClient,
@@ -58,11 +53,12 @@ async function claimBatchForIds(
   return result.rows.map((row) => row.id);
 }
 
-(hasDb ? describe : describe.skip)('integration outbox (integration)', () => {
+describe('integration outbox (integration)', () => {
   let pool: pg.Pool;
 
-  beforeAll(() => {
-    pool = new pg.Pool({ connectionString: databaseUrl });
+  beforeAll(async () => {
+    const verified = await openIntegrationDatabase();
+    pool = verified.pool;
   });
 
   afterAll(async () => {
@@ -126,8 +122,6 @@ async function claimBatchForIds(
   });
 
   it('stale worker markDelivered is a no-op when lease owner differs', async () => {
-    if (!hasDb) return;
-    const pool = new pg.Pool({ connectionString: databaseUrl });
     const id = randomUUID();
     const now = new Date();
     const leaseExpires = new Date(now.getTime() + 60_000);
@@ -167,7 +161,6 @@ async function claimBatchForIds(
     expect(current.rows[0]?.lease_owner).toBe('worker-b');
 
     await pool.query(`DELETE FROM outbox_events WHERE id = $1`, [id]);
-    await pool.end();
   });
 
   it('unit-level backoff helpers remain consistent', () => {

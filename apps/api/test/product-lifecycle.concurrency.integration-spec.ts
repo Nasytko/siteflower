@@ -2,18 +2,16 @@
  * PostgreSQL concurrency tests for product deletion vs order creation,
  * and for a product update that must keep variant ids, promotions, and collections.
  *
- * Uses the same lock SQL as order creation and hard delete. Requires a
- * reachable DATABASE_URL. Creates only rows prefixed with `race-`.
+ * Uses the same lock SQL as order creation and hard delete. Requires
+ * TEST_DATABASE_URL + TEST_DATABASE_ALLOW_INTEGRATION=1 (R21).
+ * Creates only rows prefixed with `race-`.
  */
 import { randomBytes, randomUUID } from 'node:crypto';
 import { setTimeout as delay } from 'node:timers/promises';
 import pg from 'pg';
 import { planVariantSync } from '../src/catalog/product-editor.util';
 import { lockProductRows, PRODUCT_ROW_LOCK_SQL } from '../src/catalog/product-lock.util';
-
-const databaseUrl =
-  process.env.DATABASE_URL ??
-  'postgresql://bouquet:bouquet_dev_password@localhost:5433/bouquet_one?schema=public';
+import { openIntegrationDatabase } from './integration-database-url';
 
 function hex(bytes: number): string {
   return randomBytes(bytes).toString('hex');
@@ -48,7 +46,8 @@ describe('product lifecycle concurrency (PostgreSQL)', () => {
   let connected = false;
 
   beforeAll(async () => {
-    pool = new pg.Pool({ connectionString: databaseUrl, connectionTimeoutMillis: 3_000 });
+    const verified = await openIntegrationDatabase({ connectionTimeoutMillis: 3_000 });
+    pool = verified.pool;
     try {
       await pool.query('SELECT 1');
       connected = true;

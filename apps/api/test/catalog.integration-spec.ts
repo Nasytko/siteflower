@@ -9,10 +9,9 @@ import request from 'supertest';
 import pg from 'pg';
 import * as argon2 from 'argon2';
 import sharp from 'sharp';
+import { openIntegrationDatabase } from './integration-database-url';
 
-const databaseUrl =
-  process.env.DATABASE_URL ??
-  'postgresql://bouquet:bouquet_dev_password@localhost:5433/bouquet_one?schema=public';
+let databaseUrl = '';
 const apiPort = String(3201 + Math.floor(Math.random() * 200));
 const origin = 'http://localhost:3000';
 const password = 'CatalogPass12!!';
@@ -41,7 +40,9 @@ describe('Catalog (integration)', () => {
   const base = `http://127.0.0.1:${apiPort}`;
 
   beforeAll(async () => {
-    pool = new pg.Pool({ connectionString: databaseUrl });
+    const verified = await openIntegrationDatabase();
+    databaseUrl = verified.url;
+    pool = verified.pool;
     await pool.query('DELETE FROM bestseller_group_products');
     await pool.query('DELETE FROM bestseller_groups');
     await pool.query('DELETE FROM product_promotion_variant_prices');

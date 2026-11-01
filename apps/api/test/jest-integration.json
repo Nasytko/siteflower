@@ -2,6 +2,7 @@
   "moduleFileExtensions": ["js", "json", "ts"],
   "rootDir": ".",
   "testRegex": ".integration-spec.ts$",
+  "setupFiles": ["<rootDir>/safe-test-database.setup.ts"],
   "transform": {
     "^.+\\.(t|j)s$": "ts-jest"
   },

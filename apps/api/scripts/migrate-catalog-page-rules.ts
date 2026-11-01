@@ -19,9 +19,10 @@ import { createPrismaClient } from '@bouquet-one/database';
 const APPLY = process.argv.includes('--apply');
 
 async function main() {
-  const connectionString =
-    process.env.DATABASE_URL ??
-    'postgresql://bouquet:bouquet_dev_password@127.0.0.1:5433/bouquet_one?schema=public';
+  const connectionString = process.env.DATABASE_URL?.trim();
+  if (!connectionString) {
+    throw new Error('DATABASE_URL is required (no bouquet_one fallback)');
+  }
   const prisma = await createPrismaClient({ connectionString });
   try {
     const [flowerTypes, flowerForms, flowerVarieties, colors, occasions, recipients] =

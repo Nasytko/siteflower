@@ -658,7 +658,25 @@ export class CatalogPagesService {
     });
     const pinned = [...new Set(input.pinnedProductIds ?? [])];
     const excluded = new Set(input.excludedProductIds ?? []);
-    const pinWindow = pinAwareListWindow({ page, pageSize, pinCount: pinned.length });
+
+    let publishedPinnedItems: ProductListItemDto[] = [];
+    if (pinned.length > 0) {
+      const rows = await this.products.findManyByIds(pinned);
+      const byId = new Map(rows.map((row) => [row.id, row]));
+      publishedPinnedItems = pinned
+        .map((id) => byId.get(id))
+        .filter(
+          (row): row is NonNullable<typeof row> =>
+            Boolean(row) && isEffectivelyPublished(row!, now) && !excluded.has(row!.id),
+        )
+        .map((row) => toProductListItemDto(row, this.urlFor, now));
+    }
+
+    const pinWindow = pinAwareListWindow({
+      page,
+      pageSize,
+      pinCount: publishedPinnedItems.length,
+    });
 
     const ruleQuery =
       pinWindow.ruleTake > 0
@@ -691,32 +709,22 @@ export class CatalogPagesService {
             })
             .then((result) => ({ items: [], total: result.total }));
 
-    let pinnedItems: ProductListItemDto[] = [];
-    if (pinWindow.includePins && pinned.length > 0) {
-      const rows = await this.products.findManyByIds(pinned);
-      const byId = new Map(rows.map((row) => [row.id, row]));
-      pinnedItems = pinned
-        .map((id) => byId.get(id))
-        .filter(
-          (row): row is NonNullable<typeof row> =>
-            Boolean(row) && isEffectivelyPublished(row!, now) && !excluded.has(row!.id),
-        )
-        .map((row) => toProductListItemDto(row, this.urlFor, now));
-    }
-
+    const pagePins = publishedPinnedItems.slice(
+      pinWindow.pinSkip,
+      pinWindow.pinSkip + pinWindow.pinTake,
+    );
     const ruleItems = ruleQuery.items.map((row) =>
       toProductListItemDto(row, this.urlFor, now),
     );
     const merged = mergePinnedItems({
-      pinnedItems,
+      pinnedItems: pagePins,
       ruleItems,
-      includePins: pinWindow.includePins,
       pageSize,
     });
 
     return {
       items: merged,
-      total: combinedTotal(ruleQuery.total, pinnedItems.length),
+      total: combinedTotal(ruleQuery.total, publishedPinnedItems.length),
       page,
       pageSize,
       diagnostics: match.diagnostics,
