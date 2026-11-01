@@ -237,6 +237,8 @@ export type CheckoutOptionSnapshotDto = {
   valueName: string;
   surchargeMinor: string;
   chargeMode: 'PER_LINE' | 'PER_UNIT';
+  /** ERP article for the option value at order time; null/omit on legacy. */
+  erpSku?: string | null;
 };
 
 export type CheckoutValidatedLineDto = {
@@ -245,6 +247,8 @@ export type CheckoutValidatedLineDto = {
   quantity: number;
   productName: string;
   productSlug: string;
+  /** ERP article snapshotted from product at validation/order time; null when unset. */
+  productErpSku: string | null;
   variantName: string;
   primaryImageUrl: string | null;
   availability: CommercialAvailability;
@@ -307,6 +311,8 @@ export type OrderItemPublicDto = {
   id: string;
   productName: string;
   productSlug: string;
+  /** ERP article at order time; null on legacy / unlinked products. */
+  productErpSku?: string | null;
   variantName: string;
   primaryImageUrl: string | null;
   quantity: number;

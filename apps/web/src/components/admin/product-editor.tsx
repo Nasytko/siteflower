@@ -7,6 +7,8 @@ import {
   defaultProductSeoDescription,
   defaultProductSeoTitle,
   isPlaceholderProductName,
+  isValidErpSkuFormat,
+  normalizeErpSku,
   normalizeSlug,
   deriveProductEditorReadiness,
   parsePositivePriceMajor,
@@ -159,6 +161,7 @@ export function ProductEditor({
   const [basic, setBasic] = useState({
     name: product.name,
     slug: product.slug,
+    erpSku: product.erpSku ?? '',
     shortDescription: product.shortDescription ?? '',
     badgeLabel: product.badgeLabel ?? '',
     description: product.description ?? '',
@@ -260,6 +263,7 @@ export function ProductEditor({
     setBasic({
       name: updated.name,
       slug: updated.slug,
+      erpSku: updated.erpSku ?? '',
       shortDescription: updated.shortDescription ?? '',
       badgeLabel: updated.badgeLabel ?? '',
       description: updated.description ?? '',
@@ -573,6 +577,18 @@ export function ProductEditor({
   function validate(): string | null {
     if (basic.name.trim().length === 0) return 'Укажите название товара';
     if (basic.slug.trim().length === 0) return 'Укажите адрес в ссылке';
+    const erpSkuNormalized = normalizeErpSku(basic.erpSku);
+    if (erpSkuNormalized && !isValidErpSkuFormat(erpSkuNormalized)) {
+      return 'Артикул ERP: латиница/цифры, допускается . _ - (без пробелов)';
+    }
+    for (const group of optionGroups) {
+      for (const value of group.values) {
+        const optSku = normalizeErpSku(value.erpSku);
+        if (optSku && !isValidErpSkuFormat(optSku)) {
+          return `Артикул ERP опции «${value.name || group.name}»: неверный формат`;
+        }
+      }
+    }
     if (variants.length === 0) return 'Укажите хотя бы одну цену';
     if (variants.length > 1) {
       const normalizedNames = variants.map((variant) => variant.name.trim().toLowerCase());
@@ -641,6 +657,7 @@ export function ProductEditor({
         expectedVersion: version,
         name: basic.name.trim(),
         slug: basic.slug.trim(),
+        erpSku: normalizeErpSku(basic.erpSku),
         shortDescription: basic.shortDescription.trim() || null,
         badgeLabel: basic.badgeLabel.trim() || null,
         description: basic.description.trim() || null,

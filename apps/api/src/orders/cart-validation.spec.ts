@@ -11,12 +11,14 @@ function source(overrides?: {
   effectivePriceMinor?: bigint;
   promotionType?: 'PERCENT' | 'FIXED' | null;
   name?: string;
+  erpSku?: string | null;
 }): VariantPriceSource {
   return {
     product: {
       id: 'p1',
       name: overrides?.name ?? 'Амели',
       slug: 'ameli',
+      erpSku: overrides?.erpSku === undefined ? null : overrides.erpSku,
       lifecycle: overrides?.lifecycle ?? 'PUBLISHED',
       availability: overrides?.availability ?? 'AVAILABLE',
       currency: 'BYN',
@@ -323,5 +325,45 @@ describe('validateCartLines', () => {
     });
     expect(result.ok).toBe(false);
     expect(result.issues.some((i) => i.code === 'OPTION_INVALID')).toBe(true);
+  });
+
+  it('allows checkout when product has no ERP SKU (pre-integration)', () => {
+    const result = validateCartLines({
+      lines: [{ productId: 'p1', variantId: 'v1', quantity: 1 }],
+      resolve: () => source({ erpSku: null }),
+    });
+    expect(result.ok).toBe(true);
+    expect(result.items[0]?.productErpSku).toBeNull();
+  });
+
+  it('snapshots product and option ERP SKUs on validated lines', () => {
+    const result = validateCartLines({
+      lines: [
+        {
+          productId: 'p1',
+          variantId: 'v1',
+          quantity: 1,
+          optionValueIds: ['opt-wrap'],
+        },
+      ],
+      resolve: () => source({ erpSku: 'BQ-100', priceMinor: 1000n }),
+      resolveOptions: () => ({
+        ok: true as const,
+        selections: [
+          {
+            groupId: 'g1',
+            groupName: 'Упаковка',
+            valueId: 'opt-wrap',
+            valueName: 'Крафт',
+            surchargeMinor: 200n,
+            chargeMode: 'PER_LINE' as const,
+            erpSku: 'WRAP-01',
+          },
+        ],
+      }),
+    });
+    expect(result.ok).toBe(true);
+    expect(result.items[0]?.productErpSku).toBe('BQ-100');
+    expect(result.items[0]?.optionsSnapshot[0]?.erpSku).toBe('WRAP-01');
   });
 });

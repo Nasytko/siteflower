@@ -9,6 +9,7 @@ import {
   deriveCompositionKind,
   heightBandWhere,
   isHeightBandId,
+  normalizeErpSku,
   normalizeSlug,
   productKindNeedsComposition,
   productKindNeedsGiftSubtype,
@@ -87,6 +88,14 @@ import {
   mergeListingIntoFilters,
   resolveCategoryListingFilters,
 } from './catalog-listing.util';
+import {
+  claimOptionValueErpSkus,
+  erpSkuConflict,
+  isErpSkuUniqueViolation,
+  releaseAllErpSkusForProduct,
+  releaseOptionValueErpSkus,
+  syncProductErpSkuRegistry,
+} from './erp-sku-registry';
 import { SlugRedirectsService } from './slug-redirects.service';
 
 type CatalogReference = 'occasion' | 'recipient' | 'color';
@@ -288,7 +297,11 @@ export class ProductsService {
       now,
     });
     return {
-      items: items.map((product) => toProductListItemDto(product, this.urlFor, now)),
+      items: items.map((product) =>
+        toProductListItemDto(product, this.urlFor, now, {
+          includeCompositionQuantities: true,
+        }),
+      ),
       total,
       page,
       pageSize,
@@ -530,6 +543,8 @@ export class ProductsService {
             sortOrder: group.sortOrder ?? groupIndex,
             values: group.values.map((value, valueIndex) => ({
               name: value.name,
+              // Duplicate must not reuse unique ERP SKUs — manager re-links after copy.
+              erpSku: null,
               surchargeMinor: value.surchargeMinor,
               chargeMode: value.chargeMode,
               sortOrder: value.sortOrder ?? valueIndex,
@@ -717,6 +732,18 @@ export class ProductsService {
       }
     }
 
+    const nextErpSku =
+      input.erpSku === undefined ? (product.erpSku ?? null) : normalizeErpSku(input.erpSku);
+    const optionSkuPayload =
+      input.optionGroups === undefined
+        ? null
+        : this.collectOptionErpSkusFromPayload(input.optionGroups);
+    if (nextErpSku && optionSkuPayload?.has(nextErpSku)) {
+      throw new ConflictException(
+        `Артикул ERP «${nextErpSku}» нельзя одновременно назначить товару и опции`,
+      );
+    }
+
     const previousFlowerItemIds = new Set(
       product.components.map((component) => component.flowerItemId),
     );
@@ -763,6 +790,7 @@ export class ProductsService {
         ...(input.badgeLabel === undefined
           ? {}
           : { badgeLabel: trimmedOrNull(input.badgeLabel) }),
+        ...(input.erpSku === undefined ? {} : { erpSku: nextErpSku }),
         availability: input.availability,
         bouquetHeightCm: input.heightCm === undefined ? product.bouquetHeightCm : input.heightCm,
         productKind: nextKind,
@@ -811,6 +839,10 @@ export class ProductsService {
       // row before variants are read, so a concurrent delete waits.
       await this.guardVersion(tx, id, input.expectedVersion, data);
 
+      // Registry claim/release after row lock — concurrent editors serialize on product OCC.
+      // Product SKU is synced before option replace so a SKU can move product → option in one txn.
+      await syncProductErpSkuRegistry(tx, id, product.erpSku ?? null, nextErpSku);
+
       await this.syncProductVariants(
         tx,
         id,
@@ -827,6 +859,11 @@ export class ProductsService {
       await this.products.replaceComponents(id, normalizedComposition.rows, tx);
 
       if (input.optionGroups !== undefined) {
+        const previousOptionValueIds = product.optionGroups.flatMap((group) =>
+          group.values.map((value) => value.id),
+        );
+        await releaseOptionValueErpSkus(tx, previousOptionValueIds);
+
         const variantIds = new Set(
           (
             await tx.productVariant.findMany({
@@ -835,7 +872,7 @@ export class ProductsService {
             })
           ).map((row) => row.id),
         );
-        await this.products.replaceOptionGroups(
+        const createdValues = await this.products.replaceOptionGroups(
           id,
           input.optionGroups.map((group, groupIndex) => ({
             name: group.name.trim(),
@@ -852,6 +889,7 @@ export class ProductsService {
                 }));
               return {
                 name: value.name.trim(),
+                erpSku: value.erpSku === undefined ? null : normalizeErpSku(value.erpSku),
                 surchargeMinor: surchargeMinor < 0n ? 0n : surchargeMinor,
                 chargeMode: value.chargeMode ?? 'PER_LINE',
                 sortOrder: value.sortOrder ?? valueIndex,
@@ -861,6 +899,10 @@ export class ProductsService {
             }),
           })),
           tx,
+        );
+        await claimOptionValueErpSkus(
+          tx,
+          createdValues.map((row) => ({ ownerId: row.id, sku: row.erpSku })),
         );
       }
 
@@ -889,7 +931,13 @@ export class ProductsService {
         familyId: input.familyId === undefined ? undefined : input.familyId,
         ...(nextSlug !== product.slug ? { previousSlug: product.slug, slug: nextSlug } : {}),
       });
-    }).catch(mapPromotionPrismaError);
+    }).catch((err: unknown) => {
+      if (err instanceof ConflictException) throw err;
+      if (isErpSkuUniqueViolation(err)) {
+        throw erpSkuConflict();
+      }
+      mapPromotionPrismaError(err);
+    });
 
     return this.finishAdminMutation(id);
   }
@@ -1185,6 +1233,14 @@ export class ProductsService {
 
         slug = current.slug;
         const mediaAssetIds = [...new Set(current.media.map((row) => row.mediaAssetId))];
+        const optionValueIds = (
+          await tx.productOptionValue.findMany({
+            where: { group: { productId: id } },
+            select: { id: true },
+          })
+        ).map((row) => row.id);
+        // Release registry only — OrderItem.productErpSku / options_snapshot stay intact.
+        await releaseAllErpSkusForProduct(tx, id, optionValueIds);
         await tx.product.delete({ where: { id } });
         for (const mediaAssetId of mediaAssetIds) {
           const productRefs = await tx.productMedia.count({ where: { mediaAssetId } });
@@ -1996,6 +2052,24 @@ export class ProductsService {
       defs.map((d) => d.id),
       tx,
     );
+  }
+
+  /** Collect normalized option ERP SKUs; throws on duplicates inside the payload. */
+  private collectOptionErpSkusFromPayload(
+    groups: NonNullable<SaveProductEditorDto['optionGroups']>,
+  ): Set<string> {
+    const seen = new Set<string>();
+    for (const group of groups) {
+      for (const value of group.values) {
+        const sku = value.erpSku === undefined ? null : normalizeErpSku(value.erpSku);
+        if (!sku) continue;
+        if (seen.has(sku)) {
+          throw new ConflictException(`Артикул ERP «${sku}» указан у двух опций`);
+        }
+        seen.add(sku);
+      }
+    }
+    return seen;
   }
 
   private async assertReferencesExist(

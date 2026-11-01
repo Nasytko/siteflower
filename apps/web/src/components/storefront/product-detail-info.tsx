@@ -1,7 +1,6 @@
 import Image from 'next/image';
 import type { ReactNode } from 'react';
 import type {
-  ComponentUnit,
   FulfillmentSettingsPublicDto,
   ProductPublicDto,
 } from '@bouquet-one/contracts';
@@ -19,18 +18,6 @@ type Props = {
   packagingImageUrl: string | null;
   city?: string | null;
 };
-
-function unitLabel(unit: ComponentUnit): string {
-  switch (unit) {
-    case 'PIECE':
-    case 'STEM':
-      return 'шт.';
-    case 'BUNCH':
-      return 'пуч.';
-    default:
-      return '';
-  }
-}
 
 export function formatDeliveryFee(minor: string, currency: string): string | null {
   const value = Number(minor);
@@ -101,12 +88,6 @@ function CompositionPanel({
                   )}
                 </span>
                 <span className="sf-pdp-composition__name">{item.displayName}</span>
-                {item.quantity != null ? (
-                  <span className="sf-pdp-composition__qty">
-                    {item.quantity}
-                    {unitLabel(item.unit) ? `\u00a0${unitLabel(item.unit)}` : ''}
-                  </span>
-                ) : null}
               </li>
             ))}
           </ul>

@@ -59,6 +59,8 @@ export type StorefrontOrderCreatedItemV1 = {
   variantId: string;
   productName: string;
   productSlug: string;
+  /** ERP article at order time; null when unset / legacy payloads. */
+  productErpSku?: string | null;
   variantName: string;
   quantity: number;
   /** Variant unit after promo, excluding options (do not recompute line as unit×qty alone when options present). */
@@ -69,6 +71,16 @@ export type StorefrontOrderCreatedItemV1 = {
   baseUnitPriceMinor?: string | null;
   /** Line option surcharges; 0 when none. lineTotal = unit×qty + optionsTotal. */
   optionsTotalMinor?: string;
+  /** Selected options with optional erpSku; omit/empty on legacy. */
+  optionsSnapshot?: Array<{
+    groupId: string;
+    groupName: string;
+    valueId: string;
+    valueName: string;
+    surchargeMinor: string;
+    chargeMode: 'PER_LINE' | 'PER_UNIT';
+    erpSku?: string | null;
+  }>;
   /** Authoritative charged line total. */
   lineTotalMinor: string;
   currency: string;

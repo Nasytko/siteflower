@@ -38,6 +38,7 @@ export type StorefrontOrderCreatedItemSource = {
   variantId: string | null;
   productName: string;
   productSlug: string;
+  productErpSku?: string | null;
   variantName: string;
   quantity: number;
   unitPriceMinor: bigint | string | number;
@@ -45,6 +46,7 @@ export type StorefrontOrderCreatedItemSource = {
   promotionType: string | null;
   baseUnitPriceMinor?: bigint | string | number | null;
   optionsTotalMinor?: bigint | string | number | null;
+  optionsSnapshot?: unknown;
   lineTotalMinor: bigint | string | number;
   currency: string;
 };
@@ -137,6 +139,7 @@ export function buildStorefrontOrderCreatedV1(input: {
         variantId: item.variantId ?? '',
         productName: item.productName,
         productSlug: item.productSlug,
+        productErpSku: item.productErpSku ?? null,
         variantName: item.variantName,
         quantity: item.quantity,
         unitPriceMinor: minorToString(item.unitPriceMinor),
@@ -154,6 +157,9 @@ export function buildStorefrontOrderCreatedV1(input: {
             ? 0
             : item.optionsTotalMinor,
         ),
+        optionsSnapshot: Array.isArray(item.optionsSnapshot)
+          ? (item.optionsSnapshot as StorefrontOrderCreatedV1['order']['items'][number]['optionsSnapshot'])
+          : undefined,
         lineTotalMinor: minorToString(item.lineTotalMinor),
         currency: item.currency,
       })),

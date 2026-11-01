@@ -21,6 +21,7 @@ export type VariantPriceSource = {
     id: string;
     name: string;
     slug: string;
+    erpSku: string | null;
     lifecycle: string;
     availability: CommercialAvailability;
     currency: string;
@@ -228,6 +229,7 @@ export function validateCartLines(input: {
       quantity: line.quantity,
       productName: product.name,
       productSlug: product.slug,
+      productErpSku: product.erpSku ?? null,
       variantName: variant.name,
       primaryImageUrl: product.primaryImageUrl,
       availability: product.availability,

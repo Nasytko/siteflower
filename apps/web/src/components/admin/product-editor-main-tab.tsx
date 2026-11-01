@@ -36,6 +36,7 @@ type Props = {
   basic: {
     name: string;
     slug: string;
+    erpSku: string;
     shortDescription: string;
     badgeLabel: string;
     description: string;
@@ -45,6 +46,7 @@ type Props = {
     React.SetStateAction<{
       name: string;
       slug: string;
+      erpSku: string;
       shortDescription: string;
       badgeLabel: string;
       description: string;
@@ -271,6 +273,26 @@ export function ProductEditorMainTab(props: Props) {
               ) : null}
             </span>
           ) : null}
+        </label>
+
+        <label className="admin-field" data-section="erpSku">
+          <span>Артикул ERP</span>
+          <input
+            className="admin-input"
+            value={basic.erpSku}
+            disabled={!canUpdate}
+            placeholder="Например: BQ-1042"
+            autoComplete="off"
+            spellCheck={false}
+            onChange={(event) => {
+              setBasic((prev) => ({ ...prev, erpSku: event.target.value }));
+              touch();
+            }}
+          />
+          <span className="admin-field__hint">
+            Постоянный артикул из ERP. Сайт его не генерирует — укажите вручную после создания
+            товара в ERP. Пока артикула нет, публикация на сайте не блокируется.
+          </span>
         </label>
 
         {productKindNeedsGiftSubtype(productKind) ? (
