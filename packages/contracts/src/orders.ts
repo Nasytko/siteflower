@@ -27,9 +27,135 @@ export const ORDER_EVENT_TYPES = [
   'ORDER_OUT_FOR_DELIVERY',
   'ORDER_COMPLETED',
   'ORDER_CANCELLED',
+  'PAYMENT_STATUS_CHANGED',
 ] as const;
 export type OrderEventType = (typeof ORDER_EVENT_TYPES)[number];
 
+/** Checkout payment method — independent of OrderStatus / ERP sync. */
+export const PAYMENT_METHODS = ['CASH_ON_DELIVERY', 'CARD_ONLINE'] as const;
+export type PaymentMethod = (typeof PAYMENT_METHODS)[number];
+
+/**
+ * Website payment lifecycle.
+ * CASH_ON_DELIVERY → NOT_REQUIRED (expected offline; never FAILED).
+ * CARD_ONLINE → AWAITING_PAYMENT until provider webhook (not redirect).
+ */
+export const PAYMENT_STATUSES = [
+  'NOT_REQUIRED',
+  'AWAITING_PAYMENT',
+  'PAID',
+  'FAILED',
+  'CANCELLED',
+] as const;
+export type PaymentStatus = (typeof PAYMENT_STATUSES)[number];
+
+export const ERP_SYNC_STATUSES = [
+  'PENDING',
+  'RETRYING',
+  'SYNCED',
+  'FAILED',
+  'DISABLED',
+] as const;
+export type ErpSyncStatus = (typeof ERP_SYNC_STATUSES)[number];
+
+export const TELEGRAM_NOTIFY_STATUSES = [
+  'PENDING',
+  'RETRYING',
+  'SENT',
+  'FAILED',
+  'SKIPPED',
+  'DISABLED',
+] as const;
+export type TelegramNotifyStatus = (typeof TELEGRAM_NOTIFY_STATUSES)[number];
+
+export const INTEGRATION_CHANNELS = ['ERP', 'TELEGRAM'] as const;
+export type IntegrationChannel = (typeof INTEGRATION_CHANNELS)[number];
+
+export const INTEGRATION_ATTEMPT_OUTCOMES = ['SUCCESS', 'FAILURE', 'SKIPPED'] as const;
+export type IntegrationAttemptOutcome = (typeof INTEGRATION_ATTEMPT_OUTCOMES)[number];
+
+export function paymentMethodLabel(method: PaymentMethod): string {
+  switch (method) {
+    case 'CASH_ON_DELIVERY':
+      return 'Наличные при получении';
+    case 'CARD_ONLINE':
+      return 'Картой онлайн';
+    default: {
+      const _e: never = method;
+      return _e;
+    }
+  }
+}
+
+export function paymentStatusLabel(status: PaymentStatus): string {
+  switch (status) {
+    case 'NOT_REQUIRED':
+      return 'Оплата при получении';
+    case 'AWAITING_PAYMENT':
+      return 'Ожидает оплаты';
+    case 'PAID':
+      return 'Оплачен';
+    case 'FAILED':
+      return 'Оплата не прошла';
+    case 'CANCELLED':
+      return 'Оплата отменена';
+    default: {
+      const _e: never = status;
+      return _e;
+    }
+  }
+}
+
+export function erpSyncStatusLabel(status: ErpSyncStatus): string {
+  switch (status) {
+    case 'PENDING':
+      return 'Ожидает ERP';
+    case 'RETRYING':
+      return 'Повтор ERP';
+    case 'SYNCED':
+      return 'ERP синхронизирован';
+    case 'FAILED':
+      return 'Ошибка ERP';
+    case 'DISABLED':
+      return 'ERP отключён';
+    default: {
+      const _e: never = status;
+      return _e;
+    }
+  }
+}
+
+export function telegramNotifyStatusLabel(status: TelegramNotifyStatus): string {
+  switch (status) {
+    case 'PENDING':
+      return 'Ожидает Telegram';
+    case 'RETRYING':
+      return 'Повтор Telegram';
+    case 'SENT':
+      return 'Telegram отправлен';
+    case 'FAILED':
+      return 'Ошибка Telegram';
+    case 'SKIPPED':
+      return 'Telegram пропущен';
+    case 'DISABLED':
+      return 'Telegram отключён';
+    default: {
+      const _e: never = status;
+      return _e;
+    }
+  }
+}
+
+/** Default payment fields for a chosen checkout method. */
+export function defaultPaymentForMethod(method: PaymentMethod): {
+  paymentMethod: PaymentMethod;
+  paymentStatus: PaymentStatus;
+} {
+  if (method === 'CARD_ONLINE') {
+    return { paymentMethod: method, paymentStatus: 'AWAITING_PAYMENT' };
+  }
+  return { paymentMethod: 'CASH_ON_DELIVERY', paymentStatus: 'NOT_REQUIRED' };
+}
 
 export const TIME_WINDOW_APPLIES_TO = ['DELIVERY', 'PICKUP', 'BOTH'] as const;
 export type TimeWindowAppliesTo = (typeof TIME_WINDOW_APPLIES_TO)[number];
@@ -170,6 +296,11 @@ export type CreateOrderRequest = {
   cardMessage?: string | null;
   anonymousCard?: boolean;
   customerComment?: string | null;
+  /**
+   * Defaults to CASH_ON_DELIVERY when omitted (legacy clients).
+   * CARD_ONLINE reserved — rejecting until a provider is configured.
+   */
+  paymentMethod?: PaymentMethod;
 };
 
 export type OrderItemPublicDto = {
@@ -255,8 +386,26 @@ export type OrderAdminListItemDto = {
   totalMinor: string;
   currency: 'BYN';
   createdAt: string;
+  paymentMethod: PaymentMethod;
+  paymentStatus: PaymentStatus;
+  erpSyncStatus: ErpSyncStatus;
+  telegramNotifyStatus: TelegramNotifyStatus;
 };
 
+export type IntegrationDeliveryAttemptDto = {
+  id: string;
+  channel: IntegrationChannel;
+  outboxEventId: string | null;
+  attemptNumber: number;
+  outcome: IntegrationAttemptOutcome;
+  remoteReference: string | null;
+  errorCode: string | null;
+  errorSanitized: string | null;
+  nextAttemptAt: string | null;
+  /** Safe meta only (kind, orderNumber). */
+  meta: Record<string, unknown> | null;
+  createdAt: string;
+};
 
 export type OrderAdminDetailDto = {
   id: string;
@@ -283,6 +432,14 @@ export type OrderAdminDetailDto = {
   subtotalMinor: string;
   deliveryFeeMinor: string;
   totalMinor: string;
+  paymentMethod: PaymentMethod;
+  paymentStatus: PaymentStatus;
+  paidAt: string | null;
+  paymentProvider: string | null;
+  paymentExternalId: string | null;
+  erpSyncStatus: ErpSyncStatus;
+  erpRemoteReference: string | null;
+  telegramNotifyStatus: TelegramNotifyStatus;
   cancellationReason: string | null;
   cancelledAt: string | null;
   confirmedAt: string | null;
@@ -291,12 +448,19 @@ export type OrderAdminDetailDto = {
   updatedAt: string;
   items: OrderItemPublicDto[];
   events: OrderEventDto[];
+  deliveryAttempts: IntegrationDeliveryAttemptDto[];
+  /** Kept for API compat; primary admin UX no longer drives operational transitions. */
   allowedTransitions: OrderStatus[];
+  canRetryErp: boolean;
+  canRetryTelegram: boolean;
 };
 
 export type AdminOrderListQuery = {
   status?: OrderStatus;
   fulfillmentType?: FulfillmentType;
+  paymentStatus?: PaymentStatus;
+  erpSyncStatus?: ErpSyncStatus;
+  telegramNotifyStatus?: TelegramNotifyStatus;
   /** YYYY-MM-DD or presets handled by API: today | tomorrow | all */
   date?: string;
   q?: string;
@@ -304,6 +468,13 @@ export type AdminOrderListQuery = {
   pageSize?: number;
 };
 
+export type AdminOrdersSummaryDto = {
+  total: number;
+  awaitingErp: number;
+  erpErrors: number;
+  telegramErrors: number;
+  awaitingPayment: number;
+};
 
 export type TransitionOrderRequest = {
   toStatus: OrderStatus;

@@ -17,6 +17,12 @@ import {
   OrderStatus,
   OrderEventType,
   OutboxDeliveryStatus,
+  PaymentMethod,
+  PaymentStatus,
+  ErpSyncStatus,
+  TelegramNotifyStatus,
+  IntegrationChannel,
+  IntegrationAttemptOutcome,
 } from './generated/prisma/client.js';
 
 export type { PrismaClient, OutboxEvent } from './generated/prisma/client.js';
@@ -37,6 +43,12 @@ export {
   OrderStatus,
   OrderEventType,
   OutboxDeliveryStatus,
+  PaymentMethod,
+  PaymentStatus,
+  ErpSyncStatus,
+  TelegramNotifyStatus,
+  IntegrationChannel,
+  IntegrationAttemptOutcome,
 };
 
 export type CreatePrismaClientOptions = {

@@ -26,6 +26,11 @@ export type StorefrontOrderCreatedSource = {
   subtotalMinor: bigint | string | number;
   deliveryFeeMinor: bigint | string | number;
   totalMinor: bigint | string | number;
+  paymentMethod?: 'CASH_ON_DELIVERY' | 'CARD_ONLINE' | string | null;
+  paymentStatus?: string | null;
+  paymentProvider?: string | null;
+  paymentExternalId?: string | null;
+  paidAt?: Date | string | null;
 };
 
 export type StorefrontOrderCreatedItemSource = {
@@ -48,6 +53,19 @@ function minorToString(value: bigint | string | number): string {
   return typeof value === 'bigint' ? value.toString() : String(value);
 }
 
+function normalizePaymentStatus(
+  value: string | null | undefined,
+): 'NOT_REQUIRED' | 'AWAITING_PAYMENT' | 'PAID' | 'FAILED' | 'CANCELLED' {
+  switch (value) {
+    case 'AWAITING_PAYMENT':
+    case 'PAID':
+    case 'FAILED':
+    case 'CANCELLED':
+      return value;
+    default:
+      return 'NOT_REQUIRED';
+  }
+}
 
 /**
  * Build immutable StorefrontOrderCreatedV1 for outbox enqueue.
@@ -101,6 +119,19 @@ export function buildStorefrontOrderCreatedV1(input: {
         anonymous: order.anonymousCard,
       },
       customerComment: order.customerComment,
+      payment: {
+        method:
+          order.paymentMethod === 'CARD_ONLINE' ? 'CARD_ONLINE' : 'CASH_ON_DELIVERY',
+        status: normalizePaymentStatus(order.paymentStatus),
+        provider: order.paymentProvider ?? null,
+        externalId: order.paymentExternalId ?? null,
+        paidAt:
+          order.paidAt instanceof Date
+            ? order.paidAt.toISOString()
+            : typeof order.paidAt === 'string'
+              ? order.paidAt
+              : null,
+      },
       items: items.map((item) => ({
         productId: item.productId ?? '',
         variantId: item.variantId ?? '',

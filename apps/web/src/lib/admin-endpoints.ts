@@ -146,6 +146,10 @@ export const adminEndpoints = {
     `${ADMIN}/catalog/product-families/${id}/members/order`,
 
   orders: `${ADMIN}/orders`,
+  ordersSummary: `${ADMIN}/orders/summary`,
+  order: (id: string) => `${ADMIN}/orders/${id}`,
+  orderRetryErp: (id: string) => `${ADMIN}/orders/${id}/retry-erp`,
+  orderRetryTelegram: (id: string) => `${ADMIN}/orders/${id}/retry-telegram`,
   storefrontSettings: `${ADMIN}/storefront/settings`,
   homepage: `${ADMIN}/storefront/homepage`,
   navigationMain: `${ADMIN}/storefront/navigation/main`,

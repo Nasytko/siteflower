@@ -188,6 +188,7 @@ export function CheckoutForm() {
       cardMessage: wantCard && cardMessage.trim() ? cardMessage.trim() : null,
       anonymousCard: wantCard ? anonymousCard : false,
       customerComment: customerComment || null,
+      paymentMethod: 'CASH_ON_DELIVERY',
     };
 
     if (fulfillmentType === 'DELIVERY') {

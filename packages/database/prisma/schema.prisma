@@ -391,7 +391,7 @@ model CatalogCategory {
   h1             String?            @db.VarChar(200)
   body           String?            @db.Text
   /// THEMATIC publish state; hubs/gift subtypes use visibility instead when null.
-  pageStatus     CatalogPageStatus? @map("page_status")
+  pageStatus     CatalogPageStatus?  @map("page_status")
   publishedAt    DateTime?          @map("published_at") @db.Timestamptz(3)
   navVisible     Boolean            @default(false) @map("nav_visible")
   sortOrder      Int                @default(0) @map("sort_order")
@@ -1307,8 +1307,54 @@ enum OrderEventType {
   ORDER_OUT_FOR_DELIVERY
   ORDER_COMPLETED
   ORDER_CANCELLED
+  PAYMENT_STATUS_CHANGED
 }
 
+/// How the customer intends to pay (site checkout). Independent of OrderStatus.
+enum PaymentMethod {
+  CASH_ON_DELIVERY
+  /// Reserved — online acquiring not wired yet.
+  CARD_ONLINE
+}
+
+/// Payment lifecycle on the website. Cash is NOT_REQUIRED (expected offline), never FAILED.
+enum PaymentStatus {
+  NOT_REQUIRED
+  AWAITING_PAYMENT
+  PAID
+  FAILED
+  CANCELLED
+}
+
+/// Denormalized ERP outbox sync for admin filters (source of truth remains outbox_events).
+enum ErpSyncStatus {
+  PENDING
+  RETRYING
+  SYNCED
+  FAILED
+  DISABLED
+}
+
+/// Denormalized Telegram notify status for admin filters.
+enum TelegramNotifyStatus {
+  PENDING
+  RETRYING
+  SENT
+  FAILED
+  SKIPPED
+  DISABLED
+}
+
+enum IntegrationChannel {
+  ERP
+  TELEGRAM
+}
+
+enum IntegrationAttemptOutcome {
+  SUCCESS
+  FAILURE
+  SKIPPED
+}
 
 /// Singleton (`id = 1`) — checkout/fulfillment configuration.
 model FulfillmentSettings {
@@ -1376,6 +1422,18 @@ model Order {
   deliveryFeeMinor BigInt @default(0) @map("delivery_fee_minor")
   totalMinor       BigInt @map("total_minor")
 
+  /// Defaults keep pre-payment orders valid (cash / offline).
+  paymentMethod PaymentMethod @default(CASH_ON_DELIVERY) @map("payment_method")
+  paymentStatus PaymentStatus @default(NOT_REQUIRED) @map("payment_status")
+  paidAt            DateTime? @map("paid_at") @db.Timestamptz(3)
+  /// Future acquiring provider key (e.g. bepaid); null until online payments exist.
+  paymentProvider   String?   @map("payment_provider") @db.VarChar(64)
+  paymentExternalId String?   @map("payment_external_id") @db.VarChar(200)
+
+  erpSyncStatus      ErpSyncStatus        @default(PENDING) @map("erp_sync_status")
+  erpRemoteReference String?              @map("erp_remote_reference") @db.VarChar(200)
+  telegramNotifyStatus TelegramNotifyStatus @default(PENDING) @map("telegram_notify_status")
+
   cancellationReason String?   @map("cancellation_reason") @db.VarChar(500)
   cancelledAt        DateTime? @map("cancelled_at") @db.Timestamptz(3)
   confirmedAt        DateTime? @map("confirmed_at") @db.Timestamptz(3)
@@ -1386,11 +1444,15 @@ model Order {
 
   items             OrderItem[]
   events            OrderEvent[]
+  deliveryAttempts  IntegrationDeliveryAttempt[]
 
   @@index([status, fulfillmentDate])
   @@index([fulfillmentDate, timeWindowStartMinutes])
   @@index([createdAt(sort: Desc)])
   @@index([purchaserPhoneE164])
+  @@index([paymentStatus])
+  @@index([erpSyncStatus])
+  @@index([telegramNotifyStatus])
   @@map("orders")
 }
 
@@ -1538,6 +1600,29 @@ model IntegrationRuntimeSettings {
 }
 
 /// Immutable per-attempt log for ERP / Telegram delivery (no secrets / raw tokens).
+model IntegrationDeliveryAttempt {
+  id               String                     @id @default(uuid()) @db.Uuid
+  channel          IntegrationChannel
+  orderId          String                     @map("order_id") @db.Uuid
+  outboxEventId    String?                    @map("outbox_event_id") @db.Uuid
+  attemptNumber    Int                        @map("attempt_number")
+  outcome          IntegrationAttemptOutcome
+  /// ERP remoteReference or Telegram message_id (never bot token).
+  remoteReference  String?                    @map("remote_reference") @db.VarChar(200)
+  errorCode        String?                    @map("error_code") @db.VarChar(64)
+  errorSanitized   String?                    @map("error_sanitized") @db.VarChar(500)
+  nextAttemptAt    DateTime?                  @map("next_attempt_at") @db.Timestamptz(3)
+  /// Safe summary only (kind, orderNumber) — never HMAC secrets or full phone dumps.
+  meta             Json?
+  createdAt        DateTime                   @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@index([orderId, createdAt])
+  @@index([channel, createdAt])
+  @@index([outboxEventId])
+  @@map("integration_delivery_attempts")
+}
 
 /// Safe replay of the same logical request (separate from outbox delivery).
 /// Recovery ciphertext holds only minimal secrets (e.g. tracking token) under AES-256-GCM.

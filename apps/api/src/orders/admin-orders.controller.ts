@@ -17,6 +17,12 @@ export class AdminOrdersController {
   constructor(private readonly orders: OrdersService) {}
 
   @RequirePermissions('ORDERS_READ')
+  @Get('summary')
+  summary(@Query('date') date?: string) {
+    return this.orders.summaryAdmin({ date });
+  }
+
+  @RequirePermissions('ORDERS_READ')
   @Get()
   list(@Query() query: AdminOrderListQueryDto) {
     return this.orders.listAdmin(query);
@@ -28,6 +34,33 @@ export class AdminOrdersController {
     return this.orders.getAdmin(id);
   }
 
+  @RequirePermissions('ORDERS_UPDATE')
+  @Post(':id/retry-erp')
+  retryErp(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentAdmin() admin: AuthenticatedAdmin,
+    @Req() req: Request,
+  ) {
+    return this.orders.retryErp(id, {
+      id: admin.id,
+      requestId: getRequestId(req),
+    });
+  }
+
+  @RequirePermissions('ORDERS_UPDATE')
+  @Post(':id/retry-telegram')
+  retryTelegram(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentAdmin() admin: AuthenticatedAdmin,
+    @Req() req: Request,
+  ) {
+    return this.orders.retryTelegram(id, {
+      id: admin.id,
+      requestId: getRequestId(req),
+    });
+  }
+
+  /** Kept for API compatibility — primary admin UX no longer drives operational transitions. */
   @RequirePermissions('ORDERS_UPDATE')
   @Post(':id/transition')
   transition(

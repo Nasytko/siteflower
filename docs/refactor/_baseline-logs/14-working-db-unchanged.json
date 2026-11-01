@@ -1,0 +1,17 @@
+{
+  "workingDbUnchanged": true,
+  "before": {
+    "db": "bouquet_one",
+    "products": 13,
+    "admins": 4,
+    "seo_landings": 0,
+    "products_max_updated": "2026-10-27 05:50:24.804+03"
+  },
+  "after": {
+    "db": "bouquet_one",
+    "products": 13,
+    "admins": 4,
+    "seo_landings": 0,
+    "products_max_updated": "2026-10-27 05:50:24.804+03"
+  }
+}

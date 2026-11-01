@@ -16,7 +16,14 @@ import {
   MinLength,
   ValidateNested,
 } from 'class-validator';
-import { FULFILLMENT_TYPES, ORDER_STATUSES } from '@bouquet-one/contracts';
+import {
+  ERP_SYNC_STATUSES,
+  FULFILLMENT_TYPES,
+  ORDER_STATUSES,
+  PAYMENT_METHODS,
+  PAYMENT_STATUSES,
+  TELEGRAM_NOTIFY_STATUSES,
+} from '@bouquet-one/contracts';
 
 export class CartLineDto {
   @IsUUID()
@@ -132,6 +139,11 @@ export class CreateOrderBodyDto {
   @IsString()
   @MaxLength(1000)
   customerComment?: string | null;
+
+  /** Defaults to CASH_ON_DELIVERY. CARD_ONLINE rejected until provider is configured. */
+  @IsOptional()
+  @IsIn(PAYMENT_METHODS as unknown as string[])
+  paymentMethod?: (typeof PAYMENT_METHODS)[number];
 }
 
 export class TransitionOrderBodyDto {
@@ -154,6 +166,18 @@ export class AdminOrderListQueryDto {
   @IsOptional()
   @IsIn(FULFILLMENT_TYPES as unknown as string[])
   fulfillmentType?: (typeof FULFILLMENT_TYPES)[number];
+
+  @IsOptional()
+  @IsIn(PAYMENT_STATUSES as unknown as string[])
+  paymentStatus?: (typeof PAYMENT_STATUSES)[number];
+
+  @IsOptional()
+  @IsIn(ERP_SYNC_STATUSES as unknown as string[])
+  erpSyncStatus?: (typeof ERP_SYNC_STATUSES)[number];
+
+  @IsOptional()
+  @IsIn(TELEGRAM_NOTIFY_STATUSES as unknown as string[])
+  telegramNotifyStatus?: (typeof TELEGRAM_NOTIFY_STATUSES)[number];
 
   @IsOptional()
   @IsString()

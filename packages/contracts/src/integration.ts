@@ -3,9 +3,18 @@
  * At-least-once delivery; receivers MUST be idempotent on eventId.
  */
 
-export const INTEGRATION_EVENT_TYPES = ['ORDER_CREATED'] as const;
+export const INTEGRATION_EVENT_TYPES = ['ORDER_CREATED', 'TELEGRAM_NOTIFY'] as const;
 export type IntegrationEventType = (typeof INTEGRATION_EVENT_TYPES)[number];
 
+export const TELEGRAM_NOTIFY_KINDS = [
+  'AFTER_ERP_SUCCESS',
+  'AFTER_ERP_FAILURE',
+  'ERP_RECOVERED',
+  'PAYMENT_PAID',
+  'PAYMENT_FAILED',
+  'CASH_ON_DELIVERY',
+] as const;
+export type TelegramNotifyKind = (typeof TELEGRAM_NOTIFY_KINDS)[number];
 
 export const INTEGRATION_MODES = ['DISABLED', 'SIMULATOR', 'ERP'] as const;
 export type IntegrationMode = (typeof INTEGRATION_MODES)[number];
@@ -104,6 +113,14 @@ export type StorefrontOrderCreatedV1 = {
       anonymous: boolean;
     };
     customerComment: string | null;
+    /** Additive payment snapshot (safe defaults for legacy payloads without these fields). */
+    payment: {
+      method: 'CASH_ON_DELIVERY' | 'CARD_ONLINE';
+      status: 'NOT_REQUIRED' | 'AWAITING_PAYMENT' | 'PAID' | 'FAILED' | 'CANCELLED';
+      provider: string | null;
+      externalId: string | null;
+      paidAt: string | null;
+    };
     items: StorefrontOrderCreatedItemV1[];
     money: {
       currency: 'BYN';
@@ -114,6 +131,33 @@ export type StorefrontOrderCreatedV1 = {
   };
 };
 
+/** Outbox payload for Telegram Bot API delivery (no bot token in payload). */
+export type TelegramNotifyPayloadV1 = {
+  eventId: string;
+  eventType: 'TELEGRAM_NOTIFY';
+  schemaVersion: 1;
+  kind: TelegramNotifyKind;
+  occurredAt: string;
+  orderId: string;
+  orderNumber: string;
+  /** Preformatted MarkdownV2-safe text is built at send time from this snapshot. */
+  snapshot: {
+    fulfillmentType: 'DELIVERY' | 'PICKUP';
+    fulfillmentDate: string;
+    timeWindowLabel: string;
+    purchaserName: string;
+    purchaserPhoneMasked: string;
+    deliverySummary: string | null;
+    paymentMethod: 'CASH_ON_DELIVERY' | 'CARD_ONLINE';
+    paymentStatus: string;
+    totalMinor: string;
+    currency: 'BYN';
+    itemLines: Array<{ name: string; quantity: number; lineTotalMinor: string }>;
+    erpSyncStatus: string;
+    erpRemoteReference: string | null;
+    erpErrorSanitized: string | null;
+  };
+};
 
 export type IntegrationAcceptResponseV1 = {
   status: 'ACCEPTED';

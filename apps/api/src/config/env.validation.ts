@@ -66,6 +66,11 @@ export const envSchema = z
     INTEGRATION_LEASE_SECONDS: z.coerce.number().int().positive().default(60),
     INTEGRATION_WORKER_ID: z.string().optional(),
     INTEGRATION_CONCURRENCY: z.coerce.number().int().positive().default(2),
+    /** Telegram order notifications (Bot API). Token never logged. */
+    TELEGRAM_NOTIFY_ENABLED: booleanFromString.optional(),
+    TELEGRAM_BOT_TOKEN: z.string().optional(),
+    TELEGRAM_CHAT_ID: z.string().optional(),
+    TELEGRAM_TIMEOUT_MS: z.coerce.number().int().positive().default(8000),
   })
   .superRefine((env, ctx) => {
     if (env.NODE_ENV === 'production' && !env.DATABASE_URL) {

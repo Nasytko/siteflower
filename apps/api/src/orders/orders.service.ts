@@ -6,13 +6,17 @@ import {
 } from '@nestjs/common';
 import {
   allowedOrderTransitions,
+  defaultPaymentForMethod,
   isOrderTransitionAllowed,
   orderStatusLabel,
+  type AdminOrdersSummaryDto,
   type CheckoutCartLineInput,
   type CheckoutValidateRequest,
   type CheckoutValidateResponse,
   type CreateOrderRequest,
+  type ErpSyncStatus,
   type FulfillmentType,
+  type IntegrationDeliveryAttemptDto,
   type OrderAdminDetailDto,
   type OrderAdminListItemDto,
   type OrderCreatedResponse,
@@ -20,6 +24,9 @@ import {
   type OrderItemPublicDto,
   type OrderStatus,
   type OrderTrackingDto,
+  type PaymentMethod,
+  type PaymentStatus,
+  type TelegramNotifyStatus,
   type TimeWindowDto,
 } from '@bouquet-one/contracts';
 import type { OrderEventType, Prisma } from '@bouquet-one/database';
@@ -34,6 +41,7 @@ import {
 } from '../catalog/promotion.util';
 import { AppConfigService } from '../config/app-config.service';
 import { PrismaService } from '../database/prisma.service';
+import { OutboxRepository } from '../integration/outbox.repository';
 import { buildStorefrontOrderCreatedV1 } from '../integration/payload';
 import { MediaService } from '../media/media.service';
 import {
@@ -90,6 +98,7 @@ export class OrdersService {
     private readonly fulfillment: FulfillmentSettingsService,
     private readonly audit: AuditService,
     private readonly appConfig: AppConfigService,
+    private readonly outbox: OutboxRepository,
   ) {}
 
   private primaryImageUrl(product: {
@@ -258,6 +267,15 @@ export class OrdersService {
 
     const requestHash = hashCreateOrderPayload(dto);
 
+    const paymentMethod: PaymentMethod =
+      dto.paymentMethod === 'CARD_ONLINE' ? 'CARD_ONLINE' : 'CASH_ON_DELIVERY';
+    if (paymentMethod === 'CARD_ONLINE') {
+      throw new BadRequestException(
+        'Онлайн-оплата картой пока недоступна. Выберите оплату наличными при получении.',
+      );
+    }
+    const paymentDefaults = defaultPaymentForMethod(paymentMethod);
+
     const existing = await this.prisma.client.order.findUnique({
       where: { idempotencyKey },
     });
@@ -390,6 +408,7 @@ export class OrdersService {
         const fresh = validateCartLines({
           lines: dto.items,
           resolve: this.resolverFromLoaded(loaded, now),
+          resolveOptions: this.optionsResolverFromLoaded(loaded),
           now,
         });
         if (!fresh.ok) {
@@ -444,6 +463,10 @@ export class OrdersService {
             subtotalMinor: fresh.subtotalMinor,
             deliveryFeeMinor: deliveryFee,
             totalMinor: freshTotal,
+            paymentMethod: paymentDefaults.paymentMethod,
+            paymentStatus: paymentDefaults.paymentStatus,
+            erpSyncStatus: 'PENDING',
+            telegramNotifyStatus: 'PENDING',
             items: {
               create: fresh.items.map((item, index) => ({
                 sortOrder: index,
@@ -706,9 +729,49 @@ export class OrdersService {
     };
   }
 
+  async summaryAdmin(query: {
+    date?: string;
+  }): Promise<AdminOrdersSummaryDto> {
+    const where = this.adminDateWhere(query.date);
+    const [total, awaitingErp, erpErrors, telegramErrors, awaitingPayment] =
+      await Promise.all([
+        this.prisma.client.order.count({ where }),
+        this.prisma.client.order.count({
+          where: { ...where, erpSyncStatus: { in: ['PENDING', 'RETRYING'] } },
+        }),
+        this.prisma.client.order.count({ where: { ...where, erpSyncStatus: 'FAILED' } }),
+        this.prisma.client.order.count({
+          where: { ...where, telegramNotifyStatus: 'FAILED' },
+        }),
+        this.prisma.client.order.count({
+          where: { ...where, paymentStatus: 'AWAITING_PAYMENT' },
+        }),
+      ]);
+    return { total, awaitingErp, erpErrors, telegramErrors, awaitingPayment };
+  }
+
+  private adminDateWhere(date?: string): Prisma.OrderWhereInput {
+    const where: Prisma.OrderWhereInput = {};
+    const tz = this.appConfig.businessTimezone;
+    const today = businessDateString(new Date(), tz);
+    if (date === 'today' || date === undefined) {
+      where.fulfillmentDate = today;
+    } else if (date === 'tomorrow') {
+      const [y, m, d] = today.split('-').map(Number);
+      const t = new Date(Date.UTC(y!, m! - 1, d! + 1));
+      where.fulfillmentDate = `${t.getUTCFullYear()}-${String(t.getUTCMonth() + 1).padStart(2, '0')}-${String(t.getUTCDate()).padStart(2, '0')}`;
+    } else if (date && date !== 'all') {
+      where.fulfillmentDate = date;
+    }
+    return where;
+  }
+
   async listAdmin(query: {
     status?: OrderStatus;
     fulfillmentType?: FulfillmentType;
+    paymentStatus?: PaymentStatus;
+    erpSyncStatus?: ErpSyncStatus;
+    telegramNotifyStatus?: TelegramNotifyStatus;
     date?: string;
     q?: string;
     page?: number;
@@ -716,21 +779,12 @@ export class OrdersService {
   }): Promise<{ items: OrderAdminListItemDto[]; total: number; page: number; pageSize: number }> {
     const page = Math.max(1, query.page ?? 1);
     const pageSize = Math.min(50, Math.max(1, query.pageSize ?? 20));
-    const where: Prisma.OrderWhereInput = {};
+    const where: Prisma.OrderWhereInput = { ...this.adminDateWhere(query.date) };
     if (query.status) where.status = query.status;
     if (query.fulfillmentType) where.fulfillmentType = query.fulfillmentType;
-
-    const tz = this.appConfig.businessTimezone;
-    const today = businessDateString(new Date(), tz);
-    if (query.date === 'today' || query.date === undefined) {
-      where.fulfillmentDate = today;
-    } else if (query.date === 'tomorrow') {
-      const [y, m, d] = today.split('-').map(Number);
-      const t = new Date(Date.UTC(y!, m! - 1, d! + 1));
-      where.fulfillmentDate = `${t.getUTCFullYear()}-${String(t.getUTCMonth() + 1).padStart(2, '0')}-${String(t.getUTCDate()).padStart(2, '0')}`;
-    } else if (query.date && query.date !== 'all') {
-      where.fulfillmentDate = query.date;
-    }
+    if (query.paymentStatus) where.paymentStatus = query.paymentStatus;
+    if (query.erpSyncStatus) where.erpSyncStatus = query.erpSyncStatus;
+    if (query.telegramNotifyStatus) where.telegramNotifyStatus = query.telegramNotifyStatus;
 
     if (query.q?.trim()) {
       const q = query.q.trim();
@@ -771,6 +825,10 @@ export class OrdersService {
         totalMinor: o.totalMinor.toString(),
         currency: 'BYN',
         createdAt: o.createdAt.toISOString(),
+        paymentMethod: o.paymentMethod,
+        paymentStatus: o.paymentStatus,
+        erpSyncStatus: o.erpSyncStatus,
+        telegramNotifyStatus: o.telegramNotifyStatus,
       })),
       total,
       page,
@@ -784,10 +842,100 @@ export class OrdersService {
       include: {
         items: { orderBy: { sortOrder: 'asc' } },
         events: { orderBy: { createdAt: 'asc' } },
+        deliveryAttempts: { orderBy: { createdAt: 'asc' } },
       },
     });
     if (!order) throw new NotFoundException();
-    return mapAdminDetail(order);
+    const outbox = await this.prisma.client.outboxEvent.findMany({
+      where: { aggregateId: id },
+      select: { id: true, eventType: true, status: true },
+    });
+    return mapAdminDetail(order, outbox);
+  }
+
+  async retryErp(id: string, actor: { id: string; requestId?: string }): Promise<OrderAdminDetailDto> {
+    const order = await this.prisma.client.order.findUnique({ where: { id } });
+    if (!order) throw new NotFoundException();
+    const event = await this.prisma.client.outboxEvent.findFirst({
+      where: { aggregateId: id, eventType: 'ORDER_CREATED' },
+      orderBy: { createdAt: 'desc' },
+    });
+    if (!event) throw new NotFoundException('Нет ERP outbox-события для заказа');
+    if (event.status === 'DELIVERED') {
+      throw new ConflictException('Заказ уже передан в ERP');
+    }
+    if (event.status === 'PROCESSING') {
+      throw new ConflictException('Идёт отправка в ERP — подождите');
+    }
+    await this.outbox.manualRetry(event.id);
+    await this.prisma.client.order.update({
+      where: { id },
+      data: { erpSyncStatus: 'PENDING' },
+    });
+    await this.audit.record({
+      actorAdminUserId: actor.id,
+      action: 'ORDER_STATUS_CHANGED',
+      entityType: 'Order',
+      entityId: id,
+      requestId: actor.requestId ?? null,
+      metadata: { manualRetry: 'ERP', outboxEventId: event.id, orderNumber: order.orderNumber },
+    });
+    return this.getAdmin(id);
+  }
+
+  async retryTelegram(
+    id: string,
+    actor: { id: string; requestId?: string },
+  ): Promise<OrderAdminDetailDto> {
+    const order = await this.prisma.client.order.findUnique({ where: { id } });
+    if (!order) throw new NotFoundException();
+    const event = await this.prisma.client.outboxEvent.findFirst({
+      where: { aggregateId: id, eventType: 'TELEGRAM_NOTIFY' },
+      orderBy: { createdAt: 'desc' },
+    });
+    if (!event) {
+      throw new NotFoundException(
+        'Нет Telegram-события. Дождитесь результата ERP или повторите ERP.',
+      );
+    }
+    if (event.status === 'DELIVERED') {
+      // Allow re-notify: reset same outbox to PENDING (idempotent send to chat is acceptable).
+      await this.prisma.client.outboxEvent.update({
+        where: { id: event.id },
+        data: {
+          status: 'PENDING',
+          availableAt: new Date(),
+          nextAttemptAt: null,
+          leaseOwner: null,
+          leaseExpiresAt: null,
+          failureCategory: null,
+          lastErrorSanitized: null,
+          deliveredAt: null,
+          processedAt: null,
+        },
+      });
+    } else if (event.status === 'PROCESSING') {
+      throw new ConflictException('Идёт отправка в Telegram — подождите');
+    } else {
+      await this.outbox.manualRetry(event.id);
+    }
+    await this.prisma.client.order.update({
+      where: { id },
+      data: { telegramNotifyStatus: 'PENDING' },
+    });
+    await this.audit.record({
+      actorAdminUserId: actor.id,
+      action: 'ORDER_STATUS_CHANGED',
+      entityType: 'Order',
+      entityId: id,
+      requestId: actor.requestId ?? null,
+      metadata: {
+        manualRetry: 'TELEGRAM',
+        outboxEventId: event.id,
+        orderNumber: order.orderNumber,
+      },
+    });
+    return this.getAdmin(id);
   }
 
   async transition(
@@ -845,14 +993,7 @@ export class OrdersService {
         tx,
       );
 
-      const full = await tx.order.findUniqueOrThrow({
-        where: { id },
-        include: {
-          items: { orderBy: { sortOrder: 'asc' } },
-          events: { orderBy: { createdAt: 'asc' } },
-        },
-      });
-      return mapAdminDetail(full);
+      return this.getAdmin(id);
     });
   }
 
@@ -913,14 +1054,7 @@ export class OrdersService {
         tx,
       );
 
-      const full = await tx.order.findUniqueOrThrow({
-        where: { id },
-        include: {
-          items: { orderBy: { sortOrder: 'asc' } },
-          events: { orderBy: { createdAt: 'asc' } },
-        },
-      });
-      return mapAdminDetail(full);
+      return this.getAdmin(id);
     });
   }
 }
@@ -978,55 +1112,122 @@ function mapEvent(e: {
   };
 }
 
-function mapAdminDetail(order: {
+function mapAttempt(a: {
   id: string;
-  orderNumber: string;
-  status: OrderStatus;
-  fulfillmentType: FulfillmentType;
-  purchaserName: string;
-  purchaserPhoneE164: string;
-  recipientName: string | null;
-  recipientPhoneE164: string | null;
-  surprise: boolean;
-  addressKnown: boolean;
-  deliveryAddress: string | null;
-  addressDetails: string | null;
-  fulfillmentDate: string;
-  timeWindowId: string;
-  timeWindowLabel: string;
-  timeWindowStartMinutes: number;
-  timeWindowEndMinutes: number;
-  cardMessage: string | null;
-  anonymousCard: boolean;
-  customerComment: string | null;
-  subtotalMinor: bigint;
-  deliveryFeeMinor: bigint;
-  totalMinor: bigint;
-  cancellationReason: string | null;
-  cancelledAt: Date | null;
-  confirmedAt: Date | null;
-  completedAt: Date | null;
+  channel: 'ERP' | 'TELEGRAM';
+  outboxEventId: string | null;
+  attemptNumber: number;
+  outcome: 'SUCCESS' | 'FAILURE' | 'SKIPPED';
+  remoteReference: string | null;
+  errorCode: string | null;
+  errorSanitized: string | null;
+  nextAttemptAt: Date | null;
+  meta: unknown;
   createdAt: Date;
-  updatedAt: Date;
-  items: Array<{
+}): IntegrationDeliveryAttemptDto {
+  return {
+    id: a.id,
+    channel: a.channel,
+    outboxEventId: a.outboxEventId,
+    attemptNumber: a.attemptNumber,
+    outcome: a.outcome,
+    remoteReference: a.remoteReference,
+    errorCode: a.errorCode,
+    errorSanitized: a.errorSanitized,
+    nextAttemptAt: a.nextAttemptAt?.toISOString() ?? null,
+    meta:
+      a.meta && typeof a.meta === 'object' && !Array.isArray(a.meta)
+        ? (a.meta as Record<string, unknown>)
+        : null,
+    createdAt: a.createdAt.toISOString(),
+  };
+}
+
+function mapAdminDetail(
+  order: {
     id: string;
-    productName: string;
-    productSlug: string;
-    variantName: string;
-    primaryImageUrl: string | null;
-    quantity: number;
-    unitPriceMinor: bigint;
-    lineTotalMinor: bigint;
-  }>;
-  events: Array<{
-    id: string;
-    type: OrderEventType;
-    fromStatus: OrderStatus | null;
-    toStatus: OrderStatus | null;
-    message: string | null;
+    orderNumber: string;
+    status: OrderStatus;
+    fulfillmentType: FulfillmentType;
+    purchaserName: string;
+    purchaserPhoneE164: string;
+    recipientName: string | null;
+    recipientPhoneE164: string | null;
+    surprise: boolean;
+    addressKnown: boolean;
+    deliveryAddress: string | null;
+    addressDetails: string | null;
+    fulfillmentDate: string;
+    timeWindowId: string;
+    timeWindowLabel: string;
+    timeWindowStartMinutes: number;
+    timeWindowEndMinutes: number;
+    cardMessage: string | null;
+    anonymousCard: boolean;
+    customerComment: string | null;
+    subtotalMinor: bigint;
+    deliveryFeeMinor: bigint;
+    totalMinor: bigint;
+    paymentMethod: PaymentMethod;
+    paymentStatus: PaymentStatus;
+    paidAt: Date | null;
+    paymentProvider: string | null;
+    paymentExternalId: string | null;
+    erpSyncStatus: ErpSyncStatus;
+    erpRemoteReference: string | null;
+    telegramNotifyStatus: TelegramNotifyStatus;
+    cancellationReason: string | null;
+    cancelledAt: Date | null;
+    confirmedAt: Date | null;
+    completedAt: Date | null;
     createdAt: Date;
-  }>;
-}): OrderAdminDetailDto {
+    updatedAt: Date;
+    items: Array<{
+      id: string;
+      productName: string;
+      productSlug: string;
+      variantName: string;
+      primaryImageUrl: string | null;
+      quantity: number;
+      unitPriceMinor: bigint;
+      lineTotalMinor: bigint;
+    }>;
+    events: Array<{
+      id: string;
+      type: OrderEventType;
+      fromStatus: OrderStatus | null;
+      toStatus: OrderStatus | null;
+      message: string | null;
+      createdAt: Date;
+    }>;
+    deliveryAttempts: Array<{
+      id: string;
+      channel: 'ERP' | 'TELEGRAM';
+      outboxEventId: string | null;
+      attemptNumber: number;
+      outcome: 'SUCCESS' | 'FAILURE' | 'SKIPPED';
+      remoteReference: string | null;
+      errorCode: string | null;
+      errorSanitized: string | null;
+      nextAttemptAt: Date | null;
+      meta: unknown;
+      createdAt: Date;
+    }>;
+  },
+  outbox: Array<{ id: string; eventType: string; status: string }>,
+): OrderAdminDetailDto {
+  const erpOutbox = outbox.find((e) => e.eventType === 'ORDER_CREATED');
+  const tgOutbox = outbox
+    .filter((e) => e.eventType === 'TELEGRAM_NOTIFY')
+    .sort((a, b) => a.id.localeCompare(b.id))
+    .at(-1);
+  const canRetryErp = Boolean(
+    erpOutbox && ['PENDING', 'RETRY', 'FAILED'].includes(erpOutbox.status),
+  );
+  const canRetryTelegram = Boolean(
+    tgOutbox && ['PENDING', 'RETRY', 'FAILED', 'DELIVERED'].includes(tgOutbox.status),
+  );
+
   return {
     id: order.id,
     orderNumber: order.orderNumber,
@@ -1052,6 +1253,14 @@ function mapAdminDetail(order: {
     subtotalMinor: order.subtotalMinor.toString(),
     deliveryFeeMinor: order.deliveryFeeMinor.toString(),
     totalMinor: order.totalMinor.toString(),
+    paymentMethod: order.paymentMethod,
+    paymentStatus: order.paymentStatus,
+    paidAt: order.paidAt?.toISOString() ?? null,
+    paymentProvider: order.paymentProvider,
+    paymentExternalId: order.paymentExternalId,
+    erpSyncStatus: order.erpSyncStatus,
+    erpRemoteReference: order.erpRemoteReference,
+    telegramNotifyStatus: order.telegramNotifyStatus,
     cancellationReason: order.cancellationReason,
     cancelledAt: order.cancelledAt?.toISOString() ?? null,
     confirmedAt: order.confirmedAt?.toISOString() ?? null,
@@ -1060,7 +1269,10 @@ function mapAdminDetail(order: {
     updatedAt: order.updatedAt.toISOString(),
     items: order.items.map(mapItem),
     events: order.events.map(mapEvent),
+    deliveryAttempts: order.deliveryAttempts.map(mapAttempt),
     allowedTransitions: allowedOrderTransitions(order.status, order.fulfillmentType),
+    canRetryErp,
+    canRetryTelegram,
   };
 }
 
@@ -1088,6 +1300,7 @@ export function hashCreateOrderPayload(dto: CreateOrderRequest): string {
     cardMessage: dto.cardMessage?.trim() ?? null,
     anonymousCard: Boolean(dto.anonymousCard),
     customerComment: dto.customerComment?.trim() ?? null,
+    paymentMethod: dto.paymentMethod === 'CARD_ONLINE' ? 'CARD_ONLINE' : 'CASH_ON_DELIVERY',
   };
   return createHash('sha256').update(JSON.stringify(canonical)).digest('hex');
 }

@@ -1,14 +1,18 @@
 'use client';
 
-import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { useTransition } from 'react';
+import { useCallback, useEffect, useState, useTransition } from 'react';
 import {
-  orderStatusLabel,
-  type FulfillmentType,
+  erpSyncStatusLabel,
+  paymentMethodLabel,
+  paymentStatusLabel,
+  telegramNotifyStatusLabel,
+  type AdminOrdersSummaryDto,
+  type OrderAdminDetailDto,
   type OrderAdminListItemDto,
-  type OrderStatus,
 } from '@bouquet-one/contracts';
+import { adminGet, adminPost, errorMessage } from '@/lib/admin-client';
+import { adminEndpoints } from '@/lib/admin-endpoints';
 import { formatPriceFromMinor } from '@/lib/media';
 
 type Props = {
@@ -16,26 +20,102 @@ type Props = {
   total: number;
   page: number;
   pageSize: number;
+  summary: AdminOrdersSummaryDto;
+  canUpdate: boolean;
   filters: {
     date: string;
     status?: string;
     fulfillmentType?: string;
+    paymentStatus?: string;
+    erpSyncStatus?: string;
+    telegramNotifyStatus?: string;
     q?: string;
   };
 };
 
-export function OrdersManager({ items, total, page, pageSize, filters }: Props) {
+function chipClass(tone: 'ok' | 'warn' | 'err' | 'muted'): string {
+  switch (tone) {
+    case 'ok':
+      return 'rounded px-1.5 py-0.5 text-xs bg-emerald-50 text-emerald-900';
+    case 'warn':
+      return 'rounded px-1.5 py-0.5 text-xs bg-amber-50 text-amber-900';
+    case 'err':
+      return 'rounded px-1.5 py-0.5 text-xs bg-red-50 text-red-800';
+    default:
+      return 'rounded px-1.5 py-0.5 text-xs bg-[var(--admin-bg)] text-[var(--admin-muted)]';
+  }
+}
+
+function erpTone(s: string): 'ok' | 'warn' | 'err' | 'muted' {
+  if (s === 'SYNCED') return 'ok';
+  if (s === 'FAILED') return 'err';
+  if (s === 'RETRYING' || s === 'PENDING') return 'warn';
+  return 'muted';
+}
+
+function tgTone(s: string): 'ok' | 'warn' | 'err' | 'muted' {
+  if (s === 'SENT') return 'ok';
+  if (s === 'FAILED') return 'err';
+  if (s === 'RETRYING' || s === 'PENDING') return 'warn';
+  return 'muted';
+}
+
+function payTone(s: string): 'ok' | 'warn' | 'err' | 'muted' {
+  if (s === 'PAID' || s === 'NOT_REQUIRED') return 'ok';
+  if (s === 'FAILED') return 'err';
+  if (s === 'AWAITING_PAYMENT') return 'warn';
+  return 'muted';
+}
+
+export function OrdersManager({
+  items,
+  total,
+  page,
+  pageSize,
+  summary,
+  canUpdate,
+  filters,
+}: Props) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [pending, startTransition] = useTransition();
+  const [selectedId, setSelectedId] = useState<string | null>(
+    typeof searchParams.get('id') === 'string' ? searchParams.get('id') : null,
+  );
+  const [detail, setDetail] = useState<OrderAdminDetailDto | null>(null);
+  const [detailError, setDetailError] = useState<string | null>(null);
+  const [detailLoading, setDetailLoading] = useState(false);
+  const [actionError, setActionError] = useState<string | null>(null);
+  const [actionPending, setActionPending] = useState(false);
+  const [techOpen, setTechOpen] = useState(false);
+
+  const loadDetail = useCallback(async (id: string) => {
+    setDetailLoading(true);
+    setDetailError(null);
+    try {
+      const data = await adminGet<OrderAdminDetailDto>(adminEndpoints.order(id));
+      setDetail(data);
+    } catch (err) {
+      setDetail(null);
+      setDetailError(errorMessage(err, 'Не удалось загрузить заказ'));
+    } finally {
+      setDetailLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!selectedId) {
+      setDetail(null);
+      return;
+    }
+    void loadDetail(selectedId);
+  }, [selectedId, loadDetail]);
 
   function setFilter(key: string, value: string) {
     const params = new URLSearchParams(searchParams.toString());
-    if (!value || (value === 'all' && key === 'date')) {
+    if (!value || value === 'all' || value === '') {
       if (key === 'date') params.set('date', 'all');
       else params.delete(key);
-    } else if (value === '' || value === 'all') {
-      params.delete(key);
     } else {
       params.set(key, value);
     }
@@ -45,26 +125,82 @@ export function OrdersManager({ items, total, page, pageSize, filters }: Props) 
     });
   }
 
+  function selectOrder(id: string) {
+    setSelectedId(id);
+    const params = new URLSearchParams(searchParams.toString());
+    params.set('id', id);
+    router.replace(`/admin/orders?${params.toString()}`, { scroll: false });
+  }
+
+  async function retryErp() {
+    if (!detail || !canUpdate) return;
+    setActionPending(true);
+    setActionError(null);
+    try {
+      const next = await adminPost<OrderAdminDetailDto>(
+        adminEndpoints.orderRetryErp(detail.id),
+        {},
+      );
+      setDetail(next);
+      router.refresh();
+    } catch (err) {
+      setActionError(errorMessage(err, 'Не удалось повторить ERP'));
+    } finally {
+      setActionPending(false);
+    }
+  }
+
+  async function retryTelegram() {
+    if (!detail || !canUpdate) return;
+    setActionPending(true);
+    setActionError(null);
+    try {
+      const next = await adminPost<OrderAdminDetailDto>(
+        adminEndpoints.orderRetryTelegram(detail.id),
+        {},
+      );
+      setDetail(next);
+      router.refresh();
+    } catch (err) {
+      setActionError(errorMessage(err, 'Не удалось повторить Telegram'));
+    } finally {
+      setActionPending(false);
+    }
+  }
+
   const pages = Math.max(1, Math.ceil(total / pageSize));
-  const date = filters.date || 'today';
-  const hasFilters = Boolean(filters.status || filters.fulfillmentType || filters.q);
-  const emptyMessage =
-    hasFilters
-      ? 'По выбранным фильтрам заказов нет. Сбросьте фильтры или измените поиск.'
-      : date === 'today'
-        ? 'На сегодня заказов нет.'
-        : date === 'tomorrow'
-          ? 'На завтра заказов пока нет.'
-          : 'Заказов пока нет.';
+  const emptyMessage = 'Заказов по выбранным фильтрам нет.';
 
   return (
     <div className={`space-y-5 ${pending ? 'opacity-70' : ''}`}>
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+        {(
+          [
+            ['Все', summary.total, null],
+            ['Ожидают ERP', summary.awaitingErp, () => setFilter('erpSyncStatus', 'PENDING')],
+            ['Ошибки ERP', summary.erpErrors, () => setFilter('erpSyncStatus', 'FAILED')],
+            ['Ошибки Telegram', summary.telegramErrors, () => setFilter('telegramNotifyStatus', 'FAILED')],
+            ['Ожидают оплаты', summary.awaitingPayment, () => setFilter('paymentStatus', 'AWAITING_PAYMENT')],
+          ] as const
+        ).map(([label, value, onClick]) => (
+          <button
+            key={label}
+            type="button"
+            className="admin-card p-3 text-left"
+            onClick={onClick ?? undefined}
+          >
+            <p className="text-xs text-[var(--admin-muted)]">{label}</p>
+            <p className="text-xl font-semibold tabular-nums">{value}</p>
+          </button>
+        ))}
+      </div>
+
       <div className="admin-seg">
         {(
           [
             ['today', 'Сегодня'],
             ['tomorrow', 'Завтра'],
-            ['all', 'Все'],
+            ['all', 'Все даты'],
           ] as const
         ).map(([value, label]) => (
           <button
@@ -80,165 +216,280 @@ export function OrdersManager({ items, total, page, pageSize, filters }: Props) 
         ))}
       </div>
 
-      <div className="admin-toolbar">
+      <div className="admin-toolbar flex flex-wrap gap-3">
         <label className="admin-field">
-          <span>Статус</span>
+          <span>Оплата</span>
           <select
             className="admin-select"
-            value={filters.status ?? ''}
-            onChange={(e) => setFilter('status', e.target.value)}
+            value={filters.paymentStatus ?? ''}
+            onChange={(e) => setFilter('paymentStatus', e.target.value)}
           >
-            <option value="">Все статусы</option>
-            {(
-              [
-                'RECEIVED',
-                'CONFIRMED',
-                'PREPARING',
-                'READY',
-                'DELIVERING',
-                'COMPLETED',
-                'CANCELLED',
-              ] as OrderStatus[]
-            ).map((s) => (
-              <option key={s} value={s}>
-                {orderStatusLabel(s)}
-              </option>
-            ))}
+            <option value="">Все</option>
+            <option value="NOT_REQUIRED">При получении</option>
+            <option value="AWAITING_PAYMENT">Ожидает</option>
+            <option value="PAID">Оплачен</option>
+            <option value="FAILED">Не прошла</option>
           </select>
         </label>
         <label className="admin-field">
-          <span>Тип</span>
+          <span>ERP</span>
           <select
             className="admin-select"
-            value={filters.fulfillmentType ?? ''}
-            onChange={(e) => setFilter('fulfillmentType', e.target.value)}
+            value={filters.erpSyncStatus ?? ''}
+            onChange={(e) => setFilter('erpSyncStatus', e.target.value)}
           >
-            <option value="">Все типы</option>
-            {(['DELIVERY', 'PICKUP'] as FulfillmentType[]).map((t) => (
-              <option key={t} value={t}>
-                {t === 'DELIVERY' ? 'Доставка' : 'Самовывоз'}
-              </option>
-            ))}
+            <option value="">Все</option>
+            <option value="PENDING">Ожидает</option>
+            <option value="RETRYING">Повтор</option>
+            <option value="SYNCED">OK</option>
+            <option value="FAILED">Ошибка</option>
+            <option value="DISABLED">Отключён</option>
           </select>
         </label>
-        <form
-          className="flex flex-wrap items-end gap-2"
-          onSubmit={(e) => {
-            e.preventDefault();
-            const fd = new FormData(e.currentTarget);
-            setFilter('q', String(fd.get('q') ?? ''));
-          }}
-        >
-          <label className="admin-field">
-            <span>Поиск</span>
-            <input
-              name="q"
-              defaultValue={filters.q ?? ''}
-              placeholder="Номер / имя / телефон"
-              className="admin-input w-56"
-            />
-          </label>
-          <button type="submit" className="admin-btn-ghost">
-            Найти
-          </button>
-        </form>
+        <label className="admin-field">
+          <span>Telegram</span>
+          <select
+            className="admin-select"
+            value={filters.telegramNotifyStatus ?? ''}
+            onChange={(e) => setFilter('telegramNotifyStatus', e.target.value)}
+          >
+            <option value="">Все</option>
+            <option value="PENDING">Ожидает</option>
+            <option value="RETRYING">Повтор</option>
+            <option value="SENT">Отправлен</option>
+            <option value="FAILED">Ошибка</option>
+            <option value="SKIPPED">Пропущен</option>
+            <option value="DISABLED">Отключён</option>
+          </select>
+        </label>
+        <label className="admin-field min-w-[12rem] flex-1">
+          <span>Поиск</span>
+          <input
+            className="admin-input"
+            defaultValue={filters.q ?? ''}
+            placeholder="№, имя, телефон"
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                setFilter('q', (e.target as HTMLInputElement).value);
+              }
+            }}
+          />
+        </label>
       </div>
 
-      <div className="admin-panel admin-table-wrap admin-table-wrap--cards">
-        <table className="admin-table admin-table--compact">
-          <thead>
-            <tr>
-              <th>Номер</th>
-              <th>Дата</th>
-              <th>Время</th>
-              <th>Тип</th>
-              <th>Клиент</th>
-              <th>Статус</th>
-              <th>Сумма</th>
-            </tr>
-          </thead>
-          <tbody>
-            {items.length === 0 ? (
-              <tr>
-                <td colSpan={7}>
-                  <div className="admin-empty admin-empty--action">
-                    <p>{emptyMessage}</p>
-                    {hasFilters ? (
-                      <Link href={`/admin/orders?date=${date}`} className="admin-btn-ghost">
-                        Сбросить фильтры
-                      </Link>
-                    ) : null}
-                  </div>
-                </td>
-              </tr>
-            ) : (
-              items.map((order) => (
-                <tr key={order.id}>
-                  <td data-primary>
-                    <Link
-                      href={`/admin/orders/${order.id}`}
-                      className="font-semibold text-[var(--admin-ink)] underline-offset-2 hover:text-[var(--admin-brand)] hover:underline"
-                    >
-                      {order.orderNumber}
-                    </Link>
-                  </td>
-                  <td data-label="Дата" className="tabular-nums">{order.fulfillmentDate}</td>
-                  <td data-label="Время">{order.timeWindowLabel}</td>
-                  <td data-label="Тип">
-                    <span className="admin-chip admin-chip--muted">
-                      {order.fulfillmentType === 'DELIVERY' ? 'Доставка' : 'Самовывоз'}
-                    </span>
-                  </td>
-                  <td data-label="Клиент">
-                    <span className="block">{order.purchaserName}</span>
-                    {order.recipientName && order.recipientName !== order.purchaserName ? (
-                      <span className="block text-xs text-[var(--admin-muted)]">
-                        → {order.recipientName}
-                      </span>
-                    ) : null}
-                  </td>
-                  <td data-label="Статус">
-                    <span className="admin-chip">{orderStatusLabel(order.status)}</span>
-                  </td>
-                  <td data-label="Сумма" className="tabular-nums font-semibold">
-                    {formatPriceFromMinor(order.totalMinor, order.currency)}
-                  </td>
+      <div className="grid gap-4 lg:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)]">
+        <div className="admin-card overflow-x-auto">
+          {items.length === 0 ? (
+            <p className="admin-empty p-4">{emptyMessage}</p>
+          ) : (
+            <table className="admin-table w-full text-sm">
+              <thead>
+                <tr>
+                  <th>Заказ</th>
+                  <th>Оплата</th>
+                  <th>ERP</th>
+                  <th>Telegram</th>
+                  <th>Сумма</th>
                 </tr>
-              ))
-            )}
-          </tbody>
-        </table>
-      </div>
-
-      {pages > 1 ? (
-        <div className="flex items-center gap-3 text-sm text-[var(--admin-muted)]">
-          <span>
-            Стр. {page} / {pages} · {total}
-          </span>
-          {page > 1 ? (
-            <Link
-              href={`/admin/orders?${new URLSearchParams({
-                ...Object.fromEntries(Object.entries(filters).filter(([, v]) => v)),
-                page: String(page - 1),
-              }).toString()}`}
-              className="font-medium text-[var(--admin-brand)] underline-offset-2 hover:underline"
-            >
-              Назад
-            </Link>
-          ) : null}
-          {page < pages ? (
-            <Link
-              href={`/admin/orders?${new URLSearchParams({
-                ...Object.fromEntries(Object.entries(filters).filter(([, v]) => v)),
-                page: String(page + 1),
-              }).toString()}`}
-              className="font-medium text-[var(--admin-brand)] underline-offset-2 hover:underline"
-            >
-              Далее
-            </Link>
+              </thead>
+              <tbody>
+                {items.map((row) => (
+                  <tr
+                    key={row.id}
+                    className={`cursor-pointer ${selectedId === row.id ? 'bg-[var(--admin-brand-soft)]' : ''}`}
+                    onClick={() => selectOrder(row.id)}
+                  >
+                    <td>
+                      <div className="font-medium">{row.orderNumber}</div>
+                      <div className="text-xs text-[var(--admin-muted)]">
+                        {row.purchaserName} · {row.fulfillmentDate}
+                      </div>
+                    </td>
+                    <td>
+                      <span className={chipClass(payTone(row.paymentStatus))}>
+                        {paymentStatusLabel(row.paymentStatus)}
+                      </span>
+                    </td>
+                    <td>
+                      <span className={chipClass(erpTone(row.erpSyncStatus))}>
+                        {erpSyncStatusLabel(row.erpSyncStatus)}
+                      </span>
+                    </td>
+                    <td>
+                      <span className={chipClass(tgTone(row.telegramNotifyStatus))}>
+                        {telegramNotifyStatusLabel(row.telegramNotifyStatus)}
+                      </span>
+                    </td>
+                    <td className="tabular-nums">
+                      {formatPriceFromMinor(row.totalMinor, row.currency)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+          {pages > 1 ? (
+            <div className="flex items-center justify-between gap-2 border-t border-[var(--admin-border)] p-3 text-sm">
+              <span className="text-[var(--admin-muted)]">
+                Стр. {page} / {pages} · {total}
+              </span>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  className="admin-btn-ghost"
+                  disabled={page <= 1}
+                  onClick={() => setFilter('page', String(page - 1))}
+                >
+                  Назад
+                </button>
+                <button
+                  type="button"
+                  className="admin-btn-ghost"
+                  disabled={page >= pages}
+                  onClick={() => setFilter('page', String(page + 1))}
+                >
+                  Вперёд
+                </button>
+              </div>
+            </div>
           ) : null}
         </div>
-      ) : null}
+
+        <aside className="admin-card space-y-4 p-4">
+          {!selectedId ? (
+            <p className="admin-empty">Выберите заказ в таблице</p>
+          ) : detailLoading ? (
+            <p className="admin-empty">Загрузка…</p>
+          ) : detailError ? (
+            <p className="text-sm text-red-700">{detailError}</p>
+          ) : detail ? (
+            <>
+              <header>
+                <h2 className="text-lg font-semibold">{detail.orderNumber}</h2>
+                <p className="text-sm text-[var(--admin-muted)]">
+                  Создан {new Date(detail.createdAt).toLocaleString('ru-BY')}
+                </p>
+              </header>
+
+              <div className="flex flex-wrap gap-2">
+                <span className={chipClass(payTone(detail.paymentStatus))}>
+                  {paymentMethodLabel(detail.paymentMethod)} ·{' '}
+                  {paymentStatusLabel(detail.paymentStatus)}
+                </span>
+                <span className={chipClass(erpTone(detail.erpSyncStatus))}>
+                  {erpSyncStatusLabel(detail.erpSyncStatus)}
+                </span>
+                <span className={chipClass(tgTone(detail.telegramNotifyStatus))}>
+                  {telegramNotifyStatusLabel(detail.telegramNotifyStatus)}
+                </span>
+              </div>
+
+              <section className="space-y-1 text-sm">
+                <p>
+                  <strong>{detail.purchaserName}</strong> · {detail.purchaserPhoneE164}
+                </p>
+                <p>
+                  {detail.fulfillmentType === 'DELIVERY' ? 'Доставка' : 'Самовывоз'}:{' '}
+                  {detail.fulfillmentDate}, {detail.timeWindowLabel}
+                </p>
+                {detail.deliveryAddress ? <p>{detail.deliveryAddress}</p> : null}
+                <p className="font-semibold tabular-nums">
+                  Итого {formatPriceFromMinor(detail.totalMinor, detail.currency)}
+                </p>
+              </section>
+
+              <ul className="space-y-1 text-sm">
+                {detail.items.map((item) => (
+                  <li key={item.id}>
+                    {item.productName} ({item.variantName}) × {item.quantity}
+                    {item.optionsSnapshot && item.optionsSnapshot.length > 0
+                      ? ` · ${item.optionsSnapshot.map((o) => o.valueName).join(', ')}`
+                      : ''}{' '}
+                    — {formatPriceFromMinor(item.lineTotalMinor, item.currency)}
+                  </li>
+                ))}
+              </ul>
+
+              {canUpdate ? (
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    className="admin-btn-ghost"
+                    disabled={actionPending || !detail.canRetryErp}
+                    onClick={() => void retryErp()}
+                  >
+                    Повторить ERP
+                  </button>
+                  <button
+                    type="button"
+                    className="admin-btn-ghost"
+                    disabled={actionPending || !detail.canRetryTelegram}
+                    onClick={() => void retryTelegram()}
+                  >
+                    Повторить Telegram
+                  </button>
+                </div>
+              ) : null}
+              {actionError ? <p className="text-sm text-red-700">{actionError}</p> : null}
+
+              <section>
+                <h3 className="mb-2 text-sm font-semibold">Хронология и попытки</h3>
+                <ol className="space-y-2 text-xs">
+                  {detail.events.map((e) => (
+                    <li key={e.id} className="border-l-2 border-[var(--admin-border)] pl-2">
+                      <div className="text-[var(--admin-muted)]">
+                        {new Date(e.createdAt).toLocaleString('ru-BY')}
+                      </div>
+                      <div>
+                        {e.type}
+                        {e.message ? ` — ${e.message}` : ''}
+                      </div>
+                    </li>
+                  ))}
+                  {detail.deliveryAttempts.map((a) => (
+                    <li key={a.id} className="border-l-2 border-[var(--admin-brand)] pl-2">
+                      <div className="text-[var(--admin-muted)]">
+                        {new Date(a.createdAt).toLocaleString('ru-BY')} · {a.channel} #
+                        {a.attemptNumber}
+                      </div>
+                      <div>
+                        {a.outcome}
+                        {a.remoteReference ? ` · ${a.remoteReference}` : ''}
+                        {a.errorCode ? ` · ${a.errorCode}` : ''}
+                      </div>
+                      {a.errorSanitized ? (
+                        <div className="text-red-700">{a.errorSanitized}</div>
+                      ) : null}
+                      {a.nextAttemptAt ? (
+                        <div className="text-[var(--admin-muted)]">
+                          След. попытка: {new Date(a.nextAttemptAt).toLocaleString('ru-BY')}
+                        </div>
+                      ) : null}
+                    </li>
+                  ))}
+                </ol>
+              </section>
+
+              <details open={techOpen} onToggle={(e) => setTechOpen((e.target as HTMLDetailsElement).open)}>
+                <summary className="cursor-pointer text-sm font-medium">Технические детали</summary>
+                <pre className="mt-2 overflow-x-auto rounded bg-[var(--admin-bg)] p-2 text-[11px]">
+                  {JSON.stringify(
+                    {
+                      id: detail.id,
+                      erpRemoteReference: detail.erpRemoteReference,
+                      paymentProvider: detail.paymentProvider,
+                      paymentExternalId: detail.paymentExternalId,
+                      attempts: detail.deliveryAttempts.length,
+                    },
+                    null,
+                    2,
+                  )}
+                </pre>
+              </details>
+            </>
+          ) : null}
+        </aside>
+      </div>
     </div>
   );
 }
