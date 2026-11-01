@@ -19,6 +19,8 @@ source "${SCRIPT_DIR}/deploy/lib/nginx.sh"
 SHOPBUKET1_NGINX_LIB_LOADED=1
 # shellcheck source=deploy/lib/health.sh
 source "${SCRIPT_DIR}/deploy/lib/health.sh"
+# shellcheck source=deploy/lib/migrate-image.sh
+source "${SCRIPT_DIR}/deploy/lib/migrate-image.sh"
 
 # Compose file interpolates ${SHOPBUKET1_ENV_FILE}; always export the default path.
 export SHOPBUKET1_ENV_FILE="${SHOPBUKET1_ENV_FILE:-/etc/shopbuket1/production.env}"
@@ -195,12 +197,23 @@ remember_previous_images() {
 }
 
 build_images() {
-  log "Building API image ${NEW_API_IMAGE}"
-  docker build \
-    -f "$SCRIPT_DIR/deploy/Dockerfile.api" \
-    -t "$NEW_API_IMAGE" \
-    -t shopbuket1-api:local \
-    "$SCRIPT_DIR"
+  # Prefer SHA-tagged image already verified in preflight (same commit re-deploy).
+  # Never treat unverified shopbuket1-api:local as the migrate source of truth.
+  if release_api_image_usable "$NEW_API_IMAGE"; then
+    log "Reusing verified API image ${NEW_API_IMAGE} (migrations match checkout)"
+    cleanup_stale_api_local_alias "$NEW_API_IMAGE"
+    sync_api_local_alias "$NEW_API_IMAGE"
+  else
+    log "Building API image ${NEW_API_IMAGE}"
+    docker build \
+      -f "$SCRIPT_DIR/deploy/Dockerfile.api" \
+      -t "$NEW_API_IMAGE" \
+      "$SCRIPT_DIR"
+    assert_image_migrations_match_checkout "$NEW_API_IMAGE"
+    cleanup_stale_api_local_alias "$NEW_API_IMAGE"
+    sync_api_local_alias "$NEW_API_IMAGE"
+  fi
+  export SHOPBUKET1_API_IMAGE="$NEW_API_IMAGE"
 
   log "Building Web image ${NEW_WEB_IMAGE}"
   docker build \
@@ -220,7 +233,14 @@ backup_before_migrate() {
 }
 
 migrate() {
-  log "Running prisma migrate deploy"
+  local image="${SHOPBUKET1_API_IMAGE:-}"
+  [[ -n "$image" ]] || die "SHOPBUKET1_API_IMAGE unset before live migrate"
+  [[ "$image" == "$NEW_API_IMAGE" ]] \
+    || die "Live migrate image (${image}) must equal release tag (${NEW_API_IMAGE})"
+  [[ "$image" != "shopbuket1-api:local" ]] \
+    || die "Refusing live migrate via unverified shopbuket1-api:local"
+  assert_image_migrations_match_checkout "$image"
+  log "Running prisma migrate deploy via ${image}"
   compose run --rm --no-deps \
     -e "DATABASE_URL=${DATABASE_URL}" \
     api \

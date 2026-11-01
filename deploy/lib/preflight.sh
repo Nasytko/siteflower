@@ -224,12 +224,17 @@ preflight_restore_dump() {
 preflight_migrate_rehearsal() {
   local db="$1"
   assert_preflight_db_name "$db"
-  local enc url
+  local enc url image
   enc="$(urlencode "$POSTGRES_PASSWORD")"
   url="postgresql://${POSTGRES_USER}:${enc}@postgres:5432/${db}?schema=public"
   [[ "$url" == *"/${db}?"* ]] || die "Rehearsal DATABASE_URL must target ${db}"
   [[ "$url" != *"/${POSTGRES_DB}?"* ]] || die "Refusing rehearsal URL that targets production DB name"
-  log "Applying prisma migrate deploy on isolated DB ${db}"
+  image="${SHOPBUKET1_API_IMAGE:-}"
+  [[ -n "$image" ]] || die "SHOPBUKET1_API_IMAGE unset — call ensure_release_api_image before rehearsal migrate"
+  [[ "$image" != "shopbuket1-api:local" ]] \
+    || die "Refusing rehearsal migrate via unverified shopbuket1-api:local — use SHA-tagged image"
+  assert_image_migrations_match_checkout "$image"
+  log "Applying prisma migrate deploy on isolated DB ${db} via ${image}"
   compose run --rm --no-deps \
     -e "DATABASE_URL=${url}" \
     api \
@@ -375,6 +380,12 @@ preflight_verify_rehearsal() {
       fails=1
     fi
   fi
+  # Every checkout migration must be finished after rehearsal migrate.
+  if declare -F verify_checkout_migrations_applied_db >/dev/null 2>&1; then
+    if ! verify_checkout_migrations_applied_db "$db" "rehearsal"; then
+      fails=1
+    fi
+  fi
   return "$fails"
 }
 
@@ -453,6 +464,7 @@ write_preflight_report() {
   "rehearsal_db": "$(printf '%s' "$rehearsal_db" | sed 's/"/\\"/g')",
   "production_db": "$(printf '%s' "$POSTGRES_DB" | sed 's/"/\\"/g')",
   "migrations_applied_count": ${migrations_applied:-0},
+  "migrate_image": "$(printf '%s' "${SHOPBUKET1_API_IMAGE:-}" | sed 's/"/\\"/g')",
   "inventory": ${inventory_json},
   "reason": "$(printf '%s' "$reason" | sed 's/"/\\"/g')"
 }

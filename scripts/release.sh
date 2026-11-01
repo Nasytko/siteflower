@@ -28,6 +28,8 @@ SHOPBUKET1_NGINX_LIB_LOADED=1
 source "${ROOT_DIR}/deploy/lib/health.sh"
 # shellcheck source=../deploy/lib/preflight.sh
 source "${ROOT_DIR}/deploy/lib/preflight.sh"
+# shellcheck source=../deploy/lib/migrate-image.sh
+source "${ROOT_DIR}/deploy/lib/migrate-image.sh"
 # shellcheck source=../deploy/lib/cleanup-plan.sh
 source "${ROOT_DIR}/deploy/lib/cleanup-plan.sh"
 
@@ -136,27 +138,10 @@ resolve_release_ref() {
   printf '%s\n' "$sha"
 }
 
+# Build/reuse SHA-tagged API image and verify migration manifest vs checkout.
+# Never uses unverified shopbuket1-api:local (see ensure_release_api_image).
 ensure_api_image_for_migrate() {
-  local rev="$1"
-  local short="${rev:0:12}"
-  local image="shopbuket1-api:${short}"
-  if docker image inspect "$image" >/dev/null 2>&1; then
-    export SHOPBUKET1_API_IMAGE="$image"
-    log "Using existing API image $image"
-    return 0
-  fi
-  if docker image inspect shopbuket1-api:local >/dev/null 2>&1; then
-    export SHOPBUKET1_API_IMAGE="shopbuket1-api:local"
-    log "Using shopbuket1-api:local for preflight migrate"
-    return 0
-  fi
-  log "Building API image ${image} for migration rehearsal"
-  docker build \
-    -f "$ROOT_DIR/deploy/Dockerfile.api" \
-    -t "$image" \
-    -t shopbuket1-api:local \
-    "$ROOT_DIR"
-  export SHOPBUKET1_API_IMAGE="$image"
+  ensure_release_api_image "$1"
 }
 
 cmd_preflight() {
@@ -286,6 +271,8 @@ cmd_dry_run() {
     mig_n="$(find "$mig_dir" -mindepth 1 -maxdepth 1 -type d | wc -l | tr -d ' ')"
   fi
   log "Migration folders in checkout: ${mig_n}"
+  log "Migrate image: shopbuket1-api:${target:0:12} (never unverified shopbuket1-api:local)"
+  log "Preflight builds/verifies API image migration manifest (names+checksum) vs checkout before rehearsal"
   if release_requires_erp_sku_registry; then
     log "Task 04A gate: erp_sku_registry verify is mandatory after migrate"
   fi
@@ -307,10 +294,11 @@ Planned stages for ./deploy.sh production ${REF:-}:
   3. resolve git to ${target}
   4. check migration conflicts + inventory (+ diameter_cm inventory)
   5. ./backup.sh preflight → ${SHOPBUKET1_BACKUP_DIR} (TOC structural check only)
-  6. restore + prisma migrate deploy on shopbuket1_preflight_<sha12> only
-  7. verify rehearsal (erp_sku_registry table+PK mandatory); drop temp DB
-  8. on PASS: build images, pre-migrate backup, live migrate, erp_sku live verify, switch api/web
-  9. healthchecks; write release metadata; prune old images/metadata only
+  6. build/reuse shopbuket1-api:<sha12>; verify migration manifest vs checkout
+  7. restore + prisma migrate deploy on shopbuket1_preflight_<sha12> via that image only
+  8. verify rehearsal (erp_sku_registry + finished migrations); drop temp DB
+  9. on PASS: reuse/build same API image + web, pre-migrate backup, live migrate via same image, switch api/web
+  10. healthchecks; write release metadata; prune old images/metadata; sync :local alias
   On migrate failure: running app not switched.
   On health failure after schema advance: refuse auto app rollback (avoid schema mismatch).
 Never: docker system prune --volumes, erpbuket1, ad-hoc schema DROP, DB auto-rollback.
