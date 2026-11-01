@@ -66,6 +66,43 @@ pass "missing revision rejected"
 bash "${ROOT}/scripts/release.sh" --help >/dev/null || fail "release.sh --help"
 pass "release.sh --help"
 
+# --- deploy.sh production --dry-run (no Docker) ---
+dry="$(bash "${ROOT}/deploy.sh" production --dry-run 2>&1)" || fail "deploy.sh production --dry-run"
+echo "$dry" | grep -qi "DRY-RUN" || fail "production dry-run missing banner"
+echo "$dry" | grep -qi "erp_sku_registry" || fail "dry-run must mention erp_sku_registry gate"
+pass "deploy.sh production --dry-run"
+
+# --- restore-test CLI requires --dump and --db ---
+rc=0
+bash "${ROOT}/scripts/release.sh" restore-test 2>/dev/null || rc=$?
+[[ "$rc" -ne 0 ]] || fail "restore-test without flags must fail"
+pass "restore-test requires explicit flags"
+
+# --- 04A migration detection ---
+release_requires_erp_sku_registry || fail "Task 04A migration must be present in tree"
+pass "release_requires_erp_sku_registry"
+
+# --- prune keeps current ---
+SHOPBUKET1_RELEASES_DIR="$TMP/state/releases"
+SHOPBUKET1_CURRENT_FILE="$TMP/state/current-release"
+SHOPBUKET1_PREVIOUS_FILE="$TMP/state/previous-release"
+SHOPBUKET1_RELEASE_METADATA_KEEP=2
+mkdir -p "$SHOPBUKET1_RELEASES_DIR"
+for i in 1 2 3 4; do
+  f="${SHOPBUKET1_RELEASES_DIR}/r${i}.json"
+  printf '{"revision":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","api_image":"shopbuket1-api:x","web_image":"shopbuket1-web:x","deployed_at":"2026-01-0%sT00:00:00Z"}\n' "$i" >"$f"
+  sleep 1
+done
+printf '%s\n' "${SHOPBUKET1_RELEASES_DIR}/r4.json" >"$SHOPBUKET1_CURRENT_FILE"
+printf '%s\n' "${SHOPBUKET1_RELEASES_DIR}/r3.json" >"$SHOPBUKET1_PREVIOUS_FILE"
+prune_release_metadata
+[[ -f "${SHOPBUKET1_RELEASES_DIR}/r4.json" ]] || fail "current meta pruned"
+[[ -f "${SHOPBUKET1_RELEASES_DIR}/r3.json" ]] || fail "previous meta pruned"
+n="$(find "$SHOPBUKET1_RELEASES_DIR" -name '*.json' | wc -l | tr -d ' ')"
+[[ "$n" -eq 2 ]] || fail "prune did not reduce to keep=2 (got $n)"
+[[ ! -f "${SHOPBUKET1_RELEASES_DIR}/r1.json" ]] || fail "oldest release should be pruned"
+pass "prune_release_metadata"
+
 # --- seo check helper sources ---
 # shellcheck source=../../deploy/lib/health.sh
 source "${ROOT}/deploy/lib/health.sh"

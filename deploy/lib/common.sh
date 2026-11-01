@@ -209,3 +209,53 @@ json_field() {
   local file="$1" key="$2"
   sed -n "s/.*\"${key}\"[[:space:]]*:[[:space:]]*\"\\([^\"]*\\)\".*/\\1/p" "$file" | head -n1
 }
+
+# Keep newest N release metadata JSON files; never delete files pointed by current/previous.
+prune_release_metadata() {
+  local keep="${SHOPBUKET1_RELEASE_METADATA_KEEP:-10}"
+  [[ "$keep" =~ ^[0-9]+$ ]] && [[ "$keep" -gt 0 ]] || keep=10
+  mkdir -p "$SHOPBUKET1_RELEASES_DIR"
+
+  local protect=()
+  local p
+  for p in "$SHOPBUKET1_CURRENT_FILE" "$SHOPBUKET1_PREVIOUS_FILE"; do
+    if [[ -f "$p" ]]; then
+      protect+=("$(tr -d '\r\n' <"$p")")
+    fi
+  done
+
+  local i=0 path
+  while IFS= read -r path; do
+    [[ -n "$path" && -f "$path" ]] || continue
+    i=$((i + 1))
+    if [[ "$i" -le "$keep" ]]; then
+      continue
+    fi
+    local skip=0 protected
+    for protected in "${protect[@]:-}"; do
+      if [[ -n "$protected" && "$path" == "$protected" ]]; then
+        skip=1
+        break
+      fi
+    done
+    if [[ "$skip" -eq 1 ]]; then
+      log "Retention: keeping protected release metadata $path"
+      continue
+    fi
+    log "Retention: removing old release metadata $path"
+    rm -f "$path" || true
+  done < <(ls -1t "${SHOPBUKET1_RELEASES_DIR}"/*.json 2>/dev/null || true)
+}
+
+list_release_metadata() {
+  mkdir -p "$SHOPBUKET1_RELEASES_DIR"
+  local path rev api when
+  echo "=== shopbuket1 releases (newest first) ==="
+  while IFS= read -r path; do
+    [[ -f "$path" ]] || continue
+    rev="$(json_field "$path" revision)"
+    api="$(json_field "$path" api_image)"
+    when="$(json_field "$path" deployed_at)"
+    printf '%s  rev=%s  api=%s  at=%s\n' "$path" "${rev:-?}" "${api:-?}" "${when:-?}"
+  done < <(ls -1t "${SHOPBUKET1_RELEASES_DIR}"/*.json 2>/dev/null || true)
+}

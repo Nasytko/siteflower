@@ -1,11 +1,13 @@
 #!/usr/bin/env bash
 # shopbuket1 — normal application deployment (does NOT reinstall the VPS).
 # Usage:
-#   ./deploy.sh
-#   ./deploy.sh <git-ref>
+#   ./deploy.sh production [--dry-run] [git-ref]   # recommended one-command path
+#   ./deploy.sh [--dry-run] [git-ref]              # direct deploy (prefer release preflight)
+#   ./deploy.sh --help
 #
 # Never runs docker system prune --volumes.
 # Never deletes erpbuket1 or other non-shopbuket1 Docker resources.
+# Never auto-rolls back PostgreSQL.
 
 set -euo pipefail
 
@@ -21,7 +23,47 @@ source "${SCRIPT_DIR}/deploy/lib/health.sh"
 # Compose file interpolates ${SHOPBUKET1_ENV_FILE}; always export the default path.
 export SHOPBUKET1_ENV_FILE="${SHOPBUKET1_ENV_FILE:-/etc/shopbuket1/production.env}"
 
-REF="${1:-}"
+MODE=""
+DRY_RUN=0
+REF=""
+CLEANUP_PLAN=""
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    production) MODE="production"; shift ;;
+    --dry-run) DRY_RUN=1; shift ;;
+    --cleanup-plan)
+      [[ $# -ge 2 ]] || die "--cleanup-plan requires a path to an approved plan JSON"
+      CLEANUP_PLAN="$2"
+      shift 2
+      ;;
+    -h|--help|help)
+      cat <<'EOF'
+Usage:
+  ./deploy.sh production [--dry-run] [git-ref]
+  ./deploy.sh production --cleanup-plan <approved-plan.json> [git-ref]
+  ./deploy.sh [--dry-run] [git-ref]
+
+production     — safe one-command path: preflight (backup + migrate rehearsal) then deploy
+--cleanup-plan — deep cleanup: only a prepared+approved plan's migrations (never ad-hoc DROP)
+--dry-run      — print current/target SHA and planned stages; no mutate
+<git-ref>      — optional explicit commit SHA / tag / branch (validated)
+
+Also see: ./scripts/release.sh {preflight|deploy|status|releases|restore-test|rollback}
+EOF
+      exit 0
+      ;;
+    *)
+      if [[ -z "$REF" ]]; then
+        REF="$1"
+        shift
+      else
+        die "Unexpected argument: $1"
+      fi
+      ;;
+  esac
+done
+export SHOPBUKET1_CLEANUP_PLAN="${CLEANUP_PLAN}"
+
 NEW_API_IMAGE=""
 NEW_WEB_IMAGE=""
 PREV_API_IMAGE=""
@@ -29,8 +71,16 @@ PREV_WEB_IMAGE=""
 # Set only after containers are about to be replaced (rollback applies then).
 DEPLOY_STARTED=0
 DEPLOY_INTERRUPTED=0
+# Set after successful live migrate in this process — blocks unsafe app-image rollback.
+SCHEMA_ADVANCED=0
 
 rollback_app_images() {
+  if [[ "${SCHEMA_ADVANCED:-0}" -eq 1 ]]; then
+    log "Refusing automatic app-image rollback: live schema was advanced by this deploy."
+    log "Previous images may be incompatible with the current DB. Prefer a forward fix."
+    log "DB restore requires explicit operator approval — not performed here."
+    return 1
+  fi
   if [[ -z "${PREV_API_IMAGE:-}" || -z "${PREV_WEB_IMAGE:-}" ]]; then
     log "No previous release images recorded — cannot auto-rollback containers"
     return 0
@@ -49,11 +99,13 @@ on_err() {
     exit "$code"
   fi
   if [[ "$DEPLOY_STARTED" -eq 1 ]]; then
-    log "Deploy failed (exit ${code}). Attempting application container rollback."
+    log "Deploy failed after container switch (exit ${code})."
     log "Database migrations are NOT reverted automatically."
-    rollback_app_images || true
+    if ! rollback_app_images; then
+      log "Left new containers in place (or failed switch) to avoid schema/app mismatch."
+    fi
   else
-    log "Deploy aborted early (exit ${code}) before container switch — no image rollback."
+    log "Deploy aborted early (exit ${code}) before container switch — running app untouched."
   fi
   exit "$code"
 }
@@ -62,8 +114,10 @@ on_interrupt() {
   DEPLOY_INTERRUPTED=1
   log "Deploy interrupted (SIGINT/SIGTERM). Lock will release on process exit."
   if [[ "$DEPLOY_STARTED" -eq 1 ]]; then
-    log "Attempting application container rollback after interrupt."
+    log "Interrupt after container switch — evaluating app rollback safety."
     rollback_app_images || true
+  else
+    log "Interrupt before container switch — running app untouched."
   fi
   exit 130
 }
@@ -171,6 +225,17 @@ migrate() {
     -e "DATABASE_URL=${DATABASE_URL}" \
     api \
     sh -lc 'cd /app/node_modules/@bouquet-one/database && exec /app/node_modules/.bin/prisma migrate deploy'
+  SCHEMA_ADVANCED=1
+  log "Live migrate finished — SCHEMA_ADVANCED=1 (auto app rollback disabled)"
+}
+
+# Post-migrate gate before switching api/web.
+# Uses live catalog/_prisma_migrations — not migrate deploy exit code alone.
+post_migrate_verify() {
+  # shellcheck source=deploy/lib/preflight.sh
+  source "${SCRIPT_DIR}/deploy/lib/preflight.sh"
+  log "Stage: verify live schema state (migrations + erp_sku + payment/telegram)"
+  verify_live_schema_state || die "Live schema state verification failed — refusing container switch"
 }
 
 bring_up() {
@@ -253,7 +318,73 @@ prune_old_shopbuket1_images() {
   done
 }
 
+# Peek target SHA without checkout/fetch mutation when possible.
+peek_target_sha() {
+  cd "$SCRIPT_DIR"
+  require_cmd git
+  if [[ -n "$REF" ]]; then
+    validate_git_ref "$REF"
+    git rev-parse --verify "${REF}^{commit}" 2>/dev/null || die "Cannot resolve ref for dry-run: $REF"
+    return 0
+  fi
+  git rev-parse HEAD
+}
+
+cmd_dry_run_direct() {
+  log "=== DRY-RUN (direct deploy path) — no backup / migrate / build / switch ==="
+  local current target
+  current="$(git -C "$SCRIPT_DIR" rev-parse HEAD 2>/dev/null || echo unknown)"
+  target="$(peek_target_sha)"
+  target="${target//$'\r'/}"
+  log "Current HEAD:  ${current}"
+  log "Target commit: ${target}"
+  if [[ -f "$SHOPBUKET1_CURRENT_FILE" ]]; then
+    local meta
+    meta="$(tr -d '\r\n' <"$SHOPBUKET1_CURRENT_FILE" 2>/dev/null || true)"
+    if [[ -n "$meta" && -f "$meta" ]]; then
+      log "Live release:  $(json_field "$meta" revision) ($(json_field "$meta" api_image))"
+    fi
+  else
+    log "Live release:  (no current-release pointer)"
+  fi
+  cat <<EOF >&2
+Planned stages (would run without --dry-run):
+  1. acquire flock ${SHOPBUKET1_LOCK_FILE}
+  2. validate ${SHOPBUKET1_ENV_FILE}
+  3. Nginx/domain preflight
+  4. resolve/checkout target ${target}
+  5. docker build shopbuket1-api / shopbuket1-web
+  6. pg_dump via ./backup.sh pre-migrate → ${SHOPBUKET1_BACKUP_DIR}
+  7. prisma migrate deploy (live DB — irreversible automatically)
+  8. recreate api/web (+ worker if integrations)
+  9. startup + production healthchecks
+ 10. write release metadata; prune old shopbuket1 images + release JSON
+On health failure after switch: app rollback only if schema was NOT advanced; DB never auto-restored.
+Read-only dry-run: no flock, git checkout/fetch, docker, backup, migrate, or release writes.
+EOF
+  log "DRY-RUN complete — no changes made"
+}
+
 main() {
+  # Recommended one-command path delegates to release.sh (preflight + deploy).
+  if [[ "$MODE" == "production" ]]; then
+    if [[ -n "${CLEANUP_PLAN}" ]]; then
+      export SHOPBUKET1_CLEANUP_PLAN="$CLEANUP_PLAN"
+    fi
+    if [[ "$DRY_RUN" -eq 1 ]]; then
+      exec "${SCRIPT_DIR}/scripts/release.sh" dry-run ${REF:+"$REF"}
+    fi
+    exec "${SCRIPT_DIR}/scripts/release.sh" production ${REF:+"$REF"}
+  fi
+  if [[ -n "${CLEANUP_PLAN}" && "$MODE" != "production" ]]; then
+    die "--cleanup-plan is only valid with: ./deploy.sh production --cleanup-plan <plan>"
+  fi
+
+  if [[ "$DRY_RUN" -eq 1 ]]; then
+    cmd_dry_run_direct
+    exit 0
+  fi
+
   log "Stage: acquire deploy lock"
   acquire_lock
   log "Stage: require Docker access"
@@ -278,6 +409,7 @@ main() {
 
   # Prefer the two-stage path: ./scripts/release.sh preflight && ./scripts/release.sh deploy
   # Direct ./deploy.sh still works; set SHOPBUKET1_REQUIRE_PREFLIGHT=1 to enforce.
+  # ./deploy.sh production always requires preflight via release.sh.
   if [[ "${SHOPBUKET1_REQUIRE_PREFLIGHT:-0}" == "1" ]]; then
     # shellcheck source=deploy/lib/preflight.sh
     source "${SCRIPT_DIR}/deploy/lib/preflight.sh"
@@ -298,8 +430,10 @@ main() {
     sleep 2
   done
 
+  # Migrate runs while DEPLOY_STARTED=0 so failure leaves the running app untouched.
   backup_before_migrate
   migrate
+  post_migrate_verify
 
   DEPLOY_STARTED=1
   bring_up
@@ -307,6 +441,7 @@ main() {
   wait_production_healthy
 
   write_release_metadata "$rev" "$NEW_API_IMAGE" "$NEW_WEB_IMAGE"
+  prune_release_metadata
   prune_old_shopbuket1_images
 
   log "Deploy succeeded: $rev"

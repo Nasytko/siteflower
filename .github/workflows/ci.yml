@@ -88,6 +88,12 @@ jobs:
       - name: Release preflight unit tests
         run: bash deploy/test/release-preflight.test.sh
 
+      - name: Deploy safe-path unit tests
+        run: bash deploy/test/deploy-safe.test.sh
+
+      - name: Cleanup-plan unit tests
+        run: bash deploy/test/cleanup-plan.test.sh
+
       - name: Lint, typecheck, unit+integration tests, build
         # turbo `test` for @bouquet-one/api runs jest unit then jest-integration
         # against TEST_DATABASE_URL (this job's isolated Postgres). Missing/unsafe URL must fail.

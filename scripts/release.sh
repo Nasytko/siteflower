@@ -2,8 +2,14 @@
 # shopbuket1 — two-stage release entry point (pull-based GitHub → server).
 #
 # Usage (on the production VPS, from the git checkout):
+#   ./deploy.sh production [--dry-run] [git-ref]   # preferred one-command wrapper
+#   ./scripts/release.sh production [git-ref]      # preflight + deploy
+#   ./scripts/release.sh dry-run [git-ref]
 #   ./scripts/release.sh preflight [git-ref]
 #   ./scripts/release.sh deploy    [git-ref]
+#   ./scripts/release.sh restore-test --dump <path> --db shopbuket1_preflight_<name>
+#   ./scripts/release.sh releases
+#   ./scripts/release.sh seo-reconcile
 #   ./scripts/release.sh rollback  [release-metadata.json]
 #   ./scripts/release.sh status
 #
@@ -22,28 +28,81 @@ SHOPBUKET1_NGINX_LIB_LOADED=1
 source "${ROOT_DIR}/deploy/lib/health.sh"
 # shellcheck source=../deploy/lib/preflight.sh
 source "${ROOT_DIR}/deploy/lib/preflight.sh"
+# shellcheck source=../deploy/lib/cleanup-plan.sh
+source "${ROOT_DIR}/deploy/lib/cleanup-plan.sh"
 
 export SHOPBUKET1_ENV_FILE="${SHOPBUKET1_ENV_FILE:-/etc/shopbuket1/production.env}"
 export ROOT_DIR
+# Optional: path set by ./deploy.sh production --cleanup-plan <file>
+CLEANUP_PLAN_PATH="${SHOPBUKET1_CLEANUP_PLAN:-}"
 
 CMD="${1:-}"
-REF="${2:-}"
+shift || true
+# Remaining args: git-ref for most commands, or --dump/--db for restore-test.
+REF="${1:-}"
+RESTORE_DUMP=""
+RESTORE_DB=""
 
 usage() {
   cat <<'EOF'
 Usage:
-  ./scripts/release.sh preflight [git-ref]
-  ./scripts/release.sh deploy    [git-ref]
-  ./scripts/release.sh rollback  [release-metadata.json]
+  ./deploy.sh production [--dry-run] [git-ref]
+  ./deploy.sh production --cleanup-plan <approved-plan.json> [git-ref]
+  ./scripts/release.sh production   [git-ref]
+  ./scripts/release.sh dry-run      [git-ref]
+  ./scripts/release.sh preflight    [git-ref]
+  ./scripts/release.sh deploy       [git-ref]
+  ./scripts/release.sh restore-test --dump <path> --db shopbuket1_preflight_<name>
+  ./scripts/release.sh releases
+  ./scripts/release.sh seo-reconcile
+  ./scripts/release.sh rollback     [release-metadata.json]
   ./scripts/release.sh status
   ./scripts/release.sh seo-smoke
 
-preflight  — backup + isolated migration rehearsal + PASS/FAIL report (no live schema change)
-deploy     — requires matching recent preflight PASS; then runs ./deploy.sh
-rollback   — application container rollback via ./rollback.sh (DB not auto-restored)
-status     — show current/previous release + latest preflight
-seo-smoke  — post-deploy SEO route checks (catalog URLs, redirects, sitemap)
+production    — preflight then deploy for the same commit SHA (non-interactive)
+--cleanup-plan— deep cleanup: install ONLY the approved plan migrations (via env SHOPBUKET1_CLEANUP_PLAN)
+dry-run       — strictly read-only plan (no git mutate, docker, backup, DB, release writes)
+preflight     — backup + isolated migration rehearsal + PASS/FAIL report
+deploy        — requires matching recent preflight PASS; then runs ./deploy.sh
+restore-test  — FULL pg_restore into an EXPLICIT isolated DB (not TOC-only; never production)
+releases      — list release metadata JSON (newest first)
+seo-reconcile — read-only SEO legacy table counts (no DROP)
+rollback      — application container rollback (DB not auto-restored)
+status        — show current/previous release + latest preflight
+seo-smoke     — post-deploy SEO route checks
+
+Note: backup.sh pg_restore -l is structural validation only — not a restore-test.
+Normal production never installs cleanup-plan migrations.
 EOF
+}
+
+parse_restore_test_args() {
+  RESTORE_DUMP=""
+  RESTORE_DB=""
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --dump)
+        [[ $# -ge 2 ]] || die "restore-test: --dump requires a path"
+        RESTORE_DUMP="$2"
+        shift 2
+        ;;
+      --db)
+        [[ $# -ge 2 ]] || die "restore-test: --db requires a database name"
+        RESTORE_DB="$2"
+        shift 2
+        ;;
+      -h|--help)
+        usage
+        exit 0
+        ;;
+      *)
+        die "restore-test: unknown argument '$1' (need --dump PATH --db shopbuket1_preflight_NAME)"
+        ;;
+    esac
+  done
+  [[ -n "$RESTORE_DUMP" ]] || die "restore-test: --dump PATH is required (no automatic dump selection)"
+  [[ -n "$RESTORE_DB" ]] || die "restore-test: --db shopbuket1_preflight_NAME is required (no automatic DB name)"
+  assert_preflight_db_name "$RESTORE_DB"
 }
 
 resolve_release_ref() {
@@ -119,6 +178,8 @@ cmd_preflight() {
 
   preflight_postgres_ready
   ensure_database_url
+  preflight_check_migration_conflicts
+  preflight_diameter_cm_inventory
 
   local migrations_applied inventory backup rehearsal_db report
   migrations_applied="$(preflight_migration_status)"
@@ -182,6 +243,216 @@ cmd_deploy() {
 
 cmd_rollback() {
   exec "$ROOT_DIR/rollback.sh" "${REF:-}"
+}
+
+cmd_dry_run() {
+  # Strictly read-only: no flock, git fetch/checkout/pull, docker, backup, DB, or release writes.
+  log "=== DRY-RUN (production path) — strictly read-only ==="
+  cd "$ROOT_DIR"
+  require_cmd git
+  local current target
+  current="$(git rev-parse HEAD)"
+  if [[ -n "$REF" ]]; then
+    validate_git_ref "$REF"
+    # rev-parse only — never fetch/checkout in dry-run.
+    target="$(git rev-parse --verify "${REF}^{commit}")"
+  else
+    target="$current"
+  fi
+  log "Current HEAD:  ${current}"
+  log "Target commit: ${target}"
+  if [[ "$current" != "$target" ]]; then
+    log "Note: live run would checkout/detach to ${target} (dry-run does not)"
+  fi
+  if [[ -f "$SHOPBUKET1_CURRENT_FILE" ]]; then
+    local meta
+    meta="$(tr -d '\r\n' <"$SHOPBUKET1_CURRENT_FILE" 2>/dev/null || true)"
+    if [[ -n "$meta" && -f "$meta" ]]; then
+      log "Live release:  $(json_field "$meta" revision)"
+      log "  api_image=$(json_field "$meta" api_image)"
+      log "  web_image=$(json_field "$meta" web_image)"
+    fi
+  else
+    log "Live release:  (none recorded)"
+  fi
+  if [[ -f "${SHOPBUKET1_ENV_FILE}" ]]; then
+    log "Env file: present (${SHOPBUKET1_ENV_FILE})"
+  else
+    log "Env file: MISSING (${SHOPBUKET1_ENV_FILE}) — live run would fail"
+  fi
+  local mig_dir="${ROOT_DIR}/packages/database/prisma/migrations"
+  local mig_n=0
+  if [[ -d "$mig_dir" ]]; then
+    mig_n="$(find "$mig_dir" -mindepth 1 -maxdepth 1 -type d | wc -l | tr -d ' ')"
+  fi
+  log "Migration folders in checkout: ${mig_n}"
+  if release_requires_erp_sku_registry; then
+    log "Task 04A gate: erp_sku_registry verify is mandatory after migrate"
+  fi
+  if [[ -n "${CLEANUP_PLAN_PATH}" ]]; then
+    log "Cleanup plan path: ${CLEANUP_PLAN_PATH}"
+    if [[ -f "${CLEANUP_PLAN_PATH}" ]]; then
+      load_cleanup_plan "${CLEANUP_PLAN_PATH}"
+      log "Cleanup plan id=${CLEANUP_PLAN_ID} status=${CLEANUP_PLAN_STATUS} (dry-run does not install)"
+    else
+      log "Cleanup plan MISSING at path (live run would fail)"
+    fi
+  else
+    log "Cleanup plan: none (normal deploy — SEO DROP migrations stay out of prisma/migrations)"
+  fi
+  cat <<EOF >&2
+Planned stages for ./deploy.sh production ${REF:-}:
+  1. flock ${SHOPBUKET1_LOCK_FILE}
+  2. validate env + Nginx/domain preflight
+  3. resolve git to ${target}
+  4. check migration conflicts + inventory (+ diameter_cm inventory)
+  5. ./backup.sh preflight → ${SHOPBUKET1_BACKUP_DIR} (TOC structural check only)
+  6. restore + prisma migrate deploy on shopbuket1_preflight_<sha12> only
+  7. verify rehearsal (erp_sku_registry table+PK mandatory); drop temp DB
+  8. on PASS: build images, pre-migrate backup, live migrate, erp_sku live verify, switch api/web
+  9. healthchecks; write release metadata; prune old images/metadata only
+  On migrate failure: running app not switched.
+  On health failure after schema advance: refuse auto app rollback (avoid schema mismatch).
+Never: docker system prune --volumes, erpbuket1, ad-hoc schema DROP, DB auto-rollback.
+Dry-run itself performs none of the stages above.
+Cleanup DROP of seo_landing_* requires --cleanup-plan with status=approved + token.
+EOF
+  log "DRY-RUN complete — no changes made"
+}
+
+cmd_production() {
+  # One-command: preflight then deploy for the same SHA. Non-interactive.
+  log "Stage: production one-command (preflight → deploy)"
+  acquire_lock
+  preflight_require_tools
+  [[ -f "$SHOPBUKET1_ENV_FILE" ]] || die "Missing $SHOPBUKET1_ENV_FILE"
+  validate_production_env
+  preflight_disk_ok
+
+  local rc=0
+  run_healthcheck_mode preflight || rc=$?
+  [[ "$rc" -eq 0 ]] || die "Nginx/domain preflight failed: ${HEALTH_LAST_REASON:-unknown}"
+
+  local rev
+  rev="$(resolve_release_ref)"
+  rev="${rev//$'\r'/}"
+  log "Production pipeline revision ${rev}"
+
+  preflight_postgres_ready
+  ensure_database_url
+  preflight_check_migration_conflicts
+  preflight_diameter_cm_inventory
+
+  # Approved cleanup-plan: install gated migrations before rehearsal/live migrate.
+  if [[ -n "${CLEANUP_PLAN_PATH}" ]]; then
+    log "Stage: cleanup-plan ${CLEANUP_PLAN_PATH}"
+    load_cleanup_plan "${CLEANUP_PLAN_PATH}"
+    validate_cleanup_plan_approval
+    if [[ "${CLEANUP_PLAN_REQUIRES_RESTORE}" == "true" ]]; then
+      [[ "${SHOPBUKET1_CLEANUP_RESTORE_TEST_OK:-0}" == "1" ]] \
+        || die "Cleanup plan requires restore-test first. Run restore-test, then export SHOPBUKET1_CLEANUP_RESTORE_TEST_OK=1"
+    fi
+    if [[ "${CLEANUP_PLAN_REQUIRES_SEO}" == "true" ]]; then
+      cleanup_plan_seo_sql_gates
+    fi
+    install_cleanup_plan_migrations
+  fi
+
+  local migrations_applied inventory backup rehearsal_db report
+  migrations_applied="$(preflight_migration_status)"
+  inventory="$(preflight_inventory_json)"
+  backup="$(preflight_create_backup)"
+  backup="$(echo "$backup" | tr -d '\r' | tail -n1)"
+
+  rehearsal_db="shopbuket1_preflight_${rev:0:12}"
+  assert_preflight_db_name "$rehearsal_db"
+  ensure_api_image_for_migrate "$rev"
+
+  local ok=1
+  reason=""
+  if ! preflight_create_rehearsal_db "$rehearsal_db"; then
+    ok=0
+    reason="create_rehearsal_db_failed"
+  elif ! preflight_restore_dump "$rehearsal_db" "$backup"; then
+    ok=0
+    reason="restore_failed"
+  elif ! preflight_migrate_rehearsal "$rehearsal_db"; then
+    ok=0
+    reason="migrate_failed"
+  elif ! preflight_verify_rehearsal "$rehearsal_db"; then
+    ok=0
+    reason="verify_failed"
+  fi
+  preflight_drop_db_if_exists "$rehearsal_db" || true
+
+  if [[ "$ok" -ne 1 ]]; then
+    report="$(write_preflight_report "$rev" "FAIL" "$backup" "$rehearsal_db" "$inventory" "$migrations_applied" "$reason")"
+    die "PREFLIGHT FAIL (${reason}). Report: ${report}. Production schema was not modified."
+  fi
+  report="$(write_preflight_report "$rev" "PASS" "$backup" "$rehearsal_db" "$inventory" "$migrations_applied" "")"
+  log "PREFLIGHT PASS for ${rev} — continuing to deploy"
+  log "Report: ${report}"
+
+  # Release flock so deploy.sh can acquire the same lock.
+  exec 9>&- || true
+  export SHOPBUKET1_REQUIRE_PREFLIGHT=1
+  # Pass SHA only — cleanup migrations already installed into prisma/migrations for this checkout.
+  exec "$ROOT_DIR/deploy.sh" "$rev"
+}
+
+cmd_restore_test() {
+  # Full restore proof on an EXPLICIT isolated DB. Never targets POSTGRES_DB.
+  # Distinct from backup.sh TOC validation (pg_restore -l), which is structural only.
+  parse_restore_test_args "$@"
+  acquire_lock
+  preflight_require_tools
+  [[ -f "$SHOPBUKET1_ENV_FILE" ]] || die "Missing $SHOPBUKET1_ENV_FILE"
+  load_env_file "$SHOPBUKET1_ENV_FILE"
+  ensure_database_url
+  preflight_postgres_ready
+  preflight_disk_ok
+
+  local dump="$RESTORE_DUMP"
+  local db="$RESTORE_DB"
+  [[ -f "$dump" ]] || die "Dump file not found: $dump"
+  [[ "$db" != "$POSTGRES_DB" ]] || die "Refusing restore-test against production DB name"
+  log "Restore-test dump: $dump"
+  log "Restore-test isolated DB: $db (explicit; production=${POSTGRES_DB})"
+
+  local size
+  size="$(wc -c <"$dump" | tr -d ' ')"
+  [[ "$size" -gt 1000 ]] || die "Dump too small (${size} bytes): $dump"
+  log "Dump size ${size} bytes — proceeding to FULL pg_restore (TOC-only is insufficient)"
+
+  if ! preflight_create_rehearsal_db "$db"; then
+    die "restore-test: could not create ${db}"
+  fi
+  local failed=0
+  if ! preflight_restore_dump "$db" "$dump"; then
+    failed=1
+  else
+    local n
+    n="$(preflight_psql_db "$db" "SELECT count(*)::int FROM information_schema.tables WHERE table_schema='public'")"
+    n="$(echo "$n" | tr -d '[:space:]')"
+    log "Restore-test public tables: ${n}"
+    if [[ ! "$n" =~ ^[0-9]+$ ]] || [[ "$n" -le 0 ]]; then
+      failed=1
+    fi
+  fi
+  preflight_drop_db_if_exists "$db" || true
+  [[ "$failed" -eq 0 ]] || die "restore-test FAILED for $dump → ${db} (production DB untouched)"
+  log "RESTORE-TEST PASS: full restore into ${db} succeeded; temp DB dropped; production untouched"
+}
+
+cmd_releases() {
+  list_release_metadata
+}
+
+cmd_seo_reconcile() {
+  [[ -f "$SHOPBUKET1_ENV_FILE" ]] || die "Missing $SHOPBUKET1_ENV_FILE"
+  load_env_file "$SHOPBUKET1_ENV_FILE"
+  preflight_postgres_ready
+  seo_reconcile_report
 }
 
 cmd_status() {
@@ -285,8 +556,13 @@ cmd_seo_smoke() {
 
 main() {
   case "$CMD" in
+    production) cmd_production ;;
+    dry-run) cmd_dry_run ;;
     preflight) cmd_preflight ;;
     deploy) cmd_deploy ;;
+    restore-test) cmd_restore_test "$@" ;;
+    releases) cmd_releases ;;
+    seo-reconcile) cmd_seo_reconcile ;;
     rollback) cmd_rollback ;;
     status) cmd_status ;;
     seo-smoke) cmd_seo_smoke ;;
