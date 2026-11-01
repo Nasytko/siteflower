@@ -31,8 +31,7 @@ const TYPE_FILTERS: Array<{ id: 'all' | SeoEntityType; label: string }> = [
   { id: 'occasion', label: 'Поводы' },
   { id: 'recipient', label: 'Получатели' },
   { id: 'color', label: 'Цвета' },
-  { id: 'page', label: 'Страницы' },
-  { id: 'seo_landing', label: 'SEO-подборки' },
+  { id: 'page', label: 'Страницы каталога' },
 ];
 
 function entityTypeLabel(type: SeoEntityType): string {
@@ -48,9 +47,7 @@ function entityTypeLabel(type: SeoEntityType): string {
     case 'color':
       return 'Цвет';
     case 'page':
-      return 'Страница';
-    case 'seo_landing':
-      return 'SEO-подборка';
+      return 'Страница каталога';
   }
 }
 

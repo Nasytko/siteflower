@@ -4,12 +4,14 @@ import {
   CATALOG_RULES_EMPTY_MATCH_ID,
   FLOWER_TYPE_SLUG_ALIASES,
   migrateCatalogPageRulesJson,
+  parseCatalogPageRules,
   resolveCatalogPageRules,
   type CatalogPageRulesResolution,
   type CatalogRulesDiagnostic,
   type CatalogTaxonomyLookup,
   type ResolvedCatalogPageFilters,
 } from '@bouquet-one/contracts';
+import type { Prisma } from '@bouquet-one/database';
 import { PrismaService } from '../database/prisma.service';
 import type { ProductListFilters } from './products.repository';
 
@@ -21,9 +23,18 @@ export type CatalogMatchResult = {
 
 /**
  * Single catalog match path for public listing, admin preview, and placement.
- * Resolves CatalogCategory.rules (and SEO landing rules) to ProductListFilters
- * with stable taxonomy IDs; fail-closed on ambiguous/unknown slugs.
+ * Resolves CatalogCategory.rules to ProductListFilters with stable taxonomy IDs;
+ * fail-closed on ambiguous/unknown slugs. No parallel SeoLanding match engine.
  */
+
+/**
+ * Parse rules JSON into list filters (slug passthrough, no taxonomy lookup).
+ * Prefer CatalogMatchService.resolveRulesToFilters for public/admin/placement
+ * so flowerTypeIds win and page slugs like «rozy» resolve via aliases.
+ */
+export function rulesToFilters(rules: Prisma.JsonValue): ProductListFilters {
+  return toProductListFilters(parseCatalogPageRules(rules));
+}
 @Injectable()
 export class CatalogMatchService {
   private lookupCache: { at: number; lookup: CatalogTaxonomyLookup } | null = null;

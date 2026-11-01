@@ -163,8 +163,6 @@ export type ProductPlacementKind =
   | 'HUB'
   | 'GIFT_SUBTYPE'
   | 'CATALOG_PAGE'
-  /** @deprecated Use CATALOG_PAGE */
-  | 'SEO_LANDING'
   | 'RECOMMENDED'
   | 'INSUFFICIENT_DATA';
 
@@ -488,8 +486,12 @@ export function adminProductCompositionSummary(input: {
     .join(', ');
 }
 
-export const SEO_LANDING_STATUSES = ['DRAFT', 'PUBLISHED', 'ARCHIVED'] as const;
-export type SeoLandingStatus = (typeof SEO_LANDING_STATUSES)[number];
+/**
+ * Publication status for CatalogCategory thematic pages.
+ * Prisma client enum is CatalogPageStatus; PostgreSQL type remains "SeoLandingStatus" via @@map.
+ */
+export const CATALOG_PAGE_STATUSES = ['DRAFT', 'PUBLISHED', 'ARCHIVED'] as const;
+export type CatalogPageStatus = (typeof CATALOG_PAGE_STATUSES)[number];
 
 export const SLUG_ENTITY_TYPES = [
   'PRODUCT',
@@ -497,6 +499,7 @@ export const SLUG_ENTITY_TYPES = [
   'RECIPIENT',
   'COLOR',
   'CATALOG_CATEGORY',
+  /** Historical slug_redirects rows from pre-unify era; resolve into CatalogCategory. */
   'SEO_LANDING',
 ] as const;
 export type SlugEntityType = (typeof SLUG_ENTITY_TYPES)[number];
@@ -1091,7 +1094,7 @@ export type CatalogPageDeleteImpactDto = {
 export function evaluateCatalogPageDeleteImpact(input: {
   pageKind: CatalogPageKind;
   isSystem: boolean;
-  status: SeoLandingStatus | 'LIVE';
+  status: CatalogPageStatus | 'LIVE';
   childrenCount: number;
   navigationCount: number;
   assignedProductsCount: number;
@@ -1910,7 +1913,7 @@ export type CatalogPageDto = {
   listingKind: CatalogListingKind | null;
   parentId: string | null;
   rules: Record<string, unknown>;
-  status: SeoLandingStatus | 'LIVE';
+  status: CatalogPageStatus | 'LIVE';
   visibility: TaxonomyVisibility;
   noIndex: boolean;
   navVisible: boolean;
@@ -1937,40 +1940,6 @@ export type ProductTraitDefinitionDto = {
   name: string;
   description: string | null;
   sortOrder: number;
-};
-
-/** Managed SEO landing page (Admin + public). @deprecated Prefer CatalogPageDto. */
-export type SeoLandingPageDto = {
-  id: string;
-  slug: string;
-  title: string;
-  h1: string;
-  seoTitle: string | null;
-  seoDescription: string | null;
-  body: string | null;
-  /** Catalog list filter shape (JSON-compatible). */
-  rules: Record<string, unknown>;
-  status: SeoLandingStatus;
-  noIndex: boolean;
-  navVisible: boolean;
-  sortOrder: number;
-  version: number;
-  publishedAt: string | null;
-  pinnedProductIds: string[];
-  excludedProductIds: string[];
-  createdAt: string;
-  updatedAt: string;
-};
-
-export type SeoLandingPagePublicDto = {
-  id: string;
-  slug: string;
-  title: string;
-  h1: string;
-  seoTitle: string | null;
-  seoDescription: string | null;
-  body: string | null;
-  noIndex: boolean;
 };
 
 export type ProductMediaDto = {

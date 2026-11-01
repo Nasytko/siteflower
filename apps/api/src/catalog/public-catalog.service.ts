@@ -24,6 +24,11 @@ import {
   mergeListingIntoFilters,
   resolveCategoryListingFilters,
 } from './catalog-listing.util';
+import {
+  combinedTotal,
+  mergePinnedItems,
+  pinAwareListWindow,
+} from './catalog-pin-merge.util';
 import { isEffectivelyPublished } from './catalog.logic';
 import {
   PRODUCT_INCLUDE,
@@ -38,7 +43,6 @@ import { ProductFamiliesService } from './product-families.service';
 import type { PublicProductListQueryDto } from './products.dto';
 import { effectivelyPublishedWhere, ProductsRepository } from './products.repository';
 import { PromotionsService } from './promotions.service';
-import { SeoLandingsService } from './seo-landings.service';
 import { SlugRedirectsService } from './slug-redirects.service';
 
 /** Public landing-page taxonomies (flower types use /cvety via listFlowerTypes). */
@@ -64,7 +68,6 @@ export class PublicCatalogService {
     private readonly families: ProductFamiliesService,
     private readonly promotions: PromotionsService,
     private readonly slugRedirects: SlugRedirectsService,
-    private readonly seoLandings: SeoLandingsService,
     private readonly media: MediaService,
     private readonly prisma: PrismaService,
     private readonly catalogMatch: CatalogMatchService,
@@ -121,6 +124,14 @@ export class PublicCatalogService {
             select: { productId: true },
           });
           return excludes.map((p) => p.productId);
+        },
+        loadPinnedProductIds: async (pageId) => {
+          const pins = await this.prisma.client.catalogPageProduct.findMany({
+            where: { pageId },
+            orderBy: { sortOrder: 'asc' },
+            select: { productId: true },
+          });
+          return pins.map((p) => p.productId);
         },
         visibleOnly: true,
       });
@@ -195,28 +206,88 @@ export class PublicCatalogService {
           catalogCategoryIds: catalogFilters.catalogCategoryIds,
         };
 
-    const { items, total } = await this.products.list({
-      filters: {
-        publishedAt: now,
-        search: query.search,
-        availability: query.availability,
-        flowerSlugs: query.flowerSlugs,
-        budgetRanges,
-        ...listingFilters,
-        // Facet color overrides only when page rules did not set component color.
-        componentColorIds:
-          listingFilters.componentColorIds ?? gatedFacet.componentColorIds,
-        componentColorSlugs:
-          listingFilters.componentColorSlugs ?? gatedFacet.componentColorSlugs,
-      },
-      skip: (page - 1) * pageSize,
-      take: pageSize,
-      sort: query.sort ?? 'recommended',
-      now,
+    const pinnedIds = [...new Set(catalogFilters.listing?.pinnedProductIds ?? [])];
+    const excludedIds = [...new Set(catalogFilters.listing?.excludeProductIds ?? [])];
+    const pinWindow = pinAwareListWindow({
+      page,
+      pageSize,
+      pinCount: pinnedIds.length,
     });
+
+    // Exclude both explicit excludes and pins from the rules query (pins merged back).
+    const excludeFromRules = [...new Set([...excludedIds, ...pinnedIds])];
+
+    const ruleQuery =
+      pinWindow.ruleTake > 0
+        ? await this.products.list({
+            filters: {
+              publishedAt: now,
+              search: query.search,
+              availability: query.availability,
+              flowerSlugs: query.flowerSlugs,
+              budgetRanges,
+              ...listingFilters,
+              excludeProductIds: excludeFromRules.length ? excludeFromRules : undefined,
+              // Facet color overrides only when page rules did not set component color.
+              componentColorIds:
+                listingFilters.componentColorIds ?? gatedFacet.componentColorIds,
+              componentColorSlugs:
+                listingFilters.componentColorSlugs ?? gatedFacet.componentColorSlugs,
+            },
+            skip: pinWindow.ruleSkip,
+            take: pinWindow.ruleTake,
+            sort: query.sort ?? 'recommended',
+            now,
+          })
+        : await this.products.list({
+            filters: {
+              publishedAt: now,
+              search: query.search,
+              availability: query.availability,
+              flowerSlugs: query.flowerSlugs,
+              budgetRanges,
+              ...listingFilters,
+              excludeProductIds: excludeFromRules.length ? excludeFromRules : undefined,
+              componentColorIds:
+                listingFilters.componentColorIds ?? gatedFacet.componentColorIds,
+              componentColorSlugs:
+                listingFilters.componentColorSlugs ?? gatedFacet.componentColorSlugs,
+            },
+            skip: 0,
+            take: 1,
+            sort: query.sort ?? 'recommended',
+            now,
+          }).then((result) => ({ items: [], total: result.total }));
+
+    const { items, total } = ruleQuery;
+
+    let pinnedItems: ProductListItemDto[] = [];
+    if (pinWindow.includePins && pinnedIds.length > 0) {
+      const rows = await this.products.findManyByIds(pinnedIds);
+      const byId = new Map(rows.map((row) => [row.id, row]));
+      pinnedItems = pinnedIds
+        .map((id) => byId.get(id))
+        .filter(
+          (row): row is NonNullable<typeof row> =>
+            Boolean(row) && isEffectivelyPublished(row!, now),
+        )
+        .filter((row) => !excludedIds.includes(row.id))
+        .map((row) => toProductListItemDto(row, this.urlFor, now));
+    }
+
+    const ruleItems = items.map((product) =>
+      toProductListItemDto(product, this.urlFor, now),
+    );
+    const merged = mergePinnedItems({
+      pinnedItems,
+      ruleItems,
+      includePins: pinWindow.includePins,
+      pageSize,
+    });
+
     return {
-      items: items.map((product) => toProductListItemDto(product, this.urlFor, now)),
-      total,
+      items: merged,
+      total: combinedTotal(total, pinnedItems.length),
       page,
       pageSize,
     };
@@ -256,7 +327,14 @@ export class PublicCatalogService {
       canonicalSlug: string;
     }
   > {
-    const candidates = await this.slugRedirects.resolveChain('CATALOG_CATEGORY', slug);
+    // CATALOG_CATEGORY is canonical; SEO_LANDING covers historical redirect rows
+    // from the pre-unify era (same public /catalog/[slug] URL space).
+    const candidates = [
+      ...new Set([
+        ...(await this.slugRedirects.resolveChain('CATALOG_CATEGORY', slug)),
+        ...(await this.slugRedirects.resolveChain('SEO_LANDING', slug)),
+      ]),
+    ];
     for (const candidate of candidates) {
       try {
         const category = await this.categories.getBySlug(candidate);
@@ -382,7 +460,9 @@ export class PublicCatalogService {
 
   async getSitemap(): Promise<SitemapEntryDto[]> {
     const now = new Date();
-    const [products, occasions, recipients, categories, seoLandings] = await Promise.all([
+    // Single source: CatalogCategory (SYSTEM_HUB / LEGACY / published THEMATIC).
+    // SeoLandingPage is not read for sitemap after Task 03 consolidation.
+    const [products, occasions, recipients, categories] = await Promise.all([
       this.prisma.client.product.findMany({
         where: { ...effectivelyPublishedWhere(now), noIndex: false },
         select: { slug: true, updatedAt: true },
@@ -405,13 +485,13 @@ export class PublicCatalogService {
           OR: [
             { pageKind: 'SYSTEM_HUB' },
             { pageKind: 'LEGACY' },
+            { pageKind: 'GIFT_SUBTYPE' },
             { pageKind: 'THEMATIC', pageStatus: 'PUBLISHED' },
           ],
         },
         select: { slug: true, updatedAt: true, pageKind: true, pageStatus: true },
         orderBy: { updatedAt: 'desc' },
       }),
-      this.seoLandings.listSitemapEntries(),
     ]);
 
     const newestProductUpdate = products[0]?.updatedAt.toISOString() ?? null;
@@ -428,7 +508,6 @@ export class PublicCatalogService {
         updatedAt: category.updatedAt.toISOString(),
       }));
 
-    // Dedupe: seoLandings also emit /catalog/{slug} for thematic pages.
     const byPath = new Map<string, { path: string; updatedAt: string | null }>();
     for (const entry of [
       { path: '/catalog', updatedAt: newestProductUpdate },
@@ -447,7 +526,6 @@ export class PublicCatalogService {
         path: `/komu/${recipient.slug}`,
         updatedAt: recipient.updatedAt.toISOString(),
       })),
-      ...seoLandings,
     ]) {
       const prev = byPath.get(entry.path);
       if (!prev || (entry.updatedAt && (!prev.updatedAt || entry.updatedAt > prev.updatedAt))) {

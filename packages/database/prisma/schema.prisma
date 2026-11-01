@@ -231,10 +231,13 @@ enum CatalogPageKind {
   LEGACY
 }
 
-enum SeoLandingStatus {
+/// Client name CatalogPageStatus; PostgreSQL type remains "SeoLandingStatus" (no DB rename).
+enum CatalogPageStatus {
   DRAFT
   PUBLISHED
   ARCHIVED
+
+  @@map("SeoLandingStatus")
 }
 
 enum CatalogFilterType {
@@ -388,7 +391,7 @@ model CatalogCategory {
   h1             String?            @db.VarChar(200)
   body           String?            @db.Text
   /// THEMATIC publish state; hubs/gift subtypes use visibility instead when null.
-  pageStatus     SeoLandingStatus?  @map("page_status")
+  pageStatus     CatalogPageStatus? @map("page_status")
   publishedAt    DateTime?          @map("published_at") @db.Timestamptz(3)
   navVisible     Boolean            @default(false) @map("nav_visible")
   sortOrder      Int                @default(0) @map("sort_order")
@@ -1026,7 +1029,7 @@ model SeoLandingPage {
   body           String?          @db.Text
   /// Public catalog filter shape (JSON) — same semantics as list products query.
   rules          Json             @default("{}")
-  status         SeoLandingStatus @default(DRAFT)
+  status         CatalogPageStatus @default(DRAFT)
   noIndex        Boolean          @default(false) @map("no_index")
   navVisible     Boolean          @default(false) @map("nav_visible")
   sortOrder      Int              @default(0) @map("sort_order")

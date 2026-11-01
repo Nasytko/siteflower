@@ -15,7 +15,7 @@ import type { CompositionKind, ProductKind } from './catalog';
  * 1. `20261024120000_catalog_rules_stable_ids` (or TS migrate script) applied on
  *    every environment that serves traffic.
  * 2. Dry-run report shows zero UNRESOLVED/AMBIGUOUS for flower-type slug tokens.
- * 3. All CatalogCategory / SeoLandingPage rules that referenced aliases persist
+ * 3. All CatalogCategory rules that referenced aliases persist
  *    `flowerTypeIds` / `onlyFlowerTypeIds`.
  * 4. Admin saves only `*Ids` (no new slug-only flower rules).
  * 5. Integration suite asserts `/katalog/rozy` matches via flowerTypeIds only.

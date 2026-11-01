@@ -1,6 +1,6 @@
 /**
- * Safe, remappable enrichment of CatalogCategory.rules / SeoLandingPage.rules
- * with stable taxonomy *Ids. Does not touch products or orders.
+ * Safe, remappable enrichment of CatalogCategory.rules with stable taxonomy *Ids.
+ * Does not touch products, orders, or legacy SeoLandingPage rows (Task 03: category-only).
  *
  * Usage:
  *   pnpm --filter @bouquet-one/api exec tsx scripts/migrate-catalog-page-rules.ts
@@ -49,9 +49,6 @@ async function main() {
         select: { id: true, slug: true, rules: true },
       })
     ).filter((row) => row.rules != null);
-    const landings = await prisma.seoLandingPage.findMany({
-      select: { id: true, slug: true, rules: true },
-    });
 
     let wouldChange = 0;
     let applied = 0;
@@ -69,26 +66,6 @@ async function main() {
       reports.push(line);
       if (APPLY && changed) {
         await prisma.catalogCategory.update({
-          where: { id: row.id },
-          data: { rules: next },
-        });
-        applied += 1;
-      }
-    }
-
-    for (const row of landings) {
-      const { next, changed, diagnostics } = migrateCatalogPageRulesJson(row.rules, lookup);
-      if (!changed && diagnostics.length === 0) continue;
-      if (changed) wouldChange += 1;
-      reports.push(
-        [
-          `seo:${row.slug}`,
-          changed ? 'ENRICH' : 'SKIP',
-          diagnostics.map((d) => `${d.code}:${d.value}`).join(',') || 'ok',
-        ].join(' | '),
-      );
-      if (APPLY && changed) {
-        await prisma.seoLandingPage.update({
           where: { id: row.id },
           data: { rules: next },
         });

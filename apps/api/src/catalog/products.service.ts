@@ -79,7 +79,7 @@ import type {
 import { ProductsRepository } from './products.repository';
 import { mapPromotionPrismaError } from './promotions.service';
 import {
-  describeSeoLandingRules,
+  describeCatalogPageRules,
   flowerTypeSlugsFromRules,
 } from './placement-match.util';
 import { CatalogMatchService } from './catalog-match.service';
@@ -1341,8 +1341,6 @@ export class ProductsService {
       bestsellerLinksCount,
       catalogPinsCount,
       catalogExcludeCount,
-      seoPinsCount,
-      seoExcludeCount,
       mediaCount,
     ] = await Promise.all([
       this.prisma.client.orderItem.count({ where: { productId: id } }),
@@ -1351,8 +1349,6 @@ export class ProductsService {
       this.prisma.client.bestsellerGroupProduct.count({ where: { productId: id } }),
       this.prisma.client.catalogPageProduct.count({ where: { productId: id } }),
       this.prisma.client.catalogPageExclude.count({ where: { productId: id } }),
-      this.prisma.client.seoLandingPageProduct.count({ where: { productId: id } }),
-      this.prisma.client.seoLandingPageExclude.count({ where: { productId: id } }),
       this.prisma.client.productMedia.count({ where: { productId: id } }),
     ]);
 
@@ -1364,7 +1360,7 @@ export class ProductsService {
       familyMembersCount,
       hasPromotion: promotionCount > 0,
       bestsellerLinksCount,
-      catalogPinsCount: catalogPinsCount + catalogExcludeCount + seoPinsCount + seoExcludeCount,
+      catalogPinsCount: catalogPinsCount + catalogExcludeCount,
       mediaCount,
     });
   }
@@ -1865,7 +1861,7 @@ export class ProductsService {
       pages.map(async (page): Promise<ProductPlacementEntryDto | null> => {
         const path = categoryPublicHref(page.slug);
         const rules = (page.rules ?? {}) as Prisma.JsonValue;
-        const matchReason = describeSeoLandingRules(rules);
+        const matchReason = describeCatalogPageRules(rules);
         const ruleTypeSlugs = flowerTypeSlugsFromRules(rules);
         const excluded = page.excludedProducts.some((row) => row.productId === id);
         if (excluded) {

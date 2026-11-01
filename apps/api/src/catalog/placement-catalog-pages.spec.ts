@@ -1,16 +1,16 @@
-import { describeSeoLandingRules, flowerTypeSlugsFromRules } from './placement-match.util';
-import { rulesToFilters } from './seo-landings.service';
+import { describeCatalogPageRules, flowerTypeSlugsFromRules } from './placement-match.util';
+import { rulesToFilters } from './catalog-match.service';
 
 describe('catalog page placement rules', () => {
   it('describes only-roses vs contains-roses distinctly', () => {
     expect(
-      describeSeoLandingRules({
+      describeCatalogPageRules({
         productKinds: ['BOUQUET'],
         onlyFlowerType: 'roza',
       }),
     ).toContain('только вид');
     expect(
-      describeSeoLandingRules({
+      describeCatalogPageRules({
         productKinds: ['BOUQUET'],
         containsFlowerType: 'roza',
       }),
@@ -18,7 +18,7 @@ describe('catalog page placement rules', () => {
   });
 
   it('describes AUTHORIAL trait pages', () => {
-    const summary = describeSeoLandingRules({
+    const summary = describeCatalogPageRules({
       productKinds: ['BOUQUET'],
       traitKeys: ['AUTHORIAL'],
     });

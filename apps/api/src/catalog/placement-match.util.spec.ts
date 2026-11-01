@@ -1,8 +1,8 @@
-import { describeSeoLandingRules, flowerTypeSlugsFromRules } from './placement-match.util';
+import { describeCatalogPageRules, flowerTypeSlugsFromRules } from './placement-match.util';
 
 describe('placement-match.util', () => {
   it('describes contains + mono rules in Russian', () => {
-    const text = describeSeoLandingRules({
+    const text = describeCatalogPageRules({
       productKinds: ['BOUQUET'],
       flowerTypeSlugs: ['roza'],
       compositionKinds: ['MONO'],

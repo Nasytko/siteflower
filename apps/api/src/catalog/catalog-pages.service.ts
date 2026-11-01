@@ -19,7 +19,7 @@ import {
   type PaginatedResponse,
   type ProductListItemDto,
   type ProductTraitDefinitionDto,
-  type SeoLandingStatus,
+  type CatalogPageStatus,
 } from '@bouquet-one/contracts';
 import type { Prisma } from '@bouquet-one/database';
 import { AuditService } from '../audit/audit.service';
@@ -37,7 +37,12 @@ import {
 } from './catalog-listing.util';
 import { isEffectivelyPublished } from './catalog.logic';
 import { toProductListItemDto } from './catalog.mapper';
-import { describeSeoLandingRules } from './placement-match.util';
+import {
+  combinedTotal,
+  mergePinnedItems,
+  pinAwareListWindow,
+} from './catalog-pin-merge.util';
+import { describeCatalogPageRules } from './placement-match.util';
 import { ProductsRepository } from './products.repository';
 import { SlugRedirectsService } from './slug-redirects.service';
 
@@ -635,7 +640,7 @@ export class CatalogPagesService {
     };
   }
 
-  /** Live preview for unsaved constructor rules (same engine as public PLP). */
+  /** Live preview for unsaved constructor rules (same pin/pagination engine as public PLP). */
   async previewRules(
     input: {
       rules?: Record<string, unknown>;
@@ -652,39 +657,66 @@ export class CatalogPagesService {
       excludedProductIds: input.excludedProductIds,
     });
     const pinned = [...new Set(input.pinnedProductIds ?? [])];
-    const { items, total } = await this.products.list({
-      filters: {
-        ...match.filters,
-        publishedAt: now,
-        excludeProductIds: match.excludeProductIds.length
-          ? match.excludeProductIds
-          : undefined,
-      },
-      skip: Math.max(0, (page - 1) * pageSize),
-      take: pageSize,
-      sort: 'recommended',
-      now,
-    });
+    const excluded = new Set(input.excludedProductIds ?? []);
+    const pinWindow = pinAwareListWindow({ page, pageSize, pinCount: pinned.length });
+
+    const ruleQuery =
+      pinWindow.ruleTake > 0
+        ? await this.products.list({
+            filters: {
+              ...match.filters,
+              publishedAt: now,
+              excludeProductIds: match.excludeProductIds.length
+                ? match.excludeProductIds
+                : undefined,
+            },
+            skip: pinWindow.ruleSkip,
+            take: pinWindow.ruleTake,
+            sort: 'recommended',
+            now,
+          })
+        : await this.products
+            .list({
+              filters: {
+                ...match.filters,
+                publishedAt: now,
+                excludeProductIds: match.excludeProductIds.length
+                  ? match.excludeProductIds
+                  : undefined,
+              },
+              skip: 0,
+              take: 1,
+              sort: 'recommended',
+              now,
+            })
+            .then((result) => ({ items: [], total: result.total }));
 
     let pinnedItems: ProductListItemDto[] = [];
-    if (pinned.length > 0) {
+    if (pinWindow.includePins && pinned.length > 0) {
       const rows = await this.products.findManyByIds(pinned);
       const byId = new Map(rows.map((row) => [row.id, row]));
       pinnedItems = pinned
         .map((id) => byId.get(id))
-        .filter((row): row is NonNullable<typeof row> => Boolean(row) && isEffectivelyPublished(row!, now))
-        .map((row) => toProductListItemDto(row!, this.urlFor, now));
+        .filter(
+          (row): row is NonNullable<typeof row> =>
+            Boolean(row) && isEffectivelyPublished(row!, now) && !excluded.has(row!.id),
+        )
+        .map((row) => toProductListItemDto(row, this.urlFor, now));
     }
 
-    const pinnedIds = new Set(pinnedItems.map((i) => i.id));
-    const rest = items
-      .filter((row) => !pinnedIds.has(row.id))
-      .map((row) => toProductListItemDto(row, this.urlFor, now));
-    const merged = [...pinnedItems, ...rest].slice(0, pageSize);
+    const ruleItems = ruleQuery.items.map((row) =>
+      toProductListItemDto(row, this.urlFor, now),
+    );
+    const merged = mergePinnedItems({
+      pinnedItems,
+      ruleItems,
+      includePins: pinWindow.includePins,
+      pageSize,
+    });
 
     return {
       items: merged,
-      total: total + pinnedItems.length,
+      total: combinedTotal(ruleQuery.total, pinnedItems.length),
       page,
       pageSize,
       diagnostics: match.diagnostics,
@@ -742,10 +774,10 @@ export class CatalogPagesService {
       row.rules && typeof row.rules === 'object' && !Array.isArray(row.rules)
         ? (row.rules as Record<string, unknown>)
         : {};
-    const status: SeoLandingStatus | 'LIVE' =
+    const status: CatalogPageStatus | 'LIVE' =
       pageKind === 'SYSTEM_HUB'
         ? 'LIVE'
-        : ((row.pageStatus as SeoLandingStatus | null) ?? 'DRAFT');
+        : ((row.pageStatus as CatalogPageStatus | null) ?? 'DRAFT');
     return {
       id: row.id,
       slug: row.slug,
@@ -774,7 +806,7 @@ export class CatalogPagesService {
       rulesSummary:
         pageKind === 'SYSTEM_HUB'
           ? `Основной раздел · ${row.name}`
-          : describeSeoLandingRules(rules as Prisma.JsonValue),
+          : describeCatalogPageRules(rules as Prisma.JsonValue),
       createdAt: row.createdAt.toISOString(),
       updatedAt: row.updatedAt.toISOString(),
     };

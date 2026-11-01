@@ -13,7 +13,6 @@ export const SEO_ENTITY_TYPES = [
   'recipient',
   'color',
   'page',
-  'seo_landing',
 ] as const;
 export type SeoEntityType = (typeof SEO_ENTITY_TYPES)[number];
 

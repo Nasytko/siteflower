@@ -16,7 +16,6 @@ import type {
   ProductListItemDto,
   ProductResolveDto,
   ProductSort,
-  SeoLandingPagePublicDto,
   SitemapEntryDto,
   StorefrontSettingsPublicDto,
   TaxonomyPublicDto,
@@ -280,27 +279,6 @@ export function getTaxonomy(kind: string, slug: string) {
   return publicFetch<TaxonomyPublicDto>(
     `/catalog/taxonomies/${encodeURIComponent(kind)}/${encodeURIComponent(slug)}`,
     { tags: ['catalog', 'taxonomies', `taxonomy:${kind}:${slug}`] },
-  );
-}
-
-export function getSeoLanding(slug: string) {
-  return publicFetch<
-    SeoLandingPagePublicDto & { redirectedFrom?: string | null; canonicalSlug?: string }
-  >(`/catalog/seo-landings/${encodeURIComponent(slug)}`, {
-    tags: ['catalog', 'seo-landings', `seo-landing:${slug}`],
-  });
-}
-
-export function listSeoLandingProducts(
-  slug: string,
-  params: { page?: number; pageSize?: number } = {},
-) {
-  return publicFetch<PaginatedResponse<ProductListItemDto>>(
-    `/catalog/seo-landings/${encodeURIComponent(slug)}/products`,
-    {
-      searchParams: params,
-      tags: ['catalog', 'seo-landings', 'products', `seo-landing:${slug}`],
-    },
   );
 }
 

@@ -56,8 +56,8 @@ export class SeoHealthService {
       sitemapFlowerTypes,
       sitemapOccasions,
       sitemapRecipients,
-      seoLandings,
-      sitemapLandings,
+      catalogPages,
+      sitemapCatalogPages,
     ] = await Promise.all([
       this.prisma.client.product.findMany({
         select: {
@@ -148,23 +148,29 @@ export class SeoHealthService {
         where: { visibility: 'VISIBLE', noIndex: false },
         select: { slug: true },
       }),
-      this.prisma.client.seoLandingPage.findMany({
+      this.prisma.client.catalogCategory.findMany({
+        where: { pageKind: 'THEMATIC' },
         select: {
           id: true,
           slug: true,
-          title: true,
+          name: true,
           h1: true,
-          status: true,
+          pageStatus: true,
           noIndex: true,
           seoTitle: true,
           seoDescription: true,
           rules: true,
           _count: { select: { pinnedProducts: true } },
         },
-        orderBy: [{ sortOrder: 'asc' }, { title: 'asc' }],
+        orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }],
       }),
-      this.prisma.client.seoLandingPage.findMany({
-        where: { status: 'PUBLISHED', noIndex: false },
+      this.prisma.client.catalogCategory.findMany({
+        where: {
+          pageKind: 'THEMATIC',
+          pageStatus: 'PUBLISHED',
+          visibility: 'VISIBLE',
+          noIndex: false,
+        },
         select: { slug: true },
       }),
     ]);
@@ -177,7 +183,7 @@ export class SeoHealthService {
       ...sitemapProducts.map((p) => `/products/${p.slug}`),
       ...sitemapOccasions.map((o) => `/povod/${o.slug}`),
       ...sitemapRecipients.map((r) => `/komu/${r.slug}`),
-      ...sitemapLandings.map((l) => `/catalog/${l.slug}`),
+      ...sitemapCatalogPages.map((l) => `/catalog/${l.slug}`),
     ]);
     void sitemapFlowerTypes;
 
@@ -275,70 +281,73 @@ export class SeoHealthService {
     pushTaxonomy(recipients, 'recipient', (slug) => `/komu/${slug}`, 'recipients', true);
     pushTaxonomy(colors, 'color', () => null, 'colors', false);
 
-    for (const landing of seoLandings) {
-      const path = `/catalog/${landing.slug}`;
+    for (const pageRow of catalogPages) {
+      const path = `/catalog/${pageRow.slug}`;
       const rules =
-        landing.rules && typeof landing.rules === 'object' && !Array.isArray(landing.rules)
-          ? (landing.rules as Record<string, unknown>)
+        pageRow.rules && typeof pageRow.rules === 'object' && !Array.isArray(pageRow.rules)
+          ? (pageRow.rules as Record<string, unknown>)
           : {};
       const ruleKeys = Object.keys(rules);
       const checks: SeoEntityHealth['checks'] = [];
-      const published = landing.status === 'PUBLISHED';
-      const indexable = published && !landing.noIndex;
+      const published = pageRow.pageStatus === 'PUBLISHED';
+      const indexable = published && !pageRow.noIndex;
+      const adminHref = `/admin/catalog/pages`;
 
-      if (published && ruleKeys.length === 0 && landing._count.pinnedProducts === 0) {
+      if (published && ruleKeys.length === 0 && pageRow._count.pinnedProducts === 0) {
         checks.push({
-          code: 'SEO_LANDING_EMPTY_RULES',
+          code: 'CATALOG_PAGE_EMPTY_RULES',
           severity: 'CRITICAL',
           title: 'Пустые правила',
-          message: 'Опубликованная подборка без правил и закреплений подберёт весь каталог или будет пустой.',
-          entityType: 'seo_landing',
-          entityId: landing.id,
-          href: `/admin/seo/landings`,
+          message: 'Опубликованная страница без правил и закреплений подберёт весь каталог или будет пустой.',
+          entityType: 'page',
+          entityId: pageRow.id,
+          href: adminHref,
         });
       }
-      if (published && !landing.seoTitle?.trim()) {
+      if (published && !pageRow.seoTitle?.trim()) {
         checks.push({
-          code: 'SEO_LANDING_TITLE_MISSING',
+          code: 'CATALOG_PAGE_TITLE_MISSING',
           severity: 'WARNING',
           title: 'Нет SEO title',
           message: 'Используется обычный title страницы.',
-          entityType: 'seo_landing',
-          entityId: landing.id,
-          href: `/admin/seo/landings`,
+          entityType: 'page',
+          entityId: pageRow.id,
+          href: adminHref,
         });
       }
-      if (published && !landing.seoDescription?.trim()) {
+      if (published && !pageRow.seoDescription?.trim()) {
         checks.push({
-          code: 'SEO_LANDING_DESC_MISSING',
+          code: 'CATALOG_PAGE_DESC_MISSING',
           severity: 'WARNING',
           title: 'Нет meta description',
-          message: 'Рекомендуется уникальное описание подборки.',
-          entityType: 'seo_landing',
-          entityId: landing.id,
-          href: `/admin/seo/landings`,
+          message: 'Рекомендуется уникальное описание страницы каталога.',
+          entityType: 'page',
+          entityId: pageRow.id,
+          href: adminHref,
         });
       }
       if (indexable && !sitemapPaths.has(path)) {
         checks.push({
-          code: 'SEO_LANDING_SITEMAP_MISSING',
+          code: 'CATALOG_PAGE_SITEMAP_MISSING',
           severity: 'CRITICAL',
           title: 'Нет в sitemap',
           message: `Ожидался URL ${path} в sitemap.`,
-          entityType: 'seo_landing',
-          entityId: landing.id,
-          href: `/admin/seo/landings`,
+          entityType: 'page',
+          entityId: pageRow.id,
+          href: adminHref,
         });
       }
       if (checks.length === 0) {
         checks.push({
-          code: 'SEO_LANDING_OK',
+          code: 'CATALOG_PAGE_OK',
           severity: 'PASS',
-          title: 'SEO-подборка',
-          message: published ? 'Подборка опубликована.' : `Статус: ${landing.status}.`,
-          entityType: 'seo_landing',
-          entityId: landing.id,
-          href: `/admin/seo/landings`,
+          title: 'Страница каталога',
+          message: published
+            ? 'Тематическая страница опубликована.'
+            : `Статус: ${pageRow.pageStatus ?? 'DRAFT'}.`,
+          entityType: 'page',
+          entityId: pageRow.id,
+          href: adminHref,
         });
       }
 
@@ -353,11 +362,11 @@ export class SeoHealthService {
         worst === 'CRITICAL' ? 'attention' : worst === 'WARNING' ? 'improve' : 'good';
 
       items.push({
-        entityType: 'seo_landing',
-        entityId: landing.id,
-        name: landing.title,
+        entityType: 'page',
+        entityId: pageRow.id,
+        name: pageRow.name,
         path,
-        href: `/admin/seo/landings`,
+        href: adminHref,
         status,
         indexable,
         indexabilityLabel: indexable

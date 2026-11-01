@@ -1,7 +1,7 @@
 import { isDominantFlowerType } from '@bouquet-one/contracts';
-import { rulesToFilters } from './seo-landings.service';
+import { rulesToFilters } from './catalog-match.service';
 
-describe('SEO landing rules → ProductListFilters', () => {
+describe('catalog page rules → ProductListFilters', () => {
   it('maps chrysanthemum bouquet mono rule', () => {
     const filters = rulesToFilters({
       productKinds: ['BOUQUET'],

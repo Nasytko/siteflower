@@ -27,6 +27,8 @@ export type ResolvedCategoryListing = {
   pageRules?: ProductListFilters;
   match?: CatalogMatchResult;
   excludeProductIds?: string[];
+  /** Catalog page pins (sortOrder ascending). Public PLP prepends these on page 1. */
+  pinnedProductIds?: string[];
 };
 
 type ExpandIds = (
@@ -35,6 +37,7 @@ type ExpandIds = (
 ) => Promise<string[]>;
 
 type LoadExcludes = (pageId: string) => Promise<string[]>;
+type LoadPins = (pageId: string) => Promise<string[]>;
 
 /**
  * Single orchestrator for public + admin category listing.
@@ -45,6 +48,8 @@ export async function resolveCategoryListingFilters(params: {
   catalogMatch: CatalogMatchService;
   expandCategoryIds: ExpandIds;
   loadExcludeProductIds?: LoadExcludes;
+  /** Optional pin loader — used for public PLP pin-first merge. */
+  loadPinnedProductIds?: LoadPins;
   /** Public storefront only expands VISIBLE descendants. */
   visibleOnly?: boolean;
 }): Promise<ResolvedCategoryListing> {
@@ -74,6 +79,9 @@ export async function resolveCategoryListingFilters(params: {
     if (params.loadExcludeProductIds) {
       out.excludeProductIds = await params.loadExcludeProductIds(category.id);
     }
+    if (params.loadPinnedProductIds) {
+      out.pinnedProductIds = await params.loadPinnedProductIds(category.id);
+    }
   } else if (scope.resolveFlowerTypeFromPageSlug) {
     const match = await catalogMatch.resolveFlowerLeafFromPageSlug(category.slug);
     out.pageRules = match.filters;
@@ -84,6 +92,16 @@ export async function resolveCategoryListingFilters(params: {
       productKinds: scope.productKinds,
       compositionKinds: scope.scopeCompositionKinds,
     };
+  }
+
+  // Pins/excludes also apply to SYSTEM_HUB / GIFT_SUBTYPE when loaders provided.
+  if (!hasThematicRules) {
+    if (params.loadExcludeProductIds) {
+      out.excludeProductIds = await params.loadExcludeProductIds(category.id);
+    }
+    if (params.loadPinnedProductIds) {
+      out.pinnedProductIds = await params.loadPinnedProductIds(category.id);
+    }
   }
 
   return out;

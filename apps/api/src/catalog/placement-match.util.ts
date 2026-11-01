@@ -1,10 +1,10 @@
 import type { Prisma } from '@bouquet-one/database';
 
 /**
- * Human-readable summary of SEO landing rules for the placement panel.
+ * Human-readable summary of catalog page rules for the placement panel.
  * Does not invent matches — only describes what the rules ask for.
  */
-export function describeSeoLandingRules(rules: Prisma.JsonValue): string {
+export function describeCatalogPageRules(rules: Prisma.JsonValue): string {
   const record =
     rules && typeof rules === 'object' && !Array.isArray(rules)
       ? (rules as Record<string, unknown>)
