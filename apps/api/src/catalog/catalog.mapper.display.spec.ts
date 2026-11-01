@@ -17,7 +17,6 @@ function baseProduct(
     badgeLabel: null,
     erpSku: null,
     bouquetHeightCm: 45,
-    diameterCm: null,
     catalogCategoryId: null,
     productKind: 'BOUQUET',
     compositionKind: 'UNKNOWN',

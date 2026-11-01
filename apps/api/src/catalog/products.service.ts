@@ -517,8 +517,6 @@ export class ProductsService {
             : 'UNKNOWN',
           compositionPrimaryComplete: source.compositionPrimaryComplete,
           compositionText: source.compositionText,
-          // diameterCm: copy for data continuity until column drop migration.
-          diameterCm: source.diameterCm,
         },
       });
 
@@ -794,7 +792,6 @@ export class ProductsService {
         availability: input.availability,
         bouquetHeightCm: input.heightCm === undefined ? product.bouquetHeightCm : input.heightCm,
         productKind: nextKind,
-        // diameterCm intentionally not updated from editor (deprecated UI field).
         compositionKind: resolveStoredCompositionKind(
           nextKind,
           needsComposition ? normalizedComposition.compositionKind : 'UNKNOWN',

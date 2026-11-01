@@ -2104,8 +2104,6 @@ export type ProductAdminDto = {
   lifecycle: ProductLifecycle;
   availability: CommercialAvailability;
   heightCm: number | null;
-  /** @deprecated Not shown in admin; retained for API compatibility. */
-  diameterCm: number | null;
   productKind: ProductKind;
   compositionKind: CompositionKind;
   compositionPrecision: CompositionPrecision;

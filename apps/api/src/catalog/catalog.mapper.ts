@@ -347,7 +347,6 @@ export function toProductAdminDto(
     lifecycle: product.lifecycle,
     availability: product.availability,
     heightCm: product.bouquetHeightCm ?? null,
-    diameterCm: product.diameterCm ?? null,
     productKind: product.productKind,
     compositionKind: product.compositionKind,
     compositionPrecision: product.compositionPrecision,

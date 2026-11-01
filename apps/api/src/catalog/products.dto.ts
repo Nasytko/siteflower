@@ -211,20 +211,6 @@ export class SaveProductEditorDto extends ExpectedVersionDto {
   @IsIn(PRODUCT_KINDS)
   productKind?: ProductKind;
 
-  /** @deprecated Ignored by editor; retained for API compatibility. */
-  @IsOptional()
-  @Transform(({ value }) => {
-    if (value === '' || value === null) return null;
-    if (value === undefined) return undefined;
-    const n = typeof value === 'number' ? value : Number(value);
-    return Number.isFinite(n) ? n : undefined;
-  })
-  @ValidateIf((_, v) => v !== null && v !== undefined)
-  @IsInt()
-  @Min(5)
-  @Max(250)
-  diameterCm?: number | null;
-
   @IsOptional()
   @IsIn(COMPOSITION_PRECISIONS)
   compositionPrecision?: CompositionPrecision;
