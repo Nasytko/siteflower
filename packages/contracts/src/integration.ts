@@ -6,6 +6,7 @@
 export const INTEGRATION_EVENT_TYPES = ['ORDER_CREATED'] as const;
 export type IntegrationEventType = (typeof INTEGRATION_EVENT_TYPES)[number];
 
+
 export const INTEGRATION_MODES = ['DISABLED', 'SIMULATOR', 'ERP'] as const;
 export type IntegrationMode = (typeof INTEGRATION_MODES)[number];
 
@@ -51,9 +52,15 @@ export type StorefrontOrderCreatedItemV1 = {
   productSlug: string;
   variantName: string;
   quantity: number;
+  /** Variant unit after promo, excluding options (do not recompute line as unit×qty alone when options present). */
   unitPriceMinor: string;
   originalUnitPriceMinor: string | null;
   promotionType: string | null;
+  /** Pre-option variant unit; null on legacy. */
+  baseUnitPriceMinor?: string | null;
+  /** Line option surcharges; 0 when none. lineTotal = unit×qty + optionsTotal. */
+  optionsTotalMinor?: string;
+  /** Authoritative charged line total. */
   lineTotalMinor: string;
   currency: string;
 };
@@ -106,6 +113,7 @@ export type StorefrontOrderCreatedV1 = {
     };
   };
 };
+
 
 export type IntegrationAcceptResponseV1 = {
   status: 'ACCEPTED';

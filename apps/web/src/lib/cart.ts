@@ -1,6 +1,7 @@
 /**
- * Client cart — productId/variantId/quantity only.
+ * Client cart — productId/variantId/quantity (+ optional optionValueIds).
  * Display fields are UX cache; server re-quotes on validate/checkout.
+ * Option surcharges are never trusted from the browser.
  */
 
 export const CART_STORAGE_KEY = 'bouquet-one:cart:v1';
@@ -10,11 +11,16 @@ export type CartLine = {
   productId: string;
   variantId: string;
   quantity: number;
-  /** Display cache only */
+  /** Selected ProductOptionValue ids (server-validated at checkout). */
+  optionValueIds?: string[];
+  /** Display cache only — never trust for checkout totals. */
   productName?: string;
   productSlug?: string;
   variantName?: string;
+  /** Variant unit after promo, excluding options (mirrors OrderItem.unitPriceMinor). */
   unitPriceMinor?: string;
+  /** Cached option surcharges for the line; omit/0 when none. Not baked into unitPriceMinor. */
+  optionsTotalMinor?: string;
   primaryImageUrl?: string | null;
 };
 
@@ -27,6 +33,20 @@ export function emptyCart(): CartState {
   return { version: 1, items: [] };
 }
 
+/** Merge identity: same variant with different options = separate lines. */
+export function cartLineKey(line: {
+  variantId: string;
+  optionValueIds?: readonly string[];
+}): string {
+  const opts = [...(line.optionValueIds ?? [])].filter(Boolean).sort().join(',');
+  return `${line.variantId}:${opts}`;
+}
+
+function normalizeOptionValueIds(ids: string[] | undefined): string[] | undefined {
+  if (!ids || ids.length === 0) return undefined;
+  return [...new Set(ids.filter(Boolean))];
+}
+
 export function parseCart(raw: string | null): CartState {
   if (!raw) return emptyCart();
   try {
@@ -34,13 +54,22 @@ export function parseCart(raw: string | null): CartState {
     if (parsed?.version !== 1 || !Array.isArray(parsed.items)) return emptyCart();
     return {
       version: 1,
-      items: parsed.items.filter(
-        (item) =>
-          typeof item?.productId === 'string' &&
-          typeof item?.variantId === 'string' &&
-          Number.isInteger(item.quantity) &&
-          item.quantity > 0,
-      ),
+      items: parsed.items
+        .filter(
+          (item) =>
+            typeof item?.productId === 'string' &&
+            typeof item?.variantId === 'string' &&
+            Number.isInteger(item.quantity) &&
+            item.quantity > 0,
+        )
+        .map((item) => ({
+          ...item,
+          optionValueIds: normalizeOptionValueIds(
+            Array.isArray(item.optionValueIds)
+              ? item.optionValueIds.filter((id): id is string => typeof id === 'string')
+              : undefined,
+          ),
+        })),
     };
   } catch {
     return emptyCart();
@@ -66,54 +95,57 @@ export function cartItemCount(state: CartState): number {
   return state.items.reduce((sum, line) => sum + line.quantity, 0);
 }
 
-export function addToCart(
-  state: CartState,
-  line: CartLine,
-): CartState {
+export function addToCart(state: CartState, line: CartLine): CartState {
   const qty = Math.min(MAX_LINE_QTY, Math.max(1, line.quantity));
-  const existing = state.items.find((i) => i.variantId === line.variantId);
+  const optionValueIds = normalizeOptionValueIds(line.optionValueIds);
+  const key = cartLineKey({ variantId: line.variantId, optionValueIds });
+  const existing = state.items.find((i) => cartLineKey(i) === key);
   if (existing) {
     return {
       version: 1,
       items: state.items.map((i) =>
-        i.variantId === line.variantId
+        cartLineKey(i) === key
           ? {
               ...i,
               ...line,
+              optionValueIds,
               quantity: Math.min(MAX_LINE_QTY, i.quantity + qty),
             }
           : i,
       ),
     };
   }
-  return { version: 1, items: [...state.items, { ...line, quantity: qty }] };
+  return {
+    version: 1,
+    items: [...state.items, { ...line, optionValueIds, quantity: qty }],
+  };
 }
 
 export function setCartQuantity(
   state: CartState,
-  variantId: string,
+  lineKey: string,
   quantity: number,
 ): CartState {
   if (quantity < 1) {
     return {
       version: 1,
-      items: state.items.filter((i) => i.variantId !== variantId),
+      items: state.items.filter((i) => cartLineKey(i) !== lineKey),
     };
   }
   return {
     version: 1,
     items: state.items.map((i) =>
-      i.variantId === variantId
+      cartLineKey(i) === lineKey
         ? { ...i, quantity: Math.min(MAX_LINE_QTY, quantity) }
         : i,
     ),
   };
 }
 
-export function removeFromCart(state: CartState, variantId: string): CartState {
+export function removeFromCart(state: CartState, lineKey: string): CartState {
   return {
     version: 1,
-    items: state.items.filter((i) => i.variantId !== variantId),
+    items: state.items.filter((i) => cartLineKey(i) !== lineKey),
   };
 }
 

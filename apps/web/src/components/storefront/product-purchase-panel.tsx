@@ -2,7 +2,11 @@
 
 import Image from 'next/image';
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
-import type { ProductListItemDto, ProductPublicDto } from '@bouquet-one/contracts';
+import type {
+  ProductListItemDto,
+  ProductOptionGroupDto,
+  ProductPublicDto,
+} from '@bouquet-one/contracts';
 import { formatPriceFromMinor, pickDerivativeUrl, sortProductMedia } from '@/lib/media';
 import { trackEvent } from '@/lib/analytics';
 import {
@@ -14,6 +18,11 @@ import {
   writeCardDraft,
   writeCart,
 } from '@/lib/cart';
+import {
+  estimateOptionsTotalMinor,
+  requiredOptionsMissing,
+  resolveOptionSurchargeMinor,
+} from '@/lib/product-options';
 
 type Variant = ProductPublicDto['variants'][number];
 
@@ -30,6 +39,7 @@ type PurchaseProduct = Pick<
   | 'variants'
   | 'shortDescription'
   | 'badgeLabel'
+  | 'optionGroups'
 >;
 
 /** Postcard products from the «Открытки» category — added to the cart with the bouquet. */
@@ -44,6 +54,11 @@ type PurchaseState = {
   setSelectedId: (id: string) => void;
   qty: number;
   setQty: (qty: number) => void;
+  optionGroups: ProductOptionGroupDto[];
+  selectedByGroup: Record<string, string[]>;
+  toggleOptionValue: (groupId: string, valueId: string, multi: boolean) => void;
+  optionsTotalMinor: string;
+  optionsMissing: boolean;
   hydrated: boolean;
   blocked: boolean;
   priceLabel: string;
@@ -89,6 +104,11 @@ export function ProductPurchaseProvider({
   const [cardEnabled, setCardEnabledState] = useState(true);
   const [cardMessage, setCardMessageState] = useState('');
   const [postcardId, setPostcardId] = useState<string | null>(null);
+  const optionGroups = useMemo(
+    () => (product.optionGroups ?? []).filter((group) => group.values.some((v) => v.active)),
+    [product.optionGroups],
+  );
+  const [selectedByGroup, setSelectedByGroup] = useState<Record<string, string[]>>({});
 
   const selected = sorted.find((v) => v.id === selectedId) ?? sorted[0];
   const priceLabel = selected
@@ -97,7 +117,34 @@ export function ProductPurchaseProvider({
   const discounted = selected != null && selected.effectivePriceMinor !== selected.priceMinor;
   const originalLabel =
     discounted && selected ? formatPriceFromMinor(selected.priceMinor, product.currency) : null;
-  const blocked = product.availability === 'TEMPORARILY_UNAVAILABLE' || !selected;
+  const optionsEstimate = selected
+    ? estimateOptionsTotalMinor({
+        groups: optionGroups,
+        variantId: selected.id,
+        selectedByGroup,
+        quantity: qty,
+        baseUnitPriceMinor: selected.effectivePriceMinor,
+      })
+    : { optionValueIds: [] as string[], optionsTotalMinor: '0', lineTotalMinor: '0' };
+  const optionsMissing = requiredOptionsMissing(optionGroups, selectedByGroup);
+  const blocked =
+    product.availability === 'TEMPORARILY_UNAVAILABLE' || !selected || optionsMissing;
+
+  function toggleOptionValue(groupId: string, valueId: string, multi: boolean) {
+    setSelectedByGroup((prev) => {
+      const current = prev[groupId] ?? [];
+      if (multi) {
+        const next = current.includes(valueId)
+          ? current.filter((id) => id !== valueId)
+          : [...current, valueId];
+        return { ...prev, [groupId]: next };
+      }
+      if (current.length === 1 && current[0] === valueId) {
+        return { ...prev, [groupId]: [] };
+      }
+      return { ...prev, [groupId]: [valueId] };
+    });
+  }
 
   useEffect(() => {
     setHydrated(true);
@@ -127,14 +174,23 @@ export function ProductPurchaseProvider({
   function onAdd() {
     if (!selected || blocked) return;
     const primary = sortProductMedia(product.media)[0]?.url ?? null;
+    const estimate = estimateOptionsTotalMinor({
+      groups: optionGroups,
+      variantId: selected.id,
+      selectedByGroup,
+      quantity: qty,
+      baseUnitPriceMinor: selected.effectivePriceMinor,
+    });
     let next = addToCart(readCart(), {
       productId: product.id,
       variantId: selected.id,
       quantity: qty,
+      optionValueIds: estimate.optionValueIds.length ? estimate.optionValueIds : undefined,
       productName: product.name,
       productSlug: product.slug,
       variantName: selected.name,
       unitPriceMinor: selected.effectivePriceMinor,
+      optionsTotalMinor: estimate.optionsTotalMinor,
       primaryImageUrl: primary,
     });
     const postcard = cardEnabled ? postcards.find((p) => p.id === postcardId) : undefined;
@@ -169,6 +225,11 @@ export function ProductPurchaseProvider({
     setSelectedId,
     qty,
     setQty: (n) => setQty(Math.min(MAX_LINE_QTY, Math.max(1, n))),
+    optionGroups,
+    selectedByGroup,
+    toggleOptionValue,
+    optionsTotalMinor: optionsEstimate.optionsTotalMinor,
+    optionsMissing,
     hydrated,
     blocked,
     priceLabel,
@@ -223,6 +284,11 @@ export function ProductBuyCard({
     setSelectedId,
     qty,
     setQty,
+    optionGroups,
+    selectedByGroup,
+    toggleOptionValue,
+    optionsTotalMinor,
+    optionsMissing,
     hydrated,
     blocked,
     priceLabel,
@@ -235,6 +301,10 @@ export function ProductBuyCard({
   const availability = availabilityBadge(product.availability);
   const percentOff = product.promotion?.percentOff ?? null;
   const badgeLabel = product.badgeLabel?.trim() || null;
+  const optionsTotalLabel =
+    optionsTotalMinor !== '0'
+      ? formatPriceFromMinor(optionsTotalMinor, product.currency)
+      : null;
   const messengers = [
     whatsappUrl
       ? { key: 'wa', href: whatsappUrl, label: 'WhatsApp', icon: <WhatsAppIcon /> }
@@ -291,6 +361,56 @@ export function ProductBuyCard({
 
       {children}
 
+      {optionGroups.length > 0 ? (
+        <div className="sf-pdp-buy__block space-y-4" data-testid="product-options">
+          {optionGroups.map((group) => {
+            const multi = group.selection === 'MULTI';
+            const picked = selectedByGroup[group.id] ?? [];
+            return (
+              <div key={group.id}>
+                <p className="sf-pdp-buy__label">
+                  {group.name}
+                  {group.required ? ' *' : ''}
+                </p>
+                <div
+                  className="sf-pdp-variants"
+                  role={multi ? 'group' : 'listbox'}
+                  aria-label={group.name}
+                >
+                  {group.values
+                    .filter((value) => value.active)
+                    .map((value) => {
+                      const active = picked.includes(value.id);
+                      const surcharge = resolveOptionSurchargeMinor(value, selected?.id);
+                      const surchargeLabel =
+                        surcharge === 0n
+                          ? 'без доплаты'
+                          : `+${formatPriceFromMinor(surcharge.toString(), product.currency)}`;
+                      return (
+                        <button
+                          key={value.id}
+                          type="button"
+                          role={multi ? 'checkbox' : 'option'}
+                          aria-checked={multi ? active : undefined}
+                          aria-selected={!multi ? active : undefined}
+                          className={`sf-pdp-variant ${active ? 'sf-pdp-variant--active' : ''}`}
+                          onClick={() => toggleOptionValue(group.id, value.id, multi)}
+                        >
+                          <span className="sf-pdp-variant__name">{value.name}</span>
+                          <span className="sf-pdp-variant__price">{surchargeLabel}</span>
+                        </button>
+                      );
+                    })}
+                </div>
+              </div>
+            );
+          })}
+          {optionsMissing ? (
+            <p className="sf-small text-muted">Выберите обязательные опции</p>
+          ) : null}
+        </div>
+      ) : null}
+
       <div className="sf-pdp-buy__row">
         <div className="sf-pdp-buy__price" aria-live="polite">
           <p className="sf-pdp-buy__amount" data-sale={originalLabel ? 'true' : 'false'}>
@@ -303,8 +423,11 @@ export function ProductBuyCard({
             ) : null}
           </p>
           <p className="sf-pdp-buy__unit">Цена за 1 шт.</p>
+          {optionsTotalLabel ? (
+            <p className="sf-pdp-buy__unit">Опции: {optionsTotalLabel}</p>
+          ) : null}
         </div>
-        <QtyStepper qty={qty} setQty={setQty} disabled={blocked} />
+        <QtyStepper qty={qty} setQty={setQty} disabled={product.availability === 'TEMPORARILY_UNAVAILABLE' || !selected} />
       </div>
 
       <button

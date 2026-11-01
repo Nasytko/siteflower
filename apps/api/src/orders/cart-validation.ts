@@ -7,9 +7,10 @@ import type {
   CheckoutValidateIssueDto,
   CheckoutValidatedLineDto,
   CommercialAvailability,
+  PricedOptionSelection,
   PromotionType,
 } from '@bouquet-one/contracts';
-import { formatPriceFromMinor } from '@bouquet-one/contracts';
+import { computeLinePriceMinor, formatPriceFromMinor } from '@bouquet-one/contracts';
 import { isEffectivelyPublished } from '../catalog/catalog.logic';
 
 export const MAX_LINE_QUANTITY = 20;
@@ -46,9 +47,23 @@ export type ValidatedCartLine = CheckoutValidatedLineDto & {
   promotionType: PromotionType | null;
 };
 
+function lineMergeKey(line: CheckoutCartLineInput): string {
+  const opts = [...(line.optionValueIds ?? [])].sort().join(',');
+  return `${line.productId}:${line.variantId}:${opts}`;
+}
+
 export function validateCartLines(input: {
   lines: CheckoutCartLineInput[];
   resolve: (productId: string, variantId: string) => VariantPriceSource | null;
+  /**
+   * Resolve selected option value ids to priced selections.
+   * When omitted, optionValueIds are rejected if present.
+   */
+  resolveOptions?: (
+    productId: string,
+    variantId: string,
+    optionValueIds: string[] | undefined,
+  ) => { ok: true; selections: PricedOptionSelection[] } | { ok: false; message: string };
   priorUnitPrices?: Map<string, bigint>;
   now?: Date;
 }): {
@@ -94,15 +109,18 @@ export function validateCartLines(input: {
     };
   }
 
-  // Merge duplicate variant lines
+  // Merge duplicate variant+options lines
   const merged = new Map<string, CheckoutCartLineInput>();
   for (const line of input.lines) {
-    const key = `${line.productId}:${line.variantId}`;
+    const key = lineMergeKey(line);
     const existing = merged.get(key);
     if (existing) {
       existing.quantity += line.quantity;
     } else {
-      merged.set(key, { ...line });
+      merged.set(key, {
+        ...line,
+        optionValueIds: line.optionValueIds ? [...line.optionValueIds] : undefined,
+      });
     }
   }
 
@@ -160,21 +178,48 @@ export function validateCartLines(input: {
       continue;
     }
 
-    // Promotional price is commercial truth at checkout time.
-    const unit = variant.effectivePriceMinor;
-    const promoted = unit < variant.priceMinor;
-    const lineTotal = unit * BigInt(line.quantity);
+    let optionSelections: PricedOptionSelection[] = [];
+    if (line.optionValueIds && line.optionValueIds.length > 0 && !input.resolveOptions) {
+      issues.push({
+        code: 'OPTION_INVALID',
+        productId: product.id,
+        variantId: variant.id,
+        message: 'Опции товара временно недоступны для оформления',
+      });
+      continue;
+    }
+    if (input.resolveOptions) {
+      const opt = input.resolveOptions(product.id, variant.id, line.optionValueIds);
+      if (!opt.ok) {
+        issues.push({
+          code: 'OPTION_INVALID',
+          productId: product.id,
+          variantId: variant.id,
+          message: opt.message,
+        });
+        continue;
+      }
+      optionSelections = opt.selections;
+    }
+
+    // Promotional price is commercial truth at checkout time for the variant base.
+    const baseUnit = variant.effectivePriceMinor;
+    const promoted = baseUnit < variant.priceMinor;
+    const priced = computeLinePriceMinor({
+      quantity: line.quantity,
+      baseUnitPriceMinor: baseUnit,
+      options: optionSelections,
+    });
     const prior = input.priorUnitPrices?.get(variant.id);
-    if (prior != null && prior !== unit) {
+    if (prior != null && prior !== baseUnit) {
       issues.push({
         code: 'PRICE_CHANGED',
         productId: product.id,
         variantId: variant.id,
-        message: `Цена букета «${product.name}» изменилась с ${formatPriceFromMinor(prior)} на ${formatPriceFromMinor(unit)}.`,
+        message: `Цена букета «${product.name}» изменилась с ${formatPriceFromMinor(prior)} на ${formatPriceFromMinor(baseUnit)}.`,
         previousUnitPriceMinor: prior.toString(),
-        currentUnitPriceMinor: unit.toString(),
+        currentUnitPriceMinor: baseUnit.toString(),
       });
-      // PRICE_CHANGED is informational — still allow checkout at current price
     }
 
     items.push({
@@ -186,13 +231,16 @@ export function validateCartLines(input: {
       variantName: variant.name,
       primaryImageUrl: product.primaryImageUrl,
       availability: product.availability,
-      unitPriceMinor: unit.toString(),
-      lineTotalMinor: lineTotal.toString(),
+      unitPriceMinor: priced.unitPriceMinor.toString(),
+      baseUnitPriceMinor: priced.baseUnitPriceMinor.toString(),
+      optionsTotalMinor: priced.optionsTotalMinor.toString(),
+      optionsSnapshot: priced.optionsSnapshot,
+      lineTotalMinor: priced.lineTotalMinor.toString(),
       currency: 'BYN',
       originalUnitPriceMinor: promoted ? variant.priceMinor.toString() : null,
       promotionType: promoted ? variant.promotionType : null,
     });
-    subtotal += lineTotal;
+    subtotal += priced.lineTotalMinor;
   }
 
   const blocking = issues.filter((i) => i.code !== 'PRICE_CHANGED');

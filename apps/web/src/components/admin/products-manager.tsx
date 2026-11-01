@@ -308,6 +308,7 @@ export function ProductsManager({
   const [requestId, setRequestId] = useState<string | null>(null);
   const [retryable, setRetryable] = useState(false);
   const [creating, setCreating] = useState(false);
+  const [createKind, setCreateKind] = useState<ProductKind>('BOUQUET');
   const [duplicateTarget, setDuplicateTarget] = useState<ProductListItemDto | null>(null);
   const [duplicating, setDuplicating] = useState(false);
   const [duplicateSuccessId, setDuplicateSuccessId] = useState<string | null>(null);
@@ -407,13 +408,12 @@ export function ProductsManager({
     return `/admin/catalog/products?${params.toString()}`;
   }
 
-  async function onCreate() {
+  async function onCreate(kind: ProductKind = 'BOUQUET') {
     if (!canCreate || creating) return;
     setCreating(true);
     setError(null);
     setRequestId(null);
     try {
-      const kind: ProductKind = 'BOUQUET';
       const created = await adminPost<{ id: string }>(adminEndpoints.products, {
         name: DEFAULT_NEW_PRODUCT_NAMES[kind],
         productKind: kind,
@@ -598,15 +598,30 @@ export function ProductsManager({
           <p className="admin-page-lead">Управление ассортиментом магазина</p>
         </div>
         {canCreate ? (
-          <button
-            type="button"
-            className="admin-btn admin-products-header__create"
-            disabled={creating}
-            onClick={() => void onCreate()}
-          >
-            <IconPlus />
-            {creating ? 'Создаём…' : 'Добавить товар'}
-          </button>
+          <label className="admin-products-header__create flex flex-wrap items-center gap-2">
+            <select
+              className="admin-select"
+              aria-label="Тип нового товара"
+              disabled={creating}
+              value={createKind}
+              onChange={(event) => setCreateKind(event.target.value as ProductKind)}
+            >
+              {PRIMARY_PRODUCT_KINDS.map((kind) => (
+                <option key={kind} value={kind}>
+                  {productKindLabel(kind)}
+                </option>
+              ))}
+            </select>
+            <button
+              type="button"
+              className="admin-btn"
+              disabled={creating}
+              onClick={() => void onCreate(createKind)}
+            >
+              <IconPlus />
+              {creating ? 'Создаём…' : 'Добавить товар'}
+            </button>
+          </label>
         ) : null}
       </header>
 
@@ -898,7 +913,12 @@ export function ProductsManager({
                 Создайте первый товар — откроется карточка для фото, цены и состава.
               </p>
               {canCreate ? (
-                <button type="button" className="admin-btn" disabled={creating} onClick={() => void onCreate()}>
+                <button
+                  type="button"
+                  className="admin-btn"
+                  disabled={creating}
+                  onClick={() => void onCreate(createKind)}
+                >
                   Добавить товар
                 </button>
               ) : null}

@@ -25,6 +25,8 @@ import {
   COMPOSITION_PRECISIONS,
   PRODUCT_KINDS,
   PRODUCT_LIFECYCLES,
+  PRODUCT_OPTION_CHARGE_MODES,
+  PRODUCT_OPTION_SELECTIONS,
   PRODUCT_SORTS,
   PROMOTION_TYPES,
   VARIANT_STATUSES,
@@ -35,6 +37,8 @@ import {
   type CompositionPrecision,
   type ProductKind,
   type ProductLifecycle,
+  type ProductOptionChargeMode,
+  type ProductOptionSelection,
   type ProductSort,
   type PromotionType,
   type VariantStatus,
@@ -206,6 +210,18 @@ export class SaveProductEditorDto extends ExpectedVersionDto {
   @IsIn(COMPOSITION_PRECISIONS)
   compositionPrecision?: CompositionPrecision;
 
+  /** APPROXIMATE: listed PRIMARY flowers form the complete main set. */
+  @IsOptional()
+  @IsBoolean()
+  compositionPrimaryComplete?: boolean;
+
+  /** Free-text composition for DESCRIPTIVE (or optional notes). */
+  @IsOptional()
+  @ValidateIf((_, value) => value !== null)
+  @IsString()
+  @MaxLength(4000)
+  compositionText?: string | null;
+
   @IsOptional()
   @ValidateIf((_, value) => value !== null)
   @IsString()
@@ -301,6 +317,73 @@ export class SaveProductEditorDto extends ExpectedVersionDto {
   @ArrayMaxSize(20)
   @IsUUID(undefined, { each: true })
   groupIds?: string[];
+
+  /**
+   * When provided, fully replaces product option groups (wrapping, ribbon, vase).
+   * Omit to leave options unchanged. Empty array clears all groups.
+   */
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(20)
+  @ValidateNested({ each: true })
+  @Type(() => EditorOptionGroupInputDto)
+  optionGroups?: EditorOptionGroupInputDto[];
+}
+
+export class EditorOptionValueInputDto {
+  @IsString()
+  @MinLength(1)
+  @MaxLength(120)
+  name!: string;
+
+  @IsString()
+  @Matches(PRICE_MINOR_PATTERN, { message: 'surchargeMinor must be integer minor units as a string' })
+  surchargeMinor!: string;
+
+  @IsOptional()
+  @IsIn(PRODUCT_OPTION_CHARGE_MODES)
+  chargeMode?: ProductOptionChargeMode;
+
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  @Max(9999)
+  sortOrder?: number;
+
+  @IsOptional()
+  @IsBoolean()
+  active?: boolean;
+
+  /** variantId → surchargeMinor override (omit or empty = default surcharge). */
+  @IsOptional()
+  variantSurcharges?: Record<string, string>;
+}
+
+export class EditorOptionGroupInputDto {
+  @IsString()
+  @MinLength(1)
+  @MaxLength(120)
+  name!: string;
+
+  @IsOptional()
+  @IsIn(PRODUCT_OPTION_SELECTIONS)
+  selection?: ProductOptionSelection;
+
+  @IsOptional()
+  @IsBoolean()
+  required?: boolean;
+
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  @Max(9999)
+  sortOrder?: number;
+
+  @IsArray()
+  @ArrayMaxSize(40)
+  @ValidateNested({ each: true })
+  @Type(() => EditorOptionValueInputDto)
+  values!: EditorOptionValueInputDto[];
 }
 
 export class ProductComponentInputDto {

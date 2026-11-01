@@ -60,6 +60,12 @@ import {
 import { ProductReadinessPanel } from '@/components/admin/product-readiness-panel';
 import { ProductEditorMainTab } from '@/components/admin/product-editor-main-tab';
 import { ProductEditorCompositionTab } from '@/components/admin/product-editor-composition-tab';
+import {
+  optionGroupsToPayload,
+  ProductEditorOptionsTab,
+  toOptionGroupDrafts,
+  type OptionGroupDraft,
+} from '@/components/admin/product-editor-options-tab';
 import { ProductEditorRelated } from '@/components/admin/product-editor-related';
 import { ProductPlacementPanel } from '@/components/admin/product-placement-panel';
 import { AdminDeletePanel } from '@/components/admin/admin-delete-panel';
@@ -162,6 +168,10 @@ export function ProductEditor({
   const [compositionPrecision, setCompositionPrecision] = useState<CompositionPrecision>(
     product.compositionPrecision ?? 'UNKNOWN',
   );
+  const [compositionPrimaryComplete, setCompositionPrimaryComplete] = useState(
+    product.compositionPrimaryComplete ?? false,
+  );
+  const [compositionText, setCompositionText] = useState(product.compositionText ?? '');
   const [catalogCategoryId, setCatalogCategoryId] = useState(product.catalogCategoryId ?? '');
   const [taxonomyOptions, setTaxonomyOptions] = useState({
     occasions: options.occasions,
@@ -197,7 +207,17 @@ export function ProductEditor({
     };
   }, []);
 
-  const [variants, setVariants] = useState<VariantDraft[]>(() => toVariantDrafts(product));
+  const [editorSeed] = useState(() => {
+    const seededVariants = toVariantDrafts(product);
+    return {
+      variants: seededVariants,
+      optionGroups: toOptionGroupDrafts(product.optionGroups ?? [], seededVariants),
+    };
+  });
+  const [variants, setVariants] = useState<VariantDraft[]>(() => editorSeed.variants);
+  const [optionGroups, setOptionGroups] = useState<OptionGroupDraft[]>(
+    () => editorSeed.optionGroups,
+  );
   const [components, setComponents] = useState<ComponentDraft[]>(() => toComponentDrafts(product));
   const [discovery, setDiscovery] = useState({
     occasionIds: product.occasions.map((item) => item.id),
@@ -247,10 +267,14 @@ export function ProductEditor({
     });
     setProductKindState(updated.productKind ?? 'BOUQUET');
     setCompositionPrecision(updated.compositionPrecision ?? 'UNKNOWN');
+    setCompositionPrimaryComplete(updated.compositionPrimaryComplete ?? false);
+    setCompositionText(updated.compositionText ?? '');
     setCatalogCategoryId(updated.catalogCategoryId ?? '');
     setFamilyId(updated.family?.id ?? '');
     setFamilyMemberSortOrder(familyMemberSortOrderFor(updated));
-    setVariants(toVariantDrafts(updated));
+    const nextVariants = toVariantDrafts(updated);
+    setVariants(nextVariants);
+    setOptionGroups(toOptionGroupDrafts(updated.optionGroups ?? [], nextVariants));
     setComponents(toComponentDrafts(updated));
     setDiscovery({
       occasionIds: updated.occasions.map((item) => item.id),
@@ -567,6 +591,11 @@ export function ProductEditor({
       }
     }
     if (needsComposition) {
+      if (compositionPrecision === 'DESCRIPTIVE') {
+        if (compositionText.trim().length === 0 && components.length === 0) {
+          return 'Для описательного состава укажите текст или строки состава';
+        }
+      }
       for (const component of components) {
         if (component.displayName.trim().length === 0) {
           return 'В составе есть строка без названия';
@@ -576,6 +605,9 @@ export function ProductEditor({
         }
       }
       if (compositionPrecision === 'EXACT') {
+        if (components.length === 0) {
+          return 'При точном составе добавьте хотя бы одну строку';
+        }
         for (const component of components) {
           if (component.role === 'PRIMARY') {
             const qty = Number(component.quantity);
@@ -615,6 +647,8 @@ export function ProductEditor({
         heightCm: basic.heightCm.trim().length > 0 ? Number(basic.heightCm) : null,
         productKind,
         compositionPrecision,
+        compositionPrimaryComplete,
+        compositionText: compositionText.trim() || null,
         availability: publication.availability,
         publishAt: fromDateTimeLocalValue(publication.publishAt),
         unpublishAt: fromDateTimeLocalValue(publication.unpublishAt),
@@ -644,6 +678,7 @@ export function ProductEditor({
               sortOrder: index,
             }))
           : [],
+        optionGroups: optionGroupsToPayload(optionGroups, variants),
         occasionIds: discovery.occasionIds,
         recipientIds: discovery.recipientIds,
         colorIds: discovery.colorIds,
@@ -1224,6 +1259,12 @@ export function ProductEditor({
         <ProductEditorCompositionTab
           canUpdate={canUpdate}
           productKind={productKind}
+          compositionPrecision={compositionPrecision}
+          setCompositionPrecision={setCompositionPrecision}
+          compositionPrimaryComplete={compositionPrimaryComplete}
+          setCompositionPrimaryComplete={setCompositionPrimaryComplete}
+          compositionText={compositionText}
+          setCompositionText={setCompositionText}
           components={components}
           setComponents={setComponents}
           compositionReplaceKey={compositionReplaceKey}
@@ -1254,6 +1295,14 @@ export function ProductEditor({
           </div>
         </section>
       )}
+
+      <ProductEditorOptionsTab
+        canUpdate={canUpdate}
+        optionGroups={optionGroups}
+        setOptionGroups={setOptionGroups}
+        variants={variants}
+        touch={touch}
+      />
 
         <section className="admin-section sf-pe-card" data-section="photo">
           <h2 className="admin-section__title">Фотографии</h2>

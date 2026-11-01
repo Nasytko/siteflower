@@ -37,8 +37,20 @@ export type ComponentRole = (typeof COMPONENT_ROLES)[number];
 export const COMPOSITION_KINDS = ['MONO', 'MIXED', 'UNKNOWN'] as const;
 export type CompositionKind = (typeof COMPOSITION_KINDS)[number];
 
-export const COMPOSITION_PRECISIONS = ['EXACT', 'APPROXIMATE', 'UNKNOWN'] as const;
+export const COMPOSITION_PRECISIONS = [
+  'EXACT',
+  'APPROXIMATE',
+  'DESCRIPTIVE',
+  'UNKNOWN',
+] as const;
 export type CompositionPrecision = (typeof COMPOSITION_PRECISIONS)[number];
+
+/** Product add-on option selection mode (not a ProductVariant). */
+export const PRODUCT_OPTION_SELECTIONS = ['SINGLE', 'MULTI'] as const;
+export type ProductOptionSelection = (typeof PRODUCT_OPTION_SELECTIONS)[number];
+
+export const PRODUCT_OPTION_CHARGE_MODES = ['PER_LINE', 'PER_UNIT'] as const;
+export type ProductOptionChargeMode = (typeof PRODUCT_OPTION_CHARGE_MODES)[number];
 
 /** What is sold — drives admin editor (composition required or not). */
 export const PRODUCT_KINDS = [
@@ -1373,10 +1385,33 @@ export function isDominantFlowerType(
   return true;
 }
 
+export type DeriveCompositionKindOptions = {
+  /**
+   * Precision is orthogonal to CompositionKind:
+   * - DESCRIPTIVE → kind UNKNOWN (free text is not structured evidence; precision stays DESCRIPTIVE).
+   * - UNKNOWN → kind UNKNOWN (unset/incomplete; precision stays UNKNOWN — never rewrite to DESCRIPTIVE).
+   * - EXACT / APPROXIMATE → classify from PRIMARY structured lines when list is complete.
+   */
+  precision?: CompositionPrecision | null;
+  /**
+   * APPROXIMATE: explicit false → kind UNKNOWN (incomplete knowledge).
+   * When omitted, treated as complete for pure-function callers; persisted DB default is false.
+   */
+  primaryListComplete?: boolean | null;
+};
+
 /**
- * Derive mono/mixed from PRIMARY composition lines only.
- * GREENERY / FILLER / OTHER never break mono.
- * Empty or only non-primary → UNKNOWN.
+ * Single classification SoT for MONO / MIXED / UNKNOWN (CompositionKind).
+ * Do not invent parallel classifiers.
+ *
+ * Rules:
+ * - Only PRIMARY lines count; GREENERY / FILLER / OTHER never break mono.
+ * - Distinct FlowerType ids among PRIMARY: 1 → MONO, ≥2 → MIXED, 0 → UNKNOWN.
+ * - Different varieties of the same type stay MONO (type id, not variety).
+ * - Color / title / free-text description never classify.
+ * - DESCRIPTIVE precision → CompositionKind UNKNOWN (precision value remains DESCRIPTIVE).
+ * - UNKNOWN precision → CompositionKind UNKNOWN (precision value remains UNKNOWN).
+ * - Incomplete primary list → CompositionKind UNKNOWN.
  */
 export function deriveCompositionKind(
   rows: Array<{
@@ -1385,7 +1420,16 @@ export function deriveCompositionKind(
     typeName?: string | null;
     flowerItem?: { flowerTypeId?: string | null; flowerType?: { id?: string; name?: string } | null } | null;
   }>,
+  options?: DeriveCompositionKindOptions,
 ): CompositionKind {
+  const precision = options?.precision ?? null;
+  if (precision === 'DESCRIPTIVE' || precision === 'UNKNOWN') {
+    return 'UNKNOWN';
+  }
+  if (options?.primaryListComplete === false) {
+    return 'UNKNOWN';
+  }
+
   const primary = rows.filter((row) => (row.role ?? 'PRIMARY') === 'PRIMARY');
   if (primary.length === 0) return 'UNKNOWN';
 
@@ -1403,6 +1447,85 @@ export function deriveCompositionKind(
   if (typeKeys.size === 0) return 'UNKNOWN';
   if (typeKeys.size === 1) return 'MONO';
   return 'MIXED';
+}
+
+/** Selected option value with resolved surcharge for pricing. */
+export type PricedOptionSelection = {
+  groupId: string;
+  groupName: string;
+  valueId: string;
+  valueName: string;
+  surchargeMinor: bigint;
+  chargeMode: ProductOptionChargeMode;
+};
+
+/**
+ * Single server-side line pricing SoT (do not invent parallel calculators).
+ *
+ * Field meanings (aligned with OrderItem history):
+ * - baseUnitPriceMinor / unitPriceMinor = variant unit after promotion, **excluding** options
+ *   (unitPriceMinor keeps its historical meaning for refunds/analytics).
+ * - optionsTotalMinor = PER_LINE once + PER_UNIT × quantity for the line
+ * - lineTotalMinor = unitPriceMinor × quantity + optionsTotalMinor (authoritative charged total)
+ * Promotions are already folded into the variant effective unit before this function runs.
+ */
+export function computeLinePriceMinor(input: {
+  quantity: number;
+  /** Variant unit after promotion (excluding options). */
+  baseUnitPriceMinor: bigint;
+  options?: ReadonlyArray<PricedOptionSelection>;
+}): {
+  baseUnitPriceMinor: bigint;
+  optionsTotalMinor: bigint;
+  /** Same as baseUnitPriceMinor — historical OrderItem.unitPriceMinor (no option share). */
+  unitPriceMinor: bigint;
+  lineTotalMinor: bigint;
+  optionsSnapshot: Array<{
+    groupId: string;
+    groupName: string;
+    valueId: string;
+    valueName: string;
+    surchargeMinor: string;
+    chargeMode: ProductOptionChargeMode;
+  }>;
+} {
+  const qty = input.quantity;
+  if (!Number.isInteger(qty) || qty < 1) {
+    throw new Error('quantity must be a positive integer');
+  }
+  if (input.baseUnitPriceMinor < 0n) {
+    throw new Error('baseUnitPriceMinor must be non-negative');
+  }
+  let optionsTotal = 0n;
+  const snapshot: Array<{
+    groupId: string;
+    groupName: string;
+    valueId: string;
+    valueName: string;
+    surchargeMinor: string;
+    chargeMode: ProductOptionChargeMode;
+  }> = [];
+  for (const opt of input.options ?? []) {
+    const surcharge = opt.surchargeMinor < 0n ? 0n : opt.surchargeMinor;
+    const linePart = opt.chargeMode === 'PER_UNIT' ? surcharge * BigInt(qty) : surcharge;
+    optionsTotal += linePart;
+    snapshot.push({
+      groupId: opt.groupId,
+      groupName: opt.groupName,
+      valueId: opt.valueId,
+      valueName: opt.valueName,
+      surchargeMinor: surcharge.toString(),
+      chargeMode: opt.chargeMode,
+    });
+  }
+  const goodsTotal = input.baseUnitPriceMinor * BigInt(qty);
+  return {
+    baseUnitPriceMinor: input.baseUnitPriceMinor,
+    optionsTotalMinor: optionsTotal,
+    unitPriceMinor: input.baseUnitPriceMinor,
+    lineTotalMinor: goodsTotal + optionsTotal,
+    optionsSnapshot: snapshot,
+  };
 }
 
 /** Suggest product-level visual palette color ids from component line colors (unique, order preserved). */
@@ -1957,6 +2080,11 @@ export type ProductAdminDto = {
   productKind: ProductKind;
   compositionKind: CompositionKind;
   compositionPrecision: CompositionPrecision;
+  /** APPROXIMATE: listed PRIMARY flowers are the complete main set. */
+  /** False until manager confirms complete PRIMARY list (APPROXIMATE) or EXACT save. */
+  compositionPrimaryComplete: boolean;
+  /** Free-text composition for DESCRIPTIVE; never auto-filled from UNKNOWN. */
+  compositionText: string | null;
   catalogCategoryId: string | null;
   catalogCategory: TaxonomyRefDto | null;
   family: ProductFamilyDto | null;
@@ -1973,6 +2101,8 @@ export type ProductAdminDto = {
   promotion: ProductPromotionAdminDto | null;
   variants: ProductVariantDto[];
   components: ProductComponentDto[];
+  /** Product add-ons (wrapping, ribbon, vase) — not variants. */
+  optionGroups: ProductOptionGroupDto[];
   media: ProductMediaDto[];
   occasions: TaxonomyRefDto[];
   recipients: TaxonomyRefDto[];
@@ -1983,6 +2113,28 @@ export type ProductAdminDto = {
   bestsellerGroupIds: string[];
   createdAt: string;
   updatedAt: string;
+};
+
+export type ProductOptionValueDto = {
+  id: string;
+  groupId: string;
+  name: string;
+  surchargeMinor: string;
+  chargeMode: ProductOptionChargeMode;
+  sortOrder: number;
+  active: boolean;
+  /** variantId → surchargeMinor override */
+  variantSurcharges: Record<string, string>;
+};
+
+export type ProductOptionGroupDto = {
+  id: string;
+  productId: string;
+  name: string;
+  selection: ProductOptionSelection;
+  required: boolean;
+  sortOrder: number;
+  values: ProductOptionValueDto[];
 };
 
 /** Storefront-safe product DTO (no admin version/audit fields). */
@@ -2022,6 +2174,8 @@ export type ProductPublicDto = {
     /** Flower dictionary photo for «Состав». */
     imageUrl?: string | null;
   }>;
+  /** Add-on options available on the PDP (wrapping, ribbon, vase). */
+  optionGroups: ProductOptionGroupDto[];
   media: Array<{
     url: string;
     alt: string | null;

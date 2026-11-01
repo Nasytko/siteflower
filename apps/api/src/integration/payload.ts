@@ -38,6 +38,8 @@ export type StorefrontOrderCreatedItemSource = {
   unitPriceMinor: bigint | string | number;
   originalUnitPriceMinor: bigint | string | number | null;
   promotionType: string | null;
+  baseUnitPriceMinor?: bigint | string | number | null;
+  optionsTotalMinor?: bigint | string | number | null;
   lineTotalMinor: bigint | string | number;
   currency: string;
 };
@@ -45,6 +47,7 @@ export type StorefrontOrderCreatedItemSource = {
 function minorToString(value: bigint | string | number): string {
   return typeof value === 'bigint' ? value.toString() : String(value);
 }
+
 
 /**
  * Build immutable StorefrontOrderCreatedV1 for outbox enqueue.
@@ -111,6 +114,15 @@ export function buildStorefrontOrderCreatedV1(input: {
             ? null
             : minorToString(item.originalUnitPriceMinor),
         promotionType: item.promotionType,
+        baseUnitPriceMinor:
+          item.baseUnitPriceMinor === null || item.baseUnitPriceMinor === undefined
+            ? null
+            : minorToString(item.baseUnitPriceMinor),
+        optionsTotalMinor: minorToString(
+          item.optionsTotalMinor === null || item.optionsTotalMinor === undefined
+            ? 0
+            : item.optionsTotalMinor,
+        ),
         lineTotalMinor: minorToString(item.lineTotalMinor),
         currency: item.currency,
       })),

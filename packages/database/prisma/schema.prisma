@@ -179,12 +179,29 @@ enum CompositionKind {
   UNKNOWN
 }
 
-/// How precise the composition quantities are for filters/SEO.
-/// EXACT = fixed composition; APPROXIMATE = substitutions allowed.
+/// How precise the composition is for filters/SEO/editor.
+/// EXACT = fixed recipe with quantities; APPROXIMATE = known primaries, soft qty;
+/// DESCRIPTIVE = free-text composition (structured lines optional);
+/// UNKNOWN = unset / incomplete (do not treat as DESCRIPTIVE).
 enum CompositionPrecision {
   EXACT
   APPROXIMATE
+  DESCRIPTIVE
   UNKNOWN
+}
+
+/// Option group selection mode on a product.
+enum ProductOptionSelection {
+  SINGLE
+  MULTI
+}
+
+/// How an option surcharge scales with line quantity.
+enum ProductOptionChargeMode {
+  /// Once per cart/order line (e.g. wrapping, vase).
+  PER_LINE
+  /// Multiplied by line quantity (e.g. per-stem add-on).
+  PER_UNIT
 }
 
 /// Sellable product shape — drives editor UI (composition required or not).
@@ -636,6 +653,12 @@ model Product {
   /// Cached from PRIMARY composition lines on save (UNKNOWN for non-floral kinds).
   compositionKind      CompositionKind        @default(UNKNOWN) @map("composition_kind")
   compositionPrecision CompositionPrecision   @default(UNKNOWN) @map("composition_precision")
+  /// APPROXIMATE: listed PRIMARY flowers form the complete main set (manager-confirmed).
+  /// Default false — legacy/unknown completeness must not auto-claim MONO/MIXED.
+  /// EXACT saves force true; DESCRIPTIVE/UNKNOWN store false (flag unused for classification).
+  compositionPrimaryComplete Boolean            @default(false) @map("composition_primary_complete")
+  /// Free-text composition for DESCRIPTIVE only. Not inferred from UNKNOWN precision.
+  compositionText      String?                @map("composition_text") @db.Text
   lifecycle            ProductLifecycle       @default(DRAFT)
   availability         CommercialAvailability @default(AVAILABLE)
   currency             String                 @default("BYN") @db.Char(3)
@@ -664,6 +687,7 @@ model Product {
   catalogPagePins     CatalogPageProduct[]
   catalogPageExcludes CatalogPageExclude[]
   traits              ProductTrait[]
+  optionGroups        ProductOptionGroup[]
 
   @@index([lifecycle, publishAt])
   @@index([lifecycle, availability])
@@ -687,10 +711,62 @@ model ProductVariant {
 
   product             Product                        @relation(fields: [productId], references: [id], onDelete: Cascade)
   promotionSalePrices ProductPromotionVariantPrice[]
+  optionPrices        ProductOptionVariantPrice[]
 
   @@index([productId, sortOrder])
   @@index([productId, status])
   @@map("product_variants")
+}
+
+/// Named group of add-ons (wrapping, ribbon, vase) on a product — not a ProductVariant.
+model ProductOptionGroup {
+  id         String                 @id @default(uuid()) @db.Uuid
+  productId  String                 @map("product_id") @db.Uuid
+  name       String                 @db.VarChar(120)
+  selection  ProductOptionSelection @default(SINGLE)
+  required   Boolean                @default(false)
+  sortOrder  Int                    @default(0) @map("sort_order")
+  createdAt  DateTime               @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt  DateTime               @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  product Product              @relation(fields: [productId], references: [id], onDelete: Cascade)
+  values  ProductOptionValue[]
+
+  @@index([productId, sortOrder])
+  @@map("product_option_groups")
+}
+
+model ProductOptionValue {
+  id             String                  @id @default(uuid()) @db.Uuid
+  groupId        String                  @map("group_id") @db.Uuid
+  name           String                  @db.VarChar(120)
+  /// Default surcharge in minor units (may be 0).
+  surchargeMinor BigInt                  @default(0) @map("surcharge_minor")
+  chargeMode     ProductOptionChargeMode @default(PER_LINE) @map("charge_mode")
+  sortOrder      Int                     @default(0) @map("sort_order")
+  active         Boolean                 @default(true)
+  createdAt      DateTime                @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt      DateTime                @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  group         ProductOptionGroup           @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  variantPrices ProductOptionVariantPrice[]
+
+  @@index([groupId, sortOrder])
+  @@map("product_option_values")
+}
+
+/// Optional per-variant surcharge override for an option value.
+model ProductOptionVariantPrice {
+  optionValueId  String @map("option_value_id") @db.Uuid
+  variantId      String @map("variant_id") @db.Uuid
+  surchargeMinor BigInt @map("surcharge_minor")
+
+  optionValue ProductOptionValue @relation(fields: [optionValueId], references: [id], onDelete: Cascade)
+  variant     ProductVariant     @relation(fields: [variantId], references: [id], onDelete: Cascade)
+
+  @@id([optionValueId, variantId])
+  @@index([variantId])
+  @@map("product_option_variant_prices")
 }
 
 model ProductComponent {
@@ -1230,6 +1306,7 @@ enum OrderEventType {
   ORDER_CANCELLED
 }
 
+
 /// Singleton (`id = 1`) — checkout/fulfillment configuration.
 model FulfillmentSettings {
   id                 Int      @id @default(1)
@@ -1304,8 +1381,8 @@ model Order {
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
 
-  items  OrderItem[]
-  events OrderEvent[]
+  items             OrderItem[]
+  events            OrderEvent[]
 
   @@index([status, fulfillmentDate])
   @@index([fulfillmentDate, timeWindowStartMinutes])
@@ -1326,13 +1403,21 @@ model OrderItem {
   variantName     String  @map("variant_name") @db.VarChar(120)
   primaryImageUrl String? @map("primary_image_url") @db.VarChar(1000)
 
-  /// Final charged unit price (immutable commercial truth).
+  /// Variant unit after promotion, excluding option surcharges (historical meaning — do not redefine).
+  /// Legacy invariant without options: lineTotalMinor = unitPriceMinor * quantity.
   unitPriceMinor         BigInt  @map("unit_price_minor")
-  /// Regular (pre-promotion) unit price when a promotion applied; null if none.
+  /// Catalog/list variant unit before promotion; null when no promotion applied at order time.
   originalUnitPriceMinor BigInt? @map("original_unit_price_minor")
   /// Snapshot of promotion type at order time: PERCENT | FIXED | null.
   promotionType          String? @map("promotion_type") @db.VarChar(16)
+  /// Explicit pre-option variant unit (equals unitPriceMinor on new rows; null on pre-options legacy).
+  baseUnitPriceMinor     BigInt? @map("base_unit_price_minor")
+  /// Option surcharges for the whole line (PER_LINE once + PER_UNIT × qty). Default 0 for legacy.
+  optionsTotalMinor      BigInt  @default(0) @map("options_total_minor")
+  /// Selected options snapshot; null/empty when none. Never mutates after insert.
+  optionsSnapshot        Json?   @map("options_snapshot")
   quantity               Int
+  /// Authoritative charged line total: unitPriceMinor * quantity + optionsTotalMinor.
   lineTotalMinor         BigInt  @map("line_total_minor")
   currency               String  @default("BYN") @db.Char(3)
 
@@ -1448,6 +1533,8 @@ model IntegrationRuntimeSettings {
 
   @@map("integration_runtime_settings")
 }
+
+/// Immutable per-attempt log for ERP / Telegram delivery (no secrets / raw tokens).
 
 /// Safe replay of the same logical request (separate from outbox delivery).
 /// Recovery ciphertext holds only minimal secrets (e.g. tracking token) under AES-256-GCM.

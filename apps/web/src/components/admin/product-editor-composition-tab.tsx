@@ -3,11 +3,13 @@
 import { useEffect, useId, useRef, useState } from 'react';
 import {
   COMPONENT_ROLES,
+  COMPOSITION_PRECISIONS,
   deriveCompositionKind,
   formatCompositionSummaryLine,
   productKindUsesBouquetCompositionKind,
   suggestVisualPaletteColorIds,
   type ComponentRole,
+  type CompositionPrecision,
   type ProductKind,
 } from '@bouquet-one/contracts';
 import { AdminColorSwatch } from '@/components/admin/admin-color-swatch';
@@ -23,6 +25,12 @@ import { componentRoleLabel } from '@/lib/admin-labels';
 type Props = {
   canUpdate: boolean;
   productKind: ProductKind;
+  compositionPrecision: CompositionPrecision;
+  setCompositionPrecision: (value: CompositionPrecision) => void;
+  compositionPrimaryComplete: boolean;
+  setCompositionPrimaryComplete: (value: boolean) => void;
+  compositionText: string;
+  setCompositionText: (value: string) => void;
   components: ComponentDraft[];
   setComponents: React.Dispatch<React.SetStateAction<ComponentDraft[]>>;
   compositionSearch: string;
@@ -42,10 +50,23 @@ type Props = {
   nextComponentKey: () => string;
 };
 
+const PRECISION_LABELS: Record<CompositionPrecision, string> = {
+  EXACT: 'Точный состав (с количествами)',
+  APPROXIMATE: 'Приблизительный состав',
+  DESCRIPTIVE: 'Описательный (текст)',
+  UNKNOWN: 'Не задан',
+};
+
 export function ProductEditorCompositionTab(props: Props) {
   const {
     canUpdate,
     productKind,
+    compositionPrecision,
+    setCompositionPrecision,
+    compositionPrimaryComplete,
+    setCompositionPrimaryComplete,
+    compositionText,
+    setCompositionText,
     components,
     setComponents,
     compositionSearch,
@@ -77,6 +98,10 @@ export function ProductEditorCompositionTab(props: Props) {
       role: row.role,
       typeName: row.typeName,
     })),
+    {
+      precision: compositionPrecision,
+      primaryListComplete: compositionPrimaryComplete,
+    },
   );
   const typeNames = [
     ...new Set(components.map((row) => row.typeName.trim()).filter(Boolean)),
@@ -165,11 +190,76 @@ export function ProductEditorCompositionTab(props: Props) {
       </div>
       <div className="sf-pe-card__body space-y-6">
 
-      {summaryLine ? (
+      {!isStem ? (
+        <div className="grid max-w-xl gap-3">
+          <label className="admin-field">
+            <span className="admin-field__label">Точность состава</span>
+            <select
+              className="admin-input"
+              value={compositionPrecision}
+              disabled={!canUpdate}
+              onChange={(event) => {
+                const next = event.target.value as CompositionPrecision;
+                setCompositionPrecision(next);
+                if (next === 'EXACT') setCompositionPrimaryComplete(true);
+                if (next === 'DESCRIPTIVE' || next === 'UNKNOWN') {
+                  setCompositionPrimaryComplete(false);
+                }
+                touch();
+              }}
+            >
+              {COMPOSITION_PRECISIONS.map((value) => (
+                <option key={value} value={value}>
+                  {PRECISION_LABELS[value]}
+                </option>
+              ))}
+            </select>
+          </label>
+          {compositionPrecision === 'APPROXIMATE' ? (
+            <label className="flex items-center gap-2 text-sm">
+              <input
+                type="checkbox"
+                checked={compositionPrimaryComplete}
+                disabled={!canUpdate}
+                onChange={(event) => {
+                  setCompositionPrimaryComplete(event.target.checked);
+                  touch();
+                }}
+              />
+              Перечень основных цветов полный (без галочки — классификация UNKNOWN)
+            </label>
+          ) : null}
+          {compositionPrecision === 'DESCRIPTIVE' ? (
+            <label className="admin-field">
+              <span className="admin-field__label">Описание состава</span>
+              <textarea
+                className="admin-input min-h-24"
+                value={compositionText}
+                disabled={!canUpdate}
+                placeholder="Свободное описание без автоматической классификации по тексту"
+                onChange={(event) => {
+                  setCompositionText(event.target.value);
+                  touch();
+                }}
+              />
+            </label>
+          ) : null}
+          <p className="text-sm text-[var(--admin-muted)]">
+            Классификация: <strong>{derivedKind}</strong>
+            {derivedKind === 'MONO'
+              ? ' — один основной вид'
+              : derivedKind === 'MIXED'
+                ? ' — несколько основных видов'
+                : ' — недостаточно данных'}
+          </p>
+        </div>
+      ) : null}
+
+      {summaryLine && compositionPrecision !== 'DESCRIPTIVE' ? (
         <p className="text-sm text-[var(--admin-muted)]">{summaryLine}</p>
       ) : null}
 
-      {canUpdate ? (
+      {canUpdate && compositionPrecision !== 'DESCRIPTIVE' ? (
         <div className="max-w-xl space-y-3">
           {isReplacing ? (
             <p className="text-sm font-medium text-amber-900">
@@ -285,6 +375,8 @@ export function ProductEditorCompositionTab(props: Props) {
         </div>
       ) : null}
 
+      {compositionPrecision !== 'DESCRIPTIVE' ? (
+        <>
       <hr className="border-[var(--admin-border)]" />
 
       <div className="space-y-3">
@@ -414,6 +506,8 @@ export function ProductEditorCompositionTab(props: Props) {
             Необязательно — для SEO-фильтров в блоке «Кому подходит»
           </span>
         </div>
+      ) : null}
+        </>
       ) : null}
       </div>
     </section>

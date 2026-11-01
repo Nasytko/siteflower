@@ -41,6 +41,7 @@ import {
   formatOrderNumber,
   isTimeWindowSelectable,
 } from './business-time.util';
+import { resolvePricedOptions, type OptionValueRow } from '../catalog/product-options.util';
 import { validateCartLines, type VariantPriceSource } from './cart-validation';
 import { FulfillmentSettingsService } from './fulfillment-settings.service';
 import { maskPhoneE164, normalizeByPhone } from './phone.util';
@@ -150,7 +151,51 @@ export class OrdersService {
     const loaded = (await Promise.all(productIds.map((id) => this.products.findById(id)))).filter(
       (product): product is ProductWithRelations => product !== null,
     );
-    return this.resolverFromLoaded(loaded, now);
+    return {
+      resolve: this.resolverFromLoaded(loaded, now),
+      resolveOptions: this.optionsResolverFromLoaded(loaded),
+    };
+  }
+
+  private optionsResolverFromLoaded(loaded: ProductWithRelations[]) {
+    const valuesByProduct = new Map<string, OptionValueRow[]>();
+    for (const product of loaded) {
+      const rows: OptionValueRow[] = [];
+      for (const group of product.optionGroups ?? []) {
+        for (const value of group.values) {
+          rows.push({
+            id: value.id,
+            name: value.name,
+            surchargeMinor: value.surchargeMinor,
+            chargeMode: value.chargeMode,
+            active: value.active,
+            group: {
+              id: group.id,
+              name: group.name,
+              productId: group.productId,
+              selection: group.selection,
+              required: group.required,
+            },
+            variantPrices: value.variantPrices.map((row) => ({
+              variantId: row.variantId,
+              surchargeMinor: row.surchargeMinor,
+            })),
+          });
+        }
+      }
+      valuesByProduct.set(product.id, rows);
+    }
+    return (
+      productId: string,
+      variantId: string,
+      optionValueIds: string[] | undefined,
+    ) =>
+      resolvePricedOptions({
+        productId,
+        variantId,
+        optionValueIds,
+        values: valuesByProduct.get(productId) ?? [],
+      });
   }
 
   private async loadLockedProducts(
@@ -171,7 +216,7 @@ export class OrdersService {
   async validateCart(dto: CheckoutValidateRequest): Promise<CheckoutValidateResponse> {
     const now = new Date();
     const settings = await this.fulfillment.getOrCreate();
-    const resolve = await this.buildResolver(dto.items, now);
+    const { resolve, resolveOptions } = await this.buildResolver(dto.items, now);
     const prior = new Map<string, bigint>();
     for (const p of dto.priorUnitPrices ?? []) {
       try {
@@ -183,6 +228,7 @@ export class OrdersService {
     const result = validateCartLines({
       lines: dto.items,
       resolve,
+      resolveOptions,
       priorUnitPrices: prior,
       now,
     });
@@ -307,8 +353,13 @@ export class OrdersService {
     }
     const anonymousCard = Boolean(dto.anonymousCard);
 
-    const resolve = await this.buildResolver(dto.items, now);
-    const priced = validateCartLines({ lines: dto.items, resolve, now });
+    const built = await this.buildResolver(dto.items, now);
+    const priced = validateCartLines({
+      lines: dto.items,
+      resolve: built.resolve,
+      resolveOptions: built.resolveOptions,
+      now,
+    });
     if (!priced.ok) {
       throw new BadRequestException({
         message: 'Корзина содержит недоступные товары',
@@ -408,6 +459,9 @@ export class OrdersService {
                     ? null
                     : BigInt(item.originalUnitPriceMinor),
                 promotionType: item.promotionType,
+                baseUnitPriceMinor: BigInt(item.baseUnitPriceMinor),
+                optionsTotalMinor: BigInt(item.optionsTotalMinor),
+                optionsSnapshot: item.optionsSnapshot as unknown as Prisma.InputJsonValue,
                 quantity: item.quantity,
                 lineTotalMinor: BigInt(item.lineTotalMinor),
                 currency: 'BYN',
@@ -446,6 +500,8 @@ export class OrdersService {
                 unitPriceMinor: item.unitPriceMinor,
                 originalUnitPriceMinor: item.originalUnitPriceMinor,
                 promotionType: item.promotionType,
+                baseUnitPriceMinor: item.baseUnitPriceMinor,
+                optionsTotalMinor: item.optionsTotalMinor,
                 lineTotalMinor: item.lineTotalMinor,
                 currency: 'BYN',
               })),
@@ -878,7 +934,13 @@ function mapItem(item: {
   quantity: number;
   unitPriceMinor: bigint;
   lineTotalMinor: bigint;
+  baseUnitPriceMinor?: bigint | null;
+  optionsTotalMinor?: bigint | null;
+  optionsSnapshot?: unknown;
 }): OrderItemPublicDto {
+  const snapshot = Array.isArray(item.optionsSnapshot)
+    ? (item.optionsSnapshot as OrderItemPublicDto['optionsSnapshot'])
+    : null;
   return {
     id: item.id,
     productName: item.productName,
@@ -887,6 +949,12 @@ function mapItem(item: {
     primaryImageUrl: item.primaryImageUrl,
     quantity: item.quantity,
     unitPriceMinor: item.unitPriceMinor.toString(),
+    baseUnitPriceMinor:
+      item.baseUnitPriceMinor === undefined || item.baseUnitPriceMinor === null
+        ? null
+        : item.baseUnitPriceMinor.toString(),
+    optionsTotalMinor: (item.optionsTotalMinor ?? 0n).toString(),
+    optionsSnapshot: snapshot,
     lineTotalMinor: item.lineTotalMinor.toString(),
     currency: 'BYN',
   };

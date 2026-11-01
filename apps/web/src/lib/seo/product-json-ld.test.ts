@@ -51,10 +51,14 @@ function baseProduct(overrides: Partial<ProductPublicDto> = {}): ProductPublicDt
       variant('v3', '25 шт', '14900', 2),
     ],
     components: [],
+    optionGroups: [],
     media: [],
     occasions: [],
     recipients: [],
     colors: [],
+    badgeLabel: null,
+    productKind: 'BOUQUET',
+    compositionKind: 'UNKNOWN',
     ...overrides,
   };
 }

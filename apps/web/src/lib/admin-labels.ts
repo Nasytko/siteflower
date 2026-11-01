@@ -8,7 +8,6 @@ import type {
   ComponentRole,
   ComponentUnit,
   CompositionKind,
-  CompositionPrecision,
   ProductKind,
   ProductLifecycle,
   PromotionType,
@@ -64,12 +63,6 @@ const COMPOSITION_KIND: Record<CompositionKind, string> = {
   UNKNOWN: 'Не определён',
 };
 
-const COMPOSITION_PRECISION: Record<CompositionPrecision, string> = {
-  EXACT: 'Без замены цветов',
-  APPROXIMATE: 'Допускается замена цветов',
-  UNKNOWN: 'Не указано',
-};
-
 const PRODUCT_KIND: Record<ProductKind, string> = {
   BOUQUET: 'Букет',
   COMPOSITION: 'Композиция',
@@ -120,15 +113,6 @@ export function componentRoleLabel(value: ComponentRole): string {
 
 export function compositionKindLabel(value: CompositionKind): string {
   return COMPOSITION_KIND[value] ?? value;
-}
-
-export function compositionPrecisionLabel(value: CompositionPrecision): string {
-  return COMPOSITION_PRECISION[value] ?? value;
-}
-
-/** Toggle-friendly wording for flower substitution (APPROXIMATE vs EXACT). */
-export function flowerSubstitutionLabel(value: CompositionPrecision): string {
-  return compositionPrecisionLabel(value);
 }
 
 export function productKindLabel(value: ProductKind): string {

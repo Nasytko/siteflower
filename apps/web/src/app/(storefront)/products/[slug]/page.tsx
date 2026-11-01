@@ -133,6 +133,7 @@ export default async function ProductPage({ params }: { params: Params }) {
     variants: product.variants,
     shortDescription: product.shortDescription,
     badgeLabel: product.badgeLabel ?? null,
+    optionGroups: product.optionGroups ?? [],
   };
 
   return (

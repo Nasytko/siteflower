@@ -554,6 +554,61 @@ export class ProductsRepository {
     }
   }
 
+  /**
+   * Full replace of product option groups/values/variant surcharges.
+   * Cascades delete values and variant prices via FK.
+   */
+  async replaceOptionGroups(
+    productId: string,
+    groups: Array<{
+      name: string;
+      selection: 'SINGLE' | 'MULTI';
+      required: boolean;
+      sortOrder: number;
+      values: Array<{
+        name: string;
+        surchargeMinor: bigint;
+        chargeMode: 'PER_LINE' | 'PER_UNIT';
+        sortOrder: number;
+        active: boolean;
+        variantSurcharges: Array<{ variantId: string; surchargeMinor: bigint }>;
+      }>;
+    }>,
+    tx: Prisma.TransactionClient,
+  ): Promise<void> {
+    await tx.productOptionGroup.deleteMany({ where: { productId } });
+    for (const group of groups) {
+      const created = await tx.productOptionGroup.create({
+        data: {
+          productId,
+          name: group.name,
+          selection: group.selection,
+          required: group.required,
+          sortOrder: group.sortOrder,
+          values: {
+            create: group.values.map((value) => ({
+              name: value.name,
+              surchargeMinor: value.surchargeMinor,
+              chargeMode: value.chargeMode,
+              sortOrder: value.sortOrder,
+              active: value.active,
+              variantPrices:
+                value.variantSurcharges.length > 0
+                  ? {
+                      create: value.variantSurcharges.map((row) => ({
+                        variantId: row.variantId,
+                        surchargeMinor: row.surchargeMinor,
+                      })),
+                    }
+                  : undefined,
+            })),
+          },
+        },
+      });
+      void created;
+    }
+  }
+
   async replaceOccasions(
     productId: string,
     occasionIds: string[],

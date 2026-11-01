@@ -30,6 +30,7 @@ import {
   defaultFilterKeysForPreset,
   suggestProductNameFromComposition,
   deriveCompositionManagerSummary,
+  computeLinePriceMinor,
   deriveCompositionKind,
   formatCompositionSummaryLine,
   adminProductCompositionSummary,
@@ -143,6 +144,110 @@ test('deriveCompositionKind scenarios (mono / mixed / greenery / unknown)', () =
   // 6. Unknown / empty composition
   assert.equal(deriveCompositionKind([]), 'UNKNOWN');
   assert.equal(deriveCompositionKind([{ role: 'GREENERY', typeName: 'Эвкалипт' }]), 'UNKNOWN');
+  // DESCRIPTIVE / incomplete primary list never classify as mono/mixed
+  assert.equal(
+    deriveCompositionKind([{ role: 'PRIMARY', typeId: 'rose' }], { precision: 'DESCRIPTIVE' }),
+    'UNKNOWN',
+  );
+  assert.equal(
+    deriveCompositionKind([{ role: 'PRIMARY', typeId: 'rose' }], {
+      precision: 'APPROXIMATE',
+      primaryListComplete: false,
+    }),
+    'UNKNOWN',
+  );
+  assert.equal(
+    deriveCompositionKind([{ role: 'PRIMARY', typeId: 'rose' }], {
+      precision: 'APPROXIMATE',
+      primaryListComplete: true,
+    }),
+    'MONO',
+  );
+  // UNKNOWN precision keeps CompositionKind UNKNOWN; distinct from DESCRIPTIVE (same kind, different precision policy)
+  assert.equal(
+    deriveCompositionKind([{ role: 'PRIMARY', typeId: 'rose' }], { precision: 'UNKNOWN' }),
+    'UNKNOWN',
+  );
+});
+
+test('computeLinePriceMinor: PER_LINE + PER_UNIT options', () => {
+  const priced = computeLinePriceMinor({
+    quantity: 3,
+    baseUnitPriceMinor: 1000n,
+    options: [
+      {
+        groupId: 'g1',
+        groupName: 'Упаковка',
+        valueId: 'v1',
+        valueName: 'Крафт',
+        surchargeMinor: 200n,
+        chargeMode: 'PER_LINE',
+      },
+      {
+        groupId: 'g2',
+        groupName: 'Лента',
+        valueId: 'v2',
+        valueName: 'Атлас',
+        surchargeMinor: 50n,
+        chargeMode: 'PER_UNIT',
+      },
+    ],
+  });
+  // goods 3000 + craft 200 + ribbon 150 = 3350
+  assert.equal(priced.lineTotalMinor, 3350n);
+  assert.equal(priced.optionsTotalMinor, 350n);
+  // unitPriceMinor keeps historical meaning (variant unit, no option share)
+  assert.equal(priced.unitPriceMinor, 1000n);
+  assert.equal(priced.baseUnitPriceMinor, 1000n);
+  assert.equal(priced.unitPriceMinor * 3n + priced.optionsTotalMinor, priced.lineTotalMinor);
+  assert.equal(priced.optionsSnapshot.length, 2);
+});
+
+test('computeLinePriceMinor: no options preserves legacy unit×qty = lineTotal', () => {
+  const priced = computeLinePriceMinor({ quantity: 2, baseUnitPriceMinor: 15900n });
+  assert.equal(priced.unitPriceMinor, 15900n);
+  assert.equal(priced.optionsTotalMinor, 0n);
+  assert.equal(priced.lineTotalMinor, 31800n);
+});
+
+test('computeLinePriceMinor: PER_LINE charged once regardless of quantity', () => {
+  const priced = computeLinePriceMinor({
+    quantity: 5,
+    baseUnitPriceMinor: 1000n,
+    options: [
+      {
+        groupId: 'g1',
+        groupName: 'Упаковка',
+        valueId: 'v1',
+        valueName: 'Крафт',
+        surchargeMinor: 300n,
+        chargeMode: 'PER_LINE',
+      },
+    ],
+  });
+  assert.equal(priced.unitPriceMinor, 1000n);
+  assert.equal(priced.optionsTotalMinor, 300n);
+  assert.equal(priced.lineTotalMinor, 5300n);
+});
+
+test('computeLinePriceMinor: PER_UNIT scales with quantity', () => {
+  const priced = computeLinePriceMinor({
+    quantity: 4,
+    baseUnitPriceMinor: 2000n,
+    options: [
+      {
+        groupId: 'g2',
+        groupName: 'Лента',
+        valueId: 'v2',
+        valueName: 'Атлас',
+        surchargeMinor: 50n,
+        chargeMode: 'PER_UNIT',
+      },
+    ],
+  });
+  assert.equal(priced.unitPriceMinor, 2000n);
+  assert.equal(priced.optionsTotalMinor, 200n);
+  assert.equal(priced.lineTotalMinor, 8200n);
 });
 
 test('resolveStoredCompositionKind: STEM/gift never store mono', () => {

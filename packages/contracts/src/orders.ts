@@ -30,6 +30,7 @@ export const ORDER_EVENT_TYPES = [
 ] as const;
 export type OrderEventType = (typeof ORDER_EVENT_TYPES)[number];
 
+
 export const TIME_WINDOW_APPLIES_TO = ['DELIVERY', 'PICKUP', 'BOTH'] as const;
 export type TimeWindowAppliesTo = (typeof TIME_WINDOW_APPLIES_TO)[number];
 
@@ -76,11 +77,13 @@ export type UpdateFulfillmentSettingsDto = {
   pickupInstructions?: string | null;
 };
 
-/** Client cart line — no prices. */
+/** Client cart line — no prices (server resolves option surcharges). */
 export type CheckoutCartLineInput = {
   productId: string;
   variantId: string;
   quantity: number;
+  /** Selected ProductOptionValue ids (server-validated). */
+  optionValueIds?: string[];
 };
 
 export type CheckoutValidateIssueCode =
@@ -88,7 +91,8 @@ export type CheckoutValidateIssueCode =
   | 'VARIANT_UNAVAILABLE'
   | 'QUANTITY_INVALID'
   | 'PRICE_CHANGED'
-  | 'NOT_FOUND';
+  | 'NOT_FOUND'
+  | 'OPTION_INVALID';
 
 export type CheckoutValidateIssueDto = {
   code: CheckoutValidateIssueCode;
@@ -100,6 +104,15 @@ export type CheckoutValidateIssueDto = {
   currentUnitPriceMinor?: string;
 };
 
+export type CheckoutOptionSnapshotDto = {
+  groupId: string;
+  groupName: string;
+  valueId: string;
+  valueName: string;
+  surchargeMinor: string;
+  chargeMode: 'PER_LINE' | 'PER_UNIT';
+};
+
 export type CheckoutValidatedLineDto = {
   productId: string;
   variantId: string;
@@ -109,7 +122,17 @@ export type CheckoutValidatedLineDto = {
   variantName: string;
   primaryImageUrl: string | null;
   availability: CommercialAvailability;
+  /**
+   * Variant unit after promotion, excluding options (historical OrderItem.unitPriceMinor).
+   * Equals baseUnitPriceMinor on validated lines.
+   */
   unitPriceMinor: string;
+  /** Explicit pre-option variant unit (same value as unitPriceMinor). */
+  baseUnitPriceMinor: string;
+  /** Line-level option surcharges (not baked into unitPriceMinor). */
+  optionsTotalMinor: string;
+  optionsSnapshot: CheckoutOptionSnapshotDto[];
+  /** unitPriceMinor * quantity + optionsTotalMinor */
   lineTotalMinor: string;
   currency: 'BYN';
 };
@@ -156,7 +179,14 @@ export type OrderItemPublicDto = {
   variantName: string;
   primaryImageUrl: string | null;
   quantity: number;
+  /** Variant unit after promo, excluding options (immutable historical meaning). */
   unitPriceMinor: string;
+  /** Pre-option variant unit on option-era rows; null on legacy. */
+  baseUnitPriceMinor?: string | null;
+  /** Option surcharges for the line; 0 / omitted on legacy. */
+  optionsTotalMinor?: string;
+  optionsSnapshot?: CheckoutOptionSnapshotDto[] | null;
+  /** Authoritative charged total for the line. */
   lineTotalMinor: string;
   currency: 'BYN';
 };
@@ -227,6 +257,7 @@ export type OrderAdminListItemDto = {
   createdAt: string;
 };
 
+
 export type OrderAdminDetailDto = {
   id: string;
   orderNumber: string;
@@ -260,7 +291,6 @@ export type OrderAdminDetailDto = {
   updatedAt: string;
   items: OrderItemPublicDto[];
   events: OrderEventDto[];
-  /** Valid next statuses for UI (server remains authoritative). */
   allowedTransitions: OrderStatus[];
 };
 
@@ -273,6 +303,7 @@ export type AdminOrderListQuery = {
   page?: number;
   pageSize?: number;
 };
+
 
 export type TransitionOrderRequest = {
   toStatus: OrderStatus;

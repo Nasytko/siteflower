@@ -73,6 +73,15 @@ export const PRODUCT_INCLUDE = {
   traits: { include: { trait: { select: { key: true } } } },
   promotion: { include: { variantPrices: true } },
   bestsellerLinks: { select: { groupId: true, sortOrder: true } },
+  optionGroups: {
+    orderBy: { sortOrder: 'asc' },
+    include: {
+      values: {
+        orderBy: { sortOrder: 'asc' },
+        include: { variantPrices: true },
+      },
+    },
+  },
 } satisfies Prisma.ProductInclude;
 
 export type ProductWithRelations = Prisma.ProductGetPayload<{ include: typeof PRODUCT_INCLUDE }>;
@@ -340,6 +349,8 @@ export function toProductAdminDto(
     productKind: product.productKind,
     compositionKind: product.compositionKind,
     compositionPrecision: product.compositionPrecision,
+    compositionPrimaryComplete: product.compositionPrimaryComplete,
+    compositionText: product.compositionText ?? null,
     catalogCategoryId: product.catalogCategoryId,
     catalogCategory: product.catalogCategory ? toTaxonomyRef(product.catalogCategory) : null,
     family:
@@ -382,6 +393,26 @@ export function toProductAdminDto(
       quantity: component.quantity,
       unit: component.unit,
       sortOrder: component.sortOrder,
+    })),
+    optionGroups: (product.optionGroups ?? []).map((group) => ({
+      id: group.id,
+      productId: group.productId,
+      name: group.name,
+      selection: group.selection,
+      required: group.required,
+      sortOrder: group.sortOrder,
+      values: group.values.map((value) => ({
+        id: value.id,
+        groupId: value.groupId,
+        name: value.name,
+        surchargeMinor: value.surchargeMinor.toString(),
+        chargeMode: value.chargeMode,
+        sortOrder: value.sortOrder,
+        active: value.active,
+        variantSurcharges: Object.fromEntries(
+          value.variantPrices.map((row) => [row.variantId, row.surchargeMinor.toString()]),
+        ),
+      })),
     })),
     media: product.media.map((media) => toProductMediaDto(media, urlFor)),
     occasions: product.occasions.map((link) => toTaxonomyRef(link.occasion)),
@@ -465,6 +496,30 @@ export function toProductPublicDto(
       colorSlug: component.color?.slug ?? null,
       imageUrl: component.flowerItem?.imageUrl ?? null,
     })),
+    optionGroups: (product.optionGroups ?? [])
+      .map((group) => ({
+        id: group.id,
+        productId: group.productId,
+        name: group.name,
+        selection: group.selection,
+        required: group.required,
+        sortOrder: group.sortOrder,
+        values: group.values
+          .filter((value) => value.active)
+          .map((value) => ({
+            id: value.id,
+            groupId: value.groupId,
+            name: value.name,
+            surchargeMinor: value.surchargeMinor.toString(),
+            chargeMode: value.chargeMode,
+            sortOrder: value.sortOrder,
+            active: value.active,
+            variantSurcharges: Object.fromEntries(
+              value.variantPrices.map((row) => [row.variantId, row.surchargeMinor.toString()]),
+            ),
+          })),
+      }))
+      .filter((group) => group.values.length > 0),
     media: product.media.map((media) => {
       const dto = toProductMediaDto(media, urlFor);
       return {

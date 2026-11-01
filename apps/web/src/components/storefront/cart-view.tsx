@@ -9,6 +9,7 @@ import {
   cartItemCount,
   clearCart,
   readCart,
+  cartLineKey,
   removeFromCart,
   setCartQuantity,
   writeCart,
@@ -53,7 +54,10 @@ export function CartView() {
 
   const subtotal = cart.items.reduce((sum, line) => {
     const unit = BigInt(line.unitPriceMinor ?? '0');
-    return sum + unit * BigInt(line.quantity);
+    const options = BigInt(line.optionsTotalMinor ?? '0');
+    // Display estimate only: unit×qty + options (same formula as server lineTotal).
+    // Do not bake options into unitPriceMinor — avoids double-counting at checkout.
+    return sum + unit * BigInt(line.quantity) + options;
   }, 0n);
   const count = cartItemCount(cart);
 
@@ -61,11 +65,13 @@ export function CartView() {
     <div className="grid gap-8 lg:grid-cols-[1fr_20rem] lg:items-start lg:gap-10">
       <ul className="space-y-4">
         {cart.items.map((line) => {
+          const key = cartLineKey(line);
           const unit = BigInt(line.unitPriceMinor ?? '0');
-          const lineTotal = unit * BigInt(line.quantity);
+          const options = BigInt(line.optionsTotalMinor ?? '0');
+          const lineTotal = unit * BigInt(line.quantity) + options;
           return (
             <li
-              key={line.variantId}
+              key={key}
               className="flex gap-4 rounded-[var(--radius-lg)] border border-border bg-surface p-3 transition-colors hover:border-border-strong sm:gap-5 sm:p-4"
             >
               <Link
@@ -95,6 +101,14 @@ export function CartView() {
                     {line.variantName ? (
                       <p className="sf-small mt-1 text-muted">{line.variantName}</p>
                     ) : null}
+                    {line.optionValueIds && line.optionValueIds.length > 0 ? (
+                      <p className="sf-small mt-1 text-muted">
+                        С доп. опциями
+                        {options > 0n
+                          ? ` (+${formatPriceFromMinor(options.toString())})`
+                          : ''}
+                      </p>
+                    ) : null}
                   </div>
                   <p className="sf-price shrink-0 text-brand">
                     {formatPriceFromMinor(lineTotal.toString())}
@@ -116,9 +130,7 @@ export function CartView() {
                       className="inline-flex h-10 w-10 items-center justify-center rounded-full text-lg text-foreground transition hover:bg-brand-soft"
                       aria-label="Меньше"
                       onClick={() =>
-                        update(
-                          setCartQuantity(cart, line.variantId, Math.max(1, line.quantity - 1)),
-                        )
+                        update(setCartQuantity(cart, key, Math.max(1, line.quantity - 1)))
                       }
                     >
                       −
@@ -132,9 +144,7 @@ export function CartView() {
                       aria-label="Больше"
                       disabled={line.quantity >= 20}
                       onClick={() =>
-                        update(
-                          setCartQuantity(cart, line.variantId, Math.min(20, line.quantity + 1)),
-                        )
+                        update(setCartQuantity(cart, key, Math.min(20, line.quantity + 1)))
                       }
                     >
                       +
@@ -146,7 +156,7 @@ export function CartView() {
                     className="sf-small rounded-full px-3 py-2 text-muted transition hover:bg-accent-soft hover:text-accent"
                     onClick={() => {
                       trackEvent('remove_from_cart', { variantId: line.variantId });
-                      update(removeFromCart(cart, line.variantId));
+                      update(removeFromCart(cart, key));
                     }}
                   >
                     Удалить

@@ -502,10 +502,50 @@ export class ProductsService {
           compositionPrecision: productKindNeedsComposition(source.productKind)
             ? source.compositionPrecision
             : 'UNKNOWN',
+          compositionPrimaryComplete: source.compositionPrimaryComplete,
+          compositionText: source.compositionText,
           // diameterCm: copy for data continuity until column drop migration.
           diameterCm: source.diameterCm,
         },
       });
+
+      if ((source.optionGroups?.length ?? 0) > 0) {
+        const newVariants = await tx.productVariant.findMany({
+          where: { productId: product.id },
+          select: { id: true, sortOrder: true, name: true },
+          orderBy: { sortOrder: 'asc' },
+        });
+        const oldVariants = [...source.variants].sort((a, b) => a.sortOrder - b.sortOrder);
+        const variantIdMap = new Map<string, string>();
+        for (let i = 0; i < oldVariants.length; i += 1) {
+          const mapped = newVariants[i];
+          if (oldVariants[i] && mapped) variantIdMap.set(oldVariants[i]!.id, mapped.id);
+        }
+        await this.products.replaceOptionGroups(
+          product.id,
+          source.optionGroups.map((group, groupIndex) => ({
+            name: group.name,
+            selection: group.selection,
+            required: group.required,
+            sortOrder: group.sortOrder ?? groupIndex,
+            values: group.values.map((value, valueIndex) => ({
+              name: value.name,
+              surchargeMinor: value.surchargeMinor,
+              chargeMode: value.chargeMode,
+              sortOrder: value.sortOrder ?? valueIndex,
+              active: value.active,
+              variantSurcharges: value.variantPrices
+                .map((row) => {
+                  const nextVariantId = variantIdMap.get(row.variantId);
+                  if (!nextVariantId) return null;
+                  return { variantId: nextVariantId, surchargeMinor: row.surchargeMinor };
+                })
+                .filter((row): row is { variantId: string; surchargeMinor: bigint } => row != null),
+            })),
+          })),
+          tx,
+        );
+      }
 
       await this.products.replaceOccasions(
         product.id,
@@ -689,7 +729,22 @@ export class ProductsService {
         ? (input.compositionPrecision ??
           (componentsForSave.length === 0 ? 'UNKNOWN' : product.compositionPrecision))
         : 'UNKNOWN',
+      compositionPrimaryComplete: needsComposition
+        ? (input.compositionPrimaryComplete ?? product.compositionPrimaryComplete)
+        : false,
     });
+
+    if (needsComposition && normalizedComposition.compositionPrecision === 'DESCRIPTIVE') {
+      const text =
+        input.compositionText === undefined
+          ? product.compositionText
+          : trimmedOrNull(input.compositionText);
+      if (!text && normalizedComposition.rows.length === 0) {
+        throw new BadRequestException(
+          'Для описательного состава укажите текст или строки состава',
+        );
+      }
+    }
 
     await this.prisma.client.$transaction(async (tx) => {
       const resolvedCategoryId = await this.resolveEditorCatalogCategoryId(
@@ -719,6 +774,14 @@ export class ProductsService {
         compositionPrecision: needsComposition
           ? normalizedComposition.compositionPrecision
           : 'UNKNOWN',
+        compositionPrimaryComplete: needsComposition
+          ? normalizedComposition.compositionPrimaryComplete
+          : false,
+        compositionText: needsComposition
+          ? input.compositionText === undefined
+            ? product.compositionText
+            : trimmedOrNull(input.compositionText)
+          : null,
         seoTitle: trimmedOrNull(input.seoTitle ?? null),
         seoDescription: trimmedOrNull(input.seoDescription ?? null),
         noIndex: input.noIndex,
@@ -762,6 +825,44 @@ export class ProductsService {
       );
 
       await this.products.replaceComponents(id, normalizedComposition.rows, tx);
+
+      if (input.optionGroups !== undefined) {
+        const variantIds = new Set(
+          (
+            await tx.productVariant.findMany({
+              where: { productId: id },
+              select: { id: true },
+            })
+          ).map((row) => row.id),
+        );
+        await this.products.replaceOptionGroups(
+          id,
+          input.optionGroups.map((group, groupIndex) => ({
+            name: group.name.trim(),
+            selection: group.selection ?? 'SINGLE',
+            required: group.required ?? false,
+            sortOrder: group.sortOrder ?? groupIndex,
+            values: group.values.map((value, valueIndex) => {
+              const surchargeMinor = BigInt(value.surchargeMinor);
+              const variantSurcharges = Object.entries(value.variantSurcharges ?? {})
+                .filter(([variantId]) => variantIds.has(variantId))
+                .map(([variantId, minor]) => ({
+                  variantId,
+                  surchargeMinor: BigInt(minor),
+                }));
+              return {
+                name: value.name.trim(),
+                surchargeMinor: surchargeMinor < 0n ? 0n : surchargeMinor,
+                chargeMode: value.chargeMode ?? 'PER_LINE',
+                sortOrder: value.sortOrder ?? valueIndex,
+                active: value.active ?? true,
+                variantSurcharges,
+              };
+            }),
+          })),
+          tx,
+        );
+      }
 
       await this.products.replaceOccasions(id, input.occasionIds, tx);
       await this.products.replaceRecipients(id, input.recipientIds, tx);
@@ -835,6 +936,8 @@ export class ProductsService {
     );
     const normalizedComposition = await this.normalizeCompositionComponents(input.components, {
       previouslyAssignedFlowerItemIds: previousFlowerItemIds,
+      compositionPrecision: product.compositionPrecision,
+      compositionPrimaryComplete: product.compositionPrimaryComplete,
     });
     const compositionKind = resolveStoredCompositionKind(
       product.productKind,
@@ -845,6 +948,7 @@ export class ProductsService {
       await this.guardVersion(tx, id, input.expectedVersion, {
         compositionKind,
         compositionPrecision: normalizedComposition.compositionPrecision,
+        compositionPrimaryComplete: normalizedComposition.compositionPrimaryComplete,
       });
       await this.products.replaceComponents(id, normalizedComposition.rows, tx);
       await this.recordAudit(tx, actor, 'PRODUCT_UPDATED', id, {
@@ -1495,6 +1599,7 @@ export class ProductsService {
     options?: {
       previouslyAssignedFlowerItemIds?: ReadonlySet<string>;
       compositionPrecision?: CompositionPrecision;
+      compositionPrimaryComplete?: boolean;
     },
   ): Promise<{
     rows: Array<{
@@ -1508,11 +1613,32 @@ export class ProductsService {
     }>;
     compositionKind: 'MONO' | 'MIXED' | 'UNKNOWN';
     compositionPrecision: CompositionPrecision;
+    compositionPrimaryComplete: boolean;
   }> {
     const previous = options?.previouslyAssignedFlowerItemIds ?? new Set<string>();
     const precision: CompositionPrecision =
       options?.compositionPrecision ??
       (components.length === 0 ? 'UNKNOWN' : 'EXACT');
+    // Completeness policy: never assume true for legacy/omitted data.
+    // EXACT implies a full recipe; DESCRIPTIVE/UNKNOWN do not use the flag for classification.
+    const primaryListComplete =
+      precision === 'EXACT'
+        ? true
+        : precision === 'DESCRIPTIVE' || precision === 'UNKNOWN'
+          ? false
+          : (options?.compositionPrimaryComplete ?? false);
+
+    if (precision === 'EXACT' && components.length === 0) {
+      throw new BadRequestException('При точном составе добавьте хотя бы одну строку');
+    }
+    if (precision === 'DESCRIPTIVE' && components.length === 0) {
+      return {
+        rows: [],
+        compositionKind: 'UNKNOWN',
+        compositionPrecision: 'DESCRIPTIVE',
+        compositionPrimaryComplete: false,
+      };
+    }
 
     const normalized = components.map((component, index) => {
       let flowerItemId: string;
@@ -1586,9 +1712,15 @@ export class ProductsService {
         role: row.role,
         typeId: typeByItem.get(row.flowerItemId) ?? null,
       })),
+      { precision, primaryListComplete },
     );
 
-    return { rows: rowsWithColor, compositionKind, compositionPrecision: precision };
+    return {
+      rows: rowsWithColor,
+      compositionKind,
+      compositionPrecision: precision,
+      compositionPrimaryComplete: primaryListComplete,
+    };
   }
 
   /**

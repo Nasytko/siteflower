@@ -94,6 +94,15 @@ export default async function OrderTrackingPage({ params }: Props) {
                   <p className="sf-small text-muted">
                     {item.variantName} · × {item.quantity}
                   </p>
+                  {item.optionsSnapshot && item.optionsSnapshot.length > 0 ? (
+                    <ul className="mt-1 space-y-0.5 text-xs text-muted">
+                      {item.optionsSnapshot.map((opt) => (
+                        <li key={opt.valueId}>
+                          {opt.groupName}: {opt.valueName}
+                        </li>
+                      ))}
+                    </ul>
+                  ) : null}
                 </div>
                 <p className="sf-small shrink-0 tabular-nums">
                   {formatPriceFromMinor(item.lineTotalMinor, item.currency)}

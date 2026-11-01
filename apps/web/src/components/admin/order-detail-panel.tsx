@@ -273,6 +273,11 @@ export function OrderDetailPanel({
                 </div>
                 <p className="tabular-nums">
                   {formatPriceFromMinor(item.lineTotalMinor, item.currency)}
+                  {item.optionsSnapshot && item.optionsSnapshot.length > 0 ? (
+                    <div className="text-xs text-[var(--admin-muted)]">
+                      {item.optionsSnapshot.map((o) => o.valueName).join(', ')}
+                    </div>
+                  ) : null}
                 </p>
               </li>
             );

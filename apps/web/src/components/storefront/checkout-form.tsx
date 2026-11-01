@@ -116,6 +116,7 @@ export function CheckoutForm() {
                 productId: i.productId,
                 variantId: i.variantId,
                 quantity: i.quantity,
+                ...(i.optionValueIds?.length ? { optionValueIds: i.optionValueIds } : {}),
               })),
               priorUnitPrices: c.items
                 .filter((i) => i.unitPriceMinor)
@@ -176,6 +177,7 @@ export function CheckoutForm() {
         productId: i.productId,
         variantId: i.variantId,
         quantity: i.quantity,
+        ...(i.optionValueIds?.length ? { optionValueIds: i.optionValueIds } : {}),
       })),
       fulfillmentType,
       purchaserName,
@@ -577,17 +579,25 @@ export function CheckoutForm() {
         <ul className="space-y-3">
           {(validated?.items ?? []).length > 0
             ? validated!.items.map((line) => (
-                <li key={line.variantId} className="sf-small">
+                <li
+                  key={`${line.variantId}:${(line.optionsSnapshot ?? []).map((o) => o.valueId).join(',')}`}
+                  className="sf-small"
+                >
                   <span className="font-medium text-foreground">
                     {line.productName} · {line.variantName}
                   </span>
+                  {line.optionsSnapshot && line.optionsSnapshot.length > 0 ? (
+                    <span className="mt-0.5 block text-muted">
+                      {line.optionsSnapshot.map((o) => o.valueName).join(', ')}
+                    </span>
+                  ) : null}
                   <span className="mt-0.5 block text-muted">
                     × {line.quantity} · {formatPriceFromMinor(line.lineTotalMinor)}
                   </span>
                 </li>
               ))
             : cart.items.map((line) => (
-                <li key={line.variantId} className="sf-small">
+                <li key={`${line.variantId}:${(line.optionValueIds ?? []).join(',')}`} className="sf-small">
                   <span className="font-medium text-foreground">
                     {line.productName ?? 'Букет'} · {line.variantName ?? ''}
                   </span>
