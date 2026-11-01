@@ -148,6 +148,71 @@ table_exists_prod() { return 1; }
 preflight_check_migration_conflicts || fail "real migration tree should pass conflict check"
 pass "preflight_check_migration_conflicts on real tree"
 
+# Active-failed predicate must ignore historical rolled_back rows.
+echo "$PREFLIGHT_PRISMA_ACTIVE_FAILED_SQL" | grep -q 'finished_at IS NULL AND rolled_back_at IS NULL' \
+  || fail "active-failed SQL must require both NULLs"
+echo "$PREFLIGHT_PRISMA_ACTIVE_FAILED_SQL" | grep -Eq 'finished_at IS NULL OR|OR rolled_back_at' \
+  && fail "active-failed SQL must not use legacy OR rolled_back predicate"
+pass "PREFLIGHT_PRISMA_ACTIVE_FAILED_SQL predicate"
+
+# Stub _prisma_migrations presence; preflight_psql_prod returns fixture counts.
+table_exists_prod() { [[ "$1" == "_prisma_migrations" ]]; }
+_assert_active_failed_sql() {
+  local sql="$1"
+  [[ "$sql" == "$PREFLIGHT_PRISMA_ACTIVE_FAILED_SQL" ]] \
+    || fail "unexpected migration SQL: $sql"
+}
+
+# failed: finished_at NULL, rolled_back_at NULL → block
+preflight_psql_prod() {
+  _assert_active_failed_sql "$1"
+  echo "1"
+}
+if ( preflight_check_migration_conflicts ) 2>/dev/null; then
+  fail "active failed migration row must block deploy"
+fi
+pass "active failed migration blocks"
+
+# rolled-back only (finished_at NULL, rolled_back_at set) → count 0 → allow
+preflight_psql_prod() {
+  _assert_active_failed_sql "$1"
+  echo "0"
+}
+preflight_check_migration_conflicts || fail "historical rolled-back row alone must not block"
+pass "historical rolled-back migration allowed"
+
+# successfully re-applied: rolled-back row + finished row → active failed count 0 → allow
+preflight_psql_prod() {
+  _assert_active_failed_sql "$1"
+  echo "0"
+}
+preflight_check_migration_conflicts || fail "re-applied migration (rolled-back + finished) must not block"
+pass "successfully re-applied migration allowed"
+
+# unavailable DB / failed query → fail closed
+preflight_psql_prod() {
+  echo "psql: could not connect to server" >&2
+  return 2
+}
+if ( preflight_check_migration_conflicts ) 2>/dev/null; then
+  fail "unavailable DB must fail closed"
+fi
+pass "unavailable DB fails closed"
+
+# non-numeric / empty response → fail closed
+preflight_psql_prod() {
+  _assert_active_failed_sql "$1"
+  echo ""
+}
+if ( preflight_check_migration_conflicts ) 2>/dev/null; then
+  fail "empty migration count must fail closed"
+fi
+pass "empty migration count fails closed"
+
+# restore stub: no prod table (folder checks only)
+table_exists_prod() { return 1; }
+unset -f preflight_psql_prod 2>/dev/null || true
+
 release_requires_erp_sku_registry || fail "04A migration folder must be detected in checkout"
 pass "release_requires_erp_sku_registry detects Task 04A"
 

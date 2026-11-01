@@ -130,7 +130,11 @@ preflight_migration_status() {
   fi
 }
 
-# Fail closed on failed/rolled-back Prisma rows or duplicate migration folder names in the checkout.
+# Active failed Prisma row: started but neither finished nor rolled back.
+# Historical rolled_back_at rows (often paired with a later successful apply) are OK.
+PREFLIGHT_PRISMA_ACTIVE_FAILED_SQL="SELECT count(*)::int FROM _prisma_migrations WHERE finished_at IS NULL AND rolled_back_at IS NULL"
+
+# Fail closed on active failed Prisma rows or duplicate migration folder names in the checkout.
 preflight_check_migration_conflicts() {
   local root
   root="$(repo_root)"
@@ -158,10 +162,13 @@ preflight_check_migration_conflicts() {
 
   if table_exists_prod "_prisma_migrations"; then
     local failed
-    failed="$(preflight_psql_prod "SELECT count(*)::int FROM _prisma_migrations WHERE finished_at IS NULL OR rolled_back_at IS NOT NULL")"
+    failed="$(preflight_psql_prod "${PREFLIGHT_PRISMA_ACTIVE_FAILED_SQL}")"
     failed="$(echo "$failed" | tr -d '[:space:]')"
+    if [[ -z "$failed" || ! "$failed" =~ ^[0-9]+$ ]]; then
+      die "Production _prisma_migrations query failed or returned non-numeric count — resolve DB access before deploy"
+    fi
     if [[ "$failed" != "0" ]]; then
-      die "Production _prisma_migrations has ${failed} unfinished/rolled-back row(s) — resolve before deploy"
+      die "Production _prisma_migrations has ${failed} failed/unfinished row(s) (finished_at IS NULL AND rolled_back_at IS NULL) — resolve before deploy"
     fi
   fi
 }
