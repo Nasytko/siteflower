@@ -271,6 +271,37 @@ verify_checkout_migrations_applied_db "shopbuket1_preflight_test" "unit" \
   || fail "all finished must pass"
 pass "successful rehearsal: all checkout migrations finished"
 
+# Regression: docker/compose stealing stdin must not stop after 1 migration
+# (historical "finished migration count 1 != checkout 41").
+MANY="$TMP/many-migrations"
+mkdir -p "$MANY"
+printf 'provider = "postgresql"\n' >"$MANY/migration_lock.toml"
+for i in $(seq 1 41); do
+  d="$MANY/$(printf '20260101%06d_m%d' "$i" "$i")"
+  mkdir -p "$d"
+  echo "SELECT ${i};" >"$d/migration.sql"
+done
+checkout_prisma_migrations_dir() { printf '%s\n' "$MANY"; }
+QUERY_COUNT_FILE="$TMP/psql-query-count"
+printf '0\n' >"$QUERY_COUNT_FILE"
+preflight_psql_db() {
+  # Consume all stdin like a process that steals the caller's feed.
+  cat >/dev/null || true
+  # File counter — command substitution runs in a subshell.
+  local c
+  c="$(tr -d '[:space:]' <"$QUERY_COUNT_FILE")"
+  printf '%s\n' "$((c + 1))" >"$QUERY_COUNT_FILE"
+  echo "1"
+}
+verify_checkout_migrations_applied_db "shopbuket1_preflight_test" "unit" \
+  || fail "41 migrations must all verify even if psql steals stdin"
+[[ "$(tr -d '[:space:]' <"$QUERY_COUNT_FILE")" -eq 41 ]] \
+  || fail "expected 41 psql queries, got $(cat "$QUERY_COUNT_FILE")"
+pass "verify_checkout_migrations_applied_db survives stdin-stealing psql (41)"
+
+# restore fake 2-mig checkout for later tests
+checkout_prisma_migrations_dir() { printf '%s\n' "$FAKE_MIG"; }
+
 # invalidate prior PASS on re-run
 rev_file="$(write_preflight_report "$REV" "PASS" "$TMP/demo.dump" "shopbuket1_preflight_aaaaaaaaaaaa" '{"products":1}' "3" "")"
 mkdir -p "$TMP"

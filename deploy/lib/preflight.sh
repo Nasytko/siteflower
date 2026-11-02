@@ -63,9 +63,10 @@ preflight_postgres_ready() {
 }
 
 # Run SQL against the production DB name (read-only queries only by convention).
+# stdin from /dev/null — docker/compose must not consume caller loops' stdin.
 preflight_psql_prod() {
   compose exec -T postgres \
-    psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB" -tAc "$1"
+    psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB" -tAc "$1" </dev/null
 }
 
 # Run SQL against an isolated rehearsal DB.
@@ -74,7 +75,7 @@ preflight_psql_db() {
   local sql="$2"
   assert_preflight_db_name "$db"
   compose exec -T postgres \
-    psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$db" -tAc "$sql"
+    psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$db" -tAc "$sql" </dev/null
 }
 
 assert_preflight_db_name() {

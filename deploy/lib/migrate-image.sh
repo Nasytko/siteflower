@@ -61,15 +61,19 @@ checkout_migration_manifest() {
 }
 
 checkout_migration_names() {
-  local dir
+  local dir d
   dir="$(checkout_prisma_migrations_dir)"
-  find "$dir" -mindepth 1 -maxdepth 1 -type d \
-    | while IFS= read -r d; do basename "$d"; done \
-    | LC_ALL=C sort
+  # Avoid `find | while` pipelines — callers may run docker/compose inside loops.
+  for d in "$dir"/*/; do
+    [[ -d "$d" ]] || continue
+    basename "${d%/}"
+  done | LC_ALL=C sort
 }
 
 checkout_migration_count() {
-  checkout_migration_names | grep -c . || true
+  local -a names=()
+  mapfile -t names < <(checkout_migration_names)
+  printf '%s\n' "${#names[@]}"
 }
 
 docker_image_id() {
@@ -331,18 +335,23 @@ ensure_release_api_image() {
 }
 
 # After migrate: every checkout migration folder must have a finished _prisma_migrations row.
+# Names are loaded via mapfile BEFORE any docker/psql call — a while-read loop over
+# process substitution was observed to stop after 1 row when compose/docker consumed stdin
+# ("finished migration count 1 != checkout 41").
 verify_checkout_migrations_applied_db() {
   local db="$1"
   local label="${2:-rehearsal}"
   local name n fails=0 expected_n checked=0
-  expected_n="$(checkout_migration_count)"
-  expected_n="$(echo "$expected_n" | tr -d '[:space:]')"
-  [[ "$expected_n" =~ ^[1-9][0-9]*$ ]] || die "checkout migration count unavailable"
-  while IFS= read -r name; do
+  local -a names=()
+  mapfile -t names < <(checkout_migration_names)
+  expected_n="${#names[@]}"
+  [[ "$expected_n" -ge 1 ]] || die "checkout migration list empty"
+  for name in "${names[@]}"; do
     [[ -n "$name" ]] || continue
     [[ "$name" =~ ^[0-9]{14}_[A-Za-z0-9_]+$ ]] \
       || die "Unsafe migration folder name: $name"
-    n="$(preflight_psql_db "$db" "SELECT count(*)::int FROM _prisma_migrations WHERE migration_name='${name}' AND finished_at IS NOT NULL")"
+    # stdin closed so docker/compose cannot steal the name list
+    n="$(preflight_psql_db "$db" "SELECT count(*)::int FROM _prisma_migrations WHERE migration_name='${name}' AND finished_at IS NOT NULL" </dev/null)"
     n="$(echo "$n" | tr -d '[:space:]')"
     # count>=1: re-applied history may leave rolled_back + finished rows.
     if [[ ! "$n" =~ ^[1-9][0-9]*$ ]]; then
@@ -351,8 +360,8 @@ verify_checkout_migrations_applied_db() {
     else
       checked=$((checked + 1))
     fi
-  done < <(checkout_migration_names)
-  if [[ "$checked" -ne "$expected_n" && "$fails" -eq 0 ]]; then
+  done
+  if [[ "$checked" -ne "$expected_n" ]]; then
     log "FAIL ${label}: finished migration count ${checked} != checkout ${expected_n}"
     fails=1
   fi

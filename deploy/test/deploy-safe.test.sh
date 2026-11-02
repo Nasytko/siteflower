@@ -26,6 +26,7 @@ mkdir -p "$SHOPBUKET1_STATE_DIR" "$SHOPBUKET1_BACKUP_DIR" "$SHOPBUKET1_RELEASES_
 # --- help / dry-run entrypoints (no env file required) ---
 out="$(bash "${ROOT}/deploy.sh" --help 2>&1)" || fail "deploy.sh --help"
 echo "$out" | grep -q "production" || fail "help must mention production"
+echo "$out" | grep -q "staging" || fail "help must mention staging"
 pass "deploy.sh --help"
 
 out="$(bash "${ROOT}/deploy.sh" --dry-run 2>&1)" || fail "deploy.sh --dry-run"
@@ -37,6 +38,22 @@ out="$(bash "${ROOT}/deploy.sh" production --dry-run 2>&1)" || fail "deploy.sh p
 echo "$out" | grep -qi "DRY-RUN" || fail "production dry-run banner missing"
 echo "$out" | grep -qi "read-only\|no changes\|DRY-RUN complete" || fail "production dry-run must state read-only/complete"
 pass "deploy.sh production --dry-run"
+
+out="$(bash "${ROOT}/deploy.sh" staging --dry-run 2>&1)" || fail "deploy.sh staging --dry-run"
+echo "$out" | grep -qi "DRY-RUN" || fail "staging dry-run banner missing"
+echo "$out" | grep -qi "staging" || fail "staging dry-run must name staging"
+echo "$out" | grep -qi "SKIPPED\|no isolated\|Rehearsal DB" || fail "staging dry-run must skip isolated rehearsal"
+echo "$out" | grep -qi "backup\|staging-pre-migrate\|mandatory" || fail "staging dry-run must require backup"
+echo "$out" | grep -qi "manifest\|SITEFLOWER_GIT_SHA\|Migrate image" || fail "staging dry-run must require image verify"
+echo "$out" | grep -qi "Forbidden" || fail "staging dry-run must document forbidden ops"
+echo "$out" | grep -E '^[ ]*[0-9]+\..*(migrate reset|db push|DROP DATABASE|volume prune)' \
+  && fail "staging planned stages must not include forbidden ops"
+pass "deploy.sh staging --dry-run"
+
+rc=0
+bash "${ROOT}/deploy.sh" staging --cleanup-plan "${ROOT}/deploy/cleanup-plans/task05-seo-landing-drop.v1.json" --dry-run >/dev/null 2>&1 || rc=$?
+[[ "$rc" -ne 0 ]] || fail "staging must reject --cleanup-plan"
+pass "staging rejects --cleanup-plan"
 
 out="$(bash "${ROOT}/scripts/release.sh" --help 2>&1)" || fail "release.sh --help"
 echo "$out" | grep -q "restore-test" || fail "help must list restore-test"

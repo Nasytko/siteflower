@@ -1,13 +1,15 @@
 #!/usr/bin/env bash
 # shopbuket1 — normal application deployment (does NOT reinstall the VPS).
 # Usage:
-#   ./deploy.sh production [--dry-run] [git-ref]   # recommended one-command path
+#   ./deploy.sh staging [--dry-run] [git-ref]      # VPS/dev-staging: backup + migrate + switch (no rehearsal DB)
+#   ./deploy.sh production [--dry-run] [git-ref]   # future production: preflight rehearsal then deploy
 #   ./deploy.sh [--dry-run] [git-ref]              # direct deploy (prefer release preflight)
 #   ./deploy.sh --help
 #
 # Never runs docker system prune --volumes.
 # Never deletes erpbuket1 or other non-shopbuket1 Docker resources.
 # Never auto-rolls back PostgreSQL.
+# Never prisma migrate reset / db push / DROP DATABASE.
 
 set -euo pipefail
 
@@ -31,6 +33,7 @@ REF=""
 CLEANUP_PLAN=""
 while [[ $# -gt 0 ]]; do
   case "$1" in
+    staging) MODE="staging"; shift ;;
     production) MODE="production"; shift ;;
     --dry-run) DRY_RUN=1; shift ;;
     --cleanup-plan)
@@ -41,15 +44,19 @@ while [[ $# -gt 0 ]]; do
     -h|--help|help)
       cat <<'EOF'
 Usage:
+  ./deploy.sh staging [--dry-run] [git-ref]
   ./deploy.sh production [--dry-run] [git-ref]
   ./deploy.sh production --cleanup-plan <approved-plan.json> [git-ref]
   ./deploy.sh [--dry-run] [git-ref]
 
-production     — safe one-command path: preflight (backup + migrate rehearsal) then deploy
+staging        — update current VPS/dev stack: backup + verified SHA image + migrate on
+                 current DB + switch api/web (NO isolated rehearsal DB)
+production     — future prod path: preflight rehearsal then deploy (strict)
 --cleanup-plan — deep cleanup: only a prepared+approved plan's migrations (never ad-hoc DROP)
 --dry-run      — print current/target SHA and planned stages; no mutate
 <git-ref>      — optional explicit commit SHA / tag / branch (validated)
 
+Forbidden: prisma migrate reset, db push, DROP DATABASE, docker volume prune.
 Also see: ./scripts/release.sh {preflight|deploy|status|releases|restore-test|rollback}
 EOF
       exit 0
@@ -250,8 +257,9 @@ build_images() {
 }
 
 backup_before_migrate() {
-  log "Taking pre-migrate PostgreSQL backup"
-  "$SCRIPT_DIR/backup.sh" "pre-migrate"
+  local label="${1:-pre-migrate}"
+  log "Taking pre-migrate PostgreSQL backup (label=${label})"
+  "$SCRIPT_DIR/backup.sh" "$label"
 }
 
 migrate() {
@@ -411,8 +419,90 @@ EOF
   log "DRY-RUN complete — no changes made"
 }
 
+cmd_dry_run_staging() {
+  log "=== DRY-RUN (staging path) — strictly read-only ==="
+  local current target
+  current="$(git -C "$SCRIPT_DIR" rev-parse HEAD 2>/dev/null || echo unknown)"
+  target="$(peek_target_sha)"
+  target="${target//$'\r'/}"
+  log "Current HEAD:  ${current}"
+  log "Target commit: ${target}"
+  log "Env file:      ${SHOPBUKET1_ENV_FILE}"
+  log "Migrate image: shopbuket1-api:${target:0:12} (OCI git SHA + migration manifest required)"
+  log "Rehearsal DB:  SKIPPED on staging (migrate runs on current POSTGRES_DB after backup)"
+  cat <<EOF >&2
+Planned staging stages for ./deploy.sh staging ${REF:-}:
+  1. flock ${SHOPBUKET1_LOCK_FILE}
+  2. validate ${SHOPBUKET1_ENV_FILE} + Nginx/domain preflight
+  3. resolve/checkout ${target}
+  4. build/reuse shopbuket1-api:<sha12> with SITEFLOWER_GIT_SHA + migration manifest check
+  5. build shopbuket1-web:<sha12>
+  6. ./backup.sh staging-pre-migrate (mandatory)
+  7. prisma migrate deploy on CURRENT staging DB via pinned immutable image id
+  8. verify live schema (erp_sku + required migrations)
+  9. recreate api/web; startup + healthchecks
+ 10. write release metadata; prune old shopbuket1 images
+Skipped vs production: isolated shopbuket1_preflight_* rehearsal DB.
+Forbidden: migrate reset, db push, DROP DATABASE, volume prune, auto PG rollback.
+Dry-run itself performs none of the stages above.
+EOF
+  log "DRY-RUN complete — no changes made"
+}
+
+# Staging/dev VPS path: same compose stack + current DB; no isolated rehearsal.
+cmd_staging() {
+  log "Stage: staging deploy (no isolated rehearsal DB)"
+  acquire_lock
+  require_docker_access
+  [[ -f "$SHOPBUKET1_ENV_FILE" ]] || die "Missing $SHOPBUKET1_ENV_FILE — run sudo ./install.sh and edit secrets"
+  validate_production_env
+  preflight_storefront
+  remember_previous_images
+
+  local rev
+  rev="$(resolve_ref)"
+  rev="${rev//$'\r'/}"
+  rev="$(printf '%s' "$rev" | tr -d '\n')"
+  [[ "$rev" =~ ^[0-9a-f]{40}$ ]] || die "resolve_ref returned invalid revision: ${rev}"
+  log "Staging revision ${rev}"
+
+  tag_images "$rev"
+  # Build/verify API image from target SHA (manifest + OCI label). No rehearsal DB.
+  ensure_release_api_image "$rev"
+  PREFLIGHT_PINNED_API_IMAGE_ID="${SHOPBUKET1_API_IMAGE_ID}"
+  [[ -n "$PREFLIGHT_PINNED_API_IMAGE_ID" ]] || die "Staging API image was not pinned"
+  log "Stage: build images (reuse pinned API id=${PREFLIGHT_PINNED_API_IMAGE_ID})"
+  build_images
+
+  compose up -d postgres
+  local i
+  for i in $(seq 1 30); do
+    if docker inspect -f '{{.State.Health.Status}}' shopbuket1-postgres 2>/dev/null | grep -qx healthy; then
+      break
+    fi
+    sleep 2
+  done
+
+  log "Stage: mandatory staging DB backup before migrate"
+  backup_before_migrate "staging-pre-migrate"
+  # Migrate current staging DB while DEPLOY_STARTED=0 (running api/web unchanged on failure).
+  migrate
+  post_migrate_verify
+
+  DEPLOY_STARTED=1
+  bring_up
+  wait_startup_ready
+  wait_production_healthy
+
+  write_release_metadata "$rev" "$NEW_API_IMAGE" "$NEW_WEB_IMAGE"
+  prune_release_metadata
+  prune_old_shopbuket1_images
+
+  log "Staging deploy succeeded: $rev (image=${NEW_API_IMAGE} id=${SHOPBUKET1_API_IMAGE_ID:-})"
+}
+
 main() {
-  # Recommended one-command path delegates to release.sh (preflight + deploy).
+  # Future production path: strict preflight rehearsal then deploy.
   if [[ "$MODE" == "production" ]]; then
     if [[ -n "${CLEANUP_PLAN}" ]]; then
       export SHOPBUKET1_CLEANUP_PLAN="$CLEANUP_PLAN"
@@ -422,7 +512,18 @@ main() {
     fi
     exec bash "${SCRIPT_DIR}/scripts/release.sh" production ${REF:+"$REF"}
   fi
-  if [[ -n "${CLEANUP_PLAN}" && "$MODE" != "production" ]]; then
+
+  if [[ "$MODE" == "staging" ]]; then
+    [[ -z "${CLEANUP_PLAN}" ]] || die "--cleanup-plan is only valid with: ./deploy.sh production --cleanup-plan <plan>"
+    if [[ "$DRY_RUN" -eq 1 ]]; then
+      cmd_dry_run_staging
+      exit 0
+    fi
+    cmd_staging
+    exit 0
+  fi
+
+  if [[ -n "${CLEANUP_PLAN}" ]]; then
     die "--cleanup-plan is only valid with: ./deploy.sh production --cleanup-plan <plan>"
   fi
 
