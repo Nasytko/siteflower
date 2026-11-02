@@ -224,21 +224,13 @@ preflight_restore_dump() {
 preflight_migrate_rehearsal() {
   local db="$1"
   assert_preflight_db_name "$db"
-  local enc url image
+  local enc url
   enc="$(urlencode "$POSTGRES_PASSWORD")"
   url="postgresql://${POSTGRES_USER}:${enc}@postgres:5432/${db}?schema=public"
   [[ "$url" == *"/${db}?"* ]] || die "Rehearsal DATABASE_URL must target ${db}"
   [[ "$url" != *"/${POSTGRES_DB}?"* ]] || die "Refusing rehearsal URL that targets production DB name"
-  image="${SHOPBUKET1_API_IMAGE:-}"
-  [[ -n "$image" ]] || die "SHOPBUKET1_API_IMAGE unset — call ensure_release_api_image before rehearsal migrate"
-  [[ "$image" != "shopbuket1-api:local" ]] \
-    || die "Refusing rehearsal migrate via unverified shopbuket1-api:local — use SHA-tagged image"
-  assert_image_migrations_match_checkout "$image"
-  log "Applying prisma migrate deploy on isolated DB ${db} via ${image}"
-  compose run --rm --no-deps \
-    -e "DATABASE_URL=${url}" \
-    api \
-    sh -lc 'cd /app/node_modules/@bouquet-one/database && exec /app/node_modules/.bin/prisma migrate deploy'
+  log "Applying prisma migrate deploy on isolated DB ${db} via pinned id=${SHOPBUKET1_API_IMAGE_ID:-}"
+  compose_migrate_with_pinned_api_image "$url"
 }
 
 # True when the checkout includes Task 04A ERP SKU migration (fail-closed gate).
@@ -350,6 +342,7 @@ verify_live_schema_state() {
 
 preflight_verify_rehearsal() {
   local db="$1"
+  local inventory_json="${2:-}"
   assert_preflight_db_name "$db"
   local table n fails=0
   for table in products catalog_categories orders slug_redirects; do
@@ -383,6 +376,12 @@ preflight_verify_rehearsal() {
   # Every checkout migration must be finished after rehearsal migrate.
   if declare -F verify_checkout_migrations_applied_db >/dev/null 2>&1; then
     if ! verify_checkout_migrations_applied_db "$db" "rehearsal"; then
+      fails=1
+    fi
+  fi
+  # Row counts for critical tables must match production baseline inventory.
+  if [[ -n "$inventory_json" ]] && declare -F preflight_assert_inventory_preserved >/dev/null 2>&1; then
+    if ! preflight_assert_inventory_preserved "$db" "$inventory_json" "rehearsal"; then
       fails=1
     fi
   fi
@@ -464,7 +463,9 @@ write_preflight_report() {
   "rehearsal_db": "$(printf '%s' "$rehearsal_db" | sed 's/"/\\"/g')",
   "production_db": "$(printf '%s' "$POSTGRES_DB" | sed 's/"/\\"/g')",
   "migrations_applied_count": ${migrations_applied:-0},
-  "migrate_image": "$(printf '%s' "${SHOPBUKET1_API_IMAGE:-}" | sed 's/"/\\"/g')",
+  "migrate_image": "$(printf '%s' "${SHOPBUKET1_API_IMAGE_TAG:-${SHOPBUKET1_API_IMAGE:-}}" | sed 's/"/\\"/g')",
+  "migrate_image_id": "$(printf '%s' "${SHOPBUKET1_API_IMAGE_ID:-}" | sed 's/"/\\"/g')",
+  "migrate_git_sha": "$(printf '%s' "${SHOPBUKET1_API_IMAGE_GIT_SHA:-$rev}" | sed 's/"/\\"/g')",
   "inventory": ${inventory_json},
   "reason": "$(printf '%s' "$reason" | sed 's/"/\\"/g')"
 }
@@ -474,6 +475,32 @@ EOF
   printf '%s\n' "$file" >"${SHOPBUKET1_PREFLIGHT_DIR}/latest"
   log "Preflight report: $file (status=${status})"
   printf '%s\n' "$file"
+}
+
+# Invalidate a prior PASS so a re-run preflight cannot leave deploy trusting a stale report.
+invalidate_preflight_pass_report() {
+  local rev="$1"
+  local file status
+  file="$(preflight_report_path "$rev")"
+  [[ -f "$file" ]] || return 0
+  status="$(json_field "$file" status)"
+  if [[ "$status" != "PASS" ]]; then
+    return 0
+  fi
+  local stamp
+  stamp="$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
+  cp -f "$file" "${file}.superseded.${stamp}" 2>/dev/null || true
+  # Fail-closed marker — deploy must not accept SUPERSEDED.
+  if command -v jq >/dev/null 2>&1; then
+    jq --arg s "$stamp" '.status="SUPERSEDED" | .superseded_at=$s | .reason="preflight_rerun_started"' \
+      "$file" >"${file}.tmp" && mv "${file}.tmp" "$file"
+  else
+    # Minimal rewrite without jq (status field only).
+    sed 's/"status"[[:space:]]*:[[:space:]]*"PASS"/"status": "SUPERSEDED"/' "$file" >"${file}.tmp" \
+      && mv "${file}.tmp" "$file"
+  fi
+  chmod 600 "$file" 2>/dev/null || true
+  log "Invalidated prior preflight PASS for ${rev} (re-run started)"
 }
 
 require_preflight_pass() {
@@ -487,6 +514,28 @@ require_preflight_pass() {
   backup="$(json_field "$file" backup_path)"
   [[ "$status" == "PASS" ]] || die "Preflight status is '${status}' for ${rev} (need PASS)"
   [[ -n "$backup" && -f "$backup" ]] || die "Preflight backup missing: ${backup}"
+  # Restore pinned migrate image identity from the PASS report and fully re-verify.
+  local report_image report_image_id report_git_sha report_rev
+  report_image="$(json_field "$file" migrate_image)"
+  report_image_id="$(json_field "$file" migrate_image_id)"
+  report_git_sha="$(json_field "$file" migrate_git_sha)"
+  report_rev="$(json_field "$file" revision)"
+  [[ "$report_rev" == "$rev" ]] || die "Preflight report revision ${report_rev} != requested ${rev}"
+  [[ -n "$report_image" && -n "$report_image_id" ]] \
+    || die "Preflight PASS missing migrate_image / migrate_image_id — re-run preflight"
+  [[ -n "$report_git_sha" ]] || report_git_sha="$rev"
+  [[ "$report_git_sha" == "$rev" ]] \
+    || die "Preflight migrate_git_sha ${report_git_sha} != target ${rev}"
+  export SHOPBUKET1_API_IMAGE="$report_image"
+  export SHOPBUKET1_API_IMAGE_TAG="$report_image"
+  export SHOPBUKET1_API_IMAGE_ID="$report_image_id"
+  export SHOPBUKET1_API_IMAGE_GIT_SHA="$report_git_sha"
+  if declare -F assert_pinned_api_image >/dev/null 2>&1; then
+    # Re-check id + OCI git SHA label + migration manifest (fail if deleted/changed).
+    assert_pinned_api_image "$rev"
+  else
+    die "migrate-image helpers not loaded — cannot verify pinned API image"
+  fi
   # Age check (GNU date); fail closed if unparsable.
   if command -v date >/dev/null 2>&1; then
     local now_s then_s age
@@ -501,6 +550,6 @@ require_preflight_pass() {
       log "WARN could not parse preflight checked_at=${checked}; continuing"
     fi
   fi
-  log "Preflight PASS verified for ${rev}"
+  log "Preflight PASS verified for ${rev} (image=${report_image} id=${report_image_id})"
   printf '%s\n' "$file"
 }

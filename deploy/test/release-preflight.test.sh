@@ -19,6 +19,8 @@ mkdir -p "$SHOPBUKET1_STATE_DIR" "$SHOPBUKET1_BACKUP_DIR" "$SHOPBUKET1_PREFLIGHT
 
 # shellcheck source=../../deploy/lib/preflight.sh
 source "${ROOT}/deploy/lib/preflight.sh"
+# shellcheck source=../../deploy/lib/migrate-image.sh
+source "${ROOT}/deploy/lib/migrate-image.sh"
 
 POSTGRES_DB="shopbuket1"
 
@@ -39,6 +41,14 @@ pass "assert_preflight_db_name guards"
 # --- write + require preflight report ---
 rev="aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 inv='{"products":1,"orders":0}'
+# PASS reports must carry pinned migrate image identity (re-verified on require).
+export SHOPBUKET1_API_IMAGE="shopbuket1-api:aaaaaaaaaaaa"
+export SHOPBUKET1_API_IMAGE_TAG="shopbuket1-api:aaaaaaaaaaaa"
+export SHOPBUKET1_API_IMAGE_ID="sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+export SHOPBUKET1_API_IMAGE_GIT_SHA="$rev"
+# Unit stub: skip live docker inspect/manifest (covered in migrate-image.test.sh).
+assert_pinned_api_image() { return 0; }
+
 report="$(write_preflight_report "$rev" "PASS" "$TMP/backups/demo.dump" "shopbuket1_preflight_aaaaaaaaaaaa" "$inv" "3" "")"
 [[ -f "$report" ]] || fail "report not written"
 # fake backup file
@@ -46,6 +56,7 @@ mkdir -p "$TMP/backups"
 echo "not-a-real-dump-but-large-enough-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx" >"$TMP/backups/demo.dump"
 # rewrite with existing backup path
 report="$(write_preflight_report "$rev" "PASS" "$TMP/backups/demo.dump" "shopbuket1_preflight_aaaaaaaaaaaa" "$inv" "3" "")"
+grep -q 'migrate_image_id' "$report" || fail "PASS report must record migrate_image_id"
 require_preflight_pass "$rev" >/dev/null || fail "require_preflight_pass should accept PASS"
 pass "preflight PASS report accepted"
 
@@ -55,6 +66,14 @@ if ( require_preflight_pass "$rev" ) 2>/dev/null; then
   fail "FAIL report must not authorize deploy"
 fi
 pass "preflight FAIL report rejected"
+
+# SUPERSEDED (preflight re-run) rejected
+write_preflight_report "$rev" "PASS" "$TMP/backups/demo.dump" "shopbuket1_preflight_aaaaaaaaaaaa" "$inv" "3" "" >/dev/null
+invalidate_preflight_pass_report "$rev"
+if ( require_preflight_pass "$rev" ) 2>/dev/null; then
+  fail "SUPERSEDED preflight report must not authorize deploy"
+fi
+pass "superseded PASS rejected after preflight re-run"
 
 # Wrong revision rejected
 if ( require_preflight_pass "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb" ) 2>/dev/null; then

@@ -160,6 +160,8 @@ cmd_preflight() {
   rev="$(resolve_release_ref)"
   rev="${rev//$'\r'/}"
   log "Preflight revision ${rev}"
+  # Do not leave deploy trusting a prior PASS while this re-run is in progress.
+  invalidate_preflight_pass_report "$rev"
 
   preflight_postgres_ready
   ensure_database_url
@@ -176,6 +178,7 @@ cmd_preflight() {
   assert_preflight_db_name "$rehearsal_db"
 
   ensure_api_image_for_migrate "$rev"
+  export SHOPBUKET1_API_IMAGE_GIT_SHA="$rev"
 
   local ok=1
   reason=""
@@ -188,24 +191,24 @@ cmd_preflight() {
   elif ! preflight_migrate_rehearsal "$rehearsal_db"; then
     ok=0
     reason="migrate_failed"
-  elif ! preflight_verify_rehearsal "$rehearsal_db"; then
+  elif ! preflight_verify_rehearsal "$rehearsal_db" "$inventory"; then
     ok=0
     reason="verify_failed"
   fi
 
-  # Always drop isolated DB after rehearsal (success or fail).
+  # Always drop isolated DB after rehearsal (success or fail). Production untouched.
   preflight_drop_db_if_exists "$rehearsal_db" || true
 
   if [[ "$ok" -eq 1 ]]; then
     report="$(write_preflight_report "$rev" "PASS" "$backup" "$rehearsal_db" "$inventory" "$migrations_applied" "")"
-    log "PREFLIGHT PASS for ${rev}"
+    log "PREFLIGHT PASS for ${rev} (migrate_image=${SHOPBUKET1_API_IMAGE_TAG:-} id=${SHOPBUKET1_API_IMAGE_ID:-})"
     log "Review report: ${report}"
     log "Next: ./scripts/release.sh deploy ${rev}"
     exit 0
   fi
 
   report="$(write_preflight_report "$rev" "FAIL" "$backup" "$rehearsal_db" "$inventory" "$migrations_applied" "$reason")"
-  die "PREFLIGHT FAIL (${reason}). Report: ${report}. Production schema was not modified."
+  die "PREFLIGHT FAIL (${reason}). Report: ${report}. Production schema/API/Web were not modified."
 }
 
 cmd_deploy() {
@@ -325,6 +328,7 @@ cmd_production() {
   rev="$(resolve_release_ref)"
   rev="${rev//$'\r'/}"
   log "Production pipeline revision ${rev}"
+  invalidate_preflight_pass_report "$rev"
 
   preflight_postgres_ready
   ensure_database_url
@@ -355,6 +359,7 @@ cmd_production() {
   rehearsal_db="shopbuket1_preflight_${rev:0:12}"
   assert_preflight_db_name "$rehearsal_db"
   ensure_api_image_for_migrate "$rev"
+  export SHOPBUKET1_API_IMAGE_GIT_SHA="$rev"
 
   local ok=1
   reason=""
@@ -367,7 +372,7 @@ cmd_production() {
   elif ! preflight_migrate_rehearsal "$rehearsal_db"; then
     ok=0
     reason="migrate_failed"
-  elif ! preflight_verify_rehearsal "$rehearsal_db"; then
+  elif ! preflight_verify_rehearsal "$rehearsal_db" "$inventory"; then
     ok=0
     reason="verify_failed"
   fi
@@ -375,15 +380,20 @@ cmd_production() {
 
   if [[ "$ok" -ne 1 ]]; then
     report="$(write_preflight_report "$rev" "FAIL" "$backup" "$rehearsal_db" "$inventory" "$migrations_applied" "$reason")"
-    die "PREFLIGHT FAIL (${reason}). Report: ${report}. Production schema was not modified."
+    die "PREFLIGHT FAIL (${reason}). Report: ${report}. Production schema/API/Web were not modified."
   fi
   report="$(write_preflight_report "$rev" "PASS" "$backup" "$rehearsal_db" "$inventory" "$migrations_applied" "")"
-  log "PREFLIGHT PASS for ${rev} — continuing to deploy"
+  log "PREFLIGHT PASS for ${rev} — continuing to deploy (image=${SHOPBUKET1_API_IMAGE_TAG:-} id=${SHOPBUKET1_API_IMAGE_ID:-})"
   log "Report: ${report}"
 
   # Release flock so deploy.sh can acquire the same lock.
+  # Preserve pinned image id/tag for live migrate (same immutable image as rehearsal).
   exec 9>&- || true
   export SHOPBUKET1_REQUIRE_PREFLIGHT=1
+  export SHOPBUKET1_API_IMAGE="${SHOPBUKET1_API_IMAGE:-}"
+  export SHOPBUKET1_API_IMAGE_TAG="${SHOPBUKET1_API_IMAGE_TAG:-}"
+  export SHOPBUKET1_API_IMAGE_ID="${SHOPBUKET1_API_IMAGE_ID:-}"
+  export SHOPBUKET1_API_IMAGE_GIT_SHA="${SHOPBUKET1_API_IMAGE_GIT_SHA:-$rev}"
   # Pass SHA only — cleanup migrations already installed into prisma/migrations for this checkout.
   exec "$ROOT_DIR/deploy.sh" "$rev"
 }

@@ -70,6 +70,8 @@ NEW_API_IMAGE=""
 NEW_WEB_IMAGE=""
 PREV_API_IMAGE=""
 PREV_WEB_IMAGE=""
+# Immutable API image id pinned by preflight (rehearsal); live migrate must reuse it.
+PREFLIGHT_PINNED_API_IMAGE_ID=""
 # Set only after containers are about to be replaced (rollback applies then).
 DEPLOY_STARTED=0
 DEPLOY_INTERRUPTED=0
@@ -197,21 +199,41 @@ remember_previous_images() {
 }
 
 build_images() {
-  # Prefer SHA-tagged image already verified in preflight (same commit re-deploy).
+  local rev_for_label="${rev:-}"
+  [[ "$rev_for_label" =~ ^[0-9a-f]{40}$ ]] || die "build_images requires deploy revision SHA in scope"
+
+  # Prefer the immutable image already pinned in preflight (same commit).
   # Never treat unverified shopbuket1-api:local as the migrate source of truth.
-  if release_api_image_usable "$NEW_API_IMAGE"; then
-    log "Reusing verified API image ${NEW_API_IMAGE} (migrations match checkout)"
+  if [[ -n "${PREFLIGHT_PINNED_API_IMAGE_ID:-}" ]]; then
+    if ! docker image inspect "$PREFLIGHT_PINNED_API_IMAGE_ID" >/dev/null 2>&1; then
+      die "Preflight-pinned API image id ${PREFLIGHT_PINNED_API_IMAGE_ID} unavailable — re-run preflight"
+    fi
+    if ! docker image inspect "$NEW_API_IMAGE" >/dev/null 2>&1 \
+      || [[ "$(docker_image_id "$NEW_API_IMAGE")" != "$PREFLIGHT_PINNED_API_IMAGE_ID" ]]; then
+      die "Preflight-pinned API image id ${PREFLIGHT_PINNED_API_IMAGE_ID} is not tagged as ${NEW_API_IMAGE} — re-run preflight"
+    fi
+    export SHOPBUKET1_API_IMAGE_ID="$PREFLIGHT_PINNED_API_IMAGE_ID"
+    export SHOPBUKET1_API_IMAGE="$NEW_API_IMAGE"
+    export SHOPBUKET1_API_IMAGE_TAG="$NEW_API_IMAGE"
+    export SHOPBUKET1_API_IMAGE_GIT_SHA="$rev_for_label"
+    # Full re-verify: id + OCI git SHA + migration manifest
+    assert_pinned_api_image "$rev_for_label"
+    log "Reusing preflight-pinned API image ${NEW_API_IMAGE} id=${PREFLIGHT_PINNED_API_IMAGE_ID}"
     cleanup_stale_api_local_alias "$NEW_API_IMAGE"
     sync_api_local_alias "$NEW_API_IMAGE"
+  elif release_api_image_usable "$NEW_API_IMAGE" "$rev_for_label"; then
+    log "Reusing verified API image ${NEW_API_IMAGE} after full label+manifest check"
+    cleanup_stale_api_local_alias "$NEW_API_IMAGE"
+    sync_api_local_alias "$NEW_API_IMAGE"
+    pin_release_api_image_identity "$NEW_API_IMAGE" "$rev_for_label"
   else
-    log "Building API image ${NEW_API_IMAGE}"
+    log "Building API image ${NEW_API_IMAGE} (SITEFLOWER_GIT_SHA=${rev_for_label})"
     docker build \
       -f "$SCRIPT_DIR/deploy/Dockerfile.api" \
+      --build-arg "SITEFLOWER_GIT_SHA=${rev_for_label}" \
       -t "$NEW_API_IMAGE" \
       "$SCRIPT_DIR"
-    assert_image_migrations_match_checkout "$NEW_API_IMAGE"
-    cleanup_stale_api_local_alias "$NEW_API_IMAGE"
-    sync_api_local_alias "$NEW_API_IMAGE"
+    pin_release_api_image_identity "$NEW_API_IMAGE" "$rev_for_label"
   fi
   export SHOPBUKET1_API_IMAGE="$NEW_API_IMAGE"
 
@@ -234,17 +256,21 @@ backup_before_migrate() {
 
 migrate() {
   local image="${SHOPBUKET1_API_IMAGE:-}"
+  local live_id rev_for_label="${rev:-}"
   [[ -n "$image" ]] || die "SHOPBUKET1_API_IMAGE unset before live migrate"
   [[ "$image" == "$NEW_API_IMAGE" ]] \
     || die "Live migrate image (${image}) must equal release tag (${NEW_API_IMAGE})"
-  [[ "$image" != "shopbuket1-api:local" ]] \
-    || die "Refusing live migrate via unverified shopbuket1-api:local"
-  assert_image_migrations_match_checkout "$image"
-  log "Running prisma migrate deploy via ${image}"
-  compose run --rm --no-deps \
-    -e "DATABASE_URL=${DATABASE_URL}" \
-    api \
-    sh -lc 'cd /app/node_modules/@bouquet-one/database && exec /app/node_modules/.bin/prisma migrate deploy'
+  [[ "$rev_for_label" =~ ^[0-9a-f]{40}$ ]] || die "migrate requires deploy revision SHA"
+  export SHOPBUKET1_API_IMAGE_GIT_SHA="$rev_for_label"
+  assert_pinned_api_image "$rev_for_label"
+  live_id="$(docker_image_id "$SHOPBUKET1_API_IMAGE_ID")"
+  if [[ -n "${PREFLIGHT_PINNED_API_IMAGE_ID:-}" ]]; then
+    [[ "$live_id" == "$PREFLIGHT_PINNED_API_IMAGE_ID" ]] \
+      || die "Live migrate image id (${live_id}) != preflight-pinned id (${PREFLIGHT_PINNED_API_IMAGE_ID})"
+  fi
+  log "Running prisma migrate deploy via immutable id=${live_id} (tag=${image})"
+  # DEPLOY_STARTED is still 0 — migrate failure leaves production API/Web untouched.
+  compose_migrate_with_pinned_api_image "${DATABASE_URL}"
   SCHEMA_ADVANCED=1
   log "Live migrate finished — SCHEMA_ADVANCED=1 (auto app rollback disabled)"
 }
@@ -434,6 +460,10 @@ main() {
     # shellcheck source=deploy/lib/preflight.sh
     source "${SCRIPT_DIR}/deploy/lib/preflight.sh"
     require_preflight_pass "$rev" >/dev/null
+    PREFLIGHT_PINNED_API_IMAGE_ID="${SHOPBUKET1_API_IMAGE_ID:-}"
+    [[ -n "$PREFLIGHT_PINNED_API_IMAGE_ID" ]] \
+      || die "Preflight PASS report missing migrate_image_id — re-run preflight on this revision"
+    log "Preflight pinned API image id=${PREFLIGHT_PINNED_API_IMAGE_ID}"
   fi
 
   tag_images "$rev"
