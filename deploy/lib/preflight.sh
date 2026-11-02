@@ -21,6 +21,8 @@ PREFLIGHT_COUNT_TABLES=(
   seo_landing_pages
   slug_redirects
   orders
+  erp_sku_registry
+  product_option_values
 )
 
 preflight_require_tools() {
@@ -61,9 +63,10 @@ preflight_postgres_ready() {
 }
 
 # Run SQL against the production DB name (read-only queries only by convention).
+# stdin from /dev/null — docker/compose must not consume caller loops' stdin.
 preflight_psql_prod() {
   compose exec -T postgres \
-    psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB" -tAc "$1"
+    psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB" -tAc "$1" </dev/null
 }
 
 # Run SQL against an isolated rehearsal DB.
@@ -72,7 +75,7 @@ preflight_psql_db() {
   local sql="$2"
   assert_preflight_db_name "$db"
   compose exec -T postgres \
-    psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$db" -tAc "$sql"
+    psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$db" -tAc "$sql" </dev/null
 }
 
 assert_preflight_db_name() {
@@ -125,6 +128,49 @@ preflight_migration_status() {
   else
     log "WARN _prisma_migrations missing — fresh or non-Prisma DB"
     printf '0\n'
+  fi
+}
+
+# Active failed Prisma row: started but neither finished nor rolled back.
+# Historical rolled_back_at rows (often paired with a later successful apply) are OK.
+PREFLIGHT_PRISMA_ACTIVE_FAILED_SQL="SELECT count(*)::int FROM _prisma_migrations WHERE finished_at IS NULL AND rolled_back_at IS NULL"
+
+# Fail closed on active failed Prisma rows or duplicate migration folder names in the checkout.
+preflight_check_migration_conflicts() {
+  local root
+  root="$(repo_root)"
+  local mig_dir="${root}/packages/database/prisma/migrations"
+  [[ -d "$mig_dir" ]] || die "Migrations directory missing: $mig_dir"
+
+  local names_list
+  names_list="$(find "$mig_dir" -mindepth 1 -maxdepth 1 -type d \
+    | while IFS= read -r d; do basename "$d"; done | sort)"
+  local dup
+  dup="$(printf '%s\n' "$names_list" | uniq -d || true)"
+  [[ -z "$dup" ]] || die "Conflicting duplicate migration folder name(s): $dup"
+
+  local prefix_dup
+  prefix_dup="$(printf '%s\n' "$names_list" \
+    | awk '{print substr($0,1,14)}' \
+    | grep -E '^[0-9]{14}$' \
+    | sort | uniq -d || true)"
+  [[ -z "$prefix_dup" ]] \
+    || die "Conflicting migration timestamps sharing prefix: ${prefix_dup}"
+
+  local mig_n
+  mig_n="$(find "$mig_dir" -mindepth 1 -maxdepth 1 -type d | wc -l | tr -d ' ')"
+  log "Migration folders OK (${mig_n} directories)"
+
+  if table_exists_prod "_prisma_migrations"; then
+    local failed
+    failed="$(preflight_psql_prod "${PREFLIGHT_PRISMA_ACTIVE_FAILED_SQL}")"
+    failed="$(echo "$failed" | tr -d '[:space:]')"
+    if [[ -z "$failed" || ! "$failed" =~ ^[0-9]+$ ]]; then
+      die "Production _prisma_migrations query failed or returned non-numeric count — resolve DB access before deploy"
+    fi
+    if [[ "$failed" != "0" ]]; then
+      die "Production _prisma_migrations has ${failed} failed/unfinished row(s) (finished_at IS NULL AND rolled_back_at IS NULL) — resolve before deploy"
+    fi
   fi
 }
 
@@ -184,15 +230,120 @@ preflight_migrate_rehearsal() {
   url="postgresql://${POSTGRES_USER}:${enc}@postgres:5432/${db}?schema=public"
   [[ "$url" == *"/${db}?"* ]] || die "Rehearsal DATABASE_URL must target ${db}"
   [[ "$url" != *"/${POSTGRES_DB}?"* ]] || die "Refusing rehearsal URL that targets production DB name"
-  log "Applying prisma migrate deploy on isolated DB ${db}"
-  compose run --rm --no-deps \
-    -e "DATABASE_URL=${url}" \
-    api \
-    sh -lc 'cd /app/node_modules/@bouquet-one/database && exec /app/node_modules/.bin/prisma migrate deploy'
+  log "Applying prisma migrate deploy on isolated DB ${db} via pinned id=${SHOPBUKET1_API_IMAGE_ID:-}"
+  compose_migrate_with_pinned_api_image "$url"
+}
+
+# True when the checkout includes Task 04A ERP SKU migration (fail-closed gate).
+release_requires_erp_sku_registry() {
+  local root mig
+  root="$(repo_root)"
+  mig="${root}/packages/database/prisma/migrations/20261101220000_product_erp_sku"
+  [[ -d "$mig" ]]
+}
+
+# Fail closed: erp_sku_registry table + primary key must exist on $1 (DB name).
+# Uses preflight_psql_db — never call against production name unless caller intends live gate.
+verify_erp_sku_registry_db() {
+  local db="$1"
+  local label="${2:-verify}"
+  local exists sku_pk n
+  exists="$(preflight_psql_db "$db" "SELECT count(*) FROM information_schema.tables WHERE table_schema='public' AND table_name='erp_sku_registry'")"
+  exists="$(echo "$exists" | tr -d '[:space:]')"
+  if [[ "$exists" != "1" ]]; then
+    log "FAIL ${label}: erp_sku_registry table missing (Task 04A required)"
+    return 1
+  fi
+  sku_pk="$(preflight_psql_db "$db" "SELECT count(*)::int FROM pg_constraint c JOIN pg_class t ON c.conrelid=t.oid WHERE t.relname='erp_sku_registry' AND c.contype='p'")"
+  sku_pk="$(echo "$sku_pk" | tr -d '[:space:]')"
+  if [[ "$sku_pk" != "1" ]]; then
+    log "FAIL ${label}: erp_sku_registry missing primary key"
+    return 1
+  fi
+  n="$(preflight_psql_db "$db" "SELECT count(*)::int FROM erp_sku_registry")"
+  n="$(echo "$n" | tr -d '[:space:]')"
+  log "${label}: erp_sku_registry=${n} (table+PK OK)"
+  return 0
+}
+
+# Live production DB gate (after migrate deploy). Same rules, via prod helper.
+verify_erp_sku_registry_prod() {
+  local exists sku_pk n
+  exists="$(preflight_psql_prod "SELECT count(*) FROM information_schema.tables WHERE table_schema='public' AND table_name='erp_sku_registry'")"
+  exists="$(echo "$exists" | tr -d '[:space:]')"
+  if [[ "$exists" != "1" ]]; then
+    log "FAIL live: erp_sku_registry table missing after migrate (Task 04A)"
+    return 1
+  fi
+  sku_pk="$(preflight_psql_prod "SELECT count(*)::int FROM pg_constraint c JOIN pg_class t ON c.conrelid=t.oid WHERE t.relname='erp_sku_registry' AND c.contype='p'")"
+  sku_pk="$(echo "$sku_pk" | tr -d '[:space:]')"
+  if [[ "$sku_pk" != "1" ]]; then
+    log "FAIL live: erp_sku_registry missing primary key after migrate"
+    return 1
+  fi
+  n="$(preflight_psql_prod "SELECT count(*)::int FROM erp_sku_registry")"
+  n="$(echo "$n" | tr -d '[:space:]')"
+  log "Live erp_sku_registry=${n} (table+PK OK)"
+  return 0
+}
+
+# Schema state after migrate: trust DB catalog, not only migrate deploy exit code.
+verify_live_schema_state() {
+  local fails=0
+  local mig
+  for mig in \
+    20261028120000_order_payment_sync_telegram \
+    20261101220000_product_erp_sku
+  do
+    local n
+    n="$(preflight_psql_prod "SELECT count(*)::int FROM _prisma_migrations WHERE migration_name='${mig}' AND finished_at IS NOT NULL")"
+    n="$(echo "$n" | tr -d '[:space:]')"
+    if [[ "$n" != "1" ]]; then
+      log "FAIL schema state: migration ${mig} not finished in _prisma_migrations"
+      fails=1
+    else
+      log "Schema state OK: ${mig} finished"
+    fi
+  done
+
+  if [[ -d "$(repo_root)/packages/database/prisma/migrations/20261102010000_drop_product_diameter_cm" ]]; then
+    local diam_mig diam_col
+    diam_mig="$(preflight_psql_prod "SELECT count(*)::int FROM _prisma_migrations WHERE migration_name='20261102010000_drop_product_diameter_cm' AND finished_at IS NOT NULL")"
+    diam_mig="$(echo "$diam_mig" | tr -d '[:space:]')"
+    diam_col="$(preflight_psql_prod "SELECT count(*) FROM information_schema.columns WHERE table_schema='public' AND table_name='products' AND column_name='diameter_cm'")"
+    diam_col="$(echo "$diam_col" | tr -d '[:space:]')"
+    if [[ "$diam_mig" != "1" ]]; then
+      log "FAIL schema state: diameter drop migration not finished"
+      fails=1
+    fi
+    if [[ "$diam_col" != "0" ]]; then
+      log "FAIL schema state: products.diameter_cm still present after drop migration"
+      fails=1
+    else
+      log "Schema state OK: products.diameter_cm absent"
+    fi
+  fi
+
+  if release_requires_erp_sku_registry; then
+    verify_erp_sku_registry_prod || fails=1
+  fi
+
+  local pay
+  pay="$(preflight_psql_prod "SELECT count(*)::int FROM information_schema.columns WHERE table_schema='public' AND table_name='orders' AND column_name IN ('payment_status','telegram_notify_status')")"
+  pay="$(echo "$pay" | tr -d '[:space:]')"
+  if [[ "$pay" != "2" ]]; then
+    log "FAIL schema state: orders payment/telegram columns missing (got ${pay})"
+    fails=1
+  else
+    log "Schema state OK: orders payment_status + telegram_notify_status"
+  fi
+
+  return "$fails"
 }
 
 preflight_verify_rehearsal() {
   local db="$1"
+  local inventory_json="${2:-}"
   assert_preflight_db_name "$db"
   local table n fails=0
   for table in products catalog_categories orders slug_redirects; do
@@ -217,7 +368,71 @@ preflight_verify_rehearsal() {
       fails=1
     fi
   fi
+  # Task 04A: mandatory when migration is in the checkout (fail closed — not WARN).
+  if release_requires_erp_sku_registry; then
+    if ! verify_erp_sku_registry_db "$db" "rehearsal"; then
+      fails=1
+    fi
+  fi
+  # Every checkout migration must be finished after rehearsal migrate.
+  if declare -F verify_checkout_migrations_applied_db >/dev/null 2>&1; then
+    if ! verify_checkout_migrations_applied_db "$db" "rehearsal"; then
+      fails=1
+    fi
+  fi
+  # Row counts for critical tables must match production baseline inventory.
+  if [[ -n "$inventory_json" ]] && declare -F preflight_assert_inventory_preserved >/dev/null 2>&1; then
+    if ! preflight_assert_inventory_preserved "$db" "$inventory_json" "rehearsal"; then
+      fails=1
+    fi
+  fi
   return "$fails"
+}
+
+# Read-only SEO legacy inventory — never DROP seo_landing_pages here.
+seo_reconcile_report() {
+  log "SEO reconcile (read-only) — no DROP / TRUNCATE"
+  local seo_n cat_n redir_n
+  if table_exists_prod "seo_landing_pages"; then
+    seo_n="$(preflight_psql_prod "SELECT count(*)::int FROM seo_landing_pages")"
+    seo_n="$(echo "$seo_n" | tr -d '[:space:]')"
+  else
+    seo_n="missing"
+  fi
+  if table_exists_prod "catalog_categories"; then
+    cat_n="$(preflight_psql_prod "SELECT count(*)::int FROM catalog_categories")"
+    cat_n="$(echo "$cat_n" | tr -d '[:space:]')"
+  else
+    cat_n="missing"
+  fi
+  if table_exists_prod "slug_redirects"; then
+    redir_n="$(preflight_psql_prod "SELECT count(*)::int FROM slug_redirects")"
+    redir_n="$(echo "$redir_n" | tr -d '[:space:]')"
+  else
+    redir_n="missing"
+  fi
+  local orphans="n/a"
+  if table_exists_prod "seo_landing_pages" && table_exists_prod "catalog_categories"; then
+    orphans="$(preflight_psql_prod "
+      SELECT count(*)::int
+      FROM seo_landing_pages s
+      LEFT JOIN catalog_categories c
+        ON c.slug = s.slug AND c.page_kind = 'THEMATIC'
+      WHERE s.status = 'PUBLISHED' AND c.id IS NULL
+    ")"
+    orphans="$(echo "$orphans" | tr -d '[:space:]')"
+  fi
+  cat <<EOF
+=== SEO legacy reconciliation (read-only) ===
+seo_landing_pages:   ${seo_n}
+catalog_categories:  ${cat_n}
+slug_redirects:      ${redir_n}
+published orphans (legacy without THEMATIC category): ${orphans}
+
+Policy: do NOT DROP seo_landing_pages via normal deploy.
+Use ./deploy.sh production --cleanup-plan deploy/cleanup-plans/task05-seo-landing-drop.v1.json
+only after status=approved + SHOPBUKET1_CLEANUP_APPROVAL_TOKEN + restore-test.
+EOF
 }
 
 preflight_report_path() {
@@ -249,6 +464,9 @@ write_preflight_report() {
   "rehearsal_db": "$(printf '%s' "$rehearsal_db" | sed 's/"/\\"/g')",
   "production_db": "$(printf '%s' "$POSTGRES_DB" | sed 's/"/\\"/g')",
   "migrations_applied_count": ${migrations_applied:-0},
+  "migrate_image": "$(printf '%s' "${SHOPBUKET1_API_IMAGE_TAG:-${SHOPBUKET1_API_IMAGE:-}}" | sed 's/"/\\"/g')",
+  "migrate_image_id": "$(printf '%s' "${SHOPBUKET1_API_IMAGE_ID:-}" | sed 's/"/\\"/g')",
+  "migrate_git_sha": "$(printf '%s' "${SHOPBUKET1_API_IMAGE_GIT_SHA:-$rev}" | sed 's/"/\\"/g')",
   "inventory": ${inventory_json},
   "reason": "$(printf '%s' "$reason" | sed 's/"/\\"/g')"
 }
@@ -258,6 +476,32 @@ EOF
   printf '%s\n' "$file" >"${SHOPBUKET1_PREFLIGHT_DIR}/latest"
   log "Preflight report: $file (status=${status})"
   printf '%s\n' "$file"
+}
+
+# Invalidate a prior PASS so a re-run preflight cannot leave deploy trusting a stale report.
+invalidate_preflight_pass_report() {
+  local rev="$1"
+  local file status
+  file="$(preflight_report_path "$rev")"
+  [[ -f "$file" ]] || return 0
+  status="$(json_field "$file" status)"
+  if [[ "$status" != "PASS" ]]; then
+    return 0
+  fi
+  local stamp
+  stamp="$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
+  cp -f "$file" "${file}.superseded.${stamp}" 2>/dev/null || true
+  # Fail-closed marker — deploy must not accept SUPERSEDED.
+  if command -v jq >/dev/null 2>&1; then
+    jq --arg s "$stamp" '.status="SUPERSEDED" | .superseded_at=$s | .reason="preflight_rerun_started"' \
+      "$file" >"${file}.tmp" && mv "${file}.tmp" "$file"
+  else
+    # Minimal rewrite without jq (status field only).
+    sed 's/"status"[[:space:]]*:[[:space:]]*"PASS"/"status": "SUPERSEDED"/' "$file" >"${file}.tmp" \
+      && mv "${file}.tmp" "$file"
+  fi
+  chmod 600 "$file" 2>/dev/null || true
+  log "Invalidated prior preflight PASS for ${rev} (re-run started)"
 }
 
 require_preflight_pass() {
@@ -271,6 +515,28 @@ require_preflight_pass() {
   backup="$(json_field "$file" backup_path)"
   [[ "$status" == "PASS" ]] || die "Preflight status is '${status}' for ${rev} (need PASS)"
   [[ -n "$backup" && -f "$backup" ]] || die "Preflight backup missing: ${backup}"
+  # Restore pinned migrate image identity from the PASS report and fully re-verify.
+  local report_image report_image_id report_git_sha report_rev
+  report_image="$(json_field "$file" migrate_image)"
+  report_image_id="$(json_field "$file" migrate_image_id)"
+  report_git_sha="$(json_field "$file" migrate_git_sha)"
+  report_rev="$(json_field "$file" revision)"
+  [[ "$report_rev" == "$rev" ]] || die "Preflight report revision ${report_rev} != requested ${rev}"
+  [[ -n "$report_image" && -n "$report_image_id" ]] \
+    || die "Preflight PASS missing migrate_image / migrate_image_id — re-run preflight"
+  [[ -n "$report_git_sha" ]] || report_git_sha="$rev"
+  [[ "$report_git_sha" == "$rev" ]] \
+    || die "Preflight migrate_git_sha ${report_git_sha} != target ${rev}"
+  export SHOPBUKET1_API_IMAGE="$report_image"
+  export SHOPBUKET1_API_IMAGE_TAG="$report_image"
+  export SHOPBUKET1_API_IMAGE_ID="$report_image_id"
+  export SHOPBUKET1_API_IMAGE_GIT_SHA="$report_git_sha"
+  if declare -F assert_pinned_api_image >/dev/null 2>&1; then
+    # Re-check id + OCI git SHA label + migration manifest (fail if deleted/changed).
+    assert_pinned_api_image "$rev"
+  else
+    die "migrate-image helpers not loaded — cannot verify pinned API image"
+  fi
   # Age check (GNU date); fail closed if unparsable.
   if command -v date >/dev/null 2>&1; then
     local now_s then_s age
@@ -285,6 +551,6 @@ require_preflight_pass() {
       log "WARN could not parse preflight checked_at=${checked}; continuing"
     fi
   fi
-  log "Preflight PASS verified for ${rev}"
+  log "Preflight PASS verified for ${rev} (image=${report_image} id=${report_image_id})"
   printf '%s\n' "$file"
 }

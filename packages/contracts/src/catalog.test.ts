@@ -34,9 +34,14 @@ import {
   deriveCompositionKind,
   formatCompositionSummaryLine,
   adminProductCompositionSummary,
+  publicProductCompositionSummary,
   COMPOSITION_SUMMARY_EMPTY,
   isCanonicalListingHub,
   isDominantFlowerType,
+  isProductKind,
+  isValidErpSkuFormat,
+  normalizeErpSku,
+  PRODUCT_KINDS,
   productKindsForListingKind,
   resolveCatalogCategoryIdForProductKind,
   resolveCategoryListingScope,
@@ -44,6 +49,52 @@ import {
   suggestVisualPaletteColorIds,
   deriveProductEditorReadiness,
 } from './catalog.js';
+
+test('normalizeErpSku: trim, uppercase, strip spaces; empty → null', () => {
+  assert.equal(normalizeErpSku(null), null);
+  assert.equal(normalizeErpSku(undefined), null);
+  assert.equal(normalizeErpSku(''), null);
+  assert.equal(normalizeErpSku('   '), null);
+  assert.equal(normalizeErpSku('  ab-12  '), 'AB-12');
+  assert.equal(normalizeErpSku('pack 01'), 'PACK01');
+  assert.equal(isValidErpSkuFormat('AB-12'), true);
+  assert.equal(isValidErpSkuFormat('PACK.01_X'), true);
+  assert.equal(isValidErpSkuFormat('-BAD'), false);
+  assert.equal(isValidErpSkuFormat('has space'), false);
+});
+
+test('ProductKind is independent of ComponentUnit and SKU prefixes', () => {
+  for (const kind of PRODUCT_KINDS) {
+    assert.equal(isProductKind(kind), true);
+  }
+  assert.equal(isProductKind('STEM'), true);
+  // ComponentUnit STEM ≠ ProductKind STEM — kinds are not derived from unit or SKU.
+  assert.equal(isProductKind('PIECE'), false);
+  assert.equal(isProductKind('BQ-'), false);
+  assert.equal(normalizeErpSku('BQ-100'), 'BQ-100');
+  assert.equal(isProductKind(normalizeErpSku('BQ-100')!), false);
+});
+
+test('computeLinePriceMinor snapshots option erpSku without changing totals', () => {
+  const priced = computeLinePriceMinor({
+    quantity: 2,
+    baseUnitPriceMinor: 1000n,
+    options: [
+      {
+        groupId: 'g1',
+        groupName: 'Упаковка',
+        valueId: 'v1',
+        valueName: 'Крафт',
+        surchargeMinor: 100n,
+        chargeMode: 'PER_LINE',
+        erpSku: 'WRAP-01',
+      },
+    ],
+  });
+  assert.equal(priced.optionsTotalMinor, 100n);
+  assert.equal(priced.lineTotalMinor, 2100n);
+  assert.equal(priced.optionsSnapshot[0]?.erpSku, 'WRAP-01');
+});
 
 test('flowerItemIdentityKey and display name', () => {
   assert.equal(
@@ -444,6 +495,17 @@ test('adminProductCompositionSummary covers commercial kinds', () => {
       ],
     }),
     'Розы × 7, Эустомы × 5',
+  );
+  assert.equal(
+    publicProductCompositionSummary({
+      productKind: 'BOUQUET',
+      components: [
+        { role: 'PRIMARY', typeName: 'Роза', quantity: 7 },
+        { role: 'PRIMARY', typeName: 'Эустома', quantity: 5 },
+        { role: 'GREENERY', typeName: 'Эвкалипт', quantity: 3 },
+      ],
+    }),
+    'Розы, Эустомы',
   );
   assert.equal(
     adminProductCompositionSummary({

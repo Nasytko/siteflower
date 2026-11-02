@@ -23,6 +23,7 @@ import {
   TelegramNotifyStatus,
   IntegrationChannel,
   IntegrationAttemptOutcome,
+  ErpSkuOwnerKind,
 } from './generated/prisma/client.js';
 
 export type { PrismaClient, OutboxEvent } from './generated/prisma/client.js';
@@ -49,6 +50,7 @@ export {
   TelegramNotifyStatus,
   IntegrationChannel,
   IntegrationAttemptOutcome,
+  ErpSkuOwnerKind,
 };
 
 export type CreatePrismaClientOptions = {

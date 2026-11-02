@@ -6,6 +6,7 @@
 import type { Prisma } from '@bouquet-one/database';
 import {
   adminProductCompositionSummary,
+  publicProductCompositionSummary,
   defaultProductSeoDescription,
   defaultProductSeoTitle,
   derivePriceRange,
@@ -342,10 +343,10 @@ export function toProductAdminDto(
     shortDescription: product.shortDescription,
     description: product.description,
     badgeLabel: product.badgeLabel ?? null,
+    erpSku: product.erpSku ?? null,
     lifecycle: product.lifecycle,
     availability: product.availability,
     heightCm: product.bouquetHeightCm ?? null,
-    diameterCm: product.diameterCm ?? null,
     productKind: product.productKind,
     compositionKind: product.compositionKind,
     compositionPrecision: product.compositionPrecision,
@@ -405,6 +406,7 @@ export function toProductAdminDto(
         id: value.id,
         groupId: value.groupId,
         name: value.name,
+        erpSku: value.erpSku ?? null,
         surchargeMinor: value.surchargeMinor.toString(),
         chargeMode: value.chargeMode,
         sortOrder: value.sortOrder,
@@ -487,9 +489,9 @@ export function toProductPublicDto(
         effectivePriceMinor: effectiveVariantPriceMinor(variant, promo, now).toString(),
         sortOrder: variant.sortOrder,
       })),
+    // Public composition: identity for SEO filters only — no exact recipe quantities.
     components: product.components.map((component) => ({
       displayName: component.displayName,
-      quantity: component.quantity,
       unit: component.unit,
       role: component.role,
       flowerSlug: component.flowerItem?.flowerType?.slug ?? null,
@@ -510,6 +512,8 @@ export function toProductPublicDto(
             id: value.id,
             groupId: value.groupId,
             name: value.name,
+            // Storefront does not need ERP SKUs; checkout resolves from DB.
+            erpSku: null,
             surchargeMinor: value.surchargeMinor.toString(),
             chargeMode: value.chargeMode,
             sortOrder: value.sortOrder,
@@ -542,9 +546,33 @@ export function toProductListItemDto(
   product: ProductWithRelations,
   urlFor: MediaUrlResolver,
   now = new Date(),
+  /**
+   * Fail-closed: default public summary omits exact recipe quantities (Task 04A).
+   * Admin product list may pass `includeCompositionQuantities: true`.
+   */
+  options?: { includeCompositionQuantities?: boolean },
 ): ProductListItemDto {
   const primary = primaryMedia(product);
   const displayFlower = productDisplayFlowerAttrs(product);
+  const includeQuantities = options?.includeCompositionQuantities === true;
+  const summaryInput = {
+    productKind: product.productKind,
+    catalogCategoryName: product.catalogCategory?.name ?? null,
+    components: product.components.map((row) => ({
+      role: row.role,
+      quantity: row.quantity,
+      flowerItem: row.flowerItem
+        ? {
+            flowerType: row.flowerItem.flowerType
+              ? { name: row.flowerItem.flowerType.name }
+              : null,
+            flowerVariety: row.flowerItem.flowerVariety
+              ? { name: row.flowerItem.flowerVariety.name }
+              : null,
+          }
+        : null,
+    })),
+  };
   return {
     id: product.id,
     slug: product.slug,
@@ -555,24 +583,9 @@ export function toProductListItemDto(
     heightCm: product.bouquetHeightCm ?? null,
     productKind: product.productKind ?? 'BOUQUET',
     compositionKind: product.compositionKind ?? 'UNKNOWN',
-    compositionSummary: adminProductCompositionSummary({
-      productKind: product.productKind,
-      catalogCategoryName: product.catalogCategory?.name ?? null,
-      components: product.components.map((row) => ({
-        role: row.role,
-        quantity: row.quantity,
-        flowerItem: row.flowerItem
-          ? {
-              flowerType: row.flowerItem.flowerType
-                ? { name: row.flowerItem.flowerType.name }
-                : null,
-              flowerVariety: row.flowerItem.flowerVariety
-                ? { name: row.flowerItem.flowerVariety.name }
-                : null,
-            }
-          : null,
-      })),
-    }),
+    compositionSummary: includeQuantities
+      ? adminProductCompositionSummary(summaryInput)
+      : publicProductCompositionSummary(summaryInput),
     catalogCategory: product.catalogCategory ? toTaxonomyRef(product.catalogCategory) : null,
     family: product.familyMember
       ? { id: product.familyMember.family.id, name: product.familyMember.family.name }

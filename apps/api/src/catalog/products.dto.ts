@@ -23,6 +23,7 @@ import {
   COMPONENT_UNITS,
   COMPOSITION_KINDS,
   COMPOSITION_PRECISIONS,
+  ERP_SKU_PATTERN,
   PRODUCT_KINDS,
   PRODUCT_LIFECYCLES,
   PRODUCT_OPTION_CHARGE_MODES,
@@ -30,6 +31,7 @@ import {
   PRODUCT_SORTS,
   PROMOTION_TYPES,
   VARIANT_STATUSES,
+  normalizeErpSku,
   type CommercialAvailability,
   type ComponentRole,
   type ComponentUnit,
@@ -154,6 +156,23 @@ export class SaveProductEditorDto extends ExpectedVersionDto {
   @MaxLength(160)
   slug!: string;
 
+  /**
+   * ERP permanent article (manager-entered). Empty/null clears. Not auto-generated.
+   * Publish remains allowed without SKU until ERP integration requires it.
+   */
+  @IsOptional()
+  @Transform(({ value }) => {
+    if (value === undefined) return undefined;
+    return normalizeErpSku(typeof value === 'string' ? value : value == null ? null : String(value));
+  })
+  @ValidateIf((_, value) => value !== null && value !== undefined)
+  @IsString()
+  @MaxLength(64)
+  @Matches(ERP_SKU_PATTERN, {
+    message: 'erpSku must be A–Z / 0–9 / . _ - and start with alphanumeric',
+  })
+  erpSku?: string | null;
+
   @IsOptional()
   @ValidateIf((_, value) => value !== null)
   @IsString()
@@ -191,20 +210,6 @@ export class SaveProductEditorDto extends ExpectedVersionDto {
   @IsOptional()
   @IsIn(PRODUCT_KINDS)
   productKind?: ProductKind;
-
-  /** @deprecated Ignored by editor; retained for API compatibility. */
-  @IsOptional()
-  @Transform(({ value }) => {
-    if (value === '' || value === null) return null;
-    if (value === undefined) return undefined;
-    const n = typeof value === 'number' ? value : Number(value);
-    return Number.isFinite(n) ? n : undefined;
-  })
-  @ValidateIf((_, v) => v !== null && v !== undefined)
-  @IsInt()
-  @Min(5)
-  @Max(250)
-  diameterCm?: number | null;
 
   @IsOptional()
   @IsIn(COMPOSITION_PRECISIONS)
@@ -335,6 +340,20 @@ export class EditorOptionValueInputDto {
   @MinLength(1)
   @MaxLength(120)
   name!: string;
+
+  /** ERP stock article for packaging/ribbon; empty/null clears. */
+  @IsOptional()
+  @Transform(({ value }) => {
+    if (value === undefined) return undefined;
+    return normalizeErpSku(typeof value === 'string' ? value : value == null ? null : String(value));
+  })
+  @ValidateIf((_, value) => value !== null && value !== undefined)
+  @IsString()
+  @MaxLength(64)
+  @Matches(ERP_SKU_PATTERN, {
+    message: 'erpSku must be A–Z / 0–9 / . _ - and start with alphanumeric',
+  })
+  erpSku?: string | null;
 
   @IsString()
   @Matches(PRICE_MINOR_PATTERN, { message: 'surchargeMinor must be integer minor units as a string' })

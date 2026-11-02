@@ -82,8 +82,12 @@ RUN set -eux; \
   echo 'api-prod-cli-ok'
 
 FROM node:${NODE_VERSION}-bookworm-slim AS runtime
+# Full 40-char commit SHA of the checkout that produced this image (required for preflight pin).
+ARG SITEFLOWER_GIT_SHA=unknown
+LABEL org.opencontainers.image.revision="${SITEFLOWER_GIT_SHA}"
 ENV NODE_ENV=production \
-    API_PORT=3001
+    API_PORT=3001 \
+    SITEFLOWER_GIT_SHA="${SITEFLOWER_GIT_SHA}"
 RUN apt-get update \
   && apt-get install -y --no-install-recommends ca-certificates openssl tini curl \
   && rm -rf /var/lib/apt/lists/* \

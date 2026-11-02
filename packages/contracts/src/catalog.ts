@@ -28,8 +28,41 @@ export type VariantStatus = (typeof VARIANT_STATUSES)[number];
 export const TAXONOMY_VISIBILITIES = ['VISIBLE', 'HIDDEN'] as const;
 export type TaxonomyVisibility = (typeof TAXONOMY_VISIBILITIES)[number];
 
+/**
+ * Quantity units for composition lines — orthogonal to ProductKind.
+ * Never derive ProductKind from ComponentUnit or from an ERP SKU prefix.
+ */
 export const COMPONENT_UNITS = ['PIECE', 'STEM', 'BUNCH', 'UNSPECIFIED'] as const;
 export type ComponentUnit = (typeof COMPONENT_UNITS)[number];
+
+/** Max length for Product.erpSku / ProductOptionValue.erpSku / OrderItem.productErpSku. */
+export const ERP_SKU_MAX_LENGTH = 64;
+
+/**
+ * Normalized ERP article pattern after `normalizeErpSku`.
+ * Starts with alphanumeric; then A–Z, 0–9, `.`, `_`, `-` (max 64).
+ */
+export const ERP_SKU_PATTERN = /^[A-Z0-9][A-Z0-9._-]{0,63}$/;
+
+/**
+ * Normalize manager-entered ERP article for storage/compare.
+ * Trim → uppercase → strip whitespace. Empty → null. Does not invent SKUs.
+ *
+ * Global uniqueness rule (Task 04A): a non-null ERP article may appear at most once
+ * across Product and ProductOptionValue. Enforced by PostgreSQL PK on `erp_sku_registry.sku`
+ * via transactional claim/release (not a second product catalog).
+ * Order snapshots keep historical SKUs independently of the registry.
+ */
+export function normalizeErpSku(input: string | null | undefined): string | null {
+  if (input == null) return null;
+  const normalized = input.trim().toUpperCase().replace(/\s+/g, '');
+  if (normalized.length === 0) return null;
+  return normalized.slice(0, ERP_SKU_MAX_LENGTH);
+}
+
+export function isValidErpSkuFormat(sku: string): boolean {
+  return ERP_SKU_PATTERN.test(sku);
+}
 
 export const COMPONENT_ROLES = ['PRIMARY', 'GREENERY', 'FILLER', 'OTHER'] as const;
 export type ComponentRole = (typeof COMPONENT_ROLES)[number];
@@ -426,11 +459,7 @@ function compositionRowVarietyName(row: {
   return row.varietyName?.trim() || row.flowerItem?.flowerVariety?.name?.trim() || '';
 }
 
-/**
- * Compact composition line for the admin products table.
- * PRIMARY lines only — greenery does not appear. Empty → «Состав не указан».
- */
-export function adminProductCompositionSummary(input: {
+type CompositionSummaryInput = {
   productKind?: ProductKind | null;
   catalogCategoryName?: string | null;
   components: Array<{
@@ -443,7 +472,17 @@ export function adminProductCompositionSummary(input: {
       flowerVariety?: { name: string } | null;
     } | null;
   }>;
-}): string {
+};
+
+/**
+ * Compact composition line for PRIMARY flowers.
+ * Greenery omitted. Empty → «Состав не указан».
+ * @param includeQuantities — admin-only. Public storefront/API must pass false (Task 04A).
+ */
+function productCompositionSummary(
+  input: CompositionSummaryInput,
+  includeQuantities: boolean,
+): string {
   const kind = input.productKind ?? 'BOUQUET';
   if (kind === 'GIFT' || kind === 'PLANT' || kind === 'OTHER') {
     const subtype = input.catalogCategoryName?.trim();
@@ -479,11 +518,25 @@ export function adminProductCompositionSummary(input: {
   if (order.length === 0) return COMPOSITION_SUMMARY_EMPTY;
   return order
     .map((type) => {
-      const qty = totals.get(type) ?? 0;
       const label = flowerTypeListLabel(type);
+      if (!includeQuantities) return label;
+      const qty = totals.get(type) ?? 0;
       return qty > 0 ? `${label} × ${qty}` : label;
     })
     .join(', ');
+}
+
+/** Admin products table — may include exact recipe quantities. */
+export function adminProductCompositionSummary(input: CompositionSummaryInput): string {
+  return productCompositionSummary(input, true);
+}
+
+/**
+ * Storefront / public list cards — flower types only, never exact bouquet recipe quantities.
+ * SEO filters still use structured ProductComponent → FlowerItem links server-side.
+ */
+export function publicProductCompositionSummary(input: CompositionSummaryInput): string {
+  return productCompositionSummary(input, false);
 }
 
 /**
@@ -1460,6 +1513,8 @@ export type PricedOptionSelection = {
   valueName: string;
   surchargeMinor: bigint;
   chargeMode: ProductOptionChargeMode;
+  /** ERP stock article for packaging/ribbon when linked; null/omit when unset. */
+  erpSku?: string | null;
 };
 
 /**
@@ -1490,6 +1545,7 @@ export function computeLinePriceMinor(input: {
     valueName: string;
     surchargeMinor: string;
     chargeMode: ProductOptionChargeMode;
+    erpSku?: string | null;
   }>;
 } {
   const qty = input.quantity;
@@ -1507,6 +1563,7 @@ export function computeLinePriceMinor(input: {
     valueName: string;
     surchargeMinor: string;
     chargeMode: ProductOptionChargeMode;
+    erpSku?: string | null;
   }> = [];
   for (const opt of input.options ?? []) {
     const surcharge = opt.surchargeMinor < 0n ? 0n : opt.surchargeMinor;
@@ -1519,6 +1576,7 @@ export function computeLinePriceMinor(input: {
       valueName: opt.valueName,
       surchargeMinor: surcharge.toString(),
       chargeMode: opt.chargeMode,
+      erpSku: opt.erpSku ?? null,
     });
   }
   const goodsTotal = input.baseUnitPriceMinor * BigInt(qty);
@@ -2041,11 +2099,11 @@ export type ProductAdminDto = {
   description: string | null;
   /** Product page badge next to availability (e.g. «Хит сезона»). */
   badgeLabel: string | null;
+  /** ERP permanent article; null until manager links. Not required for publish pre-integration. */
+  erpSku: string | null;
   lifecycle: ProductLifecycle;
   availability: CommercialAvailability;
   heightCm: number | null;
-  /** @deprecated Not shown in admin; retained for API compatibility. */
-  diameterCm: number | null;
   productKind: ProductKind;
   compositionKind: CompositionKind;
   compositionPrecision: CompositionPrecision;
@@ -2088,6 +2146,8 @@ export type ProductOptionValueDto = {
   id: string;
   groupId: string;
   name: string;
+  /** ERP stock article for this option value (packaging/ribbon); null when unset. */
+  erpSku: string | null;
   surchargeMinor: string;
   chargeMode: ProductOptionChargeMode;
   sortOrder: number;
@@ -2133,9 +2193,12 @@ export type ProductPublicDto = {
     effectivePriceMinor: string;
     sortOrder: number;
   }>;
+  /**
+   * Public bouquet composition: flower/color identity for SEO filters, no exact recipe qty.
+   * Quantity stays on admin ProductComponentDto / DB until ERP recipe migration.
+   */
   components: Array<{
     displayName: string;
-    quantity: number | null;
     unit: ComponentUnit;
     role: ComponentRole;
     flowerSlug: string | null;

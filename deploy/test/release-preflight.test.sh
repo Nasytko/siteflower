@@ -19,6 +19,8 @@ mkdir -p "$SHOPBUKET1_STATE_DIR" "$SHOPBUKET1_BACKUP_DIR" "$SHOPBUKET1_PREFLIGHT
 
 # shellcheck source=../../deploy/lib/preflight.sh
 source "${ROOT}/deploy/lib/preflight.sh"
+# shellcheck source=../../deploy/lib/migrate-image.sh
+source "${ROOT}/deploy/lib/migrate-image.sh"
 
 POSTGRES_DB="shopbuket1"
 
@@ -39,6 +41,14 @@ pass "assert_preflight_db_name guards"
 # --- write + require preflight report ---
 rev="aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 inv='{"products":1,"orders":0}'
+# PASS reports must carry pinned migrate image identity (re-verified on require).
+export SHOPBUKET1_API_IMAGE="shopbuket1-api:aaaaaaaaaaaa"
+export SHOPBUKET1_API_IMAGE_TAG="shopbuket1-api:aaaaaaaaaaaa"
+export SHOPBUKET1_API_IMAGE_ID="sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+export SHOPBUKET1_API_IMAGE_GIT_SHA="$rev"
+# Unit stub: skip live docker inspect/manifest (covered in migrate-image.test.sh).
+assert_pinned_api_image() { return 0; }
+
 report="$(write_preflight_report "$rev" "PASS" "$TMP/backups/demo.dump" "shopbuket1_preflight_aaaaaaaaaaaa" "$inv" "3" "")"
 [[ -f "$report" ]] || fail "report not written"
 # fake backup file
@@ -46,6 +56,7 @@ mkdir -p "$TMP/backups"
 echo "not-a-real-dump-but-large-enough-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx" >"$TMP/backups/demo.dump"
 # rewrite with existing backup path
 report="$(write_preflight_report "$rev" "PASS" "$TMP/backups/demo.dump" "shopbuket1_preflight_aaaaaaaaaaaa" "$inv" "3" "")"
+grep -q 'migrate_image_id' "$report" || fail "PASS report must record migrate_image_id"
 require_preflight_pass "$rev" >/dev/null || fail "require_preflight_pass should accept PASS"
 pass "preflight PASS report accepted"
 
@@ -56,6 +67,14 @@ if ( require_preflight_pass "$rev" ) 2>/dev/null; then
 fi
 pass "preflight FAIL report rejected"
 
+# SUPERSEDED (preflight re-run) rejected
+write_preflight_report "$rev" "PASS" "$TMP/backups/demo.dump" "shopbuket1_preflight_aaaaaaaaaaaa" "$inv" "3" "" >/dev/null
+invalidate_preflight_pass_report "$rev"
+if ( require_preflight_pass "$rev" ) 2>/dev/null; then
+  fail "SUPERSEDED preflight report must not authorize deploy"
+fi
+pass "superseded PASS rejected after preflight re-run"
+
 # Wrong revision rejected
 if ( require_preflight_pass "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb" ) 2>/dev/null; then
   fail "missing revision report must fail"
@@ -65,6 +84,48 @@ pass "missing revision rejected"
 # --- release.sh help ---
 bash "${ROOT}/scripts/release.sh" --help >/dev/null || fail "release.sh --help"
 pass "release.sh --help"
+
+# --- deploy.sh production --dry-run (no Docker) ---
+dry_rc=0
+dry="$(bash "${ROOT}/deploy.sh" production --dry-run 2>&1)" || dry_rc=$?
+if [[ "$dry_rc" -ne 0 ]]; then
+  printf '%s\n' "$dry" >&2
+  fail "deploy.sh production --dry-run (exit ${dry_rc})"
+fi
+echo "$dry" | grep -qi "DRY-RUN" || fail "production dry-run missing banner"
+echo "$dry" | grep -qi "erp_sku_registry" || fail "dry-run must mention erp_sku_registry gate"
+pass "deploy.sh production --dry-run"
+
+# --- restore-test CLI requires --dump and --db ---
+rc=0
+bash "${ROOT}/scripts/release.sh" restore-test 2>/dev/null || rc=$?
+[[ "$rc" -ne 0 ]] || fail "restore-test without flags must fail"
+pass "restore-test requires explicit flags"
+
+# --- 04A migration detection ---
+release_requires_erp_sku_registry || fail "Task 04A migration must be present in tree"
+pass "release_requires_erp_sku_registry"
+
+# --- prune keeps current ---
+SHOPBUKET1_RELEASES_DIR="$TMP/state/releases"
+SHOPBUKET1_CURRENT_FILE="$TMP/state/current-release"
+SHOPBUKET1_PREVIOUS_FILE="$TMP/state/previous-release"
+SHOPBUKET1_RELEASE_METADATA_KEEP=2
+mkdir -p "$SHOPBUKET1_RELEASES_DIR"
+for i in 1 2 3 4; do
+  f="${SHOPBUKET1_RELEASES_DIR}/r${i}.json"
+  printf '{"revision":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","api_image":"shopbuket1-api:x","web_image":"shopbuket1-web:x","deployed_at":"2026-01-0%sT00:00:00Z"}\n' "$i" >"$f"
+  sleep 1
+done
+printf '%s\n' "${SHOPBUKET1_RELEASES_DIR}/r4.json" >"$SHOPBUKET1_CURRENT_FILE"
+printf '%s\n' "${SHOPBUKET1_RELEASES_DIR}/r3.json" >"$SHOPBUKET1_PREVIOUS_FILE"
+prune_release_metadata
+[[ -f "${SHOPBUKET1_RELEASES_DIR}/r4.json" ]] || fail "current meta pruned"
+[[ -f "${SHOPBUKET1_RELEASES_DIR}/r3.json" ]] || fail "previous meta pruned"
+n="$(find "$SHOPBUKET1_RELEASES_DIR" -name '*.json' | wc -l | tr -d ' ')"
+[[ "$n" -eq 2 ]] || fail "prune did not reduce to keep=2 (got $n)"
+[[ ! -f "${SHOPBUKET1_RELEASES_DIR}/r1.json" ]] || fail "oldest release should be pruned"
+pass "prune_release_metadata"
 
 # --- seo check helper sources ---
 # shellcheck source=../../deploy/lib/health.sh

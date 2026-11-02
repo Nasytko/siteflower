@@ -1,0 +1,39 @@
+{
+  "id": "task05-seo-landing-drop.v1",
+  "title": "Drop legacy seo_landing_pages after CatalogCategory cutover",
+  "status": "prepared",
+  "approvalToken": "APPROVE_TASK05_SEO_LANDING_DROP_V1",
+  "migrationsRelDir": "packages/database/prisma/cleanup-plans/task05-seo-landing-drop.v1/migrations",
+  "destructive": true,
+  "requiresSeoReconcilePass": true,
+  "requiresExplicitRestoreTest": true,
+  "preserves": [
+    "products",
+    "orders",
+    "order_items",
+    "slug_redirects",
+    "catalog_categories",
+    "catalog_page_products",
+    "catalog_page_excludes",
+    "erp_sku_registry",
+    "audit_logs",
+    "media / S3",
+    "backups",
+    ".env"
+  ],
+  "drops": [
+    "seo_landing_pages",
+    "seo_landing_page_products",
+    "seo_landing_page_excludes"
+  ],
+  "postMigrateCodeRequired": [
+    "Remove Prisma models SeoLandingPage*",
+    "Remove Product.seoLandingPins/Excludes relations",
+    "Remove buildCatalogSeoReconcileReport seoLandingPage reads or no-op when tables gone"
+  ],
+  "notes": [
+    "status must be changed to approved by an operator before deploy --cleanup-plan will run.",
+    "Normal ./deploy.sh production never installs these migrations.",
+    "Pin/exclude data must already live on catalog_page_* (reconcile CRITICAL = 0)."
+  ]
+}

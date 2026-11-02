@@ -3,6 +3,7 @@ import { resolvePricedOptions, type OptionValueRow } from './product-options.uti
 const baseValue = (overrides: Partial<OptionValueRow> & Pick<OptionValueRow, 'id' | 'name'>): OptionValueRow => ({
   id: overrides.id,
   name: overrides.name,
+  erpSku: overrides.erpSku ?? null,
   surchargeMinor: overrides.surchargeMinor ?? 100n,
   chargeMode: overrides.chargeMode ?? 'PER_LINE',
   active: overrides.active ?? true,
@@ -109,5 +110,18 @@ describe('resolvePricedOptions', () => {
       ],
     });
     expect(result.ok).toBe(false);
+  });
+
+  it('passes option erpSku into priced selections', () => {
+    const result = resolvePricedOptions({
+      productId: 'p1',
+      variantId: 'v1',
+      optionValueIds: ['o1'],
+      values: [baseValue({ id: 'o1', name: 'Крафт', erpSku: 'WRAP-01' })],
+    });
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.selections[0]?.erpSku).toBe('WRAP-01');
+    }
   });
 });

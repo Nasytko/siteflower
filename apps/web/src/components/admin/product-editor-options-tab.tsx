@@ -12,6 +12,8 @@ import { nextEditorKey, type VariantDraft } from '@/components/admin/product-edi
 export type OptionValueDraft = {
   key: string;
   name: string;
+  /** ERP stock article for packaging/ribbon; empty when unset. */
+  erpSku: string;
   surchargeMajor: string;
   chargeMode: ProductOptionChargeMode;
   active: boolean;
@@ -44,6 +46,7 @@ export function emptyOptionValueDraft(): OptionValueDraft {
   return {
     key: nextEditorKey('opt-val'),
     name: '',
+    erpSku: '',
     surchargeMajor: '0',
     chargeMode: 'PER_LINE',
     active: true,
@@ -68,6 +71,7 @@ export function toOptionGroupDrafts(
     required: boolean;
     values: Array<{
       name: string;
+      erpSku?: string | null;
       surchargeMinor: string;
       chargeMode: ProductOptionChargeMode;
       active: boolean;
@@ -93,6 +97,7 @@ export function toOptionGroupDrafts(
       return {
         key: nextEditorKey('opt-val'),
         name: value.name,
+        erpSku: value.erpSku ?? '',
         surchargeMajor: minorToMajorInput(value.surchargeMinor),
         chargeMode: value.chargeMode,
         active: value.active,
@@ -112,6 +117,7 @@ export function optionGroupsToPayload(
   sortOrder: number;
   values: Array<{
     name: string;
+    erpSku: string | null;
     surchargeMinor: string;
     chargeMode: ProductOptionChargeMode;
     sortOrder: number;
@@ -138,8 +144,10 @@ export function optionGroupsToPayload(
             if (minor == null) continue;
             variantSurcharges[variant.id] = minor;
           }
+          const erpSku = value.erpSku.trim().toUpperCase().replace(/\s+/g, '');
           return {
             name: value.name.trim(),
+            erpSku: erpSku.length > 0 ? erpSku : null,
             surchargeMinor: majorInputToMinor(value.surchargeMajor) ?? '0',
             chargeMode: value.chargeMode,
             sortOrder: valueIndex,
@@ -296,6 +304,24 @@ export function ProductEditorOptionsTab(props: Props) {
                       </select>
                     </label>
                   </div>
+                  <label className="admin-field">
+                    <span>Артикул ERP (склад)</span>
+                    <input
+                      className="admin-input"
+                      value={value.erpSku}
+                      disabled={!canUpdate}
+                      placeholder="Необязательно — если есть в ERP"
+                      autoComplete="off"
+                      spellCheck={false}
+                      onChange={(event) =>
+                        updateValue(groupIndex, valueIndex, { erpSku: event.target.value })
+                      }
+                    />
+                    <span className="admin-field__hint">
+                      Для упаковки и ленты — артикул складской позиции в ERP, без отдельного
+                      товара на сайте.
+                    </span>
+                  </label>
 
                   {variants.length > 1 ? (
                     <div className="grid gap-2 sm:grid-cols-2">

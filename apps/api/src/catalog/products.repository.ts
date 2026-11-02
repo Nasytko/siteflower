@@ -300,6 +300,23 @@ export class ProductsRepository {
     return this.db(tx).product.findUnique({ where: { slug }, select: { id: true } });
   }
 
+  findIdByErpSku(
+    erpSku: string,
+    tx?: Prisma.TransactionClient,
+  ): Promise<{ id: string } | null> {
+    return this.db(tx).product.findUnique({ where: { erpSku }, select: { id: true } });
+  }
+
+  findOptionValueIdByErpSku(
+    erpSku: string,
+    tx?: Prisma.TransactionClient,
+  ): Promise<{ id: string } | null> {
+    return this.db(tx).productOptionValue.findUnique({
+      where: { erpSku },
+      select: { id: true },
+    });
+  }
+
   async list(params: {
     filters: ProductListFilters;
     skip: number;
@@ -567,6 +584,7 @@ export class ProductsRepository {
       sortOrder: number;
       values: Array<{
         name: string;
+        erpSku?: string | null;
         surchargeMinor: bigint;
         chargeMode: 'PER_LINE' | 'PER_UNIT';
         sortOrder: number;
@@ -575,8 +593,9 @@ export class ProductsRepository {
       }>;
     }>,
     tx: Prisma.TransactionClient,
-  ): Promise<void> {
+  ): Promise<Array<{ id: string; erpSku: string | null }>> {
     await tx.productOptionGroup.deleteMany({ where: { productId } });
+    const createdValues: Array<{ id: string; erpSku: string | null }> = [];
     for (const group of groups) {
       const created = await tx.productOptionGroup.create({
         data: {
@@ -588,6 +607,7 @@ export class ProductsRepository {
           values: {
             create: group.values.map((value) => ({
               name: value.name,
+              erpSku: value.erpSku ?? null,
               surchargeMinor: value.surchargeMinor,
               chargeMode: value.chargeMode,
               sortOrder: value.sortOrder,
@@ -604,9 +624,13 @@ export class ProductsRepository {
             })),
           },
         },
+        include: { values: { select: { id: true, erpSku: true } } },
       });
-      void created;
+      for (const value of created.values) {
+        createdValues.push({ id: value.id, erpSku: value.erpSku ?? null });
+      }
     }
+    return createdValues;
   }
 
   async replaceOccasions(

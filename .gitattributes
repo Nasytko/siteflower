@@ -1,0 +1,10 @@
+# Shell scripts must use LF so Linux VPS/CI bash does not break on CR.
+*.sh text eol=lf
+deploy.sh text eol=lf
+backup.sh text eol=lf
+rollback.sh text eol=lf
+healthcheck.sh text eol=lf
+install.sh text eol=lf
+admin-create.sh text eol=lf
+scripts/**/*.sh text eol=lf
+deploy/**/*.sh text eol=lf

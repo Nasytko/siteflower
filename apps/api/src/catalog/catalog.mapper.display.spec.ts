@@ -1,6 +1,7 @@
 import {
   productDisplayFlowerAttrs,
   toProductListItemDto,
+  toProductPublicDto,
   type ProductWithRelations,
 } from './catalog.mapper';
 
@@ -13,12 +14,15 @@ function baseProduct(
     name: 'Test',
     shortDescription: null,
     description: null,
+    badgeLabel: null,
+    erpSku: null,
     bouquetHeightCm: 45,
-    diameterCm: null,
     catalogCategoryId: null,
     productKind: 'BOUQUET',
     compositionKind: 'UNKNOWN',
     compositionPrecision: 'UNKNOWN',
+    compositionPrimaryComplete: false,
+    compositionText: null,
     lifecycle: 'PUBLISHED',
     availability: 'AVAILABLE',
     currency: 'BYN',
@@ -33,7 +37,20 @@ function baseProduct(
     updatedAt: new Date(),
     catalogCategory: null,
     familyMember: null,
-    variants: [],
+    variants: [
+      {
+        id: 'v1',
+        productId: 'p1',
+        name: 'Стандарт',
+        priceMinor: 10000n,
+        sortOrder: 0,
+        status: 'ACTIVE',
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        promotionSalePrices: [],
+        optionPrices: [],
+      },
+    ],
     components: [],
     media: [],
     occasions: [],
@@ -41,6 +58,8 @@ function baseProduct(
     colors: [],
     promotion: null,
     bestsellerLinks: [],
+    optionGroups: [],
+    traits: [],
     ...overrides,
   } as unknown as ProductWithRelations;
 }
@@ -149,7 +168,44 @@ describe('toProductListItemDto composition summary', () => {
       urlFor,
     );
     expect(dto.productKind).toBe('BOUQUET');
-    expect(dto.compositionSummary).toBe('Розы × 7, Эустомы × 5');
+    // Default list mapping is public-safe (no exact recipe quantities).
+    expect(dto.compositionSummary).toBe('Розы, Эустомы');
+    expect(
+      toProductListItemDto(
+        baseProduct({
+          productKind: 'BOUQUET',
+          components: [
+            {
+              id: 'c1',
+              productId: 'p1',
+              flowerItemId: 'fi1',
+              role: 'PRIMARY',
+              quantity: 7,
+              flowerItem: { flowerType: { id: 't1', slug: 'roza', name: 'Роза' } },
+            },
+            {
+              id: 'c2',
+              productId: 'p1',
+              flowerItemId: 'fi2',
+              role: 'PRIMARY',
+              quantity: 5,
+              flowerItem: { flowerType: { id: 't2', slug: 'eustoma', name: 'Эустома' } },
+            },
+            {
+              id: 'c3',
+              productId: 'p1',
+              flowerItemId: 'fi3',
+              role: 'GREENERY',
+              quantity: 4,
+              flowerItem: { flowerType: { id: 't3', slug: 'evkalipt', name: 'Эвкалипт' } },
+            },
+          ],
+        } as unknown as Partial<ProductWithRelations>),
+        urlFor,
+        new Date(),
+        { includeCompositionQuantities: true },
+      ).compositionSummary,
+    ).toBe('Розы × 7, Эустомы × 5');
   });
 
   it('maps stem as type · variety', () => {
@@ -193,5 +249,55 @@ describe('toProductListItemDto composition summary', () => {
     const dto = toProductListItemDto(baseProduct({ productKind: 'COMPOSITION' }), urlFor);
     expect(dto.productKind).toBe('COMPOSITION');
     expect(dto.compositionSummary).toBe('Состав не указан');
+  });
+});
+
+describe('toProductPublicDto composition (Task 04A)', () => {
+  const urlFor = (key: string) => `/media/${key}`;
+
+  it('omits exact recipe quantities from public components', () => {
+    const dto = toProductPublicDto(
+      baseProduct({
+        erpSku: 'BQ-100',
+        components: [
+          {
+            id: 'c1',
+            productId: 'p1',
+            flowerItemId: 'fi1',
+            colorId: null,
+            role: 'PRIMARY',
+            displayName: 'Роза',
+            quantity: 11,
+            unit: 'STEM',
+            sortOrder: 0,
+            createdAt: new Date(),
+            updatedAt: new Date(),
+            color: null,
+            flowerItem: {
+              imageUrl: null,
+              flowerType: { slug: 'roza' },
+            },
+          },
+        ],
+      } as unknown as Partial<ProductWithRelations>),
+      urlFor,
+    );
+    expect(dto.components).toHaveLength(1);
+    expect(dto.components[0]).toEqual(
+      expect.objectContaining({
+        displayName: 'Роза',
+        unit: 'STEM',
+        flowerSlug: 'roza',
+      }),
+    );
+    expect(dto.components[0]).not.toHaveProperty('quantity');
+  });
+
+  it('maps admin erpSku while allowing null for legacy products', () => {
+    const withSku = toProductPublicDto(baseProduct({ erpSku: 'BQ-100' }), urlFor);
+    const without = toProductPublicDto(baseProduct({ erpSku: null }), urlFor);
+    // Public storefront DTO does not expose ERP SKU; admin mapper does.
+    expect(withSku).not.toHaveProperty('erpSku');
+    expect(without).not.toHaveProperty('erpSku');
   });
 });

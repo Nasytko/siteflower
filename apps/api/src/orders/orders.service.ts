@@ -133,6 +133,7 @@ export class OrdersService {
           id: product.id,
           name: product.name,
           slug: product.slug,
+          erpSku: product.erpSku ?? null,
           lifecycle: product.lifecycle,
           availability: product.availability,
           currency: product.currency,
@@ -175,6 +176,7 @@ export class OrdersService {
           rows.push({
             id: value.id,
             name: value.name,
+            erpSku: value.erpSku ?? null,
             surchargeMinor: value.surchargeMinor,
             chargeMode: value.chargeMode,
             active: value.active,
@@ -474,6 +476,7 @@ export class OrdersService {
                 variantId: item.variantId,
                 productName: item.productName,
                 productSlug: item.productSlug,
+                productErpSku: item.productErpSku ?? null,
                 variantName: item.variantName,
                 primaryImageUrl: item.primaryImageUrl,
                 unitPriceMinor: BigInt(item.unitPriceMinor),
@@ -518,6 +521,7 @@ export class OrdersService {
                 variantId: item.variantId,
                 productName: item.productName,
                 productSlug: item.productSlug,
+                productErpSku: item.productErpSku ?? null,
                 variantName: item.variantName,
                 quantity: item.quantity,
                 unitPriceMinor: item.unitPriceMinor,
@@ -525,6 +529,7 @@ export class OrdersService {
                 promotionType: item.promotionType,
                 baseUnitPriceMinor: item.baseUnitPriceMinor,
                 optionsTotalMinor: item.optionsTotalMinor,
+                optionsSnapshot: item.optionsSnapshot,
                 lineTotalMinor: item.lineTotalMinor,
                 currency: 'BYN',
               })),
@@ -943,7 +948,8 @@ export class OrdersService {
     toStatus: OrderStatus,
     actor: { id: string; requestId?: string },
   ): Promise<OrderAdminDetailDto> {
-    return this.prisma.client.$transaction(async (tx) => {
+    // Load detail after commit: getAdmin uses the pool, not `tx`.
+    await this.prisma.client.$transaction(async (tx) => {
       const order = await tx.order.findUnique({ where: { id } });
       if (!order) throw new NotFoundException();
 
@@ -992,9 +998,8 @@ export class OrdersService {
         },
         tx,
       );
-
-      return this.getAdmin(id);
     });
+    return this.getAdmin(id);
   }
 
   async cancel(
@@ -1006,7 +1011,7 @@ export class OrdersService {
     if (trimmed.length < 3 || trimmed.length > 500) {
       throw new BadRequestException('Укажите причину отмены (3–500 символов)');
     }
-    return this.prisma.client.$transaction(async (tx) => {
+    await this.prisma.client.$transaction(async (tx) => {
       const order = await tx.order.findUnique({ where: { id } });
       if (!order) throw new NotFoundException();
       if (!isOrderTransitionAllowed(order.status, 'CANCELLED', order.fulfillmentType)) {
@@ -1053,9 +1058,8 @@ export class OrdersService {
         },
         tx,
       );
-
-      return this.getAdmin(id);
     });
+    return this.getAdmin(id);
   }
 }
 
@@ -1063,6 +1067,7 @@ function mapItem(item: {
   id: string;
   productName: string;
   productSlug: string;
+  productErpSku?: string | null;
   variantName: string;
   primaryImageUrl: string | null;
   quantity: number;
@@ -1079,6 +1084,7 @@ function mapItem(item: {
     id: item.id,
     productName: item.productName,
     productSlug: item.productSlug,
+    productErpSku: item.productErpSku ?? null,
     variantName: item.variantName,
     primaryImageUrl: item.primaryImageUrl,
     quantity: item.quantity,

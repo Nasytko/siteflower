@@ -9,6 +9,7 @@ import type {
 export type OptionValueRow = {
   id: string;
   name: string;
+  erpSku?: string | null;
   surchargeMinor: bigint;
   chargeMode: ProductOptionChargeMode;
   active: boolean;
@@ -59,6 +60,7 @@ export function resolvePricedOptions(input: {
       valueName: row.name,
       surchargeMinor: surcharge < 0n ? 0n : surcharge,
       chargeMode: row.chargeMode,
+      erpSku: row.erpSku ?? null,
     });
     const list = selectedByGroup.get(row.group.id) ?? [];
     list.push(row.id);
