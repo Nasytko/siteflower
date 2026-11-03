@@ -1,6 +1,6 @@
 # VPS Runbook — Task 01 Expand (manual SSH)
 
-**Audience:** operator on the HostFly VPS  
+**Audience:** operator on the HostFly VPS
 **Cursor / CI must not SSH here.**
 
 | Item | Value |
@@ -15,10 +15,10 @@
 | Approved SHA | `0ea13cebaac10917ccd0b0c69d2d88b83d8c0075` |
 | Scripts | `./deploy.sh`, `./backup.sh`, `./rollback.sh` (repo root) |
 
-**Forbidden (stop if tempted):**  
+**Forbidden (stop if tempted):**
 `prisma migrate reset` · `db push --force-reset` · `DROP DATABASE` · `docker compose down -v` · `docker volume prune` / `rm` on `shopbuket1_pgdata` · deferred **contract** SQL · production seed · `git reset --hard` · auto DB rollback.
 
-**Safe deploy order (implemented by `./deploy.sh staging <SHA>`):**  
+**Safe deploy order (implemented by `./deploy.sh staging <SHA>`):**
 checkout SHA → build SHA-tagged API/Web images → **backup** → **`prisma migrate deploy` from new API image while old api/web still serve** → schema verify → recreate api/web only (volumes untouched).
 
 ---
@@ -74,7 +74,7 @@ Optional dry-run (read-only; no mutate):
 
 ## Шаг 2 — Backup (fresh dump — mandatory before mutate)
 
-`./deploy.sh staging` also runs `./backup.sh staging-pre-migrate` internally.  
+`./deploy.sh staging` also runs `./backup.sh staging-pre-migrate` internally.
 Still take an **extra labelled dump** first so you have a named restore point independent of deploy lock timing.
 
 ```bash
@@ -106,26 +106,26 @@ export SHOPBUKET1_ENV_FILE=/etc/shopbuket1/production.env
 
 What this does:
 
-1. `git fetch` + **detached checkout** of the SHA (working tree must be clean unless you pass this explicit ref — explicit ref is required here).  
-2. Build/pin `shopbuket1-api:0ea13cebaac1` and `shopbuket1-web:0ea13cebaac1` from that commit.  
-3. Ensure postgres healthy.  
-4. `./backup.sh staging-pre-migrate`.  
-5. `prisma migrate deploy` via **immutable new API image id** (only `packages/database/prisma/migrations/**`).  
-6. Live schema verify gate.  
-7. `compose up -d --force-recreate api web` — **does not** remove volumes.  
+1. `git fetch` + **detached checkout** of the SHA (working tree must be clean unless you pass this explicit ref — explicit ref is required here).
+2. Build/pin `shopbuket1-api:0ea13cebaac1` and `shopbuket1-web:0ea13cebaac1` from that commit.
+3. Ensure postgres healthy.
+4. `./backup.sh staging-pre-migrate`.
+5. `prisma migrate deploy` via **immutable new API image id** (only `packages/database/prisma/migrations/**`).
+6. Live schema verify gate.
+7. `compose up -d --force-recreate api web` — **does not** remove volumes.
 8. Health waits + release metadata.
 
-**Expected Task 01 migration applied:**  
+**Expected Task 01 migration applied:**
 `20261102220000_flower_type_composition_class`
 
-- ADD nullable `flower_types.composition_class` (no backfill)  
-- `product_components.display_name` → `DEFAULT ''` + DROP NOT NULL  
-- reaffirm `unit`/`role` defaults  
-- **no DROP** of `quantity` / `unit` / `role` / `color_id` / `display_name`  
-- **does not** delete products or orders  
+- ADD nullable `flower_types.composition_class` (no backfill)
+- `product_components.display_name` → `DEFAULT ''` + DROP NOT NULL
+- reaffirm `unit`/`role` defaults
+- **no DROP** of `quantity` / `unit` / `role` / `color_id` / `display_name`
+- **does not** delete products or orders
 
-**Must NOT apply:**  
-`packages/database/prisma/deferred/20261102230000_simplify_product_composition_contract.sql`  
+**Must NOT apply:**
+`packages/database/prisma/deferred/20261102230000_simplify_product_composition_contract.sql`
 (not under `prisma/migrations` → invisible to `migrate deploy`)
 
 ### Verify after deploy
@@ -185,16 +185,16 @@ docker compose -p shopbuket1 -f deploy/docker-compose.prod.yml --env-file "$SHOP
 
 Browser / admin checklist:
 
-1. Home  
-2. Catalog (`/katalog` or hub)  
-3. Product PDP — composition without stem qty from ProductComponent  
-4. Unclassified FlowerTypes → product `compositionKind` **UNKNOWN** (no MONO guess)  
-5. MONO/MIXED filters + thematic SEO pages (may under-select until classify)  
-6. Admin product editor composition (FlowerItem list)  
-7. Duplicate draft product → kind **re-derived**  
-8. ERP SKU, variants, options intact  
-9. Cart + checkout UI without real payment  
-10. No Prisma errors on composition save  
+1. Home
+2. Catalog (`/katalog` or hub)
+3. Product PDP — composition without stem qty from ProductComponent
+4. Unclassified FlowerTypes → product `compositionKind` **UNKNOWN** (no MONO guess)
+5. MONO/MIXED filters + thematic SEO pages (may under-select until classify)
+6. Admin product editor composition (FlowerItem list)
+7. Duplicate draft product → kind **re-derived**
+8. ERP SKU, variants, options intact
+9. Cart + checkout UI without real payment
+10. No Prisma errors on composition save
 
 ---
 
@@ -208,17 +208,17 @@ export SHOPBUKET1_ENV_FILE=/etc/shopbuket1/production.env
 ./rollback.sh
 ```
 
-- Does **not** reverse expand migration.  
-- Old app + expand DB is the supported rollback window (additive schema + `display_name DEFAULT ''`).  
-- New component rows may show empty legacy display names after app rollback — OK.  
+- Does **not** reverse expand migration.
+- Old app + expand DB is the supported rollback window (additive schema + `display_name DEFAULT ''`).
+- New component rows may show empty legacy display names after app rollback — OK.
 - If deploy set `SCHEMA_ADVANCED` mid-process, `deploy.sh` itself refuses unsafe auto image rollback; use `./rollback.sh` deliberately or forward-fix.
 
 ### Never
 
-- `docker compose down -v`  
-- automatic DB rollback  
-- deferred contract  
-- `git reset --hard` to “fix” a dirty tree  
+- `docker compose down -v`
+- automatic DB rollback
+- deferred contract
+- `git reset --hard` to “fix” a dirty tree
 
 ### DB restore (last resort, operator-approved)
 
@@ -228,7 +228,7 @@ Use the `pre-task01-expand` dump via your documented recovery path (`docs/deploy
 
 ## Classification (later — not part of install)
 
-Until FlowerTypes are marked BLOOM/DECORATIVE manually, catalog MONO/MIXED/SEO may show **UNKNOWN** / sparse results. That is expected.  
+Until FlowerTypes are marked BLOOM/DECORATIVE manually, catalog MONO/MIXED/SEO may show **UNKNOWN** / sparse results. That is expected.
 **Do not** run contract migration in this release.
 
 ---

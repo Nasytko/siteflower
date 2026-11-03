@@ -1,8 +1,8 @@
 # SiteFlower — Final Architecture Audit & Deployment Readiness
 
-**Date:** 2026-11-03  
-**Branch:** `main`  
-**Base HEAD (without WIP commit):** `a934c43`  
+**Date:** 2026-11-03
+**Branch:** `main`
+**Base HEAD (without WIP commit):** `a934c43`
 **Constraint:** local Windows only — no VPS, no production DB, no commit/push/deploy executed in this audit.
 
 ---
@@ -43,10 +43,10 @@ Products legacy `composition_precision` / `composition_primary_complete` remain 
 
 ### Deploy order (required)
 
-1. **Expand** (`migrate deploy` includes `20261102220000_…`)  
-2. **New app** deploy  
-3. **Classify** FlowerType.composition_class (+ optional inventory)  
-4. **Contract** (deferred, owner-gated) — never in this release  
+1. **Expand** (`migrate deploy` includes `20261102220000_…`)
+2. **New app** deploy
+3. **Classify** FlowerType.composition_class (+ optional inventory)
+4. **Contract** (deferred, owner-gated) — never in this release
 
 Forbidden: new app before expand; contract before classify; auto DB rollback.
 
@@ -94,7 +94,7 @@ FlowerType.compositionClass (BLOOM | DECORATIVE | null)
 | `bySort.get(0)` residue | Removed; regression tests assert absence |
 | Expand omit of `display_name` → NULL broke old-app rollback reads | Expand sets `display_name DEFAULT ''` + DROP NOT NULL; reaffirm unit/role defaults |
 
-**Runtime FIXED (admin/editor):** `collectFixedSalePricesFromCreatedVariants` binds by `createdId` (= variant id).  
+**Runtime FIXED (admin/editor):** `collectFixedSalePricesFromCreatedVariants` binds by `createdId` (= variant id).
 **Seed bootstrap only:** temporary name lookup (`7 шт` / `15 шт` / `25 шт`) then persist `variantId`. Renaming variants later does not rematch historical FIXED rows (they already store ids).
 
 ---
@@ -158,14 +158,14 @@ Order: **expand → new app → classify → validate → contract** (later, own
 
 ## 8. Remaining risks
 
-1. Expand not applied on real staging/production PostgreSQL (matrix cells marked live NOT VERIFIED).  
-2. Many UNKNOWN until FlowerTypes classified.  
-3. Residual SEO JSON qty/dominant keys until contract.  
-4. New app before expand **FAIL** (inserts + `composition_class` SELECT).  
-5. Contract DROP still deferred.  
-6. Live seed idempotency unproven on DB.  
-7. Task 02: ProductColor / `suggestVisualPaletteColorIds`.  
-8. Dev seed fixture `chernovik-unknown` must not become production merchandising.  
+1. Expand not applied on real staging/production PostgreSQL (matrix cells marked live NOT VERIFIED).
+2. Many UNKNOWN until FlowerTypes classified.
+3. Residual SEO JSON qty/dominant keys until contract.
+4. New app before expand **FAIL** (inserts + `composition_class` SELECT).
+5. Contract DROP still deferred.
+6. Live seed idempotency unproven on DB.
+7. Task 02: ProductColor / `suggestVisualPaletteColorIds`.
+8. Dev seed fixture `chernovik-unknown` must not become production merchandising.
 9. After new app rewrites components, rolled-back old UI may show empty `display_name` (`''`) — acceptable; NULL would have crashed Prisma.
 
 ---
@@ -238,7 +238,7 @@ Conditions: GitHub commit published; staging expand applied; classification + sm
 
 ## 11. Manual VPS deploy plan (docs only)
 
-**Operator runbook (copy-paste commands):** [`vps-task01-expand-runbook.md`](./vps-task01-expand-runbook.md).  
+**Operator runbook (copy-paste commands):** [`vps-task01-expand-runbook.md`](./vps-task01-expand-runbook.md).
 **Published feature SHA:** `0ea13cebaac10917ccd0b0c69d2d88b83d8c0075` on `feature/task-01-composition-simplify` (plus follow-up runbook commits if any).
 
 ### A. Pre-deploy
