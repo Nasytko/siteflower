@@ -12,7 +12,8 @@
 | Env | `/etc/shopbuket1/production.env` |
 | Checkout | `/opt/shopbuket1/current` (symlink) or `/opt/shopbuket1/repo` |
 | Branch | `feature/task-01-composition-simplify` |
-| Approved SHA | `e0e398a8177cd5d880bf91c7d30c7adce800ca47` |
+| Deploy ref | `origin/feature/task-01-composition-simplify` (always tip) |
+| Task 01 code SHA | `0ea13cebaac10917ccd0b0c69d2d88b83d8c0075` (expand migration + app) |
 | Scripts | `./deploy.sh`, `./backup.sh`, `./rollback.sh` (repo root) |
 
 **Forbidden (stop if tempted):**
@@ -39,9 +40,11 @@ git rev-parse HEAD
 git branch -vv
 git log -3 --oneline --decorate
 
-# Confirm the published feature commit is reachable:
-git cat-file -t e0e398a8177cd5d880bf91c7d30c7adce800ca47
-git log -1 --oneline e0e398a8177cd5d880bf91c7d30c7adce800ca47
+# Confirm the published feature tip is reachable:
+git rev-parse --verify origin/feature/task-01-composition-simplify
+git log -1 --oneline origin/feature/task-01-composition-simplify
+git merge-base --is-ancestor 0ea13cebaac10917ccd0b0c69d2d88b83d8c0075 origin/feature/task-01-composition-simplify \
+  && echo "OK: Task 01 code commit is on the feature tip"
 
 docker compose -p shopbuket1 -f deploy/docker-compose.prod.yml --env-file "$SHOPBUKET1_ENV_FILE" ps
 
@@ -67,7 +70,7 @@ Record: previous HEAD, free disk, newest existing backup name.
 Optional dry-run (read-only; no mutate):
 
 ```bash
-./deploy.sh staging --dry-run e0e398a8177cd5d880bf91c7d30c7adce800ca47
+./deploy.sh staging --dry-run origin/feature/task-01-composition-simplify
 ```
 
 ---
@@ -101,13 +104,15 @@ One command performs both (migrate **before** new API serves traffic):
 cd /opt/shopbuket1/current
 export SHOPBUKET1_ENV_FILE=/etc/shopbuket1/production.env
 
-./deploy.sh staging e0e398a8177cd5d880bf91c7d30c7adce800ca47
+TIP="$(git rev-parse origin/feature/task-01-composition-simplify)"
+echo "Deploying tip: $TIP"
+./deploy.sh staging "$TIP"
 ```
 
 What this does:
 
-1. `git fetch` + **detached checkout** of the SHA (working tree must be clean unless you pass this explicit ref — explicit ref is required here).
-2. Build/pin `shopbuket1-api:e0e398a8177c` and `shopbuket1-web:e0e398a8177c` from that commit.
+1. `git fetch` + **detached checkout** of the tip SHA.
+2. Build/pin `shopbuket1-api:<12-char>` and `shopbuket1-web:<12-char>` from that commit.
 3. Ensure postgres healthy.
 4. `./backup.sh staging-pre-migrate`.
 5. `prisma migrate deploy` via **immutable new API image id** (only `packages/database/prisma/migrations/**`).
@@ -134,7 +139,7 @@ What this does:
 export SHOPBUKET1_ENV_FILE=/etc/shopbuket1/production.env
 cd /opt/shopbuket1/current
 
-git rev-parse HEAD   # expect e0e398a8177cd5d880bf91c7d30c7adce800ca47 (detached)
+git rev-parse HEAD   # expect the tip SHA you passed to deploy.sh (detached)
 
 docker compose -p shopbuket1 -f deploy/docker-compose.prod.yml --env-file "$SHOPBUKET1_ENV_FILE" exec -T api \
   sh -lc 'cd /app/node_modules/@bouquet-one/database && ./node_modules/.bin/prisma migrate status'
@@ -243,5 +248,7 @@ cd /opt/shopbuket1/current && git fetch --all && git status && git rev-parse HEA
 After backup OK:
 
 ```bash
-./deploy.sh staging e0e398a8177cd5d880bf91c7d30c7adce800ca47
+TIP="$(git rev-parse origin/feature/task-01-composition-simplify)"
+echo "Deploying tip: $TIP"
+./deploy.sh staging "$TIP"
 ```
