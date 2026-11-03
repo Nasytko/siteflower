@@ -21,7 +21,6 @@ import {
   resolveStoredCompositionKind,
   suggestedListingKindForProductKind,
   type CatalogListingKind,
-  type CompositionPrecision,
   type PaginatedResponse,
   type ProductAdminDto,
   type ProductKind,
@@ -282,8 +281,6 @@ export class ProductsService {
         componentColorIds: query.componentColorIds,
         componentColorSlugs: query.componentColorSlugs,
         compositionKinds: query.compositionKind,
-        minFlowerTypeQuantity: query.minFlowerTypeQuantity,
-        flowerTypeQuantitySlug: query.flowerTypeQuantitySlug,
         flowerSlugs: query.flowerSlugs,
         bestsellerGroupIds: query.bestsellerGroupIds,
         promotionalOnly: query.promotionalOnly,
@@ -297,11 +294,7 @@ export class ProductsService {
       now,
     });
     return {
-      items: items.map((product) =>
-        toProductListItemDto(product, this.urlFor, now, {
-          includeCompositionQuantities: true,
-        }),
-      ),
+      items: items.map((product) => toProductListItemDto(product, this.urlFor, now)),
       total,
       page,
       pageSize,
@@ -493,11 +486,6 @@ export class ProductsService {
           product.id,
           source.components.map((component) => ({
             flowerItemId: component.flowerItemId,
-            colorId: component.colorId,
-            role: component.role,
-            displayName: component.displayName,
-            quantity: component.quantity,
-            unit: component.unit,
             sortOrder: component.sortOrder,
           })),
           tx,
@@ -508,15 +496,19 @@ export class ProductsService {
         where: { id: product.id },
         data: {
           productKind: source.productKind,
+          // Re-derive from live FlowerType.compositionClass — never copy a stale MONO/MIXED cache.
           compositionKind: resolveStoredCompositionKind(
             source.productKind,
-            source.compositionKind,
+            deriveCompositionKind(
+              source.components.map((component) => ({
+                typeId: component.flowerItem?.flowerTypeId ?? component.flowerItem?.flowerType?.id,
+                flowerItem: {
+                  flowerTypeId: component.flowerItem?.flowerTypeId,
+                  flowerType: component.flowerItem?.flowerType,
+                },
+              })),
+            ),
           ),
-          compositionPrecision: productKindNeedsComposition(source.productKind)
-            ? source.compositionPrecision
-            : 'UNKNOWN',
-          compositionPrimaryComplete: source.compositionPrimaryComplete,
-          compositionText: source.compositionText,
         },
       });
 
@@ -750,26 +742,7 @@ export class ProductsService {
     const componentsForSave = needsComposition ? input.components : [];
     const normalizedComposition = await this.normalizeCompositionComponents(componentsForSave, {
       previouslyAssignedFlowerItemIds: previousFlowerItemIds,
-      compositionPrecision: needsComposition
-        ? (input.compositionPrecision ??
-          (componentsForSave.length === 0 ? 'UNKNOWN' : product.compositionPrecision))
-        : 'UNKNOWN',
-      compositionPrimaryComplete: needsComposition
-        ? (input.compositionPrimaryComplete ?? product.compositionPrimaryComplete)
-        : false,
     });
-
-    if (needsComposition && normalizedComposition.compositionPrecision === 'DESCRIPTIVE') {
-      const text =
-        input.compositionText === undefined
-          ? product.compositionText
-          : trimmedOrNull(input.compositionText);
-      if (!text && normalizedComposition.rows.length === 0) {
-        throw new BadRequestException(
-          'Для описательного состава укажите текст или строки состава',
-        );
-      }
-    }
 
     await this.prisma.client.$transaction(async (tx) => {
       const resolvedCategoryId = await this.resolveEditorCatalogCategoryId(
@@ -796,17 +769,6 @@ export class ProductsService {
           nextKind,
           needsComposition ? normalizedComposition.compositionKind : 'UNKNOWN',
         ),
-        compositionPrecision: needsComposition
-          ? normalizedComposition.compositionPrecision
-          : 'UNKNOWN',
-        compositionPrimaryComplete: needsComposition
-          ? normalizedComposition.compositionPrimaryComplete
-          : false,
-        compositionText: needsComposition
-          ? input.compositionText === undefined
-            ? product.compositionText
-            : trimmedOrNull(input.compositionText)
-          : null,
         seoTitle: trimmedOrNull(input.seoTitle ?? null),
         seoDescription: trimmedOrNull(input.seoDescription ?? null),
         noIndex: input.noIndex,
@@ -967,7 +929,7 @@ export class ProductsService {
   }
 
   /**
-   * Composition source of truth: ProductComponent → FlowerItem (+ quantity/unit).
+   * Composition source of truth: ProductComponent → FlowerItem (identity list; recipe qty in ERP).
    */
   async setComponents(
     id: string,
@@ -981,8 +943,6 @@ export class ProductsService {
     );
     const normalizedComposition = await this.normalizeCompositionComponents(input.components, {
       previouslyAssignedFlowerItemIds: previousFlowerItemIds,
-      compositionPrecision: product.compositionPrecision,
-      compositionPrimaryComplete: product.compositionPrimaryComplete,
     });
     const compositionKind = resolveStoredCompositionKind(
       product.productKind,
@@ -992,8 +952,6 @@ export class ProductsService {
     await this.prisma.client.$transaction(async (tx) => {
       await this.guardVersion(tx, id, input.expectedVersion, {
         compositionKind,
-        compositionPrecision: normalizedComposition.compositionPrecision,
-        compositionPrimaryComplete: normalizedComposition.compositionPrimaryComplete,
       });
       await this.products.replaceComponents(id, normalizedComposition.rows, tx);
       await this.recordAudit(tx, actor, 'PRODUCT_UPDATED', id, {
@@ -1272,9 +1230,7 @@ export class ProductsService {
   > {
     const product = await this.products.findById(id);
     if (!product) throw new NotFoundException('Product not found');
-    const seed =
-      product.components.find((row) => row.role === 'PRIMARY')?.flowerItem ??
-      product.components[0]?.flowerItem;
+    const seed = product.components[0]?.flowerItem;
     if (!seed) return [];
 
     const familyId = product.familyMember?.familyId ?? null;
@@ -1638,58 +1594,23 @@ export class ProductsService {
   private async normalizeCompositionComponents(
     components: Array<{
       flowerItemId: string;
-      colorId?: string | null;
-      role?: 'PRIMARY' | 'GREENERY' | 'FILLER' | 'OTHER';
-      displayName: string;
-      quantity?: number | null;
-      unit?: 'PIECE' | 'STEM' | 'BUNCH' | 'UNSPECIFIED';
       sortOrder?: number;
     }>,
     options?: {
       previouslyAssignedFlowerItemIds?: ReadonlySet<string>;
-      compositionPrecision?: CompositionPrecision;
-      compositionPrimaryComplete?: boolean;
     },
   ): Promise<{
     rows: Array<{
       flowerItemId: string;
-      colorId: string | null;
-      role: 'PRIMARY' | 'GREENERY' | 'FILLER' | 'OTHER';
-      displayName: string;
-      quantity: number | null;
-      unit: 'PIECE' | 'STEM' | 'BUNCH' | 'UNSPECIFIED';
       sortOrder: number;
     }>;
     compositionKind: 'MONO' | 'MIXED' | 'UNKNOWN';
-    compositionPrecision: CompositionPrecision;
-    compositionPrimaryComplete: boolean;
   }> {
     const previous = options?.previouslyAssignedFlowerItemIds ?? new Set<string>();
-    const precision: CompositionPrecision =
-      options?.compositionPrecision ??
-      (components.length === 0 ? 'UNKNOWN' : 'EXACT');
-    // Completeness policy: never assume true for legacy/omitted data.
-    // EXACT implies a full recipe; DESCRIPTIVE/UNKNOWN do not use the flag for classification.
-    const primaryListComplete =
-      precision === 'EXACT'
-        ? true
-        : precision === 'DESCRIPTIVE' || precision === 'UNKNOWN'
-          ? false
-          : (options?.compositionPrimaryComplete ?? false);
+    const seen = new Set<string>();
+    const normalized: Array<{ flowerItemId: string; sortOrder: number }> = [];
 
-    if (precision === 'EXACT' && components.length === 0) {
-      throw new BadRequestException('При точном составе добавьте хотя бы одну строку');
-    }
-    if (precision === 'DESCRIPTIVE' && components.length === 0) {
-      return {
-        rows: [],
-        compositionKind: 'UNKNOWN',
-        compositionPrecision: 'DESCRIPTIVE',
-        compositionPrimaryComplete: false,
-      };
-    }
-
-    const normalized = components.map((component, index) => {
+    for (const [index, component] of components.entries()) {
       let flowerItemId: string;
       try {
         flowerItemId = assertComponentFlowerRefXor({
@@ -1700,27 +1621,15 @@ export class ProductsService {
           'Строка состава должна ссылаться на позицию справочника (FlowerItem)',
         );
       }
-      const displayName = component.displayName.trim();
-      if (!displayName) {
-        throw new BadRequestException('Укажите название строки состава');
+      if (seen.has(flowerItemId)) {
+        throw new BadRequestException('В составе нельзя дублировать одну и ту же позицию справочника');
       }
-      const role = component.role ?? 'PRIMARY';
-      const quantity = component.quantity ?? null;
-      if (precision === 'EXACT' && role === 'PRIMARY' && (quantity == null || quantity < 1)) {
-        throw new BadRequestException(
-          'При точном составе укажите количество для каждого основного цветка',
-        );
-      }
-      return {
+      seen.add(flowerItemId);
+      normalized.push({
         flowerItemId,
-        colorId: component.colorId ?? null,
-        role,
-        displayName,
-        quantity,
-        unit: component.unit ?? 'UNSPECIFIED',
         sortOrder: component.sortOrder ?? index,
-      };
-    });
+      });
+    }
 
     const flowerItemIds = normalized.map((row) => row.flowerItemId);
     if (flowerItemIds.length > 0) {
@@ -1731,44 +1640,36 @@ export class ProductsService {
       flowerItemIds.length > 0
         ? await this.prisma.client.flowerItem.findMany({
             where: { id: { in: flowerItemIds } },
-            select: { id: true, flowerTypeId: true, colorId: true },
+            select: {
+              id: true,
+              flowerTypeId: true,
+              flowerType: { select: { id: true, compositionClass: true } },
+            },
           })
         : [];
-    const typeByItem = new Map(items.map((item) => [item.id, item.flowerTypeId]));
-    const colorByItem = new Map(items.map((item) => [item.id, item.colorId]));
+    const itemById = new Map(items.map((item) => [item.id, item]));
 
-    // Snapshot dictionary color onto the component when the client omits it
-    // (historical rows / incomplete drafts). Does not rewrite order line items.
-    const rowsWithColor = normalized.map((row) => ({
-      ...row,
-      colorId: row.colorId ?? colorByItem.get(row.flowerItemId) ?? null,
-    }));
-
-    const colorIds = [
-      ...new Set(rowsWithColor.map((row) => row.colorId).filter((id): id is string => Boolean(id))),
-    ];
-    if (colorIds.length > 0) {
-      const colorCount = await this.prisma.client.color.count({
-        where: { id: { in: colorIds } },
-      });
-      if (colorCount !== colorIds.length) {
-        throw new BadRequestException('Unknown color reference in composition');
-      }
+    const missing = flowerItemIds.filter((id) => !itemById.has(id));
+    if (missing.length > 0) {
+      throw new BadRequestException('Unknown flower item reference in composition');
     }
 
     const compositionKind = deriveCompositionKind(
-      rowsWithColor.map((row) => ({
-        role: row.role,
-        typeId: typeByItem.get(row.flowerItemId) ?? null,
-      })),
-      { precision, primaryListComplete },
+      normalized.map((row) => {
+        const item = itemById.get(row.flowerItemId)!;
+        return {
+          typeId: item.flowerTypeId,
+          flowerItem: {
+            flowerTypeId: item.flowerTypeId,
+            flowerType: item.flowerType,
+          },
+        };
+      }),
     );
 
     return {
-      rows: rowsWithColor,
+      rows: normalized,
       compositionKind,
-      compositionPrecision: precision,
-      compositionPrimaryComplete: primaryListComplete,
     };
   }
 
@@ -1880,10 +1781,7 @@ export class ProductsService {
     }
 
     const needsComposition = productKindNeedsComposition(product.productKind);
-    const primaryComponents = product.components.filter(
-      (c) => c.role === 'PRIMARY' && (c.quantity == null || c.quantity > 0),
-    );
-    if (needsComposition && primaryComponents.length === 0) {
+    if (needsComposition && product.components.length === 0) {
       entries.push({
         kind: 'INSUFFICIENT_DATA',
         section: 'insufficient',
@@ -1993,17 +1891,18 @@ export class ProductsService {
       if (entry) entries.push(entry);
     }
 
-    // Reliable recommendations: PRIMARY flower types with no thematic page covering that slug.
+    // Recommendations: BLOOM flower types with no thematic page covering that slug.
     if (
       (product.productKind === 'BOUQUET' || product.productKind === 'COMPOSITION') &&
-      primaryComponents.length > 0
+      product.components.length > 0
     ) {
-      const primaryTypes = new Map<string, string>();
-      for (const component of primaryComponents) {
+      const bloomTypes = new Map<string, string>();
+      for (const component of product.components) {
         const type = component.flowerItem?.flowerType;
-        if (type?.slug && type.name) primaryTypes.set(type.slug, type.name);
+        if (type?.compositionClass !== 'BLOOM') continue;
+        if (type?.slug && type.name) bloomTypes.set(type.slug, type.name);
       }
-      for (const [slug, name] of primaryTypes) {
+      for (const [slug, name] of bloomTypes) {
         if (coveredTypeSlugs.has(slug)) continue;
         const genitive = name.toLowerCase();
         entries.push({

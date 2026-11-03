@@ -145,7 +145,6 @@ export function ProductEditorMainTab(props: Props) {
   const commercialNamePreview = suggestProductNameFromComposition(
     components.map((row) => ({
       displayName: row.displayName,
-      quantity: row.quantity.trim() ? Number(row.quantity) : null,
       typeName: row.typeName,
       varietyName: row.varietyName,
     })),

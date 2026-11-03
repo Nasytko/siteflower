@@ -384,7 +384,7 @@ export class TaxonomyService {
         map.set(row.recipientId, current);
       }
     } else {
-      const [products, flowerItems, components] = await Promise.all([
+      const [products, flowerItems, componentLinks] = await Promise.all([
         this.prisma.client.productColor.groupBy({
           by: ['colorId'],
           where: { colorId: { in: ids } },
@@ -395,10 +395,9 @@ export class TaxonomyService {
           where: { colorId: { in: ids } },
           _count: { _all: true },
         }),
-        this.prisma.client.productComponent.groupBy({
-          by: ['colorId'],
-          where: { colorId: { in: ids } },
-          _count: { _all: true },
+        this.prisma.client.productComponent.findMany({
+          where: { flowerItem: { colorId: { in: ids } } },
+          select: { flowerItem: { select: { colorId: true } } },
         }),
       ]);
       for (const row of products) {
@@ -412,11 +411,12 @@ export class TaxonomyService {
         current.flowerItemsCount = row._count._all;
         map.set(row.colorId, current);
       }
-      for (const row of components) {
-        if (!row.colorId) continue;
-        const current = map.get(row.colorId) ?? { ...empty };
-        current.componentsCount = row._count._all;
-        map.set(row.colorId, current);
+      for (const row of componentLinks) {
+        const colorId = row.flowerItem.colorId;
+        if (!colorId) continue;
+        const current = map.get(colorId) ?? { ...empty };
+        current.componentsCount += 1;
+        map.set(colorId, current);
       }
     }
     return map;

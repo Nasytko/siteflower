@@ -196,9 +196,6 @@ describe('Commerce orders (integration)', () => {
         components: [
           {
             flowerItemId: flowerItem.body.id,
-            displayName: 'Rose',
-            quantity: 9,
-            unit: 'STEM',
             sortOrder: 0,
           },
         ],
@@ -574,9 +571,6 @@ describe('Commerce orders (integration)', () => {
         components: [
           {
             flowerItemId: promoItem.body.id,
-            displayName: 'Rose',
-            quantity: 11,
-            unit: 'STEM',
             sortOrder: 0,
           },
         ],

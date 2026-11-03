@@ -76,14 +76,12 @@ test('composition kind and component color URL state', () => {
     kind: 'mono,mixed',
     ccolor: 'belyy',
     flower: 'roza',
-    qty: '11',
   });
   assert.deepEqual(state.compositionKinds, ['MONO', 'MIXED']);
   assert.deepEqual(state.componentColors, ['belyy']);
-  assert.equal(state.minQty, 11);
+  assert.deepEqual(state.flowerTypes, ['roza']);
   const params = katalogStateToListParams('bukety', state);
   assert.equal(params.compositionKind, 'mono,mixed');
   assert.equal(params.componentColor, 'belyy');
-  assert.equal(params.minFlowerTypeQuantity, 11);
-  assert.equal(params.flowerTypeQuantitySlug, 'roza');
+  assert.equal(params.flowerTypeSlug, 'roza');
 });

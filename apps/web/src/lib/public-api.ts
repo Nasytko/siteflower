@@ -101,8 +101,6 @@ export type CatalogListParams = {
   heightBand?: string;
   minPriceMinor?: string;
   maxPriceMinor?: string;
-  minFlowerTypeQuantity?: number;
-  flowerTypeQuantitySlug?: string;
   /** Only products with an effective promotion (powers /akcii). */
   promotion?: boolean;
   sort?: ProductSort;
@@ -132,8 +130,6 @@ export function listProducts(params: CatalogListParams = {}) {
     heightBand,
     minPriceMinor,
     maxPriceMinor,
-    minFlowerTypeQuantity,
-    flowerTypeQuantitySlug,
     ...rest
   } = params;
   return publicFetch<PaginatedResponse<ProductListItemDto>>('/catalog/products', {
@@ -154,8 +150,6 @@ export function listProducts(params: CatalogListParams = {}) {
       heightBand,
       minPriceMinor,
       maxPriceMinor,
-      minFlowerTypeQuantity,
-      flowerTypeQuantitySlug,
       // API field is `promotionalOnly` (not `promotion`).
       promotionalOnly: promotion === true ? true : undefined,
     },

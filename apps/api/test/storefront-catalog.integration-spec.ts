@@ -207,9 +207,6 @@ describe('Storefront catalog (integration)', () => {
         components: [
           {
             flowerItemId,
-            displayName: 'Primary stem',
-            quantity: 5,
-            unit: 'STEM',
             sortOrder: 0,
           },
         ],

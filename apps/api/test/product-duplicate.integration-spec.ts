@@ -223,9 +223,6 @@ describe('Product duplicate (integration)', () => {
         components: [
           {
             flowerItemId: flowerItem.body.id,
-            displayName: flowerItem.body.name,
-            quantity: 11,
-            unit: 'STEM',
             sortOrder: 0,
           },
         ],

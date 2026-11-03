@@ -182,13 +182,6 @@ export function toProductListFilters(
   if (resolved.recipientSlugs) filters.recipientSlugs = resolved.recipientSlugs;
   if (resolved.minPriceMinor) filters.minPriceMinor = resolved.minPriceMinor;
   if (resolved.maxPriceMinor) filters.maxPriceMinor = resolved.maxPriceMinor;
-  if (resolved.minFlowerTypeQuantity != null && resolved.flowerTypeQuantitySlug) {
-    filters.minFlowerTypeQuantity = resolved.minFlowerTypeQuantity;
-    filters.flowerTypeQuantitySlug = resolved.flowerTypeQuantitySlug;
-  }
-  if (resolved.dominantFlowerTypeSlug) {
-    filters.dominantFlowerTypeSlug = resolved.dominantFlowerTypeSlug;
-  }
   if (resolved.traitKeys) filters.traitKeys = resolved.traitKeys;
   return filters;
 }

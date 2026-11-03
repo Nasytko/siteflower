@@ -18,11 +18,14 @@ import sharp from 'sharp';
 import {
   defaultHomepageConfig,
   defaultTimeWindows,
+  deriveCompositionKind,
   flowerItemDisplayName,
   flowerItemIdentityKey,
   normalizeSlug,
+  resolveStoredCompositionKind,
 } from '@bouquet-one/contracts';
 import { createPrismaClient, type PrismaClient } from '@bouquet-one/database';
+import { mapNamedFixedSalesToVariantIds } from '../src/catalog/product-editor.util';
 
 // Capture BEFORE dotenv so a checked-in/local `.env` cannot silently enable seeding.
 const allowDevCatalogSeedExplicit = process.env.ALLOW_DEV_CATALOG_SEED === 'true';
@@ -46,7 +49,13 @@ const PRODUCTION_HOST_HINTS = [
   'cockroachlabs.cloud',
 ];
 
-type TaxonomySeed = { slug: string; name: string; sortOrder: number };
+type TaxonomySeed = {
+  slug: string;
+  name: string;
+  sortOrder: number;
+  /** Explicit seed class; omit/null = unclassified → product kind UNKNOWN when used. */
+  compositionClass?: 'BLOOM' | 'DECORATIVE' | null;
+};
 type ColorSeed = TaxonomySeed & { swatch?: string };
 type BudgetRangeSeed = {
   label: string;
@@ -54,6 +63,13 @@ type BudgetRangeSeed = {
   maxMinor: number | null;
   sortOrder: number;
 };
+
+/** Stable seed variant identities (names), not sortOrder — order can be edited later. */
+const SEED_VARIANT = {
+  S: { name: '7 шт', sortOrder: 0 },
+  M: { name: '15 шт', sortOrder: 1 },
+  L: { name: '25 шт', sortOrder: 2 },
+} as const;
 
 type BouquetSeed = {
   slug: string;
@@ -67,7 +83,7 @@ type BouquetSeed = {
   occasions: string[];
   recipients: string[];
   colors: string[];
-  components: Array<{ displayName: string; quantity: number; flowerTypeSlug: string }>;
+  components: Array<{ flowerTypeSlug: string }>;
   /** When set, seed attaches a ProductPromotion after variants exist. */
   promotion?:
     | { type: 'PERCENT'; percentOff: number }
@@ -75,10 +91,14 @@ type BouquetSeed = {
 };
 
 const FLOWER_TYPES: TaxonomySeed[] = [
-  { slug: 'rozy', name: 'Розы', sortOrder: 10 },
-  { slug: 'piony', name: 'Пионы', sortOrder: 20 },
-  { slug: 'tyulpany', name: 'Тюльпаны', sortOrder: 30 },
-  { slug: 'eustoma', name: 'Эустома', sortOrder: 40 },
+  { slug: 'rozy', name: 'Розы', sortOrder: 10, compositionClass: 'BLOOM' },
+  { slug: 'piony', name: 'Пионы', sortOrder: 20, compositionClass: 'BLOOM' },
+  { slug: 'tyulpany', name: 'Тюльпаны', sortOrder: 30, compositionClass: 'BLOOM' },
+  { slug: 'eustoma', name: 'Эустома', sortOrder: 40, compositionClass: 'BLOOM' },
+  /** Decorative greenery — does not break MONO when paired with one BLOOM type. */
+  { slug: 'evkalipt', name: 'Эвкалипт', sortOrder: 50, compositionClass: 'DECORATIVE' },
+  /** Intentionally unclassified — forces UNKNOWN for products that include it. */
+  { slug: 'neizvestnyy', name: 'Неизвестный тип', sortOrder: 60, compositionClass: null },
 ];
 
 const OCCASIONS: TaxonomySeed[] = [
@@ -120,8 +140,8 @@ const BOUQUETS: BouquetSeed[] = [
     recipients: ['lyubimoy', 'mame'],
     colors: ['rozovyy'],
     components: [
-      { displayName: 'Роза', quantity: 7, flowerTypeSlug: 'rozy' },
-      { displayName: 'Эустома', quantity: 3, flowerTypeSlug: 'eustoma' },
+      { flowerTypeSlug: 'rozy' },
+      { flowerTypeSlug: 'eustoma' },
     ],
     promotion: { type: 'PERCENT', percentOff: 15 },
   },
@@ -137,8 +157,8 @@ const BOUQUETS: BouquetSeed[] = [
     recipients: ['mame', 'kollege'],
     colors: ['belyy', 'rozovyy'],
     components: [
-      { displayName: 'Роза', quantity: 5, flowerTypeSlug: 'rozy' },
-      { displayName: 'Эустома', quantity: 5, flowerTypeSlug: 'eustoma' },
+      { flowerTypeSlug: 'rozy' },
+      { flowerTypeSlug: 'eustoma' },
     ],
     promotion: { type: 'PERCENT', percentOff: 10 },
   },
@@ -153,8 +173,21 @@ const BOUQUETS: BouquetSeed[] = [
     occasions: ['bez-povoda'],
     recipients: ['lyubimoy'],
     colors: ['belyy'],
-    components: [{ displayName: 'Роза белая', quantity: 15, flowerTypeSlug: 'rozy' }],
+    // One BLOOM + DECORATIVE greenery → still MONO.
+    components: [{ flowerTypeSlug: 'rozy' }, { flowerTypeSlug: 'evkalipt' }],
     promotion: { type: 'PERCENT', percentOff: 12 },
+  },
+  {
+    slug: 'chernovik-unknown',
+    name: 'Черновик неизвестный',
+    shortDescription: 'Seed fixture: unclassified FlowerType → compositionKind UNKNOWN.',
+    description: 'Dev-only fixture for UNKNOWN classification; not a merchandising showcase.',
+    colorHex: '#d0d0d0',
+    prices: { S: 5000, M: 7000, L: 9000 },
+    occasions: ['bez-povoda'],
+    recipients: ['kollege'],
+    colors: ['belyy'],
+    components: [{ flowerTypeSlug: 'rozy' }, { flowerTypeSlug: 'neizvestnyy' }],
   },
   {
     slug: 'nezhnost',
@@ -168,8 +201,8 @@ const BOUQUETS: BouquetSeed[] = [
     recipients: ['lyubimoy', 'mame'],
     colors: ['rozovyy'],
     components: [
-      { displayName: 'Пион', quantity: 5, flowerTypeSlug: 'piony' },
-      { displayName: 'Роза', quantity: 5, flowerTypeSlug: 'rozy' },
+      { flowerTypeSlug: 'piony' },
+      { flowerTypeSlug: 'rozy' },
     ],
   },
   {
@@ -183,7 +216,7 @@ const BOUQUETS: BouquetSeed[] = [
     occasions: ['bez-povoda', 'den-rozhdeniya'],
     recipients: ['lyubimoy'],
     colors: ['krasnyy'],
-    components: [{ displayName: 'Роза красная', quantity: 11, flowerTypeSlug: 'rozy' }],
+    components: [{ flowerTypeSlug: 'rozy' }],
     promotion: { type: 'FIXED', salePrices: { S: 8900, M: 11900, L: 15900 } },
   },
   {
@@ -196,7 +229,7 @@ const BOUQUETS: BouquetSeed[] = [
     occasions: ['8-marta', 'bez-povoda'],
     recipients: ['mame', 'kollege'],
     colors: ['rozovyy', 'belyy'],
-    components: [{ displayName: 'Тюльпан', quantity: 15, flowerTypeSlug: 'tyulpany' }],
+    components: [{ flowerTypeSlug: 'tyulpany' }],
     promotion: { type: 'PERCENT', percentOff: 20 },
   },
   {
@@ -209,7 +242,7 @@ const BOUQUETS: BouquetSeed[] = [
     occasions: ['den-rozhdeniya'],
     recipients: ['kollege', 'mame'],
     colors: ['belyy'],
-    components: [{ displayName: 'Эустома', quantity: 9, flowerTypeSlug: 'eustoma' }],
+    components: [{ flowerTypeSlug: 'eustoma' }],
     promotion: { type: 'FIXED', salePrices: { S: 7900, M: 10500, L: 12900 } },
   },
   {
@@ -223,7 +256,7 @@ const BOUQUETS: BouquetSeed[] = [
     occasions: ['den-rozhdeniya', '8-marta'],
     recipients: ['lyubimoy'],
     colors: ['rozovyy'],
-    components: [{ displayName: 'Пион', quantity: 9, flowerTypeSlug: 'piony' }],
+    components: [{ flowerTypeSlug: 'piony' }],
   },
   {
     slug: 'lavanda',
@@ -236,8 +269,8 @@ const BOUQUETS: BouquetSeed[] = [
     recipients: ['kollege', 'mame'],
     colors: ['rozovyy', 'belyy'],
     components: [
-      { displayName: 'Эустома', quantity: 5, flowerTypeSlug: 'eustoma' },
-      { displayName: 'Роза', quantity: 5, flowerTypeSlug: 'rozy' },
+      { flowerTypeSlug: 'eustoma' },
+      { flowerTypeSlug: 'rozy' },
     ],
   },
   {
@@ -251,8 +284,8 @@ const BOUQUETS: BouquetSeed[] = [
     recipients: ['lyubimoy', 'mame'],
     colors: ['rozovyy'],
     components: [
-      { displayName: 'Тюльпан', quantity: 7, flowerTypeSlug: 'tyulpany' },
-      { displayName: 'Роза', quantity: 5, flowerTypeSlug: 'rozy' },
+      { flowerTypeSlug: 'tyulpany' },
+      { flowerTypeSlug: 'rozy' },
     ],
   },
 ];
@@ -301,7 +334,16 @@ async function upsertFlowerType(
   prisma: PrismaClient,
   item: TaxonomySeed,
 ): Promise<{ id: string; slug: string; name: string }> {
-  const data = { name: item.name, sortOrder: item.sortOrder, visibility: 'VISIBLE' as const };
+  // Explicit per-type seed classification (not ComponentRole backfill).
+  // Default BLOOM only when compositionClass is omitted; null stays unclassified.
+  const compositionClass =
+    item.compositionClass === undefined ? ('BLOOM' as const) : item.compositionClass;
+  const data = {
+    name: item.name,
+    sortOrder: item.sortOrder,
+    visibility: 'VISIBLE' as const,
+    compositionClass,
+  };
   const row = await prisma.flowerType.upsert({
     where: { slug: item.slug },
     create: { slug: item.slug, ...data },
@@ -547,23 +589,23 @@ async function upsertBouquet(
     data: [
       {
         productId: product.id,
-        name: '7 шт',
+        name: SEED_VARIANT.S.name,
         priceMinor: BigInt(bouquet.prices.S),
-        sortOrder: 0,
+        sortOrder: SEED_VARIANT.S.sortOrder,
         status: 'ACTIVE',
       },
       {
         productId: product.id,
-        name: '15 шт',
+        name: SEED_VARIANT.M.name,
         priceMinor: BigInt(bouquet.prices.M),
-        sortOrder: 1,
+        sortOrder: SEED_VARIANT.M.sortOrder,
         status: 'ACTIVE',
       },
       {
         productId: product.id,
-        name: '25 шт',
+        name: SEED_VARIANT.L.name,
         priceMinor: BigInt(bouquet.prices.L),
-        sortOrder: 2,
+        sortOrder: SEED_VARIANT.L.sortOrder,
         status: 'ACTIVE',
       },
     ],
@@ -579,36 +621,72 @@ async function upsertBouquet(
     }
     return {
       productId: product.id,
-      displayName: component.displayName,
-      quantity: component.quantity,
-      unit: 'STEM' as const,
       sortOrder: index,
       flowerItemId,
     };
   });
   await prisma.productComponent.createMany({ data: componentRows });
 
+  const compositionRows = await prisma.productComponent.findMany({
+    where: { productId: product.id },
+    select: {
+      flowerItem: {
+        select: {
+          flowerTypeId: true,
+          flowerType: { select: { id: true, compositionClass: true } },
+        },
+      },
+    },
+  });
+  await prisma.product.update({
+    where: { id: product.id },
+    data: {
+      productKind: 'BOUQUET',
+      compositionKind: resolveStoredCompositionKind(
+        'BOUQUET',
+        deriveCompositionKind(
+          compositionRows.map((row) => ({
+            typeId: row.flowerItem.flowerTypeId,
+            flowerItem: {
+              flowerTypeId: row.flowerItem.flowerTypeId,
+              flowerType: row.flowerItem.flowerType,
+            },
+          })),
+        ),
+      ),
+    },
+  });
+
   await prisma.productOccasion.deleteMany({ where: { productId: product.id } });
   await prisma.productRecipient.deleteMany({ where: { productId: product.id } });
   await prisma.productColor.deleteMany({ where: { productId: product.id } });
 
   await prisma.productOccasion.createMany({
-    data: bouquet.occasions
-      .map((slug) => ids.occasions.get(slug))
-      .filter((id): id is string => Boolean(id))
-      .map((occasionId) => ({ productId: product.id, occasionId })),
+    data: bouquet.occasions.map((slug) => {
+      const occasionId = ids.occasions.get(slug);
+      if (!occasionId) {
+        throw new Error(`Missing occasion slug "${slug}" (product ${bouquet.slug})`);
+      }
+      return { productId: product.id, occasionId };
+    }),
   });
   await prisma.productRecipient.createMany({
-    data: bouquet.recipients
-      .map((slug) => ids.recipients.get(slug))
-      .filter((id): id is string => Boolean(id))
-      .map((recipientId) => ({ productId: product.id, recipientId })),
+    data: bouquet.recipients.map((slug) => {
+      const recipientId = ids.recipients.get(slug);
+      if (!recipientId) {
+        throw new Error(`Missing recipient slug "${slug}" (product ${bouquet.slug})`);
+      }
+      return { productId: product.id, recipientId };
+    }),
   });
   await prisma.productColor.createMany({
-    data: bouquet.colors
-      .map((slug) => ids.colors.get(slug))
-      .filter((id): id is string => Boolean(id))
-      .map((colorId) => ({ productId: product.id, colorId })),
+    data: bouquet.colors.map((slug) => {
+      const colorId = ids.colors.get(slug);
+      if (!colorId) {
+        throw new Error(`Missing color slug "${slug}" (product ${bouquet.slug})`);
+      }
+      return { productId: product.id, colorId };
+    }),
   });
 
   if (bouquet.promotion) {
@@ -616,7 +694,6 @@ async function upsertBouquet(
       where: { productId: product.id },
       orderBy: { sortOrder: 'asc' },
     });
-    const byName = new Map(variants.map((v) => [v.name, v]));
 
     if (bouquet.promotion.type === 'PERCENT') {
       await prisma.productPromotion.create({
@@ -629,13 +706,19 @@ async function upsertBouquet(
       });
     } else {
       const sale = bouquet.promotion.salePrices;
-      const prices = [
-        { variant: byName.get('S'), salePriceMinor: sale.S },
-        { variant: byName.get('M'), salePriceMinor: sale.M },
-        { variant: byName.get('L'), salePriceMinor: sale.L },
-      ].filter((entry): entry is { variant: NonNullable<(typeof variants)[number]>; salePriceMinor: number } =>
-        Boolean(entry.variant),
-      );
+      // Seed bootstrap looks up rows by the names it just wrote, then stores variantId.
+      // Runtime catalog/editor must never re-bind FIXED sales by sortOrder or renameable labels.
+      let priced: Array<{ variantId: string; salePriceMinor: bigint }>;
+      try {
+        priced = mapNamedFixedSalesToVariantIds(variants, [
+          { name: SEED_VARIANT.S.name, salePriceMinor: sale.S },
+          { name: SEED_VARIANT.M.name, salePriceMinor: sale.M },
+          { name: SEED_VARIANT.L.name, salePriceMinor: sale.L },
+        ]);
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        throw new Error(`${message} (product ${bouquet.slug})`);
+      }
 
       await prisma.productPromotion.create({
         data: {
@@ -644,9 +727,9 @@ async function upsertBouquet(
           type: 'FIXED',
           percentOff: null,
           variantPrices: {
-            create: prices.map(({ variant, salePriceMinor }) => ({
-              variantId: variant.id,
-              salePriceMinor: BigInt(salePriceMinor),
+            create: priced.map(({ variantId, salePriceMinor }) => ({
+              variantId,
+              salePriceMinor,
             })),
           },
         },

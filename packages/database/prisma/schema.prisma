@@ -157,37 +157,18 @@ enum TaxonomyVisibility {
   HIDDEN
 }
 
-enum ComponentUnit {
-  PIECE
-  STEM
-  BUNCH
-  UNSPECIFIED
-}
-
-/// Role of a composition line. GREENERY does not break mono/mixed detection.
-enum ComponentRole {
-  PRIMARY
-  GREENERY
-  FILLER
-  OTHER
-}
-
-/// Derived from PRIMARY composition lines (ignore GREENERY/FILLER/OTHER).
+/// Cached product classification for MONO / MIXED filters.
+/// Derived from FlowerType.compositionClass on composition lines (see contracts deriveCompositionKind).
 enum CompositionKind {
   MONO
   MIXED
   UNKNOWN
 }
 
-/// How precise the composition is for filters/SEO/editor.
-/// EXACT = fixed recipe with quantities; APPROXIMATE = known primaries, soft qty;
-/// DESCRIPTIVE = free-text composition (structured lines optional);
-/// UNKNOWN = unset / incomplete (do not treat as DESCRIPTIVE).
-enum CompositionPrecision {
-  EXACT
-  APPROXIMATE
-  DESCRIPTIVE
-  UNKNOWN
+/// Dictionary class for MONO/MIXED: null = unclassified (forces product kind UNKNOWN).
+enum FlowerTypeCompositionClass {
+  BLOOM
+  DECORATIVE
 }
 
 /// Option group selection mode on a product.
@@ -349,7 +330,6 @@ model Color {
   updatedAt      DateTime           @updatedAt @map("updated_at") @db.Timestamptz(3)
 
   products    ProductColor[]
-  components  ProductComponent[]
   flowerItems FlowerItem[]
 
   @@index([visibility, sortOrder])
@@ -497,6 +477,9 @@ model FlowerType {
   sortOrder      Int                @default(0) @map("sort_order")
   visibility     TaxonomyVisibility @default(VISIBLE)
   version        Int                @default(1)
+  /// null = not classified — any product using this type gets compositionKind UNKNOWN.
+  /// BLOOM counts toward MONO/MIXED; DECORATIVE is ignored. Never default to BLOOM.
+  compositionClass FlowerTypeCompositionClass? @map("composition_class")
   seoTitle       String?            @map("seo_title") @db.VarChar(200)
   seoDescription String?            @map("seo_description") @db.VarChar(500)
   noIndex        Boolean            @default(false) @map("no_index")
@@ -571,7 +554,7 @@ model FlowerOrigin {
 }
 
 /// Concrete reusable stem/SKU line: Type + optional Form + Variety + Origin + stem length.
-/// Quantity never lives here — only on ProductComponent.
+/// Exact recipe quantities live in ERP — not on FlowerItem or ProductComponent.
 /// Future ERP mapping should target this entity (separate mapping table preferred).
 model FlowerItem {
   id              String             @id @default(uuid()) @db.Uuid
@@ -658,17 +641,11 @@ model Product {
   /// Bouquet/card height for ruler. Stem length lives on FlowerItem.stemLengthCm.
   bouquetHeightCm      Int?                   @map("height_cm")
   catalogCategoryId    String?                @map("catalog_category_id") @db.Uuid
-  /// Commercial sellable kind (BOUQUET/STEM/…). Independent of ComponentUnit and ERP SKU — never derived from SKU prefix.
+  /// Commercial sellable kind (BOUQUET/STEM/…). Independent of ERP SKU — never derived from SKU prefix.
   productKind          ProductKind            @default(BOUQUET) @map("product_kind")
-  /// Cached from PRIMARY composition lines on save (UNKNOWN for non-floral kinds).
+  /// Cached listing facet. Recomputed on product composition save AND when
+  /// FlowerType.compositionClass changes (see recomputeCompositionKindForFlowerTypes).
   compositionKind      CompositionKind        @default(UNKNOWN) @map("composition_kind")
-  compositionPrecision CompositionPrecision   @default(UNKNOWN) @map("composition_precision")
-  /// APPROXIMATE: listed PRIMARY flowers form the complete main set (manager-confirmed).
-  /// Default false — legacy/unknown completeness must not auto-claim MONO/MIXED.
-  /// EXACT saves force true; DESCRIPTIVE/UNKNOWN store false (flag unused for classification).
-  compositionPrimaryComplete Boolean            @default(false) @map("composition_primary_complete")
-  /// Free-text composition for DESCRIPTIVE only. Not inferred from UNKNOWN precision.
-  compositionText      String?                @map("composition_text") @db.Text
   lifecycle            ProductLifecycle       @default(DRAFT)
   availability         CommercialAvailability @default(AVAILABLE)
   currency             String                 @default("BYN") @db.Char(3)
@@ -796,31 +773,22 @@ model ErpSkuRegistry {
   @@map("erp_sku_registry")
 }
 
+/// Product composition line: one FlowerItem reference (no qty/role — ERP owns recipe counts).
 model ProductComponent {
-  id           String        @id @default(uuid()) @db.Uuid
-  productId    String        @map("product_id") @db.Uuid
+  id           String   @id @default(uuid()) @db.Uuid
+  productId    String   @map("product_id") @db.Uuid
   /// Concrete stem/SKU from flower dictionary. Source of truth for composition filters.
-  flowerItemId String        @map("flower_item_id") @db.Uuid
-  /// Optional color of this composition line (same-component filters).
-  colorId      String?       @map("color_id") @db.Uuid
-  role         ComponentRole @default(PRIMARY)
-  displayName  String        @map("display_name") @db.VarChar(160)
-  /// Exact recipe qty — admin/ERP only. Kept until safe ERP recipe migration; never expose on public DTOs.
-  quantity     Int?
-  /// Quantity unit (PIECE/STEM/…). Orthogonal to Product.productKind — do not conflate with sellable kind.
-  unit         ComponentUnit @default(UNSPECIFIED)
-  sortOrder    Int           @default(0) @map("sort_order")
-  createdAt    DateTime      @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt    DateTime      @updatedAt @map("updated_at") @db.Timestamptz(3)
+  flowerItemId String   @map("flower_item_id") @db.Uuid
+  sortOrder    Int      @default(0) @map("sort_order")
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt    DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
 
   product    Product    @relation(fields: [productId], references: [id], onDelete: Cascade)
   flowerItem FlowerItem @relation(fields: [flowerItemId], references: [id], onDelete: Restrict)
-  color      Color?     @relation(fields: [colorId], references: [id], onDelete: SetNull)
 
+  /// Unique (productId, flowerItemId) added in deferred CONTRACT migration after dedupe.
   @@index([productId, sortOrder])
   @@index([flowerItemId])
-  @@index([colorId])
-  @@index([productId, role])
   @@map("product_components")
 }
 

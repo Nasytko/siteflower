@@ -188,9 +188,6 @@ describe('Catalog (integration)', () => {
         components: [
           {
             flowerItemId: flowerItem.body.id,
-            displayName: 'Rose',
-            quantity: 7,
-            unit: 'STEM',
             sortOrder: 0,
           },
         ],
@@ -300,9 +297,6 @@ describe('Catalog (integration)', () => {
         components: [
           {
             flowerItemId: redirectItem.body.id,
-            displayName: 'Stem',
-            quantity: 3,
-            unit: 'STEM',
             sortOrder: 0,
           },
         ],

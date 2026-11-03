@@ -12,7 +12,6 @@ const PUBLIC_RUNTIME_FILTER_KEYS = new Set<CatalogFilterKey>([
   'occasion',
   'recipient',
   'composition_kind',
-  'quantity',
 ]);
 
 describe('catalog filter pool public runtime gate', () => {

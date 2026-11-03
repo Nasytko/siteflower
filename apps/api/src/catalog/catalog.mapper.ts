@@ -5,11 +5,11 @@
  */
 import type { Prisma } from '@bouquet-one/database';
 import {
-  adminProductCompositionSummary,
   publicProductCompositionSummary,
   defaultProductSeoDescription,
   defaultProductSeoTitle,
   derivePriceRange,
+  flowerItemDisplayName,
   type BestsellerGroupAdminDto,
   type BestsellerGroupPublicDto,
   type BudgetRangeDto,
@@ -52,10 +52,9 @@ export const PRODUCT_INCLUDE = {
   components: {
     orderBy: { sortOrder: 'asc' },
     include: {
-      color: { select: { id: true, slug: true, name: true, swatch: true } },
       flowerItem: {
         include: {
-          flowerType: { select: { id: true, slug: true, name: true } },
+          flowerType: { select: { id: true, slug: true, name: true, compositionClass: true } },
           flowerForm: { select: { id: true, slug: true, name: true } },
           flowerVariety: { select: { id: true, slug: true, name: true } },
           flowerOrigin: { select: { id: true, slug: true, name: true } },
@@ -349,9 +348,6 @@ export function toProductAdminDto(
     heightCm: product.bouquetHeightCm ?? null,
     productKind: product.productKind,
     compositionKind: product.compositionKind,
-    compositionPrecision: product.compositionPrecision,
-    compositionPrimaryComplete: product.compositionPrimaryComplete,
-    compositionText: product.compositionText ?? null,
     catalogCategoryId: product.catalogCategoryId,
     catalogCategory: product.catalogCategory ? toTaxonomyRef(product.catalogCategory) : null,
     family:
@@ -382,18 +378,16 @@ export function toProductAdminDto(
       flowerItem: component.flowerItem
         ? toFlowerItemDto(component.flowerItem as FlowerItemRow)
         : null,
-      colorId: component.colorId ?? null,
-      color: component.color
-        ? {
-            ...toTaxonomyRef(component.color),
-            swatch: 'swatch' in component.color ? (component.color.swatch ?? null) : null,
-          }
-        : null,
-      role: component.role,
-      displayName: component.displayName,
-      quantity: component.quantity,
-      unit: component.unit,
       sortOrder: component.sortOrder,
+      displayName: component.flowerItem
+        ? flowerItemDisplayName({
+            typeName: component.flowerItem.flowerType.name,
+            formName: component.flowerItem.flowerForm?.name ?? null,
+            varietyName: component.flowerItem.flowerVariety?.name ?? null,
+            originName: component.flowerItem.flowerOrigin?.name ?? null,
+            stemLengthCm: component.flowerItem.stemLengthCm,
+          })
+        : '',
     })),
     optionGroups: (product.optionGroups ?? []).map((group) => ({
       id: group.id,
@@ -491,11 +485,17 @@ export function toProductPublicDto(
       })),
     // Public composition: identity for SEO filters only — no exact recipe quantities.
     components: product.components.map((component) => ({
-      displayName: component.displayName,
-      unit: component.unit,
-      role: component.role,
+      displayName: component.flowerItem
+        ? flowerItemDisplayName({
+            typeName: component.flowerItem.flowerType.name,
+            formName: component.flowerItem.flowerForm?.name ?? null,
+            varietyName: component.flowerItem.flowerVariety?.name ?? null,
+            originName: component.flowerItem.flowerOrigin?.name ?? null,
+            stemLengthCm: component.flowerItem.stemLengthCm,
+          })
+        : '',
       flowerSlug: component.flowerItem?.flowerType?.slug ?? null,
-      colorSlug: component.color?.slug ?? null,
+      colorSlug: component.flowerItem?.color?.slug ?? null,
       imageUrl: component.flowerItem?.imageUrl ?? null,
     })),
     optionGroups: (product.optionGroups ?? [])
@@ -546,25 +546,20 @@ export function toProductListItemDto(
   product: ProductWithRelations,
   urlFor: MediaUrlResolver,
   now = new Date(),
-  /**
-   * Fail-closed: default public summary omits exact recipe quantities (Task 04A).
-   * Admin product list may pass `includeCompositionQuantities: true`.
-   */
-  options?: { includeCompositionQuantities?: boolean },
 ): ProductListItemDto {
   const primary = primaryMedia(product);
   const displayFlower = productDisplayFlowerAttrs(product);
-  const includeQuantities = options?.includeCompositionQuantities === true;
   const summaryInput = {
     productKind: product.productKind,
     catalogCategoryName: product.catalogCategory?.name ?? null,
     components: product.components.map((row) => ({
-      role: row.role,
-      quantity: row.quantity,
       flowerItem: row.flowerItem
         ? {
             flowerType: row.flowerItem.flowerType
-              ? { name: row.flowerItem.flowerType.name }
+              ? {
+                  name: row.flowerItem.flowerType.name,
+                  compositionClass: row.flowerItem.flowerType.compositionClass,
+                }
               : null,
             flowerVariety: row.flowerItem.flowerVariety
               ? { name: row.flowerItem.flowerVariety.name }
@@ -583,9 +578,7 @@ export function toProductListItemDto(
     heightCm: product.bouquetHeightCm ?? null,
     productKind: product.productKind ?? 'BOUQUET',
     compositionKind: product.compositionKind ?? 'UNKNOWN',
-    compositionSummary: includeQuantities
-      ? adminProductCompositionSummary(summaryInput)
-      : publicProductCompositionSummary(summaryInput),
+    compositionSummary: publicProductCompositionSummary(summaryInput),
     catalogCategory: product.catalogCategory ? toTaxonomyRef(product.catalogCategory) : null,
     family: product.familyMember
       ? { id: product.familyMember.family.id, name: product.familyMember.family.name }

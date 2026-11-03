@@ -82,9 +82,6 @@ export type ResolvedCatalogPageFilters = {
   recipientSlugs?: string[];
   minPriceMinor?: string;
   maxPriceMinor?: string;
-  minFlowerTypeQuantity?: number;
-  flowerTypeQuantitySlug?: string;
-  dominantFlowerTypeSlug?: string;
   traitKeys?: string[];
 };
 
@@ -334,24 +331,6 @@ export function parseCatalogPageRules(rules: unknown): ResolvedCatalogPageFilter
     filters.maxPriceMinor = record.maxPriceMinor;
   }
 
-  if (
-    typeof record.minFlowerTypeQuantity === 'number' &&
-    Number.isInteger(record.minFlowerTypeQuantity) &&
-    record.minFlowerTypeQuantity >= 1 &&
-    typeof record.flowerTypeQuantitySlug === 'string' &&
-    record.flowerTypeQuantitySlug.trim()
-  ) {
-    filters.minFlowerTypeQuantity = record.minFlowerTypeQuantity;
-    filters.flowerTypeQuantitySlug = record.flowerTypeQuantitySlug.trim();
-  }
-
-  if (
-    typeof record.dominantFlowerTypeSlug === 'string' &&
-    record.dominantFlowerTypeSlug.trim()
-  ) {
-    filters.dominantFlowerTypeSlug = record.dominantFlowerTypeSlug.trim();
-  }
-
   const traitKeys = asStringArray(record.traitKeys);
   if (traitKeys) filters.traitKeys = traitKeys;
 
@@ -524,35 +503,6 @@ export function resolveCatalogPageRules(
     if (r.fieldBlocking) blocking = true;
     else if (r.ids) filters.recipientIds = r.ids;
     else if (parsed.recipientSlugs) filters.recipientSlugs = parsed.recipientSlugs;
-  }
-
-  if (parsed.minFlowerTypeQuantity != null && parsed.flowerTypeQuantitySlug) {
-    const q = resolveTaxonomySlug(
-      parsed.flowerTypeQuantitySlug,
-      lookup.flowerTypes,
-      aliases,
-    );
-    if (q.diagnostic) {
-      diagnostics.push({ ...q.diagnostic, field: 'flowerTypeQuantitySlug' });
-      blocking = true;
-    } else if (q.canonicalSlug) {
-      filters.minFlowerTypeQuantity = parsed.minFlowerTypeQuantity;
-      filters.flowerTypeQuantitySlug = q.canonicalSlug;
-    }
-  }
-
-  if (parsed.dominantFlowerTypeSlug) {
-    const d = resolveTaxonomySlug(
-      parsed.dominantFlowerTypeSlug,
-      lookup.flowerTypes,
-      aliases,
-    );
-    if (d.diagnostic) {
-      diagnostics.push({ ...d.diagnostic, field: 'dominantFlowerTypeSlug' });
-      blocking = true;
-    } else if (d.canonicalSlug) {
-      filters.dominantFlowerTypeSlug = d.canonicalSlug;
-    }
   }
 
   return { filters, diagnostics, blocking };

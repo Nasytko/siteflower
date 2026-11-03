@@ -56,7 +56,7 @@ describe('Unified catalog match semantics (rozy / composition)', () => {
     expect(and.some((c) => c.compositionKind === 'MONO')).toBe(false);
   });
 
-  it('monobukety: MONO + bouquet/composition only — no STEM', () => {
+  it('monobukety: MONO + bouquet/composition only — no STEM, no unclassified', () => {
     const where = whereFromRules({
       productKinds: ['BOUQUET', 'COMPOSITION'],
       compositionKinds: ['MONO'],
@@ -66,11 +66,18 @@ describe('Unified catalog match semantics (rozy / composition)', () => {
       expect.arrayContaining([
         { productKind: { in: ['BOUQUET', 'COMPOSITION'] } },
         { compositionKind: { in: ['MONO'] } },
+        {
+          NOT: {
+            components: {
+              some: { flowerItem: { flowerType: { compositionClass: null } } },
+            },
+          },
+        },
       ]),
     );
   });
 
-  it('bukety-iz-roz / onlyFlowerType: MONO from type, not mixed', () => {
+  it('bukety-iz-roz / onlyFlowerType: MONO from BLOOM type, not mixed/unclassified', () => {
     const where = whereFromRules({
       productKinds: ['BOUQUET'],
       onlyFlowerType: 'roza',
@@ -83,8 +90,17 @@ describe('Unified catalog match semantics (rozy / composition)', () => {
         {
           components: {
             some: {
-              role: 'PRIMARY',
-              flowerItem: { flowerTypeId: { in: [ROZA_ID] } },
+              flowerItem: {
+                flowerTypeId: { in: [ROZA_ID] },
+                flowerType: { compositionClass: 'BLOOM' },
+              },
+            },
+          },
+        },
+        {
+          NOT: {
+            components: {
+              some: { flowerItem: { flowerType: { compositionClass: null } } },
             },
           },
         },

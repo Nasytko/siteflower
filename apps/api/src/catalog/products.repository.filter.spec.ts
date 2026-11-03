@@ -13,19 +13,14 @@ describe('buildProductWhere composition facets', () => {
         some: {
           AND: [
             { flowerItem: { flowerType: { slug: { in: ['roza'] } } } },
-            {
-              OR: [
-                { color: { slug: { in: ['belyy'] } } },
-                { flowerItem: { color: { slug: { in: ['belyy'] } } } },
-              ],
-            },
+            { flowerItem: { color: { slug: { in: ['belyy'] } } } },
           ],
         },
       },
     });
   });
 
-  it('onlyFlowerType requires MONO and no other PRIMARY types', () => {
+  it('onlyFlowerType requires MONO, target BLOOM, no other BLOOM, no unclassified', () => {
     const where = buildProductWhere({
       onlyFlowerTypeSlugs: ['roza'],
     });
@@ -37,8 +32,12 @@ describe('buildProductWhere composition facets', () => {
         {
           components: {
             some: {
-              role: 'PRIMARY',
-              flowerItem: { flowerType: { slug: { in: ['roza'] } } },
+              flowerItem: {
+                flowerType: {
+                  slug: { in: ['roza'] },
+                  compositionClass: 'BLOOM',
+                },
+              },
             },
           },
         },
@@ -46,9 +45,38 @@ describe('buildProductWhere composition facets', () => {
           NOT: {
             components: {
               some: {
-                role: 'PRIMARY',
-                flowerItem: { flowerType: { slug: { notIn: ['roza'] } } },
+                flowerItem: {
+                  flowerType: {
+                    compositionClass: 'BLOOM',
+                    slug: { notIn: ['roza'] },
+                  },
+                },
               },
+            },
+          },
+        },
+        {
+          NOT: {
+            components: {
+              some: { flowerItem: { flowerType: { compositionClass: null } } },
+            },
+          },
+        },
+      ]),
+    );
+  });
+
+  it('compositionKind MONO/MIXED excludes products with unclassified FlowerType', () => {
+    const where = buildProductWhere({ compositionKinds: ['MONO'] });
+    const and = (where.AND ?? []) as Array<Record<string, unknown>>;
+    expect(and).toEqual(
+      expect.arrayContaining([
+        { compositionKind: { in: ['MONO'] } },
+        { productKind: { in: ['BOUQUET', 'COMPOSITION'] } },
+        {
+          NOT: {
+            components: {
+              some: { flowerItem: { flowerType: { compositionClass: null } } },
             },
           },
         },
@@ -70,17 +98,6 @@ describe('buildProductWhere composition facets', () => {
             some: { flowerItem: { flowerType: { slug: { in: ['roza'] } } } },
           },
         },
-      ]),
-    );
-  });
-
-  it('filters compositionKind mono only for bouquet/composition kinds', () => {
-    const where = buildProductWhere({ compositionKinds: ['MONO'] });
-    const and = (where.AND ?? []) as Array<Record<string, unknown>>;
-    expect(and).toEqual(
-      expect.arrayContaining([
-        { compositionKind: { in: ['MONO'] } },
-        { productKind: { in: ['BOUQUET', 'COMPOSITION'] } },
       ]),
     );
   });
@@ -119,28 +136,6 @@ describe('buildProductWhere composition facets', () => {
       expect.arrayContaining([
         { id: { in: ['prod-a'] } },
         { productKind: { in: ['BOUQUET'] } },
-      ]),
-    );
-  });
-
-  it('requires EXACT precision for quantity-by-type', () => {
-    const where = buildProductWhere({
-      minFlowerTypeQuantity: 11,
-      flowerTypeQuantitySlug: 'roza',
-    });
-    const and = (where.AND ?? []) as Array<Record<string, unknown>>;
-    expect(and).toEqual(
-      expect.arrayContaining([
-        {
-          compositionPrecision: 'EXACT',
-          components: {
-            some: {
-              role: 'PRIMARY',
-              quantity: { gte: 11 },
-              flowerItem: { flowerType: { slug: 'roza' } },
-            },
-          },
-        },
       ]),
     );
   });

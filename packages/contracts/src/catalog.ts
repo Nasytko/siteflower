@@ -4,7 +4,7 @@
  *
  * Navigation: CatalogCategory tree (Цветы → Розы, …).
  * Flower dictionary: FlowerType → FlowerVariety → FlowerItem (type+variety+origin+height).
- * Composition: ProductComponent → FlowerItem (+ quantity/unit).
+ * Composition: ProductComponent → FlowerItem (identity links; recipe qty lives in ERP).
  * Cross-product UX: ProductFamily (not sellable).
  * In-card commerce: ProductVariant (unchanged; composition stays product-level).
  * Discovery facets: Budget, Occasion/Recipient, Color, stem_height, etc.
@@ -27,13 +27,6 @@ export type VariantStatus = (typeof VARIANT_STATUSES)[number];
 
 export const TAXONOMY_VISIBILITIES = ['VISIBLE', 'HIDDEN'] as const;
 export type TaxonomyVisibility = (typeof TAXONOMY_VISIBILITIES)[number];
-
-/**
- * Quantity units for composition lines — orthogonal to ProductKind.
- * Never derive ProductKind from ComponentUnit or from an ERP SKU prefix.
- */
-export const COMPONENT_UNITS = ['PIECE', 'STEM', 'BUNCH', 'UNSPECIFIED'] as const;
-export type ComponentUnit = (typeof COMPONENT_UNITS)[number];
 
 /** Max length for Product.erpSku / ProductOptionValue.erpSku / OrderItem.productErpSku. */
 export const ERP_SKU_MAX_LENGTH = 64;
@@ -64,19 +57,18 @@ export function isValidErpSkuFormat(sku: string): boolean {
   return ERP_SKU_PATTERN.test(sku);
 }
 
-export const COMPONENT_ROLES = ['PRIMARY', 'GREENERY', 'FILLER', 'OTHER'] as const;
-export type ComponentRole = (typeof COMPONENT_ROLES)[number];
-
 export const COMPOSITION_KINDS = ['MONO', 'MIXED', 'UNKNOWN'] as const;
 export type CompositionKind = (typeof COMPOSITION_KINDS)[number];
 
-export const COMPOSITION_PRECISIONS = [
-  'EXACT',
-  'APPROXIMATE',
-  'DESCRIPTIVE',
-  'UNKNOWN',
-] as const;
-export type CompositionPrecision = (typeof COMPOSITION_PRECISIONS)[number];
+/** FlowerType dictionary class for MONO/MIXED. null/omit = unclassified. */
+export const FLOWER_TYPE_COMPOSITION_CLASSES = ['BLOOM', 'DECORATIVE'] as const;
+export type FlowerTypeCompositionClass = (typeof FLOWER_TYPE_COMPOSITION_CLASSES)[number];
+
+export function isFlowerTypeCompositionClass(
+  value: string,
+): value is FlowerTypeCompositionClass {
+  return (FLOWER_TYPE_COMPOSITION_CLASSES as readonly string[]).includes(value);
+}
 
 /** Product add-on option selection mode (not a ProductVariant). */
 export const PRODUCT_OPTION_SELECTIONS = ['SINGLE', 'MULTI'] as const;
@@ -459,44 +451,55 @@ function compositionRowVarietyName(row: {
   return row.varietyName?.trim() || row.flowerItem?.flowerVariety?.name?.trim() || '';
 }
 
+type CompositionClassCarrier = {
+  compositionClass?: FlowerTypeCompositionClass | null;
+  flowerItem?: {
+    flowerType?: { compositionClass?: FlowerTypeCompositionClass | null } | null;
+  } | null;
+};
+
+/** Resolve dictionary class; missing/null = unclassified. */
+export function resolveFlowerTypeCompositionClass(
+  row: CompositionClassCarrier,
+): FlowerTypeCompositionClass | null {
+  const direct = row.compositionClass;
+  if (direct === 'BLOOM' || direct === 'DECORATIVE') return direct;
+  const nested = row.flowerItem?.flowerType?.compositionClass;
+  if (nested === 'BLOOM' || nested === 'DECORATIVE') return nested;
+  return null;
+}
+
 type CompositionSummaryInput = {
   productKind?: ProductKind | null;
   catalogCategoryName?: string | null;
   components: Array<{
-    role?: string | null;
-    quantity?: number | null;
     typeName?: string | null;
     varietyName?: string | null;
+    compositionClass?: FlowerTypeCompositionClass | null;
     flowerItem?: {
-      flowerType?: { name: string } | null;
+      flowerType?: {
+        name: string;
+        compositionClass?: FlowerTypeCompositionClass | null;
+      } | null;
       flowerVariety?: { name: string } | null;
     } | null;
   }>;
 };
 
-/**
- * Compact composition line for PRIMARY flowers.
- * Greenery omitted. Empty → «Состав не указан».
- * @param includeQuantities — admin-only. Public storefront/API must pass false (Task 04A).
- */
-function productCompositionSummary(
-  input: CompositionSummaryInput,
-  includeQuantities: boolean,
-): string {
+/** Compact composition line — BLOOM types only; empty → «Состав не указан». */
+function productCompositionSummary(input: CompositionSummaryInput): string {
   const kind = input.productKind ?? 'BOUQUET';
   if (kind === 'GIFT' || kind === 'PLANT' || kind === 'OTHER') {
     const subtype = input.catalogCategoryName?.trim();
     return subtype || COMPOSITION_SUMMARY_EMPTY;
   }
 
-  const primary = input.components.filter((row) => {
-    const role = row.role ?? 'PRIMARY';
-    return role === 'PRIMARY';
-  });
-  const rows = primary.length > 0 ? primary : input.components;
+  const rows = input.components.filter(
+    (row) => resolveFlowerTypeCompositionClass(row) === 'BLOOM',
+  );
 
   if (kind === 'STEM') {
-    const row = rows[0];
+    const row = rows[0] ?? input.components[0];
     if (!row) return COMPOSITION_SUMMARY_EMPTY;
     const type = compositionRowTypeName(row);
     const variety = compositionRowVarietyName(row);
@@ -506,37 +509,26 @@ function productCompositionSummary(
     return COMPOSITION_SUMMARY_EMPTY;
   }
 
-  const totals = new Map<string, number>();
   const order: string[] = [];
+  const seen = new Set<string>();
   for (const row of rows) {
     const type = compositionRowTypeName(row);
-    if (!type) continue;
-    if (!totals.has(type)) order.push(type);
-    const qty = row.quantity && row.quantity > 0 ? row.quantity : 0;
-    totals.set(type, (totals.get(type) ?? 0) + qty);
+    if (!type || seen.has(type)) continue;
+    seen.add(type);
+    order.push(type);
   }
   if (order.length === 0) return COMPOSITION_SUMMARY_EMPTY;
-  return order
-    .map((type) => {
-      const label = flowerTypeListLabel(type);
-      if (!includeQuantities) return label;
-      const qty = totals.get(type) ?? 0;
-      return qty > 0 ? `${label} × ${qty}` : label;
-    })
-    .join(', ');
+  return order.map((type) => flowerTypeListLabel(type)).join(', ');
 }
 
-/** Admin products table — may include exact recipe quantities. */
+/** Admin products table — structured flower types (no ERP recipe quantities). */
 export function adminProductCompositionSummary(input: CompositionSummaryInput): string {
-  return productCompositionSummary(input, true);
+  return productCompositionSummary(input);
 }
 
-/**
- * Storefront / public list cards — flower types only, never exact bouquet recipe quantities.
- * SEO filters still use structured ProductComponent → FlowerItem links server-side.
- */
+/** Storefront / public list cards — same type labels as admin summary. */
 export function publicProductCompositionSummary(input: CompositionSummaryInput): string {
-  return productCompositionSummary(input, false);
+  return productCompositionSummary(input);
 }
 
 /**
@@ -699,9 +691,6 @@ export type GatedListingFilterFields = {
   minPriceMinor?: string;
   maxPriceMinor?: string;
   compositionKinds?: CompositionKind[];
-  /** Min total PRIMARY qty for a flower type (EXACT compositions only). */
-  minFlowerTypeQuantity?: number;
-  flowerTypeQuantitySlug?: string;
 };
 
 export function gateListingFiltersByEnabledKeys<T extends GatedListingFilterFields>(
@@ -747,10 +736,6 @@ export function gateListingFiltersByEnabledKeys<T extends GatedListingFilterFiel
   // Price window is always allowed (storefront dual-thumb slider).
   if (!keys.has('composition_kind')) {
     delete next.compositionKinds;
-  }
-  if (!keys.has('quantity')) {
-    delete next.minFlowerTypeQuantity;
-    delete next.flowerTypeQuantitySlug;
   }
 
   return next as T;
@@ -832,6 +817,11 @@ export type FlowerTypeDto = {
   name: string;
   sortOrder: number;
   visibility: TaxonomyVisibility;
+  /**
+   * Dictionary class for MONO/MIXED. null = unclassified
+   * (any product using this type must get compositionKind UNKNOWN).
+   */
+  compositionClass: FlowerTypeCompositionClass | null;
   seoTitle?: string | null;
   seoDescription?: string | null;
   noIndex?: boolean;
@@ -899,10 +889,10 @@ export type ColorRefDto = TaxonomyRefDto & {
 
 /**
  * Concrete reusable stem/SKU: Type + optional Form + Variety + Origin + stem length + color.
- * Quantity is NEVER on FlowerItem — only on ProductComponent.
- * Color is an attribute of the dictionary item (SSoT); ProductComponent.colorId is a
- * catalog snapshot copied on add/save — changing FlowerItem.colorId does not rewrite
- * historical order lines or silently cascade to existing components.
+ * Recipe stem counts live in ERP — not on FlowerItem and not on ProductComponent.
+ * Color is an attribute of the dictionary item (SSoT). ProductComponent only stores
+ * flowerItemId + sortOrder; changing FlowerItem.colorId does not rewrite historical
+ * order lines.
  */
 export type FlowerItemDto = {
   id: string;
@@ -919,7 +909,7 @@ export type FlowerItemDto = {
   name: string;
   sortOrder: number;
   visibility: TaxonomyVisibility;
-  flowerType: TaxonomyRefDto;
+  flowerType: FlowerTypeRefDto;
   flowerForm: TaxonomyRefDto | null;
   flowerVariety: TaxonomyRefDto | null;
   flowerOrigin: TaxonomyRefDto | null;
@@ -936,7 +926,6 @@ export type FlowerItemAdminDto = FlowerItemDto & {
     productId: string;
     productName: string;
     productSlug: string;
-    quantity: number | null;
   }>;
 };
 
@@ -1395,113 +1384,46 @@ function inferCompositionVarietyName(row: {
 }
 
 /**
- * Predominant PRIMARY flower type by quantity.
- * Requires EXACT-usable lines: every PRIMARY has quantity ≥ 1, flower type slug,
- * and the same unit (incomparable units → false — no guessing).
- * Target wins only with a unique maximum quantity (strict majority / sole max).
- */
-export function isDominantFlowerType(
-  rows: Array<{
-    role?: ComponentRole | null;
-    quantity?: number | null;
-    unit?: ComponentUnit | string | null;
-    flowerTypeSlug?: string | null;
-  }>,
-  targetSlug: string,
-): boolean {
-  const target = targetSlug.trim().toLowerCase();
-  if (!target) return false;
-  const primary = rows.filter((row) => (row.role ?? 'PRIMARY') === 'PRIMARY');
-  if (primary.length === 0) return false;
-  if (
-    primary.some(
-      (row) =>
-        row.quantity == null ||
-        row.quantity < 1 ||
-        !row.flowerTypeSlug?.trim() ||
-        !row.unit ||
-        row.unit === 'UNSPECIFIED',
-    )
-  ) {
-    return false;
-  }
-  const units = new Set(primary.map((row) => String(row.unit)));
-  if (units.size !== 1) return false;
-
-  const bySlug = new Map<string, number>();
-  for (const row of primary) {
-    const slug = row.flowerTypeSlug!.trim().toLowerCase();
-    bySlug.set(slug, (bySlug.get(slug) ?? 0) + row.quantity!);
-  }
-  const targetQty = bySlug.get(target) ?? 0;
-  if (targetQty <= 0) return false;
-  for (const [slug, qty] of bySlug) {
-    if (slug !== target && qty >= targetQty) return false;
-  }
-  return true;
-}
-
-export type DeriveCompositionKindOptions = {
-  /**
-   * Precision is orthogonal to CompositionKind:
-   * - DESCRIPTIVE → kind UNKNOWN (free text is not structured evidence; precision stays DESCRIPTIVE).
-   * - UNKNOWN → kind UNKNOWN (unset/incomplete; precision stays UNKNOWN — never rewrite to DESCRIPTIVE).
-   * - EXACT / APPROXIMATE → classify from PRIMARY structured lines when list is complete.
-   */
-  precision?: CompositionPrecision | null;
-  /**
-   * APPROXIMATE: explicit false → kind UNKNOWN (incomplete knowledge).
-   * When omitted, treated as complete for pure-function callers; persisted DB default is false.
-   */
-  primaryListComplete?: boolean | null;
-};
-
-/**
  * Single classification SoT for MONO / MIXED / UNKNOWN (CompositionKind).
- * Do not invent parallel classifiers.
+ * Do not invent parallel classifiers. Classification reads FlowerType.compositionClass only.
  *
  * Rules:
- * - Only PRIMARY lines count; GREENERY / FILLER / OTHER never break mono.
- * - Distinct FlowerType ids among PRIMARY: 1 → MONO, ≥2 → MIXED, 0 → UNKNOWN.
+ * - Any row with unclassified FlowerType (compositionClass null) → UNKNOWN.
+ * - Only BLOOM types count; DECORATIVE is ignored.
+ * - Distinct BLOOM FlowerType ids: 1 → MONO, ≥2 → MIXED, 0 → UNKNOWN.
  * - Different varieties of the same type stay MONO (type id, not variety).
- * - Color / title / free-text description never classify.
- * - DESCRIPTIVE precision → CompositionKind UNKNOWN (precision value remains DESCRIPTIVE).
- * - UNKNOWN precision → CompositionKind UNKNOWN (precision value remains UNKNOWN).
- * - Incomplete primary list → CompositionKind UNKNOWN.
  */
 export function deriveCompositionKind(
   rows: Array<{
-    role?: ComponentRole | null;
     typeId?: string | null;
-    typeName?: string | null;
-    flowerItem?: { flowerTypeId?: string | null; flowerType?: { id?: string; name?: string } | null } | null;
+    compositionClass?: FlowerTypeCompositionClass | null;
+    flowerItem?: {
+      flowerTypeId?: string | null;
+      flowerType?: {
+        id?: string | null;
+        compositionClass?: FlowerTypeCompositionClass | null;
+      } | null;
+    } | null;
   }>,
-  options?: DeriveCompositionKindOptions,
 ): CompositionKind {
-  const precision = options?.precision ?? null;
-  if (precision === 'DESCRIPTIVE' || precision === 'UNKNOWN') {
-    return 'UNKNOWN';
-  }
-  if (options?.primaryListComplete === false) {
-    return 'UNKNOWN';
-  }
-
-  const primary = rows.filter((row) => (row.role ?? 'PRIMARY') === 'PRIMARY');
-  if (primary.length === 0) return 'UNKNOWN';
-
-  const typeKeys = new Set<string>();
-  for (const row of primary) {
+  const bloomTypeKeys = new Set<string>();
+  for (const row of rows) {
+    const compositionClass = resolveFlowerTypeCompositionClass(row);
+    if (compositionClass == null) {
+      return 'UNKNOWN';
+    }
+    if (compositionClass === 'DECORATIVE') {
+      continue;
+    }
     const key =
       row.typeId?.trim() ||
       row.flowerItem?.flowerTypeId?.trim() ||
       row.flowerItem?.flowerType?.id?.trim() ||
-      row.typeName?.trim().toLowerCase() ||
-      row.flowerItem?.flowerType?.name?.trim().toLowerCase() ||
       '';
-    if (key) typeKeys.add(key);
+    if (key) bloomTypeKeys.add(key);
   }
-  if (typeKeys.size === 0) return 'UNKNOWN';
-  if (typeKeys.size === 1) return 'MONO';
+  if (bloomTypeKeys.size === 0) return 'UNKNOWN';
+  if (bloomTypeKeys.size === 1) return 'MONO';
   return 'MIXED';
 }
 
@@ -1589,16 +1511,25 @@ export function computeLinePriceMinor(input: {
   };
 }
 
-/** Suggest product-level visual palette color ids from component line colors (unique, order preserved). */
+/**
+ * @deprecated Task ProductColor: delete with manual product palette.
+ * No web callers left. Do not extend. Tests kept only until that task removes the export.
+ */
 export function suggestVisualPaletteColorIds(
-  rows: Array<{ role?: ComponentRole | null; colorId?: string | null }>,
+  rows: Array<{
+    colorId?: string | null;
+    compositionClass?: FlowerTypeCompositionClass | null;
+    flowerItem?: {
+      colorId?: string | null;
+      flowerType?: { compositionClass?: FlowerTypeCompositionClass | null } | null;
+    } | null;
+  }>,
 ): string[] {
   const seen = new Set<string>();
   const out: string[] = [];
   for (const row of rows) {
-    const role = row.role ?? 'PRIMARY';
-    if (role === 'GREENERY') continue;
-    const id = row.colorId?.trim();
+    if (resolveFlowerTypeCompositionClass(row) !== 'BLOOM') continue;
+    const id = row.colorId?.trim() || row.flowerItem?.colorId?.trim();
     if (!id || seen.has(id)) continue;
     seen.add(id);
     out.push(id);
@@ -1606,23 +1537,14 @@ export function suggestVisualPaletteColorIds(
   return out;
 }
 
-export function isComponentRole(value: string): value is ComponentRole {
-  return (COMPONENT_ROLES as readonly string[]).includes(value);
-}
-
 export function isCompositionKind(value: string): value is CompositionKind {
   return (COMPOSITION_KINDS as readonly string[]).includes(value);
-}
-
-export function isCompositionPrecision(value: string): value is CompositionPrecision {
-  return (COMPOSITION_PRECISIONS as readonly string[]).includes(value);
 }
 
 /** Suggest a product name from composition rows (manager confirms — never auto-applied). */
 export function suggestProductNameFromComposition(
   rows: Array<{
     displayName: string;
-    quantity: number | null;
     typeName?: string | null;
     varietyName?: string | null;
   }>,
@@ -1632,14 +1554,9 @@ export function suggestProductNameFromComposition(
 
   if (usable.length === 1) {
     const row = usable[0]!;
-    const qty = row.quantity && row.quantity > 0 ? row.quantity : null;
     const type = inferCompositionTypeName(row);
     const label = row.displayName.trim();
     const variety = inferCompositionVarietyName(row);
-    if (qty && qty > 1) {
-      if (variety) return `Букет из ${flowerTypeGenitive(type)} ${quoteFlowerVariety(variety)}`;
-      return `Букет из ${qty} ${label}`;
-    }
     if (variety) return `${type} ${quoteFlowerVariety(variety)}`;
     return label;
   }
@@ -1880,6 +1797,11 @@ export type TaxonomyRefDto = {
   name: string;
 };
 
+/** Flower type on FlowerItem payloads (includes composition class). */
+export type FlowerTypeRefDto = TaxonomyRefDto & {
+  compositionClass: FlowerTypeCompositionClass | null;
+};
+
 export type TaxonomyAdminDto = {
   id: string;
   slug: string;
@@ -1897,7 +1819,7 @@ export type TaxonomyAdminDto = {
   productsCount?: number;
   /** Color on FlowerItem rows. */
   flowerItemsCount?: number;
-  /** Color snapshot on ProductComponent. */
+  /** Products whose composition references FlowerItems of this color. */
   componentsCount?: number;
 };
 
@@ -1938,14 +1860,9 @@ export type ProductComponentDto = {
   id: string;
   flowerItemId: string;
   flowerItem: FlowerItemDto | null;
-  /** Snapshot of FlowerItem color at last product save (orders use order-line snapshots). */
-  colorId: string | null;
-  color: ColorRefDto | null;
-  role: ComponentRole;
-  displayName: string;
-  quantity: number | null;
-  unit: ComponentUnit;
   sortOrder: number;
+  /** Derived label from FlowerItem.name at read time — not persisted on ProductComponent. */
+  displayName: string;
 };
 
 export const CATALOG_PAGE_KINDS = [
@@ -2106,12 +2023,6 @@ export type ProductAdminDto = {
   heightCm: number | null;
   productKind: ProductKind;
   compositionKind: CompositionKind;
-  compositionPrecision: CompositionPrecision;
-  /** APPROXIMATE: listed PRIMARY flowers are the complete main set. */
-  /** False until manager confirms complete PRIMARY list (APPROXIMATE) or EXACT save. */
-  compositionPrimaryComplete: boolean;
-  /** Free-text composition for DESCRIPTIVE; never auto-filled from UNKNOWN. */
-  compositionText: string | null;
   catalogCategoryId: string | null;
   catalogCategory: TaxonomyRefDto | null;
   family: ProductFamilyDto | null;
@@ -2193,14 +2104,9 @@ export type ProductPublicDto = {
     effectivePriceMinor: string;
     sortOrder: number;
   }>;
-  /**
-   * Public bouquet composition: flower/color identity for SEO filters, no exact recipe qty.
-   * Quantity stays on admin ProductComponentDto / DB until ERP recipe migration.
-   */
+  /** Public bouquet composition: flower/color identity for SEO filters (no recipe quantities). */
   components: Array<{
     displayName: string;
-    unit: ComponentUnit;
-    role: ComponentRole;
     flowerSlug: string | null;
     colorSlug: string | null;
     /** Flower dictionary photo for «Состав». */

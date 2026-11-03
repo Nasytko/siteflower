@@ -181,8 +181,6 @@ export class PublicCatalogService {
       flowerOriginSlugs: catalogFilters.flowerOriginSlugs,
       heightCm: catalogFilters.heightCm,
       compositionKinds: query.compositionKind,
-      minFlowerTypeQuantity: query.minFlowerTypeQuantity,
-      flowerTypeQuantitySlug: query.flowerTypeQuantitySlug,
     };
     if (query.categorySlug) {
       try {

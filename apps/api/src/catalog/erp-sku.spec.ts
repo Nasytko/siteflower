@@ -35,16 +35,23 @@ describe('ERP SKU identity (Task 04A)', () => {
       publicProductCompositionSummary({
         productKind: 'BOUQUET',
         components: [
-          { role: 'PRIMARY', typeName: 'Роза', quantity: 25 },
-          { role: 'PRIMARY', typeName: 'Эустома', quantity: 9 },
+          { typeName: 'Роза', compositionClass: 'BLOOM' },
+          { typeName: 'Эустома', compositionClass: 'BLOOM' },
         ],
       }),
     ).toBe('Розы, Эустомы');
     expect(
       publicProductCompositionSummary({
         productKind: 'BOUQUET',
-        components: [{ role: 'PRIMARY', typeName: 'Роза', quantity: 25 }],
+        components: [{ typeName: 'Роза', compositionClass: 'BLOOM' }],
       }),
     ).not.toMatch(/\d/);
+    // Unclassified types do not invent a bloom summary.
+    expect(
+      publicProductCompositionSummary({
+        productKind: 'BOUQUET',
+        components: [{ typeName: 'Роза' }],
+      }),
+    ).toBe('Состав не указан');
   });
 });

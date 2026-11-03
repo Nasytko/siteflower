@@ -57,19 +57,6 @@ export function describeCatalogPageRules(rules: Prisma.JsonValue): string {
     (typeof record.flowerColor === 'string' ? [record.flowerColor] : undefined);
   if (colors?.length) parts.push(`цвет «${colors.join(', ')}»`);
 
-  if (typeof record.dominantFlowerTypeSlug === 'string' && record.dominantFlowerTypeSlug.trim()) {
-    parts.push(`доминирует «${record.dominantFlowerTypeSlug.trim()}»`);
-  }
-
-  if (
-    typeof record.minFlowerTypeQuantity === 'number' &&
-    typeof record.flowerTypeQuantitySlug === 'string'
-  ) {
-    parts.push(
-      `≥${record.minFlowerTypeQuantity} шт. «${record.flowerTypeQuantitySlug}» (точный состав)`,
-    );
-  }
-
   const traits = asList(record.traitKeys);
   if (traits?.length) {
     parts.push(
@@ -138,12 +125,6 @@ export function flowerTypeSlugsFromRules(rules: Prisma.JsonValue): string[] {
   }
   if (typeof record.onlyFlowerType === 'string' && record.onlyFlowerType.trim()) {
     slugs.add(record.onlyFlowerType.trim());
-  }
-  if (typeof record.dominantFlowerTypeSlug === 'string' && record.dominantFlowerTypeSlug.trim()) {
-    slugs.add(record.dominantFlowerTypeSlug.trim());
-  }
-  if (typeof record.flowerTypeQuantitySlug === 'string' && record.flowerTypeQuantitySlug.trim()) {
-    slugs.add(record.flowerTypeQuantitySlug.trim());
   }
   return [...slugs];
 }

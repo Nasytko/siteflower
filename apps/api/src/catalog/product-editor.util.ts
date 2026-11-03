@@ -27,6 +27,25 @@ export function collectFixedSalePricesFromCreatedVariants(
 }
 
 /**
+ * Bootstrap/seed only: resolve temporary name keys to variant rows, then return
+ * FIXED sales keyed by stable `variantId`. Never use sortOrder as identity.
+ * Runtime admin/API paths must pass variantId directly (see collectFixed…).
+ */
+export function mapNamedFixedSalesToVariantIds(
+  variants: ReadonlyArray<{ id: string; name: string; sortOrder?: number }>,
+  salesByName: ReadonlyArray<{ name: string; salePriceMinor: number }>,
+): Array<{ variantId: string; salePriceMinor: bigint }> {
+  const byName = new Map(variants.map((row) => [row.name, row]));
+  return salesByName.map(({ name, salePriceMinor }) => {
+    const variant = byName.get(name);
+    if (!variant) {
+      throw new Error(`FIXED promo missing variant «${name}»`);
+    }
+    return { variantId: variant.id, salePriceMinor: BigInt(salePriceMinor) };
+  });
+}
+
+/**
  * Mirrors admin editor persistence rules: DB requires PERCENT ⇒ percent_off NOT NULL.
  * When disabled without a valid percent, persist FIXED + null.
  */

@@ -19,10 +19,7 @@ import {
 } from 'class-validator';
 import {
   COMMERCIAL_AVAILABILITIES,
-  COMPONENT_ROLES,
-  COMPONENT_UNITS,
   COMPOSITION_KINDS,
-  COMPOSITION_PRECISIONS,
   ERP_SKU_PATTERN,
   PRODUCT_KINDS,
   PRODUCT_LIFECYCLES,
@@ -33,10 +30,7 @@ import {
   VARIANT_STATUSES,
   normalizeErpSku,
   type CommercialAvailability,
-  type ComponentRole,
-  type ComponentUnit,
   type CompositionKind,
-  type CompositionPrecision,
   type ProductKind,
   type ProductLifecycle,
   type ProductOptionChargeMode,
@@ -210,22 +204,6 @@ export class SaveProductEditorDto extends ExpectedVersionDto {
   @IsOptional()
   @IsIn(PRODUCT_KINDS)
   productKind?: ProductKind;
-
-  @IsOptional()
-  @IsIn(COMPOSITION_PRECISIONS)
-  compositionPrecision?: CompositionPrecision;
-
-  /** APPROXIMATE: listed PRIMARY flowers form the complete main set. */
-  @IsOptional()
-  @IsBoolean()
-  compositionPrimaryComplete?: boolean;
-
-  /** Free-text composition for DESCRIPTIVE (or optional notes). */
-  @IsOptional()
-  @ValidateIf((_, value) => value !== null)
-  @IsString()
-  @MaxLength(4000)
-  compositionText?: string | null;
 
   @IsOptional()
   @ValidateIf((_, value) => value !== null)
@@ -408,31 +386,6 @@ export class EditorOptionGroupInputDto {
 export class ProductComponentInputDto {
   @IsUUID()
   flowerItemId!: string;
-
-  @IsOptional()
-  @ValidateIf((_, value) => value !== null)
-  @IsUUID()
-  colorId?: string | null;
-
-  @IsOptional()
-  @IsIn(COMPONENT_ROLES)
-  role?: ComponentRole;
-
-  @IsString()
-  @MinLength(1)
-  @MaxLength(160)
-  displayName!: string;
-
-  @IsOptional()
-  @ValidateIf((_, value) => value !== null)
-  @IsInt()
-  @Min(0)
-  @Max(10_000)
-  quantity?: number | null;
-
-  @IsOptional()
-  @IsIn(COMPONENT_UNITS)
-  unit?: ComponentUnit;
 
   @IsOptional()
   @IsInt()
@@ -867,18 +820,6 @@ class ProductFacetQueryDto {
   @ArrayMaxSize(FACET_LIST_MAX)
   @IsIn(COMPOSITION_KINDS, { each: true })
   compositionKind?: CompositionKind[];
-
-  @IsOptional()
-  @Type(() => Number)
-  @IsInt()
-  @Min(1)
-  @Max(10_000)
-  minFlowerTypeQuantity?: number;
-
-  @IsOptional()
-  @IsString()
-  @MaxLength(120)
-  flowerTypeQuantitySlug?: string;
 
   @IsOptional()
   @Transform(toOptionalBoolean)

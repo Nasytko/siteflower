@@ -20,9 +20,6 @@ function baseProduct(
     catalogCategoryId: null,
     productKind: 'BOUQUET',
     compositionKind: 'UNKNOWN',
-    compositionPrecision: 'UNKNOWN',
-    compositionPrimaryComplete: false,
-    compositionText: null,
     lifecycle: 'PUBLISHED',
     availability: 'AVAILABLE',
     currency: 'BYN',
@@ -72,9 +69,6 @@ describe('productDisplayFlowerAttrs', () => {
           id: 'c1',
           productId: 'p1',
           flowerItemId: 'fi1',
-          displayName: 'Хризантема',
-          quantity: 5,
-          unit: 'STEM',
           sortOrder: 0,
           createdAt: new Date(),
           updatedAt: new Date(),
@@ -94,7 +88,12 @@ describe('productDisplayFlowerAttrs', () => {
             version: 1,
             createdAt: new Date(),
             updatedAt: new Date(),
-            flowerType: { id: 't2', slug: 'hrizantema', name: 'Хризантема' },
+            flowerType: {
+              id: 't2',
+              slug: 'hrizantema',
+              name: 'Хризантема',
+              compositionClass: 'BLOOM',
+            },
             flowerForm: null,
             flowerVariety: { id: 'v2', slug: 'bigudi', name: 'Бигуди' },
             flowerOrigin: { id: 'o2', slug: 'ferma', name: 'Фермерская' },
@@ -125,7 +124,7 @@ describe('productDisplayFlowerAttrs', () => {
 describe('toProductListItemDto composition summary', () => {
   const urlFor = (key: string) => `https://cdn.test/${key}`;
 
-  it('maps bouquet mixed PRIMARY quantities and ignores greenery', () => {
+  it('maps bouquet types and ignores DECORATIVE without inventing quantities', () => {
     const dto = toProductListItemDto(
       baseProduct({
         productKind: 'BOUQUET',
@@ -134,33 +133,44 @@ describe('toProductListItemDto composition summary', () => {
             id: 'c1',
             productId: 'p1',
             flowerItemId: 'fi1',
-            role: 'PRIMARY',
-            quantity: 7,
+            sortOrder: 0,
             flowerItem: {
-              flowerType: { id: 't1', slug: 'roza', name: 'Роза' },
+              flowerType: { id: 't1', slug: 'roza', name: 'Роза', compositionClass: 'BLOOM' },
               flowerVariety: null,
+              flowerForm: null,
+              flowerOrigin: null,
+              stemLengthCm: null,
             },
           },
           {
             id: 'c2',
             productId: 'p1',
             flowerItemId: 'fi2',
-            role: 'PRIMARY',
-            quantity: 5,
+            sortOrder: 1,
             flowerItem: {
-              flowerType: { id: 't2', slug: 'eustoma', name: 'Эустома' },
+              flowerType: { id: 't2', slug: 'eustoma', name: 'Эустома', compositionClass: 'BLOOM' },
               flowerVariety: null,
+              flowerForm: null,
+              flowerOrigin: null,
+              stemLengthCm: null,
             },
           },
           {
             id: 'c3',
             productId: 'p1',
             flowerItemId: 'fi3',
-            role: 'GREENERY',
-            quantity: 4,
+            sortOrder: 2,
             flowerItem: {
-              flowerType: { id: 't3', slug: 'evkalipt', name: 'Эвкалипт' },
+              flowerType: {
+                id: 't3',
+                slug: 'evkalipt',
+                name: 'Эвкалипт',
+                compositionClass: 'DECORATIVE',
+              },
               flowerVariety: null,
+              flowerForm: null,
+              flowerOrigin: null,
+              stemLengthCm: null,
             },
           },
         ],
@@ -168,44 +178,33 @@ describe('toProductListItemDto composition summary', () => {
       urlFor,
     );
     expect(dto.productKind).toBe('BOUQUET');
-    // Default list mapping is public-safe (no exact recipe quantities).
     expect(dto.compositionSummary).toBe('Розы, Эустомы');
-    expect(
-      toProductListItemDto(
-        baseProduct({
-          productKind: 'BOUQUET',
-          components: [
-            {
-              id: 'c1',
-              productId: 'p1',
-              flowerItemId: 'fi1',
-              role: 'PRIMARY',
-              quantity: 7,
-              flowerItem: { flowerType: { id: 't1', slug: 'roza', name: 'Роза' } },
+    expect(dto.compositionSummary).not.toMatch(/\d/);
+  });
+
+  it('does not invent bloom summary for unclassified FlowerType', () => {
+    const dto = toProductListItemDto(
+      baseProduct({
+        productKind: 'BOUQUET',
+        components: [
+          {
+            id: 'c1',
+            productId: 'p1',
+            flowerItemId: 'fi1',
+            sortOrder: 0,
+            flowerItem: {
+              flowerType: { id: 't1', slug: 'roza', name: 'Роза', compositionClass: null },
+              flowerVariety: null,
+              flowerForm: null,
+              flowerOrigin: null,
+              stemLengthCm: null,
             },
-            {
-              id: 'c2',
-              productId: 'p1',
-              flowerItemId: 'fi2',
-              role: 'PRIMARY',
-              quantity: 5,
-              flowerItem: { flowerType: { id: 't2', slug: 'eustoma', name: 'Эустома' } },
-            },
-            {
-              id: 'c3',
-              productId: 'p1',
-              flowerItemId: 'fi3',
-              role: 'GREENERY',
-              quantity: 4,
-              flowerItem: { flowerType: { id: 't3', slug: 'evkalipt', name: 'Эвкалипт' } },
-            },
-          ],
-        } as unknown as Partial<ProductWithRelations>),
-        urlFor,
-        new Date(),
-        { includeCompositionQuantities: true },
-      ).compositionSummary,
-    ).toBe('Розы × 7, Эустомы × 5');
+          },
+        ],
+      } as unknown as Partial<ProductWithRelations>),
+      urlFor,
+    );
+    expect(dto.compositionSummary).toBe('Состав не указан');
   });
 
   it('maps stem as type · variety', () => {
@@ -217,10 +216,12 @@ describe('toProductListItemDto composition summary', () => {
             id: 'c1',
             productId: 'p1',
             flowerItemId: 'fi1',
-            role: 'PRIMARY',
-            quantity: 1,
+            sortOrder: 0,
             flowerItem: {
-              flowerType: { id: 't1', slug: 'roza', name: 'Роза' },
+              flowerType: { id: 't1', slug: 'roza', name: 'Роза', compositionClass: 'BLOOM' },
+              flowerForm: null,
+              flowerOrigin: null,
+              stemLengthCm: null,
               flowerVariety: { id: 'v1', slug: 'gisel', name: 'Жизель' },
             },
           },
@@ -264,18 +265,17 @@ describe('toProductPublicDto composition (Task 04A)', () => {
             id: 'c1',
             productId: 'p1',
             flowerItemId: 'fi1',
-            colorId: null,
-            role: 'PRIMARY',
-            displayName: 'Роза',
-            quantity: 11,
-            unit: 'STEM',
             sortOrder: 0,
             createdAt: new Date(),
             updatedAt: new Date(),
-            color: null,
             flowerItem: {
               imageUrl: null,
-              flowerType: { slug: 'roza' },
+              stemLengthCm: null,
+              flowerForm: null,
+              flowerVariety: null,
+              flowerOrigin: null,
+              flowerType: { id: 't1', slug: 'roza', name: 'Роза', compositionClass: 'BLOOM' },
+              color: null,
             },
           },
         ],
@@ -286,11 +286,11 @@ describe('toProductPublicDto composition (Task 04A)', () => {
     expect(dto.components[0]).toEqual(
       expect.objectContaining({
         displayName: 'Роза',
-        unit: 'STEM',
         flowerSlug: 'roza',
       }),
     );
     expect(dto.components[0]).not.toHaveProperty('quantity');
+    expect(dto.components[0]).not.toHaveProperty('role');
   });
 
   it('maps admin erpSku while allowing null for legacy products', () => {

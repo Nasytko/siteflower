@@ -14,6 +14,7 @@ import {
   type FlowerOriginAdminDto,
   type FlowerOriginDto,
   type FlowerTypeAdminDto,
+  type FlowerTypeCompositionClass,
   type FlowerTypeDto,
   type FlowerVarietyAdminDto,
   type FlowerVarietyDto,
@@ -23,6 +24,7 @@ import { AuditService } from '../audit/audit.service';
 import { PrismaService } from '../database/prisma.service';
 import { StorefrontRevalidateService } from '../storefront/storefront-revalidate.service';
 import { CatalogMatchService } from './catalog-match.service';
+import { recomputeCompositionKindForFlowerTypes } from './composition-kind-recompute.util';
 import {
   buildFlowerItemFields,
   FLOWER_ITEM_INCLUDE,
@@ -63,6 +65,7 @@ export class FlowerRefsService {
       name: row.name,
       sortOrder: row.sortOrder,
       visibility: row.visibility,
+      compositionClass: row.compositionClass,
       seoTitle: row.seoTitle,
       seoDescription: row.seoDescription,
       noIndex: row.noIndex,
@@ -80,6 +83,7 @@ export class FlowerRefsService {
       name: row.name,
       sortOrder: row.sortOrder,
       visibility: row.visibility,
+      compositionClass: row.compositionClass,
       version: row.version,
       productsCount: 0,
       varietiesCount: row._count.varieties,
@@ -159,7 +163,12 @@ export class FlowerRefsService {
   }
 
   async createType(
-    input: { name: string; slug?: string; sortOrder?: number },
+    input: {
+      name: string;
+      slug?: string;
+      sortOrder?: number;
+      compositionClass?: FlowerTypeCompositionClass | null;
+    },
     actor?: ActorContext,
   ): Promise<FlowerTypeAdminDto> {
     const slug = normalizeSlug(input.slug?.trim() || input.name);
@@ -167,7 +176,14 @@ export class FlowerRefsService {
     try {
       const row = await this.prisma.client.$transaction(async (tx) => {
         const created = await tx.flowerType.create({
-          data: { name: input.name.trim(), slug, sortOrder: input.sortOrder ?? 0 },
+          data: {
+            name: input.name.trim(),
+            slug,
+            sortOrder: input.sortOrder ?? 0,
+            ...(input.compositionClass === undefined
+              ? {}
+              : { compositionClass: input.compositionClass }),
+          },
           include: { _count: { select: { varieties: true } } },
         });
         if (actor) {
@@ -194,6 +210,7 @@ export class FlowerRefsService {
         name: row.name,
         sortOrder: row.sortOrder,
         visibility: row.visibility,
+        compositionClass: row.compositionClass,
         version: row.version,
         productsCount: 0,
         varietiesCount: row._count.varieties,
@@ -315,6 +332,7 @@ export class FlowerRefsService {
       slug?: string;
       sortOrder?: number;
       visibility?: TaxonomyVisibility;
+      compositionClass?: FlowerTypeCompositionClass | null;
       seoTitle?: string | null;
       seoDescription?: string | null;
       noIndex?: boolean;
@@ -445,6 +463,12 @@ export class FlowerRefsService {
           tx,
         );
       }
+
+      // Items changed FlowerType → refresh cached Product.compositionKind for both types.
+      await recomputeCompositionKindForFlowerTypes(tx, [
+        variety.flowerTypeId,
+        input.targetFlowerTypeId,
+      ]);
 
       const updated = await tx.flowerVariety.findUniqueOrThrow({
         where: { id },
@@ -1040,7 +1064,6 @@ export class FlowerRefsService {
           take: 40,
           orderBy: { createdAt: 'desc' },
           select: {
-            quantity: true,
             product: { select: { id: true, name: true, slug: true } },
           },
         },
@@ -1054,7 +1077,6 @@ export class FlowerRefsService {
         productId: c.product.id,
         productName: c.product.name,
         productSlug: c.product.slug,
-        quantity: c.quantity,
       })),
     };
   }
@@ -1384,6 +1406,12 @@ export class FlowerRefsService {
             _count: { select: { components: true } },
           },
         });
+        if (nextTypeId !== existing.flowerTypeId) {
+          await recomputeCompositionKindForFlowerTypes(tx, [
+            existing.flowerTypeId,
+            nextTypeId,
+          ]);
+        }
         if (actor) {
           await this.audit.record(
             {
@@ -1509,6 +1537,7 @@ export class FlowerRefsService {
       sortOrder?: number;
       visibility?: TaxonomyVisibility;
       flowerTypeId?: string;
+      compositionClass?: FlowerTypeCompositionClass | null;
       seoTitle?: string | null;
       seoDescription?: string | null;
       noIndex?: boolean;
@@ -1546,6 +1575,9 @@ export class FlowerRefsService {
             ...(model === 'flowerType' && input.noIndex !== undefined
               ? { noIndex: input.noIndex }
               : {}),
+            ...(model === 'flowerType' && input.compositionClass !== undefined
+              ? { compositionClass: input.compositionClass }
+              : {}),
             version: { increment: 1 },
           },
         });
@@ -1572,6 +1604,7 @@ export class FlowerRefsService {
           seoTitle?: string | null;
           seoDescription?: string | null;
           noIndex?: boolean;
+          compositionClass?: FlowerTypeCompositionClass | null;
           _count: { products: number; varieties?: number };
         };
         if (actor) {
@@ -1591,6 +1624,10 @@ export class FlowerRefsService {
             tx,
           );
         }
+        // Cached Product.compositionKind must follow dictionary class — not only product save.
+        if (model === 'flowerType' && input.compositionClass !== undefined) {
+          await recomputeCompositionKindForFlowerTypes(tx, [id]);
+        }
         return updated;
       });
       await this.pingStorefront();
@@ -1601,6 +1638,7 @@ export class FlowerRefsService {
           name: row.name,
           sortOrder: row.sortOrder,
           visibility: row.visibility,
+          compositionClass: row.compositionClass ?? null,
           version: row.version,
           productsCount: 0,
           varietiesCount: row._count.varieties ?? 0,

@@ -1,42 +1,27 @@
 'use client';
 
+import Link from 'next/link';
 import { useEffect, useId, useRef, useState } from 'react';
 import {
-  COMPONENT_ROLES,
-  COMPOSITION_PRECISIONS,
   deriveCompositionKind,
   formatCompositionSummaryLine,
   productKindUsesBouquetCompositionKind,
-  suggestVisualPaletteColorIds,
-  type ComponentRole,
-  type CompositionPrecision,
   type ProductKind,
 } from '@bouquet-one/contracts';
 import { AdminColorSwatch } from '@/components/admin/admin-color-swatch';
 import {
-  emptyComponentDraft,
   formatCompositionHitSubtitle,
   type ComponentDraft,
   type CompositionHit,
 } from '@/components/admin/product-editor-shared';
-import { ProductEditorInlineFlower } from '@/components/admin/product-editor-inline-flower';
-import { componentRoleLabel } from '@/lib/admin-labels';
 
 type Props = {
   canUpdate: boolean;
   productKind: ProductKind;
-  compositionPrecision: CompositionPrecision;
-  setCompositionPrecision: (value: CompositionPrecision) => void;
-  compositionPrimaryComplete: boolean;
-  setCompositionPrimaryComplete: (value: boolean) => void;
-  compositionText: string;
-  setCompositionText: (value: string) => void;
   components: ComponentDraft[];
   setComponents: React.Dispatch<React.SetStateAction<ComponentDraft[]>>;
   compositionSearch: string;
   setCompositionSearch: (value: string) => void;
-  compositionAddQty: string;
-  setCompositionAddQty: (value: string) => void;
   compositionHits: CompositionHit[];
   compositionSearchPending: boolean;
   compositionSearchError: string | null;
@@ -45,34 +30,19 @@ type Props = {
   compositionReplaceKey: string | null;
   setCompositionReplaceKey: (key: string | null) => void;
   onAddFlower: (itemId: string, itemName?: string) => void;
-  onSuggestPalette: (colorIds: string[]) => void;
   touch: () => void;
-  nextComponentKey: () => string;
 };
 
-const PRECISION_LABELS: Record<CompositionPrecision, string> = {
-  EXACT: 'Точный состав (с количествами)',
-  APPROXIMATE: 'Приблизительный состав',
-  DESCRIPTIVE: 'Описательный (текст)',
-  UNKNOWN: 'Не задан',
-};
+const FLOWER_DICTIONARY_HREF = '/admin/catalog/flower-structure';
 
 export function ProductEditorCompositionTab(props: Props) {
   const {
     canUpdate,
     productKind,
-    compositionPrecision,
-    setCompositionPrecision,
-    compositionPrimaryComplete,
-    setCompositionPrimaryComplete,
-    compositionText,
-    setCompositionText,
     components,
     setComponents,
     compositionSearch,
     setCompositionSearch,
-    compositionAddQty,
-    setCompositionAddQty,
     compositionHits,
     compositionSearchPending,
     compositionSearchError,
@@ -80,9 +50,7 @@ export function ProductEditorCompositionTab(props: Props) {
     compositionReplaceKey,
     setCompositionReplaceKey,
     onAddFlower,
-    onSuggestPalette,
     touch,
-    nextComponentKey,
   } = props;
 
   const listId = useId();
@@ -95,13 +63,18 @@ export function ProductEditorCompositionTab(props: Props) {
 
   const derivedKind = deriveCompositionKind(
     components.map((row) => ({
-      role: row.role,
-      typeName: row.typeName,
+      typeId: row.typeId || null,
+      compositionClass: row.compositionClass,
+      flowerItem: row.typeId
+        ? {
+            flowerTypeId: row.typeId,
+            flowerType: {
+              id: row.typeId,
+              compositionClass: row.compositionClass,
+            },
+          }
+        : null,
     })),
-    {
-      precision: compositionPrecision,
-      primaryListComplete: compositionPrimaryComplete,
-    },
   );
   const typeNames = [
     ...new Set(components.map((row) => row.typeName.trim()).filter(Boolean)),
@@ -115,28 +88,20 @@ export function ProductEditorCompositionTab(props: Props) {
     colorNames,
     productKind,
   });
-  const suggestedPaletteIds = suggestVisualPaletteColorIds(
-    components.map((row) => ({ role: row.role, colorId: row.colorId || null })),
-  );
-  const showBouquetRoles = productKindUsesBouquetCompositionKind(productKind);
+  const showKindPreview = productKindUsesBouquetCompositionKind(productKind);
   const isStem = productKind === 'STEM';
   const isReplacing = Boolean(compositionReplaceKey);
 
-  function updateRow(index: number, patch: Partial<ComponentDraft>) {
-    setComponents((prev) => prev.map((item, i) => (i === index ? { ...item, ...patch } : item)));
-    touch();
-  }
-
-  function duplicateRow(index: number) {
+  function moveRow(index: number, delta: -1 | 1) {
     setComponents((prev) => {
-      const source = prev[index];
-      if (!source) return prev;
-      const copy = emptyComponentDraft({
-        ...source,
-        key: nextComponentKey(),
-      });
+      const target = index + delta;
+      if (target < 0 || target >= prev.length) return prev;
       const next = [...prev];
-      next.splice(index + 1, 0, copy);
+      const current = next[index];
+      const swap = next[target];
+      if (!current || !swap) return prev;
+      next[index] = swap;
+      next[target] = current;
       return next;
     });
     touch();
@@ -182,68 +147,14 @@ export function ProductEditorCompositionTab(props: Props) {
         <div>
           <h2>{isStem ? 'Выбор цветка' : 'Состав'}</h2>
           <p className="sf-pe-card__lead">
-          {isStem
-            ? 'Выберите одну позицию справочника. Вид, форма, сорт и высота подставятся сами.'
-            : 'Добавьте цветы из справочника и укажите количество веток.'}
+            {isStem
+              ? 'Выберите одну позицию справочника. Вид, форма, сорт и высота подставятся сами.'
+              : 'Добавьте цветы из справочника — каждый цветок один раз, порядок можно менять.'}
           </p>
         </div>
       </div>
       <div className="sf-pe-card__body space-y-6">
-
-      {!isStem ? (
-        <div className="grid max-w-xl gap-3">
-          <label className="admin-field">
-            <span className="admin-field__label">Точность состава</span>
-            <select
-              className="admin-input"
-              value={compositionPrecision}
-              disabled={!canUpdate}
-              onChange={(event) => {
-                const next = event.target.value as CompositionPrecision;
-                setCompositionPrecision(next);
-                if (next === 'EXACT') setCompositionPrimaryComplete(true);
-                if (next === 'DESCRIPTIVE' || next === 'UNKNOWN') {
-                  setCompositionPrimaryComplete(false);
-                }
-                touch();
-              }}
-            >
-              {COMPOSITION_PRECISIONS.map((value) => (
-                <option key={value} value={value}>
-                  {PRECISION_LABELS[value]}
-                </option>
-              ))}
-            </select>
-          </label>
-          {compositionPrecision === 'APPROXIMATE' ? (
-            <label className="flex items-center gap-2 text-sm">
-              <input
-                type="checkbox"
-                checked={compositionPrimaryComplete}
-                disabled={!canUpdate}
-                onChange={(event) => {
-                  setCompositionPrimaryComplete(event.target.checked);
-                  touch();
-                }}
-              />
-              Перечень основных цветов полный (без галочки — классификация UNKNOWN)
-            </label>
-          ) : null}
-          {compositionPrecision === 'DESCRIPTIVE' ? (
-            <label className="admin-field">
-              <span className="admin-field__label">Описание состава</span>
-              <textarea
-                className="admin-input min-h-24"
-                value={compositionText}
-                disabled={!canUpdate}
-                placeholder="Свободное описание без автоматической классификации по тексту"
-                onChange={(event) => {
-                  setCompositionText(event.target.value);
-                  touch();
-                }}
-              />
-            </label>
-          ) : null}
+        {showKindPreview ? (
           <p className="text-sm text-[var(--admin-muted)]">
             Классификация: <strong>{derivedKind}</strong>
             {derivedKind === 'MONO'
@@ -252,263 +163,220 @@ export function ProductEditorCompositionTab(props: Props) {
                 ? ' — несколько основных видов'
                 : ' — недостаточно данных'}
           </p>
-        </div>
-      ) : null}
+        ) : null}
 
-      {summaryLine && compositionPrecision !== 'DESCRIPTIVE' ? (
-        <p className="text-sm text-[var(--admin-muted)]">{summaryLine}</p>
-      ) : null}
+        {summaryLine ? (
+          <p className="text-sm text-[var(--admin-muted)]">{summaryLine}</p>
+        ) : null}
 
-      {canUpdate && compositionPrecision !== 'DESCRIPTIVE' ? (
-        <div className="max-w-xl space-y-3">
-          {isReplacing ? (
-            <p className="text-sm font-medium text-amber-900">
-              Замена цветка — выберите новую позицию из списка.
-              <button
-                type="button"
-                className="admin-link ml-2 text-xs"
-                onClick={() => {
-                  setCompositionReplaceKey(null);
-                  setCompositionSearch('');
-                }}
-              >
-                Отмена
-              </button>
-            </p>
-          ) : null}
+        {canUpdate ? (
+          <div className="max-w-xl space-y-3">
+            {isReplacing ? (
+              <p className="text-sm font-medium text-amber-900">
+                Замена цветка — выберите новую позицию из списка.
+                <button
+                  type="button"
+                  className="admin-link ml-2 text-xs"
+                  onClick={() => {
+                    setCompositionReplaceKey(null);
+                    setCompositionSearch('');
+                  }}
+                >
+                  Отмена
+                </button>
+              </p>
+            ) : null}
 
-          <label className="admin-field">
-            <span>Поиск цветка</span>
-            <input
-              ref={searchRef}
-              className="admin-input"
-              value={compositionSearch}
-              autoFocus={isReplacing}
-              placeholder="Название, вид, форма, сорт…"
-              role="combobox"
-              aria-expanded={compositionHits.length > 0}
-              aria-controls={listId}
-              aria-autocomplete="list"
-              onChange={(event) => setCompositionSearch(event.target.value)}
-              onKeyDown={onSearchKeyDown}
-            />
-          </label>
-
-          {!isReplacing && !isStem ? (
-            <label className="admin-field max-w-[8rem]">
-              <span>Кол-во</span>
+            <label className="admin-field">
+              <span>Поиск цветка</span>
               <input
-                className="admin-input tabular-nums"
-                type="number"
-                min={1}
-                value={compositionAddQty}
-                onChange={(event) => setCompositionAddQty(event.target.value)}
+                ref={searchRef}
+                className="admin-input"
+                value={compositionSearch}
+                autoFocus={isReplacing}
+                placeholder="Название, вид, форма, сорт…"
+                role="combobox"
+                aria-expanded={compositionHits.length > 0}
+                aria-controls={listId}
+                aria-autocomplete="list"
+                onChange={(event) => setCompositionSearch(event.target.value)}
+                onKeyDown={onSearchKeyDown}
               />
             </label>
-          ) : null}
 
-          <div className="space-y-1">
-            <p className="text-xs font-medium uppercase tracking-wide text-[var(--admin-muted)]">
-              {compositionBrowseMode ? 'Из справочника' : 'Результаты поиска'}
-            </p>
-            <ul
-              id={listId}
-              role="listbox"
-              className="max-h-56 space-y-0.5 overflow-y-auto rounded-md border border-[var(--admin-border)] p-1"
-            >
-              {compositionSearchPending ? (
-                <li className="px-2 py-2 text-sm text-[var(--admin-muted)]">Поиск…</li>
-              ) : compositionSearchError ? (
-                <li className="px-2 py-2 text-sm text-red-800">{compositionSearchError}</li>
-              ) : compositionHits.length === 0 ? (
-                <li className="px-2 py-2 text-sm text-[var(--admin-muted)]">
-                  {compositionBrowseMode
-                    ? 'Нет доступных позиций. '
-                    : 'Ничего не найдено. '}
-                </li>
-              ) : (
-                compositionHits.map((item, index) => {
-                  const subtitle = formatCompositionHitSubtitle(item);
-                  const active = index === activeIndex;
-                  return (
-                    <li key={item.id} role="option" aria-selected={active}>
-                      <button
-                        type="button"
-                        className={`flex w-full items-start gap-2 rounded px-2 py-2 text-left text-sm ${
-                          active
-                            ? 'bg-[var(--admin-surface-muted,rgba(0,0,0,0.06))]'
-                            : 'hover:bg-[var(--admin-surface-muted,rgba(0,0,0,0.04))]'
-                        }`}
-                        onMouseEnter={() => setActiveIndex(index)}
-                        onClick={() => pickHit(item)}
-                      >
-                        <span className="min-w-0 flex-1">
-                          <span className="font-medium">{item.name}</span>
-                          {subtitle ? (
-                            <span className="mt-0.5 block text-xs text-[var(--admin-muted)]">
-                              {subtitle}
-                            </span>
-                          ) : null}
-                        </span>
-                        {item.color?.name ? (
-                          <AdminColorSwatch
-                            name={item.color.name}
-                            swatch={item.color.swatch}
-                            className="shrink-0 text-xs text-[var(--admin-muted)]"
-                          />
-                        ) : (
-                          <span className="shrink-0 text-xs text-[var(--admin-muted)]">
-                            цвет не указан
-                          </span>
-                        )}
-                      </button>
-                    </li>
-                  );
-                })
-              )}
-            </ul>
-          </div>
-          <ProductEditorInlineFlower
-            canUpdate={canUpdate}
-            onCreated={(item) => onAddFlower(item.id, item.name)}
-          />
-        </div>
-      ) : null}
-
-      {compositionPrecision !== 'DESCRIPTIVE' ? (
-        <>
-      <hr className="border-[var(--admin-border)]" />
-
-      <div className="space-y-3">
-        <h3 className="text-sm font-semibold text-[var(--admin-ink)]">
-          В составе ({components.length})
-        </h3>
-        <ul className="space-y-3">
-          {components.length === 0 ? (
-            <li className="text-sm text-[var(--admin-muted)]">
-              Пока пусто — найдите цветок выше и добавьте.
-            </li>
-          ) : (
-            components.map((component, index) => (
-              <li
-                key={component.key}
-                className="space-y-3 rounded-lg border border-[var(--admin-border)] px-3 py-3"
+            <div className="space-y-1">
+              <p className="text-xs font-medium uppercase tracking-wide text-[var(--admin-muted)]">
+                {compositionBrowseMode ? 'Из справочника' : 'Результаты поиска'}
+              </p>
+              <ul
+                id={listId}
+                role="listbox"
+                className="max-h-56 space-y-0.5 overflow-y-auto rounded-md border border-[var(--admin-border)] p-1"
               >
-                <div className="flex flex-wrap items-start gap-2">
-                  <div className="min-w-0 flex-1">
-                    <p className="font-medium">{component.displayName || '—'}</p>
-                    <p className="text-xs text-[var(--admin-muted)]">
-                      {[component.typeName, component.formName, component.varietyName]
-                        .filter(Boolean)
-                        .join(' · ')}
-                      {component.stemLengthCm != null ? ` · ${component.stemLengthCm} см` : ''}
-                    </p>
-                    {component.colorName ? (
-                      <p className="mt-1 text-sm">
-                        <AdminColorSwatch
-                          name={component.colorName}
-                          swatch={component.colorSwatch}
-                        />
-                      </p>
-                    ) : (
-                      <p className="mt-1 text-xs text-[var(--admin-muted)]">
-                        Цвет не задан в справочнике
-                      </p>
-                    )}
-                  </div>
-                  {canUpdate ? (
-                    <div className="admin-row-actions">
-                      <button
-                        type="button"
-                        className="admin-btn-ghost text-xs"
-                        onClick={() => {
-                          setCompositionReplaceKey(component.key);
-                          setCompositionSearch('');
-                          searchRef.current?.focus();
-                        }}
-                      >
-                        Заменить
-                      </button>
-                      {!isStem ? (
-                      <button
-                        type="button"
-                        className="admin-btn-ghost text-xs"
-                        onClick={() => duplicateRow(index)}
-                      >
-                        Дублировать
-                      </button>
-                      ) : null}
-                      <button
-                        type="button"
-                        className="admin-btn-ghost text-xs"
-                        onClick={() => {
-                          setComponents((prev) => prev.filter((_, i) => i !== index));
-                          touch();
-                        }}
-                      >
-                        Удалить
-                      </button>
-                    </div>
-                  ) : null}
-                </div>
+                {compositionSearchPending ? (
+                  <li className="px-2 py-2 text-sm text-[var(--admin-muted)]">Поиск…</li>
+                ) : compositionSearchError ? (
+                  <li className="px-2 py-2 text-sm text-red-800">{compositionSearchError}</li>
+                ) : compositionHits.length === 0 ? (
+                  <li className="px-2 py-2 text-sm text-[var(--admin-muted)]">
+                    {compositionBrowseMode
+                      ? 'Нет доступных позиций. '
+                      : 'Ничего не найдено. '}
+                    <Link className="admin-link" href={FLOWER_DICTIONARY_HREF}>
+                      Справочник цветов
+                    </Link>
+                  </li>
+                ) : (
+                  compositionHits.map((item, index) => {
+                    const subtitle = formatCompositionHitSubtitle(item);
+                    const active = index === activeIndex;
+                    return (
+                      <li key={item.id} role="option" aria-selected={active}>
+                        <button
+                          type="button"
+                          className={`flex w-full items-start gap-2 rounded px-2 py-2 text-left text-sm ${
+                            active
+                              ? 'bg-[var(--admin-surface-muted,rgba(0,0,0,0.06))]'
+                              : 'hover:bg-[var(--admin-surface-muted,rgba(0,0,0,0.04))]'
+                          }`}
+                          onMouseEnter={() => setActiveIndex(index)}
+                          onClick={() => pickHit(item)}
+                        >
+                          <span className="min-w-0 flex-1">
+                            <span className="font-medium">{item.name}</span>
+                            {subtitle ? (
+                              <span className="mt-0.5 block text-xs text-[var(--admin-muted)]">
+                                {subtitle}
+                              </span>
+                            ) : null}
+                          </span>
+                          {item.color?.name ? (
+                            <AdminColorSwatch
+                              name={item.color.name}
+                              swatch={item.color.swatch}
+                              className="shrink-0 text-xs text-[var(--admin-muted)]"
+                            />
+                          ) : (
+                            <span className="shrink-0 text-xs text-[var(--admin-muted)]">
+                              цвет не указан
+                            </span>
+                          )}
+                        </button>
+                      </li>
+                    );
+                  })
+                )}
+              </ul>
+            </div>
+            <p className="text-xs text-[var(--admin-muted)]">
+              Новые позиции добавляются в{' '}
+              <Link className="admin-link" href={FLOWER_DICTIONARY_HREF}>
+                справочнике цветов
+              </Link>
+              , не здесь.
+            </p>
+          </div>
+        ) : null}
 
-                <div className="grid gap-3 sm:grid-cols-2">
-                  <label className="admin-field">
-                    <span>Количество</span>
-                    <div className="admin-field admin-field--row">
-                      <input
-                        className="admin-input w-24 tabular-nums"
-                        type="number"
-                        min={0}
-                        value={component.quantity}
-                        disabled={!canUpdate}
-                        onChange={(event) => updateRow(index, { quantity: event.target.value })}
-                      />
-                      <span className="text-sm text-[var(--admin-muted)]">шт.</span>
-                    </div>
-                  </label>
-                  {showBouquetRoles ? (
-                    <label className="admin-field">
-                      <span>Роль</span>
-                      <select
-                        className="admin-select"
-                        value={component.role}
-                        disabled={!canUpdate}
-                        onChange={(event) =>
-                          updateRow(index, { role: event.target.value as ComponentRole })
-                        }
-                      >
-                        {COMPONENT_ROLES.map((role) => (
-                          <option key={role} value={role}>
-                            {componentRoleLabel(role)}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
-                  ) : null}
-                </div>
+        <hr className="border-[var(--admin-border)]" />
+
+        <div className="space-y-3">
+          <h3 className="text-sm font-semibold text-[var(--admin-ink)]">
+            В составе ({components.length})
+          </h3>
+          <ul className="space-y-3">
+            {components.length === 0 ? (
+              <li className="text-sm text-[var(--admin-muted)]">
+                Пока пусто — найдите цветок выше и добавьте.
               </li>
-            ))
-          )}
-        </ul>
-      </div>
-
-      {canUpdate && suggestedPaletteIds.length > 0 ? (
-        <div className="flex flex-wrap items-center gap-3">
-          <button
-            type="button"
-            className="admin-btn-ghost"
-            onClick={() => onSuggestPalette(suggestedPaletteIds)}
-          >
-            Предложить гамму из состава
-          </button>
-          <span className="admin-field__hint">
-            Необязательно — для SEO-фильтров в блоке «Кому подходит»
-          </span>
+            ) : (
+              components.map((component, index) => (
+                <li
+                  key={component.key}
+                  className="space-y-2 rounded-lg border border-[var(--admin-border)] px-3 py-3"
+                >
+                  <div className="flex flex-wrap items-start gap-2">
+                    <div className="min-w-0 flex-1">
+                      <p className="font-medium">{component.displayName || '—'}</p>
+                      {component.flowerItemMissing ? (
+                        <p className="mt-1 text-sm text-amber-900">
+                          Позиция не найдена в справочнике.{' '}
+                          <Link className="admin-link" href={FLOWER_DICTIONARY_HREF}>
+                            Открыть справочник
+                          </Link>
+                        </p>
+                      ) : (
+                        <>
+                          <p className="text-xs text-[var(--admin-muted)]">
+                            {[component.typeName, component.formName, component.varietyName]
+                              .filter(Boolean)
+                              .join(' · ')}
+                            {component.stemLengthCm != null ? ` · ${component.stemLengthCm} см` : ''}
+                          </p>
+                          {component.colorName ? (
+                            <p className="mt-1 text-sm">
+                              <AdminColorSwatch
+                                name={component.colorName}
+                                swatch={component.colorSwatch}
+                              />
+                            </p>
+                          ) : (
+                            <p className="mt-1 text-xs text-[var(--admin-muted)]">
+                              Цвет не задан в справочнике
+                            </p>
+                          )}
+                        </>
+                      )}
+                    </div>
+                    {canUpdate ? (
+                      <div className="admin-row-actions">
+                        {!isStem && index > 0 ? (
+                          <button
+                            type="button"
+                            className="admin-btn-ghost text-xs"
+                            onClick={() => moveRow(index, -1)}
+                          >
+                            ↑
+                          </button>
+                        ) : null}
+                        {!isStem && index < components.length - 1 ? (
+                          <button
+                            type="button"
+                            className="admin-btn-ghost text-xs"
+                            onClick={() => moveRow(index, 1)}
+                          >
+                            ↓
+                          </button>
+                        ) : null}
+                        <button
+                          type="button"
+                          className="admin-btn-ghost text-xs"
+                          onClick={() => {
+                            setCompositionReplaceKey(component.key);
+                            setCompositionSearch('');
+                            searchRef.current?.focus();
+                          }}
+                        >
+                          Заменить
+                        </button>
+                        <button
+                          type="button"
+                          className="admin-btn-ghost text-xs"
+                          onClick={() => {
+                            setComponents((prev) => prev.filter((_, i) => i !== index));
+                            touch();
+                          }}
+                        >
+                          Удалить
+                        </button>
+                      </div>
+                    ) : null}
+                  </div>
+                </li>
+              ))
+            )}
+          </ul>
         </div>
-      ) : null}
-        </>
-      ) : null}
       </div>
     </section>
   );

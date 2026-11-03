@@ -52,15 +52,20 @@ Never denormalize a stale `product.price`. Checkout uses `effectiveVariantPriceM
 
 ## Composition
 
-`ProductComponent` holds quantity/unit and **must** reference a reusable **FlowerItem** (concrete stem/SKU). Optional **`role`** (`PRIMARY` / `GREENERY` / `FILLER` / `OTHER`) and **`colorId`** (line color for same-component filters). Quantity is never stored on FlowerItem — one FlowerItem can appear in hundreds of products with different quantities.
+`ProductComponent` is an identity list: **`flowerItemId` + `sortOrder`** only (must reference a reusable **FlowerItem**). Recipe stem counts live in ERP, not on the site composition row. Legacy DB columns (`role` / `quantity` / `unit` / `display_name` / component `color_id`) remain until the deferred contract migration; runtime code does not read or write them.
 
-On save, the API derives **`compositionKind`** (`MONO` / `MIXED` / `UNKNOWN`) from PRIMARY lines only (greenery does not break mono) and stores **`compositionPrecision`** (`EXACT` / `APPROXIMATE` / `UNKNOWN`). **`ProductColor`** remains the visual palette of the bouquet (manager-confirmed), separate from component line colors.
+On save (and when `FlowerType.compositionClass` or an item’s type changes), the API derives **`compositionKind`** (`MONO` / `MIXED` / `UNKNOWN`) from `FlowerType.compositionClass`:
 
-Duplicate product copies component rows but **reuses** the same FlowerItem rows (no dictionary cloning).
+- `BLOOM` types count toward mono/mixed (by distinct FlowerType id)
+- `DECORATIVE` is ignored for that count
+- any `null` (unclassified) type forces `UNKNOWN`
+- STEM / GIFT / PLANT never store MONO/MIXED (`resolveStoredCompositionKind`)
+
+**`ProductColor`** remains the visual palette of the bouquet (manager-confirmed), separate from FlowerItem dictionary color. Duplicate product copies component rows (same FlowerItem refs, no dictionary cloning) and **re-derives** `compositionKind` — it does not copy a stale cache.
 
 Composition stays **product-level** (not per ProductVariant) so cart/checkout remain unchanged. Customer-facing stem counts / price tiers live on **ProductVariant** names and prices. Cross-height/origin “variants” continue as separate Products in a ProductFamily.
 
-Managed SEO landings (`SeoLandingPage`, public `/p/{slug}`) use the same list-filter rules plus pin/exclude — not one category per facet combo.
+Managed catalog pages / thematic SEO rules use the same list-filter rules (`compositionKinds`, `onlyFlowerType`, flower-type contains, pin/exclude) — not one category per facet combo.
 
 ## Catalog navigation (CatalogCategory)
 

@@ -46,7 +46,6 @@ const PUBLIC_RUNTIME_FILTER_KEYS = new Set<CatalogFilterKey>([
   'occasion',
   'recipient',
   'composition_kind',
-  'quantity',
 ]);
 
 @Injectable()
@@ -422,24 +421,6 @@ export class CatalogFiltersService {
           }
         }
         return present.length > 0 ? present : null;
-      }
-      case 'quantity': {
-        const groups = await this.prisma.client.productComponent.groupBy({
-          by: ['quantity'],
-          where: {
-            quantity: { not: null },
-            product: productWhere,
-          },
-          orderBy: { quantity: 'asc' },
-        });
-        const options = groups
-          .filter((row) => row.quantity != null)
-          .map((row) => ({
-            id: String(row.quantity),
-            slug: String(row.quantity),
-            name: `${row.quantity}`,
-          }));
-        return options.length > 0 ? options : null;
       }
       default:
         return null;

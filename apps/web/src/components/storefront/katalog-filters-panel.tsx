@@ -118,11 +118,6 @@ function patchForKey(
       return { height: state.height === slug ? null : (slug as KatalogSearchState['height']) };
     case 'promo':
       return { promo: !state.promo };
-    case 'quantity': {
-      const qty = Number(slug);
-      if (!Number.isFinite(qty) || qty < 1) return {};
-      return { minQty: state.minQty === qty ? undefined : qty };
-    }
     default:
       return {};
   }
@@ -294,26 +289,9 @@ export function KatalogFiltersPanel({
           );
         }
 
+        // Soft-hide until deferred contract disables residual CatalogFilterDefinition rows.
         if (filter.key === 'quantity') {
-          return (
-            <AccordionSection
-              key={filter.key}
-              label={filter.label}
-              count={state.minQty ? 1 : 0}
-              defaultOpen={index === 0}
-            >
-              <div className="max-h-56 overflow-y-auto pr-0.5">
-                {filter.options.map((option) => (
-                  <OptionLink
-                    key={option.slug}
-                    label={`от ${option.name}`}
-                    active={state.minQty === Number(option.slug)}
-                    href={katalogHref(categorySlug, state, patchForKey(filter.key, state, option.slug))}
-                  />
-                ))}
-              </div>
-            </AccordionSection>
-          );
+          return null;
         }
 
         const selected = slugListForKey(filter.key, state);

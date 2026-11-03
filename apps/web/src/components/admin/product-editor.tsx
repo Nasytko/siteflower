@@ -16,8 +16,6 @@ import {
   productKindNeedsGiftSubtype,
   suggestProductNameFromComposition,
   suggestStemProductName,
-  type ComponentUnit,
-  type CompositionPrecision,
   type ProductAdminDto,
   type ProductDeleteImpactDto,
   type ProductKind,
@@ -74,7 +72,6 @@ import { AdminDeletePanel } from '@/components/admin/admin-delete-panel';
 import {
   compositionHitMeta,
   emptyComponentDraft,
-  nextEditorKey,
   toComponentDrafts,
   toVariantDrafts,
   type CompositionHit,
@@ -168,13 +165,6 @@ export function ProductEditor({
     heightCm: product.heightCm === null ? '' : String(product.heightCm),
   });
   const [productKind, setProductKindState] = useState<ProductKind>(initialKind);
-  const [compositionPrecision, setCompositionPrecision] = useState<CompositionPrecision>(
-    product.compositionPrecision ?? 'UNKNOWN',
-  );
-  const [compositionPrimaryComplete, setCompositionPrimaryComplete] = useState(
-    product.compositionPrimaryComplete ?? false,
-  );
-  const [compositionText, setCompositionText] = useState(product.compositionText ?? '');
   const [catalogCategoryId, setCatalogCategoryId] = useState(product.catalogCategoryId ?? '');
   const [taxonomyOptions, setTaxonomyOptions] = useState({
     occasions: options.occasions,
@@ -270,9 +260,6 @@ export function ProductEditor({
       heightCm: updated.heightCm === null ? '' : String(updated.heightCm),
     });
     setProductKindState(updated.productKind ?? 'BOUQUET');
-    setCompositionPrecision(updated.compositionPrecision ?? 'UNKNOWN');
-    setCompositionPrimaryComplete(updated.compositionPrimaryComplete ?? false);
-    setCompositionText(updated.compositionText ?? '');
     setCatalogCategoryId(updated.catalogCategoryId ?? '');
     setFamilyId(updated.family?.id ?? '');
     setFamilyMemberSortOrder(familyMemberSortOrderFor(updated));
@@ -393,7 +380,6 @@ export function ProductEditor({
   }
 
   const [compositionSearch, setCompositionSearch] = useState('');
-  const [compositionAddQty, setCompositionAddQty] = useState('1');
   const [compositionReplaceKey, setCompositionReplaceKey] = useState<string | null>(null);
   const [compositionHits, setCompositionHits] = useState<CompositionHit[]>([]);
   const [compositionSearchPending, setCompositionSearchPending] = useState(false);
@@ -438,8 +424,6 @@ export function ProductEditor({
     const fromHits = compositionHits.find((row) => row.id === itemId);
     const meta = compositionHitMeta(fromHits, itemName ?? '');
     if (!meta.displayName) return;
-    const qty = compositionAddQty.trim() || '1';
-
     if (compositionReplaceKey) {
       setComponents((prev) =>
         prev.map((row) =>
@@ -448,7 +432,7 @@ export function ProductEditor({
                 ...row,
                 ...meta,
                 flowerItemId: itemId,
-                quantity: row.quantity.trim() ? row.quantity : qty,
+                flowerItemMissing: false,
               }
             : row,
         ),
@@ -458,35 +442,23 @@ export function ProductEditor({
       setComponents([
         emptyComponentDraft({
           ...meta,
-          quantity: '1',
-          unit: 'STEM' as ComponentUnit,
           flowerItemId: itemId,
-          role: 'PRIMARY',
         }),
       ]);
     } else {
       if (components.some((row) => row.flowerItemId === itemId)) {
-        setError('Этот цветок уже есть в составе — измените количество или замените позицию');
+        setError('Этот цветок уже есть в составе');
         return;
       }
       setComponents((prev) => [
         ...prev,
         emptyComponentDraft({
           ...meta,
-          quantity: qty,
-          unit: 'STEM' as ComponentUnit,
           flowerItemId: itemId,
-          role: 'PRIMARY',
         }),
       ]);
     }
     setCompositionSearch('');
-    setCompositionAddQty('1');
-    touch();
-  }
-
-  function applySuggestedPalette(colorIds: string[]) {
-    setDiscovery((prev) => ({ ...prev, colorIds }));
     touch();
   }
 
@@ -498,7 +470,6 @@ export function ProductEditor({
         : suggestProductNameFromComposition(
             components.map((row) => ({
               displayName: row.displayName,
-              quantity: row.quantity.trim() ? Number(row.quantity) : null,
               typeName: row.typeName,
               varietyName: row.varietyName,
             })),
@@ -607,30 +578,12 @@ export function ProductEditor({
       }
     }
     if (needsComposition) {
-      if (compositionPrecision === 'DESCRIPTIVE') {
-        if (compositionText.trim().length === 0 && components.length === 0) {
-          return 'Для описательного состава укажите текст или строки состава';
-        }
+      if (!components.some((c) => Boolean(c.flowerItemId))) {
+        return 'Добавьте хотя бы один цветок из справочника';
       }
       for (const component of components) {
-        if (component.displayName.trim().length === 0) {
-          return 'В составе есть строка без названия';
-        }
         if (!component.flowerItemId) {
-          return `В составе «${component.displayName}» не выбран цветок из справочника`;
-        }
-      }
-      if (compositionPrecision === 'EXACT') {
-        if (components.length === 0) {
-          return 'При точном составе добавьте хотя бы одну строку';
-        }
-        for (const component of components) {
-          if (component.role === 'PRIMARY') {
-            const qty = Number(component.quantity);
-            if (!Number.isInteger(qty) || qty < 1) {
-              return `При точном составе укажите количество ≥ 1 для «${component.displayName}»`;
-            }
-          }
+          return 'В составе есть строка без выбранного цветка из справочника';
         }
       }
     }
@@ -663,9 +616,6 @@ export function ProductEditor({
         description: basic.description.trim() || null,
         heightCm: basic.heightCm.trim().length > 0 ? Number(basic.heightCm) : null,
         productKind,
-        compositionPrecision,
-        compositionPrimaryComplete,
-        compositionText: compositionText.trim() || null,
         availability: publication.availability,
         publishAt: fromDateTimeLocalValue(publication.publishAt),
         unpublishAt: fromDateTimeLocalValue(publication.unpublishAt),
@@ -686,12 +636,7 @@ export function ProductEditor({
         }),
         components: needsComposition
           ? components.map((component, index) => ({
-              displayName: component.displayName.trim(),
-              quantity: component.quantity.trim().length > 0 ? Number(component.quantity) : null,
-              unit: component.unit,
               flowerItemId: component.flowerItemId,
-              colorId: component.colorId || null,
-              role: component.role,
               sortOrder: index,
             }))
           : [],
@@ -1276,28 +1221,18 @@ export function ProductEditor({
         <ProductEditorCompositionTab
           canUpdate={canUpdate}
           productKind={productKind}
-          compositionPrecision={compositionPrecision}
-          setCompositionPrecision={setCompositionPrecision}
-          compositionPrimaryComplete={compositionPrimaryComplete}
-          setCompositionPrimaryComplete={setCompositionPrimaryComplete}
-          compositionText={compositionText}
-          setCompositionText={setCompositionText}
           components={components}
           setComponents={setComponents}
           compositionReplaceKey={compositionReplaceKey}
           setCompositionReplaceKey={setCompositionReplaceKey}
           compositionSearch={compositionSearch}
           setCompositionSearch={setCompositionSearch}
-          compositionAddQty={compositionAddQty}
-          setCompositionAddQty={setCompositionAddQty}
           compositionHits={compositionHits}
           compositionSearchPending={compositionSearchPending}
           compositionSearchError={compositionSearchError}
           compositionBrowseMode={compositionBrowseMode}
           onAddFlower={addFlowerItemToComposition}
-          onSuggestPalette={applySuggestedPalette}
           touch={touch}
-          nextComponentKey={() => nextEditorKey('component')}
         />
       ) : (
         <section className="sf-pe-card">

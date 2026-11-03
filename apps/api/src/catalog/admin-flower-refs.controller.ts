@@ -49,6 +49,11 @@ class CreateFlowerTypeDto {
   @Min(0)
   @Max(9999)
   sortOrder?: number;
+
+  @IsOptional()
+  @ValidateIf((_, value) => value !== null)
+  @IsIn(['BLOOM', 'DECORATIVE'])
+  compositionClass?: 'BLOOM' | 'DECORATIVE' | null;
 }
 
 class CreateFlowerVarietyDto {
@@ -130,6 +135,11 @@ class UpdateFlowerRefDto extends ExpectedVersionDto {
   @IsOptional()
   @IsBoolean()
   noIndex?: boolean;
+
+  @IsOptional()
+  @ValidateIf((_, value) => value !== null)
+  @IsIn(['BLOOM', 'DECORATIVE'])
+  compositionClass?: 'BLOOM' | 'DECORATIVE' | null;
 }
 
 class UpdateFlowerVarietyDto extends UpdateFlowerRefDto {

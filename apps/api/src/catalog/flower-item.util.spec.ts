@@ -34,16 +34,15 @@ describe('flowerItem helpers', () => {
       suggestProductNameFromComposition([
         {
           displayName: 'Хризантема Бигуди 70 см Эквадор',
-          quantity: 9,
           typeName: 'Хризантема',
           varietyName: 'Бигуди',
         },
       ]),
-    ).toBe('Букет из хризантем «Бигуди»');
+    ).toBe('Хризантема «Бигуди»');
     expect(
       suggestProductNameFromComposition([
-        { displayName: 'Роза', quantity: 10, typeName: 'Роза' },
-        { displayName: 'Эустома', quantity: 3, typeName: 'Эустома' },
+        { displayName: 'Роза', typeName: 'Роза' },
+        { displayName: 'Эустома', typeName: 'Эустома' },
       ]),
     ).toBe('Букет из роз и эустомы');
   });

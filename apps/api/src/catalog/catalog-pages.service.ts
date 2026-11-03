@@ -602,7 +602,7 @@ export class CatalogPagesService {
       reasons.push({
         code: 'ONLY_FLOWER_TYPE',
         message:
-          'Страница требует монобукет только из указанного вида (PRIMARY). Зелень допускается, другие основные виды — нет',
+          'Страница требует монобукет только из указанного вида (BLOOM). DECORATIVE допускается, другие BLOOM-виды и неклассифицированные типы — нет',
       });
     } else if (pageFilters.flowerTypeIds?.length || pageFilters.flowerTypeSlugs?.length) {
       reasons.push({

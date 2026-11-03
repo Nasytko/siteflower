@@ -5,8 +5,6 @@
 import type {
   AdminRole,
   CommercialAvailability,
-  ComponentRole,
-  ComponentUnit,
   CompositionKind,
   ProductKind,
   ProductLifecycle,
@@ -41,20 +39,6 @@ const VARIANT_STATUS: Record<VariantStatus, string> = {
 const VISIBILITY: Record<TaxonomyVisibility, string> = {
   VISIBLE: 'Показан',
   HIDDEN: 'Скрыт',
-};
-
-const UNIT: Record<ComponentUnit, string> = {
-  PIECE: 'шт.',
-  STEM: 'стеблей',
-  BUNCH: 'пучков',
-  UNSPECIFIED: 'без единицы',
-};
-
-const COMPONENT_ROLE: Record<ComponentRole, string> = {
-  PRIMARY: 'Основной',
-  GREENERY: 'Зелень',
-  FILLER: 'Наполнитель',
-  OTHER: 'Другое',
 };
 
 const COMPOSITION_KIND: Record<CompositionKind, string> = {
@@ -101,14 +85,6 @@ export function variantStatusLabel(value: VariantStatus): string {
 
 export function visibilityLabel(value: TaxonomyVisibility): string {
   return VISIBILITY[value] ?? value;
-}
-
-export function componentUnitLabel(value: ComponentUnit): string {
-  return UNIT[value] ?? value;
-}
-
-export function componentRoleLabel(value: ComponentRole): string {
-  return COMPONENT_ROLE[value] ?? value;
 }
 
 export function compositionKindLabel(value: CompositionKind): string {

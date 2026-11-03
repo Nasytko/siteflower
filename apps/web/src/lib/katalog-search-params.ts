@@ -45,8 +45,6 @@ export type KatalogSearchState = {
   promo: boolean;
   minPriceMinor?: string;
   maxPriceMinor?: string;
-  /** Min PRIMARY qty for first selected flower type (EXACT compositions). */
-  minQty?: number;
   sort: ProductSort;
   search?: string;
   page: number;
@@ -65,7 +63,6 @@ export const KATALOG_QUERY_KEYS = {
   promo: 'promo',
   minPrice: 'min',
   maxPrice: 'max',
-  minQty: 'qty',
 } as const;
 
 const KIND_SLUG_TO_ENUM: Record<string, CompositionKind> = {
@@ -139,7 +136,6 @@ export function gateKatalogSearchState(
     // Price window is always available on category PLPs (slider UX).
     minPriceMinor: state.minPriceMinor,
     maxPriceMinor: state.maxPriceMinor,
-    minQty: keys.has('quantity') ? state.minQty : undefined,
   };
 }
 
@@ -155,8 +151,6 @@ export function parseKatalogSearchParams(
   const height = heightRaw && isHeightBandId(heightRaw) ? heightRaw : null;
 
   const promoRaw = firstParam(raw[KATALOG_QUERY_KEYS.promo]);
-  const qtyRaw = firstParam(raw[KATALOG_QUERY_KEYS.minQty]);
-  const minQty = qtyRaw && /^\d+$/.test(qtyRaw) ? Number(qtyRaw) : undefined;
 
   return {
     flowerTypes: parseSlugListParam(raw[KATALOG_QUERY_KEYS.flowerTypes]),
@@ -171,7 +165,6 @@ export function parseKatalogSearchParams(
     promo: promoRaw === '1' || promoRaw === 'true',
     minPriceMinor: firstParam(raw[KATALOG_QUERY_KEYS.minPrice]),
     maxPriceMinor: firstParam(raw[KATALOG_QUERY_KEYS.maxPrice]),
-    minQty: minQty && minQty > 0 ? minQty : undefined,
     sort,
     search: firstParam(raw.q) ?? firstParam(raw.search),
     page: pageNum > 0 ? pageNum : 1,
@@ -199,8 +192,6 @@ export function katalogStateToListParams(
     promotion: state.promo || undefined,
     minPriceMinor: state.minPriceMinor,
     maxPriceMinor: state.maxPriceMinor,
-    minFlowerTypeQuantity: state.minQty,
-    flowerTypeQuantitySlug: state.minQty ? state.flowerTypes[0] : undefined,
     sort: state.sort,
   };
 }
@@ -219,7 +210,6 @@ export function katalogHasActiveFilters(state: KatalogSearchState): boolean {
     state.promo ||
     Boolean(state.minPriceMinor) ||
     Boolean(state.maxPriceMinor) ||
-    Boolean(state.minQty) ||
     Boolean(state.search)
   );
 }
@@ -257,7 +247,6 @@ export function katalogStateToQuery(state: Partial<KatalogSearchState>): string 
   if (state.promo) params.set(KATALOG_QUERY_KEYS.promo, '1');
   if (state.minPriceMinor) params.set(KATALOG_QUERY_KEYS.minPrice, state.minPriceMinor);
   if (state.maxPriceMinor) params.set(KATALOG_QUERY_KEYS.maxPrice, state.maxPriceMinor);
-  if (state.minQty) params.set(KATALOG_QUERY_KEYS.minQty, String(state.minQty));
 
   const entries: Array<[string, string | undefined]> = [
     ['sort', state.sort && state.sort !== DEFAULT_PRODUCT_SORT ? state.sort : undefined],

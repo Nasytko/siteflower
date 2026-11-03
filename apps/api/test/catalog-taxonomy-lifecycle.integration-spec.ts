@@ -406,9 +406,6 @@ describe('Catalog taxonomy lifecycle (integration)', () => {
         components: [
           {
             flowerItemId: item.body.id,
-            displayName: item.body.name,
-            quantity: 7,
-            unit: 'STEM',
             sortOrder: 0,
           },
         ],
@@ -560,9 +557,6 @@ describe('Catalog taxonomy lifecycle (integration)', () => {
         components: [
           {
             flowerItemId: item.body.id,
-            displayName: item.body.name,
-            quantity: 9,
-            unit: 'STEM',
             sortOrder: 0,
           },
         ],
@@ -575,7 +569,7 @@ describe('Catalog taxonomy lifecycle (integration)', () => {
       .expect(200);
 
     expect(editor.body.components[0].flowerItemId).toBe(item.body.id);
-    expect(editor.body.components[0].quantity).toBe(9);
+    expect(editor.body.components[0].displayName).toBeTruthy();
 
     const dup = await http
       .post(`/api/v1/admin/catalog/products/${product.id}/duplicate`)
@@ -625,8 +619,8 @@ describe('Catalog taxonomy lifecycle (integration)', () => {
     await expect(
       pool.query(
         `INSERT INTO product_components (
-           id, product_id, flower_item_id, display_name, quantity, unit, sort_order, created_at, updated_at
-         ) VALUES ($1, $2, NULL, 'bad', 1, 'STEM', 0, NOW(), NOW())`,
+           id, product_id, flower_item_id, sort_order, created_at, updated_at
+         ) VALUES ($1, $2, NULL, 0, NOW(), NOW())`,
         [uuid(), product.id],
       ),
     ).rejects.toThrow(/not-null|null value|violates not-null/i);

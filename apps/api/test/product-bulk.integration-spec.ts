@@ -175,9 +175,6 @@ describe('Product bulk operations (integration)', () => {
         components: [
           {
             flowerItemId: flowerItem.body.id,
-            displayName: 'Rose',
-            quantity: 9,
-            unit: 'STEM',
             sortOrder: 0,
           },
         ],

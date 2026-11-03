@@ -5,6 +5,8 @@ import {
   type ColorRefDto,
   type FlowerItemAdminDto,
   type FlowerItemDto,
+  type FlowerTypeCompositionClass,
+  type FlowerTypeRefDto,
   type TaxonomyRefDto,
   type TaxonomyVisibility,
 } from '@bouquet-one/contracts';
@@ -24,7 +26,7 @@ export type FlowerItemRow = {
   sortOrder: number;
   visibility: TaxonomyVisibility;
   version: number;
-  flowerType: { id: string; slug: string; name: string };
+  flowerType: { id: string; slug: string; name: string; compositionClass?: FlowerTypeCompositionClass | null };
   flowerForm: { id: string; slug: string; name: string } | null;
   flowerVariety: { id: string; slug: string; name: string } | null;
   flowerOrigin: { id: string; slug: string; name: string } | null;
@@ -34,6 +36,13 @@ export type FlowerItemRow = {
 
 function toRef(row: { id: string; slug: string; name: string }): TaxonomyRefDto {
   return { id: row.id, slug: row.slug, name: row.name };
+}
+
+function toFlowerTypeRef(row: FlowerItemRow['flowerType']): FlowerTypeRefDto {
+  return {
+    ...toRef(row),
+    compositionClass: row.compositionClass ?? null,
+  };
 }
 
 function toColorRef(
@@ -57,7 +66,7 @@ export function toFlowerItemDto(row: FlowerItemRow): FlowerItemDto {
     name: row.name,
     sortOrder: row.sortOrder,
     visibility: row.visibility,
-    flowerType: toRef(row.flowerType),
+    flowerType: toFlowerTypeRef(row.flowerType),
     flowerForm: row.flowerForm ? toRef(row.flowerForm) : null,
     flowerVariety: row.flowerVariety ? toRef(row.flowerVariety) : null,
     flowerOrigin: row.flowerOrigin ? toRef(row.flowerOrigin) : null,
@@ -119,7 +128,7 @@ export function buildFlowerItemFields(input: {
 }
 
 export const FLOWER_ITEM_INCLUDE = {
-  flowerType: { select: { id: true, slug: true, name: true } },
+  flowerType: { select: { id: true, slug: true, name: true, compositionClass: true } },
   flowerForm: { select: { id: true, slug: true, name: true } },
   flowerVariety: { select: { id: true, slug: true, name: true } },
   flowerOrigin: { select: { id: true, slug: true, name: true } },

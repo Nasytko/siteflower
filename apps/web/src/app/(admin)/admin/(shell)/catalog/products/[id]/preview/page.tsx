@@ -41,10 +41,7 @@ export default async function ProductPreviewPage({ params }: Props) {
           <h2 className="text-lg font-medium">Состав</h2>
           <ul className="mt-2 list-disc pl-5 text-stone-700">
             {product.components.map((c) => (
-              <li key={c.id}>
-                {c.displayName}
-                {c.quantity != null ? ` — ${c.quantity}` : ''}
-              </li>
+              <li key={c.id}>{c.displayName}</li>
             ))}
           </ul>
         </section>

@@ -64,16 +64,18 @@ See [docs/catalog.md](catalog.md), [catalog-simplification-and-merchandising.md]
 
 **Products & composition**
 
-- `products` (optional `height_cm` / `diameter_cm`, `composition_kind`, `composition_precision`; no `featured`)
-- `product_variants`, `product_components`
+- `products` (`composition_kind` cache; optional `bouquet_height_cm`; no `featured`)
+- `product_variants`, `product_components` (identity: `flower_item_id` + `sort_order`; recipe qty in ERP)
 - Join tables: `product_occasions`, `product_recipients`, `product_colors`
+- `flower_types.composition_class` (`BLOOM` | `DECORATIVE` | null) — SoT for MONO/MIXED/UNKNOWN
+- Legacy composition columns may still exist in DB until deferred contract DROP
 
 **Taxonomies & composition dictionary**
 
-- `flower_types`, `flower_forms`, `flower_varieties`, `flower_origins`, `flower_items`
-- `occasions`, `recipients`, `colors` (optional `swatch`; also on `product_components.color_id`)
+- `flower_types`, `flower_forms`, `flower_varieties`, `flower_origins`, `flower_items` (color on FlowerItem)
+- `occasions`, `recipients`, `colors` (optional `swatch`)
 - ~~`flowers` / `bouquet_sizes` / `product_lines`~~ (removed)
-- `seo_landing_pages` (+ pin/exclude join tables)
+- Catalog pages / thematic SEO (+ pin/exclude join tables)
 
 **Merchandising**
 

@@ -2,7 +2,6 @@ import { Injectable } from '@nestjs/common';
 import type { CommercialAvailability, Prisma, ProductLifecycle } from '@bouquet-one/database';
 import {
   budgetRangeMatchesPrice,
-  isDominantFlowerType,
   type ProductSort,
 } from '@bouquet-one/contracts';
 import { PrismaService } from '../database/prisma.service';
@@ -48,7 +47,7 @@ export type ProductListFilters = {
   flowerTypeIds?: string[];
   flowerTypeSlugs?: string[];
   /**
-   * «Букеты из X» — every PRIMARY line is of this type (MONO + contains type).
+   * «Букеты из X» — compositionKind MONO + contains type + no other BLOOM type.
    * Distinct from flowerTypeSlugs («Букеты с X»).
    */
   onlyFlowerTypeIds?: string[];
@@ -72,14 +71,6 @@ export type ProductListFilters = {
   minPriceMinor?: string;
   maxPriceMinor?: string;
   compositionKinds?: Array<'MONO' | 'MIXED' | 'UNKNOWN'>;
-  /** Min qty on a PRIMARY line for flowerTypeQuantitySlug (EXACT products only). */
-  minFlowerTypeQuantity?: number;
-  flowerTypeQuantitySlug?: string;
-  /**
-   * Predominant PRIMARY flower type (strict max quantity, comparable units, EXACT).
-   * SQL prefilters candidates; refined in memory via `isDominantFlowerType`.
-   */
-  dominantFlowerTypeSlug?: string;
   /** Product ids to exclude (SEO landing excludes). */
   excludeProductIds?: string[];
   /** Restrict to these product ids (placement / membership checks). */
@@ -328,50 +319,25 @@ export class ProductsRepository {
     const where = buildProductWhere(params.filters, now);
     const sort = params.sort ?? 'recommended';
     const budgetRanges = params.filters.budgetRanges ?? [];
-    const dominantSlug = params.filters.dominantFlowerTypeSlug?.trim() || undefined;
     const needsRefinement =
       sort === 'price_asc' ||
       sort === 'price_desc' ||
       budgetRanges.length > 0 ||
-      params.filters.promotionalOnly === true ||
-      Boolean(dominantSlug);
+      params.filters.promotionalOnly === true;
 
     if (needsRefinement) {
       // Composition / taxonomy filters stay in Prisma WHERE. Effective price, budget,
-      // promo effectiveness, and dominant flower type need JS refinement.
+      // and promo effectiveness need JS refinement.
       // Load ALL matching candidates in stable pages — never truncate.
       const candidates: CandidateRow[] = [];
       for (;;) {
         const batch = (await this.db().product.findMany({
           where,
-          select: dominantSlug
-            ? {
-                ...CANDIDATE_SELECT,
-                compositionPrecision: true,
-                components: {
-                  select: {
-                    role: true,
-                    quantity: true,
-                    unit: true,
-                    flowerItem: { select: { flowerType: { select: { slug: true } } } },
-                  },
-                },
-              }
-            : CANDIDATE_SELECT,
+          select: CANDIDATE_SELECT,
           orderBy: { id: 'asc' },
           skip: candidates.length,
           take: IN_MEMORY_CANDIDATE_PAGE,
-        })) as Array<
-          CandidateRow & {
-            compositionPrecision?: string;
-            components?: Array<{
-              role: string;
-              quantity: number | null;
-              unit: string;
-              flowerItem: { flowerType: { slug: string } | null } | null;
-            }>;
-          }
-        >;
+        })) as CandidateRow[];
         candidates.push(...batch);
         if (batch.length < IN_MEMORY_CANDIDATE_PAGE) break;
       }
@@ -382,31 +348,6 @@ export class ProductsRepository {
         }
         if (budgetRanges.length > 0 && !matchesBudget(candidate, budgetRanges, now)) {
           return false;
-        }
-        if (dominantSlug) {
-          const withComp = candidate as CandidateRow & {
-            compositionPrecision?: string;
-            components?: Array<{
-              role: string;
-              quantity: number | null;
-              unit: string;
-              flowerItem: { flowerType: { slug: string } | null } | null;
-            }>;
-          };
-          if (withComp.compositionPrecision !== 'EXACT') return false;
-          if (
-            !isDominantFlowerType(
-              (withComp.components ?? []).map((row) => ({
-                role: row.role as 'PRIMARY' | 'GREENERY' | 'FILLER' | 'OTHER',
-                quantity: row.quantity,
-                unit: row.unit,
-                flowerTypeSlug: row.flowerItem?.flowerType?.slug ?? null,
-              })),
-              dominantSlug,
-            )
-          ) {
-            return false;
-          }
         }
         return true;
       });
@@ -545,11 +486,6 @@ export class ProductsRepository {
     productId: string,
     components: Array<{
       flowerItemId: string;
-      colorId?: string | null;
-      role?: Prisma.ProductComponentCreateManyInput['role'];
-      displayName: string;
-      quantity: number | null;
-      unit: Prisma.ProductComponentCreateManyInput['unit'];
       sortOrder: number;
     }>,
     tx: Prisma.TransactionClient,
@@ -560,11 +496,6 @@ export class ProductsRepository {
         data: components.map((component) => ({
           productId,
           flowerItemId: component.flowerItemId,
-          colorId: component.colorId ?? null,
-          role: component.role ?? 'PRIMARY',
-          displayName: component.displayName,
-          quantity: component.quantity,
-          unit: component.unit,
           sortOrder: component.sortOrder,
         })),
       });
@@ -753,7 +684,7 @@ export function buildProductWhere(
 
   // Composition facets: same-component AND (type ∧ form ∧ variety ∧ origin ∧ color ∧ stem).
   // Multi-values within one facet stay OR (`in`).
-  // Color matches ProductComponent.colorId OR FlowerItem.colorId (dictionary SSoT).
+  // Composition line color = FlowerItem.colorId (dictionary SSoT).
   const flowerTypeIds = nonEmpty(filters.flowerTypeIds);
   const flowerTypeSlugs = nonEmpty([
     ...(filters.flowerTypeSlugs ?? []),
@@ -791,19 +722,9 @@ export function buildProductWhere(
     const andParts: Prisma.ProductComponentWhereInput[] = [];
     if (hasFlowerItemPredicate) andParts.push({ flowerItem: flowerItemWhere });
     if (componentColorIds) {
-      andParts.push({
-        OR: [
-          { colorId: { in: componentColorIds } },
-          { flowerItem: { colorId: { in: componentColorIds } } },
-        ],
-      });
+      andParts.push({ flowerItem: { colorId: { in: componentColorIds } } });
     } else if (componentColorSlugs) {
-      andParts.push({
-        OR: [
-          { color: { slug: { in: componentColorSlugs } } },
-          { flowerItem: { color: { slug: { in: componentColorSlugs } } } },
-        ],
-      });
+      andParts.push({ flowerItem: { color: { slug: { in: componentColorSlugs } } } });
     }
     and.push({
       components: {
@@ -812,27 +733,40 @@ export function buildProductWhere(
     });
   }
 
-  // onlyFlowerType = contains type + all PRIMARY lines are that type (mono-from-type).
+  // onlyFlowerType («Букеты из X»): cached MONO + target BLOOM + no other BLOOM + no unclassified.
+  // compositionKind alone is not enough — stale MONO must not leak UNKNOWN compositions.
   const onlyFlowerTypeIds = nonEmpty(filters.onlyFlowerTypeIds);
   const onlyFlowerTypeSlugs = nonEmpty(filters.onlyFlowerTypeSlugs);
   if (onlyFlowerTypeIds || onlyFlowerTypeSlugs) {
-    const typeMatch: Prisma.FlowerItemWhereInput = onlyFlowerTypeIds
-      ? { flowerTypeId: { in: onlyFlowerTypeIds } }
-      : { flowerType: { slug: { in: onlyFlowerTypeSlugs! } } };
-    const otherType: Prisma.FlowerItemWhereInput = onlyFlowerTypeIds
-      ? { flowerTypeId: { notIn: onlyFlowerTypeIds } }
-      : { flowerType: { slug: { notIn: onlyFlowerTypeSlugs! } } };
+    const targetBloom: Prisma.FlowerItemWhereInput = onlyFlowerTypeIds
+      ? { flowerTypeId: { in: onlyFlowerTypeIds }, flowerType: { compositionClass: 'BLOOM' } }
+      : {
+          flowerType: {
+            slug: { in: onlyFlowerTypeSlugs! },
+            compositionClass: 'BLOOM',
+          },
+        };
+    const otherBloom: Prisma.FlowerItemWhereInput = onlyFlowerTypeIds
+      ? {
+          flowerType: {
+            compositionClass: 'BLOOM',
+            id: { notIn: onlyFlowerTypeIds },
+          },
+        }
+      : {
+          flowerType: {
+            compositionClass: 'BLOOM',
+            slug: { notIn: onlyFlowerTypeSlugs! },
+          },
+        };
     and.push({ compositionKind: 'MONO' });
     and.push({ productKind: { in: ['BOUQUET', 'COMPOSITION'] } });
-    and.push({
-      components: {
-        some: { role: 'PRIMARY', flowerItem: typeMatch },
-      },
-    });
+    and.push({ components: { some: { flowerItem: targetBloom } } });
+    and.push({ NOT: { components: { some: { flowerItem: otherBloom } } } });
     and.push({
       NOT: {
         components: {
-          some: { role: 'PRIMARY', flowerItem: otherType },
+          some: { flowerItem: { flowerType: { compositionClass: null } } },
         },
       },
     });
@@ -846,39 +780,15 @@ export function buildProductWhere(
     // Mono/mixed apply only to bouquets & compositions — never STEM/gifts.
     if (bouquetOnly) {
       and.push({ productKind: { in: ['BOUQUET', 'COMPOSITION'] } });
+      // Reject stale MONO/MIXED cache when any FlowerType is still unclassified.
+      and.push({
+        NOT: {
+          components: {
+            some: { flowerItem: { flowerType: { compositionClass: null } } },
+          },
+        },
+      });
     }
-  }
-
-  if (
-    filters.minFlowerTypeQuantity != null &&
-    filters.minFlowerTypeQuantity > 0 &&
-    filters.flowerTypeQuantitySlug
-  ) {
-    and.push({
-      compositionPrecision: 'EXACT',
-      components: {
-        some: {
-          role: 'PRIMARY',
-          quantity: { gte: filters.minFlowerTypeQuantity },
-          flowerItem: { flowerType: { slug: filters.flowerTypeQuantitySlug } },
-        },
-      },
-    });
-  }
-
-  const dominantSlug = filters.dominantFlowerTypeSlug?.trim();
-  if (dominantSlug) {
-    // SQL prefilter: EXACT + contains the type as PRIMARY. Strict majority refined in memory.
-    and.push({
-      compositionPrecision: 'EXACT',
-      components: {
-        some: {
-          role: 'PRIMARY',
-          quantity: { gte: 1 },
-          flowerItem: { flowerType: { slug: dominantSlug } },
-        },
-      },
-    });
   }
 
   const excludeProductIds = nonEmpty(filters.excludeProductIds);

@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import {
   collectFixedSalePricesFromCreatedVariants,
+  mapNamedFixedSalesToVariantIds,
   planVariantSync,
   resolveEditorPromotionType,
   VariantSyncError,
@@ -38,6 +39,56 @@ describe('product-editor.util', () => {
       const prices = collectFixedSalePricesFromCreatedVariants(created);
       assert.equal(prices[0]?.variantId, 'id-new-1');
       assert.equal(prices[1]?.variantId, 'id-new-2');
+    });
+
+    it('keeps FIXED sale prices on the same variant id after sortOrder changes', () => {
+      // Runtime identity is variantId — reshuffling display order must not rematch sales.
+      const before = collectFixedSalePricesFromCreatedVariants([
+        { createdId: 'v-7', status: 'ACTIVE', salePriceMinor: '8900' },
+        { createdId: 'v-15', status: 'ACTIVE', salePriceMinor: '11900' },
+        { createdId: 'v-25', status: 'ACTIVE', salePriceMinor: '15900' },
+      ]);
+      const afterReorder = collectFixedSalePricesFromCreatedVariants([
+        { createdId: 'v-25', status: 'ACTIVE', salePriceMinor: '15900' },
+        { createdId: 'v-7', status: 'ACTIVE', salePriceMinor: '8900' },
+        { createdId: 'v-15', status: 'ACTIVE', salePriceMinor: '11900' },
+      ]);
+      const byId = (rows: typeof before) =>
+        new Map(rows.map((row) => [row.variantId, row.salePriceMinor]));
+      expect(byId(afterReorder)).toEqual(byId(before));
+      expect(byId(afterReorder).get('v-7')).toBe(8900n);
+      expect(byId(afterReorder).get('v-15')).toBe(11900n);
+      expect(byId(afterReorder).get('v-25')).toBe(15900n);
+    });
+  });
+
+  describe('mapNamedFixedSalesToVariantIds', () => {
+    it('resolves seed names to variantId and ignores sortOrder', () => {
+      const variants = [
+        { id: 'id-7', name: '7 шт', sortOrder: 2 },
+        { id: 'id-15', name: '15 шт', sortOrder: 0 },
+        { id: 'id-25', name: '25 шт', sortOrder: 1 },
+      ];
+      const prices = mapNamedFixedSalesToVariantIds(variants, [
+        { name: '7 шт', salePriceMinor: 8900 },
+        { name: '15 шт', salePriceMinor: 11900 },
+        { name: '25 шт', salePriceMinor: 15900 },
+      ]);
+      expect(prices).toEqual([
+        { variantId: 'id-7', salePriceMinor: 8900n },
+        { variantId: 'id-15', salePriceMinor: 11900n },
+        { variantId: 'id-25', salePriceMinor: 15900n },
+      ]);
+      // Index/sortOrder binding would have mapped 8900 → id-15 (sortOrder 0) — must not happen.
+      expect(prices[0]?.variantId).not.toBe('id-15');
+    });
+
+    it('throws when a named seed variant is missing', () => {
+      expect(() =>
+        mapNamedFixedSalesToVariantIds([{ id: 'only', name: '7 шт' }], [
+          { name: '15 шт', salePriceMinor: 1000 },
+        ]),
+      ).toThrow(/FIXED promo missing variant/);
     });
   });
 

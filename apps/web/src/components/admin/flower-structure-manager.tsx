@@ -491,6 +491,18 @@ export function FlowerStructureManager({
     }, `«${selected.name}» удалена`);
   }
 
+  async function setTypeCompositionClass(value: '' | 'BLOOM' | 'DECORATIVE') {
+    const current = types.find((item) => item.id === draft.flowerTypeId);
+    if (!current) return;
+    const compositionClass = value === '' ? null : value;
+    await run(async () => {
+      await adminPatch(adminEndpoints.flowerType(current.id), {
+        expectedVersion: current.version,
+        compositionClass,
+      });
+    }, 'Класс вида обновлён');
+  }
+
   async function toggleRefVisibility(kind: 'type' | 'variety' | 'origin') {
     const current =
       kind === 'type'
@@ -638,6 +650,27 @@ export function FlowerStructureManager({
                 </button>
               ) : null}
             </div>
+            {draft.flowerTypeId ? (
+              <label className="admin-field mt-2">
+                <span>Класс для моно/смешанный</span>
+                <select
+                  className="admin-select"
+                  disabled={!canUpdate || pending}
+                  value={
+                    types.find((item) => item.id === draft.flowerTypeId)?.compositionClass ?? ''
+                  }
+                  onChange={(event) =>
+                    void setTypeCompositionClass(
+                      event.target.value as '' | 'BLOOM' | 'DECORATIVE',
+                    )
+                  }
+                >
+                  <option value="">Не классифицирован</option>
+                  <option value="BLOOM">Цветок (BLOOM)</option>
+                  <option value="DECORATIVE">Декор (DECORATIVE)</option>
+                </select>
+              </label>
+            ) : null}
           </label>
 
           <label className="admin-field">
@@ -1034,9 +1067,6 @@ export function FlowerStructureManager({
                     >
                       {row.productName}
                     </Link>
-                    {row.quantity != null ? (
-                      <span className="text-[var(--admin-muted)]"> × {row.quantity}</span>
-                    ) : null}
                   </li>
                 ))}
               </ul>

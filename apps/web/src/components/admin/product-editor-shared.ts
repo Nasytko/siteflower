@@ -1,7 +1,6 @@
 import {
   DEFAULT_PRODUCT_VARIANT_NAME,
-  type ComponentRole,
-  type ComponentUnit,
+  type FlowerTypeCompositionClass,
   type ProductAdminDto,
   type VariantStatus,
 } from '@bouquet-one/contracts';
@@ -13,7 +12,11 @@ export type CompositionHit = {
   id: string;
   name: string;
   visibility?: string;
-  flowerType?: { name: string };
+  flowerType?: {
+    id?: string;
+    name: string;
+    compositionClass?: FlowerTypeCompositionClass | null;
+  };
   flowerForm?: { name: string } | null;
   flowerVariety?: { name: string } | null;
   flowerOrigin?: { name: string } | null;
@@ -25,19 +28,19 @@ export type CompositionHit = {
 export type ComponentDraft = {
   key: string;
   displayName: string;
-  quantity: string;
-  unit: ComponentUnit;
   flowerItemId: string;
+  typeId: string;
   typeName: string;
   formName: string;
   varietyName: string;
   originName: string;
   stemLengthCm: number | null;
-  role: ComponentRole;
-  /** Snapshot from FlowerItem at add time; not edited manually in composition UI. */
+  compositionClass: FlowerTypeCompositionClass | null;
   colorId: string;
   colorName: string;
   colorSwatch: string | null;
+  /** Server row references a FlowerItem that could not be loaded. */
+  flowerItemMissing?: boolean;
 };
 
 export type VariantDraft = {
@@ -92,26 +95,27 @@ export function toComponentDrafts(product: ProductAdminDto): ComponentDraft[] {
   return [...product.components]
     .sort((a, b) => a.sortOrder - b.sortOrder)
     .map((component) => {
-      const fromItem = component.flowerItem?.color;
-      // Prefer component snapshot; fall back to dictionary color when historical row has none.
-      const colorId = component.colorId ?? component.flowerItem?.colorId ?? '';
-      const colorName = component.color?.name ?? fromItem?.name ?? '';
-      const colorSwatch = component.color?.swatch ?? fromItem?.swatch ?? null;
+      const item = component.flowerItem;
+      const fromItem = item?.color;
+      const colorId = item?.colorId ?? '';
+      const colorName = fromItem?.name ?? '';
+      const colorSwatch = fromItem?.swatch ?? null;
+      const flowerType = item?.flowerType;
       return {
         key: nextEditorKey('component'),
         displayName: component.displayName,
-        quantity: component.quantity === null ? '' : String(component.quantity),
-        unit: component.unit,
         flowerItemId: component.flowerItemId ?? '',
-        typeName: component.flowerItem?.flowerType?.name ?? '',
-        formName: component.flowerItem?.flowerForm?.name ?? '',
-        varietyName: component.flowerItem?.flowerVariety?.name ?? '',
-        originName: component.flowerItem?.flowerOrigin?.name ?? '',
-        stemLengthCm: component.flowerItem?.stemLengthCm ?? null,
-        role: component.role ?? 'PRIMARY',
+        typeId: item?.flowerTypeId ?? flowerType?.id ?? '',
+        typeName: flowerType?.name ?? '',
+        formName: item?.flowerForm?.name ?? '',
+        varietyName: item?.flowerVariety?.name ?? '',
+        originName: item?.flowerOrigin?.name ?? '',
+        stemLengthCm: item?.stemLengthCm ?? null,
+        compositionClass: flowerType?.compositionClass ?? null,
         colorId,
         colorName,
         colorSwatch,
+        flowerItemMissing: Boolean(component.flowerItemId) && !item,
       };
     });
 }
@@ -123,15 +127,14 @@ export function emptyComponentDraft(
   return {
     key: key ?? nextEditorKey('component'),
     displayName: '',
-    quantity: '1',
-    unit: 'STEM',
     flowerItemId: '',
+    typeId: '',
     typeName: '',
     formName: '',
     varietyName: '',
     originName: '',
     stemLengthCm: null,
-    role: 'PRIMARY',
+    compositionClass: null,
     colorId: '',
     colorName: '',
     colorSwatch: null,
@@ -142,11 +145,13 @@ export function emptyComponentDraft(
 export function compositionHitMeta(hit: CompositionHit | undefined, fallbackName: string) {
   return {
     displayName: hit?.name ?? fallbackName,
+    typeId: hit?.flowerType?.id ?? '',
     typeName: hit?.flowerType?.name ?? '',
     formName: hit?.flowerForm?.name ?? '',
     varietyName: hit?.flowerVariety?.name ?? '',
     originName: hit?.flowerOrigin?.name ?? '',
     stemLengthCm: hit?.stemLengthCm ?? null,
+    compositionClass: hit?.flowerType?.compositionClass ?? null,
     colorId: hit?.color?.id ?? hit?.colorId ?? '',
     colorName: hit?.color?.name ?? '',
     colorSwatch: hit?.color?.swatch ?? null,

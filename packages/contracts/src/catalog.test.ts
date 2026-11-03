@@ -37,7 +37,6 @@ import {
   publicProductCompositionSummary,
   COMPOSITION_SUMMARY_EMPTY,
   isCanonicalListingHub,
-  isDominantFlowerType,
   isProductKind,
   isValidErpSkuFormat,
   normalizeErpSku,
@@ -45,6 +44,7 @@ import {
   productKindsForListingKind,
   resolveCatalogCategoryIdForProductKind,
   resolveCategoryListingScope,
+  resolveFlowerTypeCompositionClass,
   resolveStoredCompositionKind,
   suggestVisualPaletteColorIds,
   deriveProductEditorReadiness,
@@ -63,12 +63,11 @@ test('normalizeErpSku: trim, uppercase, strip spaces; empty → null', () => {
   assert.equal(isValidErpSkuFormat('has space'), false);
 });
 
-test('ProductKind is independent of ComponentUnit and SKU prefixes', () => {
+test('ProductKind is independent of ERP SKU prefixes', () => {
   for (const kind of PRODUCT_KINDS) {
     assert.equal(isProductKind(kind), true);
   }
   assert.equal(isProductKind('STEM'), true);
-  // ComponentUnit STEM ≠ ProductKind STEM — kinds are not derived from unit or SKU.
   assert.equal(isProductKind('PIECE'), false);
   assert.equal(isProductKind('BQ-'), false);
   assert.equal(normalizeErpSku('BQ-100'), 'BQ-100');
@@ -165,60 +164,34 @@ test('flowerItemIdentityKey and display name', () => {
   assert.equal(isPlaceholderProductName('Осенний закат', 'BOUQUET'), false);
 });
 
-test('deriveCompositionKind scenarios (mono / mixed / greenery / unknown)', () => {
-  // 1. Mono red roses
-  assert.equal(deriveCompositionKind([{ role: 'PRIMARY', typeName: 'Роза' }]), 'MONO');
-  // 2. Mono roses of different colors (same type)
+test('deriveCompositionKind scenarios (BLOOM / DECORATIVE / unclassified)', () => {
+  const bloom = (typeId: string) => ({ typeId, compositionClass: 'BLOOM' as const });
+
+  assert.equal(deriveCompositionKind([bloom('rose')]), 'MONO');
+  assert.equal(deriveCompositionKind([bloom('rose'), bloom('eustoma')]), 'MIXED');
   assert.equal(
     deriveCompositionKind([
-      { role: 'PRIMARY', typeName: 'Роза', typeId: 'rose' },
-      { role: 'PRIMARY', typeName: 'Роза', typeId: 'rose' },
+      bloom('rose'),
+      {
+        typeId: 'eucalyptus',
+        flowerItem: { flowerType: { id: 'euc', compositionClass: 'DECORATIVE' } },
+      },
     ]),
     'MONO',
   );
-  // 3. Mixed white roses + white eustoma
   assert.equal(
     deriveCompositionKind([
-      { role: 'PRIMARY', typeName: 'Роза' },
-      { role: 'PRIMARY', typeName: 'Эустома' },
+      { flowerItem: { flowerType: { id: 'euc', compositionClass: 'DECORATIVE' } } },
     ]),
-    'MIXED',
+    'UNKNOWN',
   );
-  // 5. Mono with decorative greenery
   assert.equal(
-    deriveCompositionKind([
-      { role: 'PRIMARY', typeName: 'Роза' },
-      { role: 'GREENERY', typeName: 'Эвкалипт' },
-    ]),
-    'MONO',
+    deriveCompositionKind([bloom('rose'), { typeId: 'mystery', compositionClass: null }]),
+    'UNKNOWN',
   );
-  // 6. Unknown / empty composition
   assert.equal(deriveCompositionKind([]), 'UNKNOWN');
-  assert.equal(deriveCompositionKind([{ role: 'GREENERY', typeName: 'Эвкалипт' }]), 'UNKNOWN');
-  // DESCRIPTIVE / incomplete primary list never classify as mono/mixed
-  assert.equal(
-    deriveCompositionKind([{ role: 'PRIMARY', typeId: 'rose' }], { precision: 'DESCRIPTIVE' }),
-    'UNKNOWN',
-  );
-  assert.equal(
-    deriveCompositionKind([{ role: 'PRIMARY', typeId: 'rose' }], {
-      precision: 'APPROXIMATE',
-      primaryListComplete: false,
-    }),
-    'UNKNOWN',
-  );
-  assert.equal(
-    deriveCompositionKind([{ role: 'PRIMARY', typeId: 'rose' }], {
-      precision: 'APPROXIMATE',
-      primaryListComplete: true,
-    }),
-    'MONO',
-  );
-  // UNKNOWN precision keeps CompositionKind UNKNOWN; distinct from DESCRIPTIVE (same kind, different precision policy)
-  assert.equal(
-    deriveCompositionKind([{ role: 'PRIMARY', typeId: 'rose' }], { precision: 'UNKNOWN' }),
-    'UNKNOWN',
-  );
+  assert.equal(deriveCompositionKind([bloom('rose'), bloom('rose')]), 'MONO');
+  assert.equal(deriveCompositionKind([{ typeId: 'rose' }]), 'UNKNOWN');
 });
 
 test('computeLinePriceMinor: PER_LINE + PER_UNIT options', () => {
@@ -307,6 +280,49 @@ test('resolveStoredCompositionKind: STEM/gift never store mono', () => {
   assert.equal(resolveStoredCompositionKind('STEM', 'MONO'), 'UNKNOWN');
   assert.equal(resolveStoredCompositionKind('GIFT', 'MIXED'), 'UNKNOWN');
   assert.equal(resolveStoredCompositionKind('PLANT', 'MONO'), 'UNKNOWN');
+});
+
+test('duplicate compositionKind must re-derive — never copy stale product cache', () => {
+  const staleCache = 'MONO' as const;
+  const components = [
+    { typeId: 'rose', compositionClass: 'BLOOM' as const },
+    { typeId: 'eu', compositionClass: null },
+  ];
+  const derived = deriveCompositionKind(components);
+  assert.equal(derived, 'UNKNOWN');
+  // Wrong path (pre-fix): resolveStored(productKind, source.compositionKind)
+  assert.equal(resolveStoredCompositionKind('BOUQUET', staleCache), 'MONO');
+  // Correct path: re-derive from live FlowerType.compositionClass
+  assert.equal(resolveStoredCompositionKind('BOUQUET', derived), 'UNKNOWN');
+});
+
+test('null compositionClass never falls back to BLOOM', () => {
+  assert.equal(resolveFlowerTypeCompositionClass({ typeId: 'x' }), null);
+  assert.equal(resolveFlowerTypeCompositionClass({ compositionClass: null }), null);
+  assert.equal(
+    resolveFlowerTypeCompositionClass({
+      flowerItem: { flowerType: { compositionClass: undefined } },
+    }),
+    null,
+  );
+  assert.equal(deriveCompositionKind([{ typeId: 'rose' }]), 'UNKNOWN');
+  assert.equal(
+    deriveCompositionKind([
+      { typeId: 'rose', compositionClass: 'BLOOM' },
+      { typeId: 'greenery', compositionClass: 'DECORATIVE' },
+    ]),
+    'MONO',
+  );
+  assert.equal(
+    resolveStoredCompositionKind(
+      'BOUQUET',
+      deriveCompositionKind([
+        { typeId: 'rose', compositionClass: 'BLOOM' },
+        { typeId: 'eustoma', compositionClass: 'BLOOM' },
+      ]),
+    ),
+    'MIXED',
+  );
 });
 
 test('productKindsForListingKind and canonical hubs', () => {
@@ -451,58 +467,31 @@ test('resolveCategoryListingScope: SYSTEM_HUB and THEMATIC do not use category t
   );
 });
 
-test('deriveCompositionKind: two rose varieties stay mono', () => {
-  assert.equal(
-    deriveCompositionKind([
-      { role: 'PRIMARY', typeId: 'rose', typeName: 'Роза' },
-      { role: 'PRIMARY', typeId: 'rose', typeName: 'Роза' },
-    ]),
-    'MONO',
-  );
-});
-
-test('isDominantFlowerType: chrysanthemum majority vs mixed units', () => {
-  assert.equal(
-    isDominantFlowerType(
-      [
-        { role: 'PRIMARY', quantity: 9, unit: 'STEM', flowerTypeSlug: 'hrizantema' },
-        { role: 'PRIMARY', quantity: 2, unit: 'STEM', flowerTypeSlug: 'roza' },
-      ],
-      'hrizantema',
-    ),
-    true,
-  );
-  assert.equal(
-    isDominantFlowerType(
-      [
-        { role: 'PRIMARY', quantity: 5, unit: 'STEM', flowerTypeSlug: 'hrizantema' },
-        { role: 'PRIMARY', quantity: 1, unit: 'BUNCH', flowerTypeSlug: 'roza' },
-      ],
-      'hrizantema',
-    ),
-    false,
-  );
-});
-
 test('adminProductCompositionSummary covers commercial kinds', () => {
   assert.equal(
     adminProductCompositionSummary({
       productKind: 'BOUQUET',
       components: [
-        { role: 'PRIMARY', typeName: 'Роза', quantity: 7 },
-        { role: 'PRIMARY', typeName: 'Эустома', quantity: 5 },
-        { role: 'GREENERY', typeName: 'Эвкалипт', quantity: 3 },
+        { typeName: 'Роза', compositionClass: 'BLOOM' },
+        { typeName: 'Эустома', compositionClass: 'BLOOM' },
+        {
+          typeName: 'Эвкалипт',
+          flowerItem: { flowerType: { name: 'Эвкалипт', compositionClass: 'DECORATIVE' } },
+        },
       ],
     }),
-    'Розы × 7, Эустомы × 5',
+    'Розы, Эустомы',
   );
   assert.equal(
     publicProductCompositionSummary({
       productKind: 'BOUQUET',
       components: [
-        { role: 'PRIMARY', typeName: 'Роза', quantity: 7 },
-        { role: 'PRIMARY', typeName: 'Эустома', quantity: 5 },
-        { role: 'GREENERY', typeName: 'Эвкалипт', quantity: 3 },
+        { typeName: 'Роза', compositionClass: 'BLOOM' },
+        { typeName: 'Эустома', compositionClass: 'BLOOM' },
+        {
+          typeName: 'Эвкалипт',
+          flowerItem: { flowerType: { name: 'Эвкалипт', compositionClass: 'DECORATIVE' } },
+        },
       ],
     }),
     'Розы, Эустомы',
@@ -511,20 +500,19 @@ test('adminProductCompositionSummary covers commercial kinds', () => {
     adminProductCompositionSummary({
       productKind: 'COMPOSITION',
       components: [
-        { role: 'PRIMARY', typeName: 'Роза', quantity: 3 },
-        { role: 'PRIMARY', typeName: 'Хризантема', quantity: 5 },
+        { typeName: 'Роза', compositionClass: 'BLOOM' },
+        { typeName: 'Хризантема', compositionClass: 'BLOOM' },
       ],
     }),
-    'Розы × 3, Хризантемы × 5',
+    'Розы, Хризантемы',
   );
   assert.equal(
     adminProductCompositionSummary({
       productKind: 'STEM',
       components: [
         {
-          role: 'PRIMARY',
           flowerItem: {
-            flowerType: { name: 'Роза' },
+            flowerType: { name: 'Роза', compositionClass: 'BLOOM' },
             flowerVariety: { name: 'Жизель' },
           },
         },
@@ -571,13 +559,18 @@ test('formatCompositionSummaryLine hides mono label for STEM', () => {
   );
 });
 
-test('suggestVisualPaletteColorIds skips greenery', () => {
+test('suggestVisualPaletteColorIds skips DECORATIVE types', () => {
   assert.deepEqual(
     suggestVisualPaletteColorIds([
-      { role: 'PRIMARY', colorId: 'c1' },
-      { role: 'GREENERY', colorId: 'c2' },
-      { role: 'PRIMARY', colorId: 'c1' },
-      { role: 'PRIMARY', colorId: 'c3' },
+      { colorId: 'c1', compositionClass: 'BLOOM' },
+      {
+        flowerItem: {
+          colorId: 'c2',
+          flowerType: { compositionClass: 'DECORATIVE' },
+        },
+      },
+      { colorId: 'c1', compositionClass: 'BLOOM' },
+      { flowerItem: { colorId: 'c3', flowerType: { compositionClass: 'BLOOM' } } },
     ]),
     ['c1', 'c3'],
   );
@@ -588,41 +581,31 @@ test('suggestProductNameFromComposition', () => {
     suggestProductNameFromComposition([
       {
         displayName: 'Хризантема Бигуди',
-        quantity: 9,
         typeName: 'Хризантема',
         varietyName: 'Бигуди',
       },
     ]),
-    'Букет из хризантем «Бигуди»',
+    'Хризантема «Бигуди»',
   );
   assert.equal(
-    suggestProductNameFromComposition([
-      { displayName: 'Роза «Мондиаль», 60 см', quantity: 1 },
-    ]),
+    suggestProductNameFromComposition([{ displayName: 'Роза «Мондиаль», 60 см' }]),
     'Роза «Мондиаль»',
   );
   assert.equal(
     suggestProductNameFromComposition([
       {
         displayName: 'Роза «Мондиаль», 60 см',
-        quantity: 15,
         typeName: 'Роза',
         varietyName: 'Мондиаль',
       },
-    ]),
-    'Букет из роз «Мондиаль»',
-  );
-  assert.equal(
-    suggestProductNameFromComposition([
-      { displayName: 'Роза «Мондиаль», 60 см', quantity: null },
     ]),
     'Роза «Мондиаль»',
   );
   assert.equal(
     suggestProductNameFromComposition([
-      { displayName: 'Роза Мондиаль 60 см Эквадор', quantity: 7, typeName: 'Роза' },
-      { displayName: 'Эустома', quantity: 3, typeName: 'Эустома' },
-      { displayName: 'Эвкалипт', quantity: 2, typeName: 'Эвкалипт' },
+      { displayName: 'Роза Мондиаль 60 см Эквадор', typeName: 'Роза' },
+      { displayName: 'Эустома', typeName: 'Эустома' },
+      { displayName: 'Эвкалипт', typeName: 'Эвкалипт' },
     ]),
     'Букет из роз, эустомы и эвкалипта',
   );
@@ -630,13 +613,11 @@ test('suggestProductNameFromComposition', () => {
     suggestProductNameFromComposition([
       {
         displayName: 'Роза Мондиаль 60 см Эквадор',
-        quantity: 5,
         typeName: 'Роза',
         varietyName: 'Мондиаль',
       },
       {
         displayName: 'Роза Жизель 50 см Кения',
-        quantity: 3,
         typeName: 'Роза',
         varietyName: 'Жизель',
       },
@@ -645,18 +626,18 @@ test('suggestProductNameFromComposition', () => {
   );
   assert.equal(
     suggestProductNameFromComposition([
-      { displayName: 'Роза', quantity: 1, typeName: 'Роза', varietyName: 'А' },
-      { displayName: 'Роза', quantity: 1, typeName: 'Роза', varietyName: 'Б' },
-      { displayName: 'Роза', quantity: 1, typeName: 'Роза', varietyName: 'В' },
+      { displayName: 'Роза', typeName: 'Роза', varietyName: 'А' },
+      { displayName: 'Роза', typeName: 'Роза', varietyName: 'Б' },
+      { displayName: 'Роза', typeName: 'Роза', varietyName: 'В' },
     ]),
     'Букет из роз разных сортов',
   );
   assert.equal(
     suggestProductNameFromComposition([
-      { displayName: 'Роза', quantity: 1, typeName: 'Роза' },
-      { displayName: 'Эустома', quantity: 1, typeName: 'Эустома' },
-      { displayName: 'Эвкалипт', quantity: 1, typeName: 'Эвкалипт' },
-      { displayName: 'Хризантема', quantity: 1, typeName: 'Хризантема' },
+      { displayName: 'Роза', typeName: 'Роза' },
+      { displayName: 'Эустома', typeName: 'Эустома' },
+      { displayName: 'Эвкалипт', typeName: 'Эвкалипт' },
+      { displayName: 'Хризантема', typeName: 'Хризантема' },
     ]),
     'Авторский букет',
   );
