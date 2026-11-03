@@ -238,7 +238,8 @@ Conditions: GitHub commit published; staging expand applied; classification + sm
 
 ## 11. Manual VPS deploy plan (docs only)
 
-**Operator runbook (copy-paste commands):** [`vps-task01-expand-runbook.md`](./vps-task01-expand-runbook.md).
+**Operator runbook (copy-paste commands):** [`vps-task01-expand-runbook.md`](./vps-task01-expand-runbook.md).  
+**Published feature SHA:** `0ea13cebaac10917ccd0b0c69d2d88b83d8c0075` on `feature/task-01-composition-simplify` (plus follow-up runbook commits if any).
 
 ### A. Pre-deploy
 

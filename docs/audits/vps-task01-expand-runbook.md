@@ -1,189 +1,206 @@
 # VPS Runbook — Task 01 Expand (manual SSH)
 
 **Audience:** operator on the HostFly VPS  
-**Cursor / CI must not SSH here.**  
-**Stack:** `shopbuket1` (`deploy/docker-compose.prod.yml`, `./deploy.sh`, `./backup.sh`, `./rollback.sh`)  
-**Env file:** `/etc/shopbuket1/production.env`  
-**Repo path (typical):** `/opt/shopbuket1/current` or `/opt/shopbuket1/repo`  
-**Branch to test:** `feature/task-01-composition-simplify` (publish SHA first)  
-**Forbidden:** `prisma migrate reset`, `db push --force-reset`, `DROP DATABASE`, `docker volume prune`, deferred **contract** SQL, auto DB rollback, production seed.
+**Cursor / CI must not SSH here.**
 
-Order for this release:
+| Item | Value |
+|------|--------|
+| Stack | `shopbuket1` |
+| Compose | `deploy/docker-compose.prod.yml` |
+| Project | `-p shopbuket1` |
+| Services | `postgres`, `api`, `web` |
+| Env | `/etc/shopbuket1/production.env` |
+| Checkout | `/opt/shopbuket1/current` (symlink) or `/opt/shopbuket1/repo` |
+| Branch | `feature/task-01-composition-simplify` |
+| Approved SHA | `0ea13cebaac10917ccd0b0c69d2d88b83d8c0075` |
+| Scripts | `./deploy.sh`, `./backup.sh`, `./rollback.sh` (repo root) |
 
-1. Preflight + backup  
-2. Fetch feature commit  
-3. **Expand** via `deploy.sh staging <SHA>` (migrate deploy includes only `prisma/migrations`)  
-4. Inventory (read-only)  
-5. Smoke  
-6. Manual FlowerType classification (later)  
-7. **Do not** apply contract  
+**Forbidden (stop if tempted):**  
+`prisma migrate reset` · `db push --force-reset` · `DROP DATABASE` · `docker compose down -v` · `docker volume prune` / `rm` on `shopbuket1_pgdata` · deferred **contract** SQL · production seed · `git reset --hard` · auto DB rollback.
+
+**Safe deploy order (implemented by `./deploy.sh staging <SHA>`):**  
+checkout SHA → build SHA-tagged API/Web images → **backup** → **`prisma migrate deploy` from new API image while old api/web still serve** → schema verify → recreate api/web only (volumes untouched).
 
 ---
 
-## A. Preflight
+## Шаг 1 — Preflight
 
 ```bash
 export SHOPBUKET1_ENV_FILE=/etc/shopbuket1/production.env
-cd /opt/shopbuket1/current   # adjust if your checkout path differs
+cd /opt/shopbuket1/current   # or: cd /opt/shopbuket1/repo
+
+test -f "$SHOPBUKET1_ENV_FILE" || { echo "Missing env"; exit 1; }
+test -x ./deploy.sh && test -x ./backup.sh && test -x ./rollback.sh
 
 git fetch --all --tags
 git status
+# If porcelain output is non-empty: STOP. Do not deploy; do not git reset --hard.
 git rev-parse HEAD
 git branch -vv
 git log -3 --oneline --decorate
 
-# Do NOT discard local edits if present — stop and decide manually.
-test -f "$SHOPBUKET1_ENV_FILE"
+# Confirm the published feature commit is reachable:
+git cat-file -t 0ea13cebaac10917ccd0b0c69d2d88b83d8c0075
+git log -1 --oneline 0ea13cebaac10917ccd0b0c69d2d88b83d8c0075
 
 docker compose -p shopbuket1 -f deploy/docker-compose.prod.yml --env-file "$SHOPBUKET1_ENV_FILE" ps
-docker compose -p shopbuket1 -f deploy/docker-compose.prod.yml --env-file "$SHOPBUKET1_ENV_FILE" exec -T postgres \
-  pg_isready -U "$POSTGRES_USER" -d "$POSTGRES_DB"
 
-df -h
+# Postgres health (env vars come from the container, not the host shell):
+docker compose -p shopbuket1 -f deploy/docker-compose.prod.yml --env-file "$SHOPBUKET1_ENV_FILE" exec -T postgres \
+  sh -lc 'pg_isready -U "$POSTGRES_USER" -d "$POSTGRES_DB"'
+
+df -h /
+df -h /var/lib/docker 2>/dev/null || true
 ls -lt /var/backups/shopbuket1 | head
 
-# Migrations currently applied (API container or one-off):
+# Current migrate status from the RUNNING api image (may not know Task 01 yet):
 docker compose -p shopbuket1 -f deploy/docker-compose.prod.yml --env-file "$SHOPBUKET1_ENV_FILE" exec -T api \
   sh -lc 'cd /app/node_modules/@bouquet-one/database && ./node_modules/.bin/prisma migrate status' \
-  || true
+  || echo "WARN: migrate status from old image failed — continue only if postgres is healthy"
 
-# Confirm deferred contract is NOT under prisma/migrations (after fetch of new SHA):
-ls packages/database/prisma/migrations | tail
-ls packages/database/prisma/deferred
-test ! -d packages/database/prisma/migrations/20261102230000_simplify_product_composition_contract \
-  && echo "OK: contract not in migrate path"
+# After you will checkout the feature SHA, contract must stay OUT of prisma/migrations:
+# (checked again post-checkout inside deploy; spot-check on GitHub tree is enough for now)
 ```
 
-Record: **previous HEAD SHA**, API/Web image tags, free disk.
+Record: previous HEAD, free disk, newest existing backup name.
+
+Optional dry-run (read-only; no mutate):
+
+```bash
+./deploy.sh staging --dry-run 0ea13cebaac10917ccd0b0c69d2d88b83d8c0075
+```
 
 ---
 
-## B. Backup (fresh dump — mandatory)
+## Шаг 2 — Backup (fresh dump — mandatory before mutate)
+
+`./deploy.sh staging` also runs `./backup.sh staging-pre-migrate` internally.  
+Still take an **extra labelled dump** first so you have a named restore point independent of deploy lock timing.
 
 ```bash
-cd /opt/shopbuket1/current
+cd /opt/shopbuket1/current   # or repo
 export SHOPBUKET1_ENV_FILE=/etc/shopbuket1/production.env
+
 ./backup.sh pre-task01-expand
+# Prints final path on stdout; also logs size + TOC structural check.
+# Retention never deletes the newest dump; aged dumps may rotate after 14 days.
 
-ls -lh /var/backups/shopbuket1 | head
-# Structural TOC check is inside backup.sh; optionally deeper:
-# ./scripts/release.sh restore-test --dump <newest.dump> --db shopbuket1_preflight_task01
+ls -lh /var/backups/shopbuket1/shopbuket1-*-pre-task01-expand.dump
+# Expect size >> 1KB. Do not delete previous backups manually.
 ```
 
-Do **not** reuse an old dump as the sole backup for this change.
-
-### Restore (only if operator-approved incident)
-
-```bash
-# Example outline — stop writers, restore into controlled path, never invent DROP.
-# Prefer documented release restore-test / ops recovery; do not paste ad-hoc destroy commands.
-# Keep the dump path recorded in the incident note.
-```
+Do **not** treat an old dump as the sole backup for this change.
 
 ---
 
-## C. Expand migration + app deploy
+## Шаг 3 — Expand migration + Шаг 4 — Deployment
 
-`deploy.sh staging <SHA>` builds SHA-tagged images, runs **`prisma migrate deploy`** from the pinned API image (only folders under `prisma/migrations`), then switches api/web.
+One command performs both (migrate **before** new API serves traffic):
 
 ```bash
 cd /opt/shopbuket1/current
 export SHOPBUKET1_ENV_FILE=/etc/shopbuket1/production.env
 
-# Optional dry-run:
-./deploy.sh staging --dry-run <APPROVED_SHA>
-
-# Live:
-./deploy.sh staging <APPROVED_SHA>
+./deploy.sh staging 0ea13cebaac10917ccd0b0c69d2d88b83d8c0075
 ```
 
-Expected new migration only for Task 01:
+What this does:
 
-- `20261102220000_flower_type_composition_class`  
-  - adds `flower_types.composition_class` (nullable)  
-  - softens `product_components.display_name` (`DEFAULT ''`, DROP NOT NULL)  
-  - reaffirms `unit`/`role` defaults  
-  - **no DROP** of legacy columns  
+1. `git fetch` + **detached checkout** of the SHA (working tree must be clean unless you pass this explicit ref — explicit ref is required here).  
+2. Build/pin `shopbuket1-api:0ea13cebaac1` and `shopbuket1-web:0ea13cebaac1` from that commit.  
+3. Ensure postgres healthy.  
+4. `./backup.sh staging-pre-migrate`.  
+5. `prisma migrate deploy` via **immutable new API image id** (only `packages/database/prisma/migrations/**`).  
+6. Live schema verify gate.  
+7. `compose up -d --force-recreate api web` — **does not** remove volumes.  
+8. Health waits + release metadata.
 
-**Must not run:**  
-`packages/database/prisma/deferred/20261102230000_simplify_product_composition_contract.sql`
+**Expected Task 01 migration applied:**  
+`20261102220000_flower_type_composition_class`
 
-### Verify schema after migrate
+- ADD nullable `flower_types.composition_class` (no backfill)  
+- `product_components.display_name` → `DEFAULT ''` + DROP NOT NULL  
+- reaffirm `unit`/`role` defaults  
+- **no DROP** of `quantity` / `unit` / `role` / `color_id` / `display_name`  
+- **does not** delete products or orders  
+
+**Must NOT apply:**  
+`packages/database/prisma/deferred/20261102230000_simplify_product_composition_contract.sql`  
+(not under `prisma/migrations` → invisible to `migrate deploy`)
+
+### Verify after deploy
 
 ```bash
+export SHOPBUKET1_ENV_FILE=/etc/shopbuket1/production.env
+cd /opt/shopbuket1/current
+
+git rev-parse HEAD   # expect 0ea13cebaac10917ccd0b0c69d2d88b83d8c0075 (detached)
+
 docker compose -p shopbuket1 -f deploy/docker-compose.prod.yml --env-file "$SHOPBUKET1_ENV_FILE" exec -T api \
   sh -lc 'cd /app/node_modules/@bouquet-one/database && ./node_modules/.bin/prisma migrate status'
 
 docker compose -p shopbuket1 -f deploy/docker-compose.prod.yml --env-file "$SHOPBUKET1_ENV_FILE" exec -T postgres \
-  psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -v ON_ERROR_STOP=1 <<'SQL'
+  sh -lc 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -v ON_ERROR_STOP=1' <<'SQL'
 SELECT column_name, is_nullable, column_default
 FROM information_schema.columns
-WHERE table_name = 'flower_types' AND column_name = 'composition_class';
+WHERE table_schema = 'public' AND table_name = 'flower_types' AND column_name = 'composition_class';
 
 SELECT column_name, is_nullable, column_default
 FROM information_schema.columns
-WHERE table_name = 'product_components'
+WHERE table_schema = 'public' AND table_name = 'product_components'
   AND column_name IN ('display_name','quantity','unit','role','color_id','flower_item_id')
 ORDER BY column_name;
+
+SELECT COUNT(*) AS products FROM products;
+SELECT COUNT(*) AS orders FROM orders;
 SQL
 ```
 
-Expect: `composition_class` present; legacy component columns **still present**.
+Expect: `composition_class` present; all listed legacy component columns still present; product/order counts unchanged vs preflight notes.
 
----
-
-## D. Inventory (read-only)
+### Inventory (read-only, optional after verify)
 
 ```bash
-cd /opt/shopbuket1/current
-# Copy results to a dated file on the host, e.g. /var/backups/shopbuket1/inventory-task01-$(date +%F).txt
+export SHOPBUKET1_ENV_FILE=/etc/shopbuket1/production.env
+OUT="/var/backups/shopbuket1/inventory-task01-$(date -u +%Y%m%dT%H%M%SZ).txt"
+
 docker compose -p shopbuket1 -f deploy/docker-compose.prod.yml --env-file "$SHOPBUKET1_ENV_FILE" exec -T postgres \
-  psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -v ON_ERROR_STOP=1 \
-  -f - < packages/database/prisma/ops/inventory-composition-simplify-staging.sql \
-  | tee "/var/backups/shopbuket1/inventory-task01-$(date +%F-%H%M).txt"
+  sh -lc 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -v ON_ERROR_STOP=1' \
+  < packages/database/prisma/ops/inventory-composition-simplify-staging.sql \
+  | tee "$OUT"
 ```
 
-Rules:
-
-- Read-only only  
-- **Do not** auto-set `composition_class` from names or ComponentRole  
-- **Do not** run contract / destructive SQL  
+Do not auto-classify FlowerTypes. Do not run contract SQL.
 
 ---
 
-## E. Deployment health
+## Шаг 5 — Smoke tests
 
 ```bash
-docker compose -p shopbuket1 -f deploy/docker-compose.prod.yml --env-file "$SHOPBUKET1_ENV_FILE" ps
 curl -fsS http://127.0.0.1:3001/api/v1/health
 curl -fsS -o /dev/null -w '%{http_code}\n' http://127.0.0.1:3000/
 docker compose -p shopbuket1 -f deploy/docker-compose.prod.yml --env-file "$SHOPBUKET1_ENV_FILE" logs --tail=200 api
 docker compose -p shopbuket1 -f deploy/docker-compose.prod.yml --env-file "$SHOPBUKET1_ENV_FILE" logs --tail=200 web
 ```
 
-Forbidden: `docker volume rm`, prune with `--volumes`, deleting `shopbuket1_pgdata`.
+Browser / admin checklist:
+
+1. Home  
+2. Catalog (`/katalog` or hub)  
+3. Product PDP — composition without stem qty from ProductComponent  
+4. Unclassified FlowerTypes → product `compositionKind` **UNKNOWN** (no MONO guess)  
+5. MONO/MIXED filters + thematic SEO pages (may under-select until classify)  
+6. Admin product editor composition (FlowerItem list)  
+7. Duplicate draft product → kind **re-derived**  
+8. ERP SKU, variants, options intact  
+9. Cart + checkout UI without real payment  
+10. No Prisma errors on composition save  
 
 ---
 
-## F. Smoke tests (manual browser / API)
+## Шаг 6 — Rollback
 
-1. Home page loads  
-2. Catalog /katalog listing loads  
-3. Product PDP: composition summary **without** stem qty from ProductComponent  
-4. Products with unclassified types → `compositionKind` **UNKNOWN** (not guessed MONO)  
-5. Filters MONO / MIXED / flower-type: no false expansion from null class  
-6. Thematic SEO pages still open; qty-based rule keys may be residual until contract  
-7. Admin: FlowerType `compositionClass` field; product composition editor (FlowerItem list)  
-8. Create / edit / **duplicate** a draft test product → compositionKind **re-derived**  
-9. ERP SKU, variants, options unchanged  
-10. Cart + checkout UI path without placing a real payable order  
-11. API logs: no Prisma errors on component save (`display_name` / missing column)
-
----
-
-## G. Rollback
-
-### App-only (preferred first response)
+### App images only
 
 ```bash
 cd /opt/shopbuket1/current
@@ -191,37 +208,40 @@ export SHOPBUKET1_ENV_FILE=/etc/shopbuket1/production.env
 ./rollback.sh
 ```
 
-Notes:
-
 - Does **not** reverse expand migration.  
-- After expand, old app + expand DB is designed to work (additive + `display_name DEFAULT ''`).  
-- If **new** app already rewrote `product_components`, rolled-back old UI may show empty display names (`''`) — acceptable; NULL would have broken Prisma reads (mitigated by DEFAULT).  
-- `deploy.sh` may refuse automatic image rollback if `SCHEMA_ADVANCED=1` in that process — use `./rollback.sh` / forward fix deliberately.
+- Old app + expand DB is the supported rollback window (additive schema + `display_name DEFAULT ''`).  
+- New component rows may show empty legacy display names after app rollback — OK.  
+- If deploy set `SCHEMA_ADVANCED` mid-process, `deploy.sh` itself refuses unsafe auto image rollback; use `./rollback.sh` deliberately or forward-fix.
 
-### Database restore (last resort)
+### Never
 
-Only with explicit approval: restore the **pre-task01-expand** dump via your documented recovery path. Never auto-rollback Postgres from deploy scripts.
+- `docker compose down -v`  
+- automatic DB rollback  
+- deferred contract  
+- `git reset --hard` to “fix” a dirty tree  
 
----
+### DB restore (last resort, operator-approved)
 
-## H. Classification (separate stage — after smoke)
-
-Until FlowerTypes used by published floral products have `composition_class`:
-
-- Affected products stay **UNKNOWN**  
-- MONO/MIXED filters and SEO pages that require classified blooms under-select or show empty — **expected**, not a migrate failure  
-- Set BLOOM / DECORATIVE manually in admin; never invent from ComponentRole  
-
-**Contract migration stays deferred.** Do not promote or run  
-`deferred/20261102230000_simplify_product_composition_contract.sql` in this release.
+Use the `pre-task01-expand` dump via your documented recovery path (`docs/deployment-hostfly.md` / `scripts/release.sh restore-test`). Not part of normal rollback.
 
 ---
 
-## First command to run on VPS
+## Classification (later — not part of install)
+
+Until FlowerTypes are marked BLOOM/DECORATIVE manually, catalog MONO/MIXED/SEO may show **UNKNOWN** / sparse results. That is expected.  
+**Do not** run contract migration in this release.
+
+---
+
+## First command on VPS
 
 ```bash
 export SHOPBUKET1_ENV_FILE=/etc/shopbuket1/production.env
 cd /opt/shopbuket1/current && git fetch --all && git status && git rev-parse HEAD && ./backup.sh pre-task01-expand
 ```
 
-Then, only after backup succeeds: `./deploy.sh staging <APPROVED_SHA>`.
+After backup OK:
+
+```bash
+./deploy.sh staging 0ea13cebaac10917ccd0b0c69d2d88b83d8c0075
+```
