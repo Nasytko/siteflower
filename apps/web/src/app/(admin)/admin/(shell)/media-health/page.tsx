@@ -1,4 +1,5 @@
 import { roleHasPermission } from '@bouquet-one/contracts';
+import { AdminPageHeader } from '@/components/admin/admin-page-header';
 import { MediaHealthPanel } from '@/components/admin/media-health-panel';
 import { adminFetch } from '@/lib/admin-api';
 import { adminEndpoints } from '@/lib/admin-endpoints';
@@ -25,13 +26,10 @@ export default async function AdminMediaHealthPage() {
 
   return (
     <main id="main-content" className="space-y-8">
-      <header>
-        <h1 className="admin-page-title">Состояние медиа</h1>
-        <p className="admin-page-lead">
-          Техническая проверка фотографий. Обычно сюда заходят только при проблемах с загрузкой
-          или отображением картинок.
-        </p>
-      </header>
+      <AdminPageHeader
+        title="Состояние медиа"
+        lead="Техническая проверка фотографий. Обычно сюда заходят только при проблемах с загрузкой или отображением картинок."
+      />
       <MediaHealthPanel
         initial={initial}
         canProbe={roleHasPermission(me.user.role, 'SITE_HEALTH_READ')}

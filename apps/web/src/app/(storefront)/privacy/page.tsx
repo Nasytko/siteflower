@@ -1,9 +1,10 @@
 import type { Metadata } from 'next';
 import {
-  LegalDocumentMissing,
   LegalDocumentView,
+  LegalPageShell,
+  LegalRelatedNav,
 } from '@/components/storefront/legal-document-view';
-import { getLegalDocument, PublicApiError } from '@/lib/public-api';
+import { getFixedLegalDocument } from '@/lib/legal-content';
 import { buildPageMetadata } from '@/lib/seo/metadata';
 
 export const metadata: Metadata = buildPageMetadata({
@@ -44,29 +45,19 @@ function CookiesAppendix() {
   );
 }
 
-export default async function PrivacyPolicyPage() {
-  const document = await getLegalDocument('privacy_policy').catch((error: unknown) => {
-    if (error instanceof PublicApiError && (error.status === 404 || error.status === 400)) {
-      return null;
-    }
-    return null;
-  });
+export default function PrivacyPolicyPage() {
+  const document = getFixedLegalDocument('privacy_policy');
 
   return (
-    <main id="main-content" className="sf-legal-page">
-      <div className="sf-legal-page__glow" aria-hidden="true" />
-      <div className="sf-container py-14 md:py-20">
-        {document ? (
-          <LegalDocumentView document={document} appendix={<CookiesAppendix />} />
-        ) : (
-          <div className="sf-legal-doc">
-            <LegalDocumentMissing title="Политика обработки персональных данных" />
-            <div className="sf-legal-appendix mt-12">
-              <CookiesAppendix />
-            </div>
-          </div>
-        )}
-      </div>
-    </main>
+    <LegalPageShell>
+      <LegalDocumentView document={document} appendix={<CookiesAppendix />} />
+      <LegalRelatedNav
+        links={[
+          { href: '/oferta', label: 'Условия заказа' },
+          { href: '/vozvrat', label: 'Возврат и отмена' },
+          { href: '/kontakty', label: 'Контакты' },
+        ]}
+      />
+    </LegalPageShell>
   );
 }

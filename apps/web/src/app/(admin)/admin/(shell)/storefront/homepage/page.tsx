@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import { roleHasPermission, type HomepageConfigAdminDto } from '@bouquet-one/contracts';
+import { AdminPageHeader } from '@/components/admin/admin-page-header';
 import { HomepageManager } from '@/components/admin/homepage-manager';
 import { adminFetch } from '@/lib/admin-api';
 import { adminEndpoints } from '@/lib/admin-endpoints';
@@ -12,28 +13,28 @@ export default async function AdminHomepagePage() {
 
   return (
     <main id="main-content" className="space-y-6">
-      <header className="admin-page-header">
-        <div className="admin-page-header__text">
-          <h1 className="admin-page-title">Главная страница</h1>
-          <p className="admin-page-lead">
-            Баннеры, быстрые категории, товарные секции и преимущества. Меню сайта и настройки
-            магазина — в соседних разделах.
-          </p>
-        </div>
-        <div className="admin-page-header__actions flex flex-wrap gap-2">
-          {canReadNavigation ? (
-            <Link href="/admin/storefront/navigation" className="admin-btn-ghost">
-              Меню сайта
+      <AdminPageHeader
+        title="Главная страница"
+        lead="Баннеры, быстрые категории, товарные секции и преимущества. Меню сайта и настройки магазина — в соседних разделах."
+        actions={
+          <>
+            {canReadNavigation ? (
+              <Link href="/admin/storefront/navigation" className="admin-btn-ghost">
+                Меню сайта
+              </Link>
+            ) : null}
+            <Link href="/admin/storefront/instagram" className="admin-btn-ghost">
+              Instagram
             </Link>
-          ) : null}
-          <Link href="/admin/storefront/settings" className="admin-btn-ghost">
-            Настройки магазина
-          </Link>
-          <Link href="/admin/promotions" className="admin-btn-ghost">
-            Акции
-          </Link>
-        </div>
-      </header>
+            <Link href="/admin/storefront/settings" className="admin-btn-ghost">
+              Настройки магазина
+            </Link>
+            <Link href="/admin/promotions" className="admin-btn-ghost">
+              Акции
+            </Link>
+          </>
+        }
+      />
       <HomepageManager
         initial={initial}
         canUpdate={roleHasPermission(me.user.role, 'CONTENT_UPDATE')}

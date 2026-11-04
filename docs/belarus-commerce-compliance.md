@@ -11,12 +11,15 @@
 3. Order is created with status `RECEIVED` («Заказ получен»).
 4. Manager reviews fulfillment feasibility.
 5. Manager contacts the customer and confirms details (`CONFIRMED`).
-6. **No online payment runs on the website.** Payment is arranged offline using
-   the seller’s actual available methods (configured in Admin when known).
+6. **No online payment runs on the website.** Payment is arranged offline
+   (cash on receipt and/or bank transfer — fixed copy in code templates).
 
 Do not add payment gateways, card forms, or fake “paid” states in this phase.
 
-## Seller identity (owner-provided)
+## Seller identity and legal pages (fixed in code)
+
+Requisites and public legal texts live in `apps/web/src/lib/legal-content.ts`
+(and `OWNER_PROVIDED_SELLER` in contracts). They are **not** edited in Admin.
 
 | Field | Value |
 | --- | --- |
@@ -30,14 +33,11 @@ Do not add payment gateways, card forms, or fake “paid” states in this phase
 | Bank УНП | 100233809 |
 
 **Important:** the legal address is **not** the shop, warehouse, or pickup point.
-Pickup and physical store addresses are separate Admin fields (`pickupAddress`,
-`physicalStoreAddress`).
+Phone / email / hours on legal pages come from Storefront Settings.
 
-## Still required from the owner (`REQUIRED_CONFIGURATION`)
+## Storefront settings still used
 
-- Trade register number + inclusion date
-- State registration date / number / registering authority
-- Official seller phone / email / hours (or confirm Storefront Settings values)
+- Official shop phone / email / hours (витрина → настройки)
 - Consumer claims contact (if different)
 - Pickup address (if pickup is enabled)
 - Actual offline payment description (only real methods)
@@ -56,13 +56,9 @@ Pickup and physical store addresses are separate Admin fields (`pickupAddress`,
 
 ## Admin
 
-- **Настройки → Юридическая информация** (`/admin/legal`)
-- Document editors under `/admin/legal/documents/[kind]`
-- Compliance panel: readiness checklist
-- Permissions: `LEGAL_READ`, `LEGAL_EDIT`, `LEGAL_PUBLISH`
-
-Publishing documents and changing seller/bank details require `LEGAL_PUBLISH`
-(SUPER_ADMIN). CONTENT_MANAGER may edit drafts (`LEGAL_EDIT`).
+Legal texts and seller/bank requisites are **not** editable in Admin.
+Source of truth: `apps/web/src/lib/legal-content.ts`. Shop phone/email/hours
+still come from Storefront Settings.
 
 ## Checkout legal behaviour
 

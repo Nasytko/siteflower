@@ -17,29 +17,28 @@ export function OrderErpSection({ events, total, canOperate }: Props) {
   const latest = events[0] ?? null;
 
   return (
-    <section className="space-y-3">
+    <section className="admin-section space-y-3">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <h2 className="text-lg font-semibold">ERP</h2>
-        <Link
-          href="/admin/integrations/erp"
-          className="text-sm text-stone-500 underline-offset-2 hover:underline"
-        >
+        <h2 className="admin-section__title">ERP</h2>
+        <Link href="/admin/integrations/erp" className="admin-link text-sm">
           Все интеграции →
         </Link>
       </div>
 
       {latest ? (
-        <p className="text-sm text-stone-600">
+        <p className="text-sm text-[var(--admin-muted)]">
           Последний статус:{' '}
-          <span className="font-medium text-stone-900">
+          <span className="font-medium text-[var(--admin-ink)]">
             {outboxStatusLabel(latest.status)}
           </span>
           {latest.remoteReference ? (
-            <span className="text-stone-500"> · ref {latest.remoteReference}</span>
+            <span> · ref {latest.remoteReference}</span>
           ) : null}
         </p>
       ) : (
-        <p className="text-sm text-stone-500">Событий outbox для этого заказа нет.</p>
+        <p className="text-sm text-[var(--admin-muted)]">
+          Событий outbox для этого заказа нет.
+        </p>
       )}
 
       {events.length > 0 ? (

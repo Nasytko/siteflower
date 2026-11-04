@@ -8,10 +8,6 @@ import type {
   FlowerVarietyDto,
   HomepageConfigDto,
   InstagramFeedPublicDto,
-  LegalBankPublicDto,
-  LegalDocumentKind,
-  LegalDocumentPublicDto,
-  LegalSellerPublicDto,
   PaginatedResponse,
   ProductListItemDto,
   ProductResolveDto,
@@ -294,37 +290,6 @@ export function getMainNavigation() {
     '/storefront/navigation/main',
     { tags: ['storefront', 'navigation'] },
   );
-}
-
-/** Public seller / contacts block for legal pages and footer. */
-export function getLegalSeller() {
-  return publicFetch<LegalSellerPublicDto>('/legal/seller', {
-    tags: ['legal', 'legal-seller'],
-    revalidate: 60,
-  });
-}
-
-/** Bank details for contacts page (secondary section). */
-export function getLegalBank() {
-  return publicFetch<LegalBankPublicDto>('/legal/bank', {
-    tags: ['legal', 'legal-bank'],
-    revalidate: 60,
-  });
-}
-
-/**
- * Published legal document by kind.
- * Accepts API path forms (`order_terms`) or contract enums (`ORDER_TERMS`).
- */
-export function getLegalDocument(kind: LegalDocumentKind | string) {
-  const pathKind = String(kind)
-    .trim()
-    .toLowerCase()
-    .replace(/-/g, '_');
-  return publicFetch<LegalDocumentPublicDto>(`/legal/documents/${encodeURIComponent(pathKind)}`, {
-    tags: ['legal', `legal-doc:${pathKind}`],
-    revalidate: 60,
-  });
 }
 
 export function getHomepageConfig() {

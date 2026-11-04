@@ -4,11 +4,8 @@ import { FavoritesProvider } from '@/components/storefront/favorites-provider';
 import { StorefrontFooter } from '@/components/storefront/footer';
 import { StorefrontHeader } from '@/components/storefront/header';
 import { PRIMARY_NAV, type PrimaryNavItem } from '@/components/storefront/primary-nav';
-import {
-  getLegalSeller,
-  getMainNavigation,
-  getStorefrontSettings,
-} from '@/lib/public-api';
+import { getMainNavigation, getStorefrontSettings } from '@/lib/public-api';
+import { getFixedLegalSeller } from '@/lib/legal-content';
 import { navItemsFromNavigationMenu } from '@/lib/storefront-nav';
 import { buildOrganizationJsonLd, serializeJsonLd } from '@/lib/seo/json-ld';
 import { getSiteUrl } from '@/lib/seo/site-url';
@@ -24,7 +21,7 @@ export default async function StorefrontLayout({ children }: { children: ReactNo
     settings = defaultStorefrontSettings();
   }
 
-  const seller = await getLegalSeller().catch(() => null);
+  const seller = getFixedLegalSeller(settings);
 
   // NavigationMenu is source of truth. Empty successful response = empty nav
   // (do not resurrect PRIMARY_NAV after the manager cleared/disabled items).

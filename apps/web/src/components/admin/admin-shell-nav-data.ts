@@ -109,6 +109,14 @@ export const ADMIN_NAV_GROUPS: AdminNavGroup[] = [
           pathname === '/admin/storefront/navigation' ||
           pathname.startsWith('/admin/storefront/navigation/'),
       },
+      {
+        href: '/admin/storefront/instagram',
+        label: 'Instagram',
+        permission: 'CONTENT_READ',
+        isActive: (pathname) =>
+          pathname === '/admin/storefront/instagram' ||
+          pathname.startsWith('/admin/storefront/instagram/'),
+      },
     ],
   },
   {
@@ -132,13 +140,6 @@ export const ADMIN_NAV_GROUPS: AdminNavGroup[] = [
     label: 'Администрирование',
     items: [
       { href: '/admin/users', label: 'Пользователи', permission: 'USERS_READ' },
-      {
-        href: '/admin/legal',
-        label: 'Юридическая информация',
-        permission: 'LEGAL_READ',
-        isActive: (pathname) =>
-          pathname === '/admin/legal' || pathname.startsWith('/admin/legal/'),
-      },
     ],
   },
   {

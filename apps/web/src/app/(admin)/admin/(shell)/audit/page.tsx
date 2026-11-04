@@ -1,5 +1,6 @@
 import { roleHasPermission, type AuditLogListResponse } from '@bouquet-one/contracts';
 import { adminFetch, fetchAdminMe } from '@/lib/admin-api';
+import { AdminPageHeader } from '@/components/admin/admin-page-header';
 import { AuditViewer } from '@/components/admin/audit-viewer';
 
 export default async function AdminAuditPage({
@@ -11,8 +12,10 @@ export default async function AdminAuditPage({
   if (!me || !roleHasPermission(me.user.role, 'AUDIT_READ')) {
     return (
       <main id="main-content" className="space-y-2">
-        <h1 className="admin-page-title">Журнал действий</h1>
-        <p className="admin-page-lead">Недостаточно прав для просмотра журнала.</p>
+        <AdminPageHeader
+          title="Журнал действий"
+          lead="Недостаточно прав для просмотра журнала."
+        />
       </main>
     );
   }
@@ -26,10 +29,10 @@ export default async function AdminAuditPage({
 
   return (
     <main id="main-content" className="space-y-6">
-      <header>
-        <h1 className="admin-page-title">Журнал действий</h1>
-        <p className="admin-page-lead">Кто и что менял в панели магазина</p>
-      </header>
+      <AdminPageHeader
+        title="Журнал действий"
+        lead="Кто и что менял в панели магазина"
+      />
       <AuditViewer initial={data} currentAction={params.action} />
     </main>
   );

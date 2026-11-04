@@ -1,4 +1,5 @@
 import { roleHasPermission } from '@bouquet-one/contracts';
+import { AdminPageHeader } from '@/components/admin/admin-page-header';
 import { IntegrationActions } from '@/components/admin/integration-actions';
 import { IntegrationEventsTable } from '@/components/admin/integration-events-table';
 import { IntegrationStatusCards } from '@/components/admin/integration-status-cards';
@@ -20,13 +21,10 @@ export default async function AdminIntegrationErpPage() {
 
   return (
     <main id="main-content" className="space-y-8">
-      <header>
-        <h1 className="admin-page-title">ERP-интеграция</h1>
-        <p className="admin-page-lead">
-          Исходящая доставка заказов в NewERP: статус воркера, очередь outbox и операционные
-          действия.
-        </p>
-      </header>
+      <AdminPageHeader
+        title="ERP-интеграция"
+        lead="Исходящая доставка заказов в NewERP: статус воркера, очередь outbox и операционные действия."
+      />
 
       <IntegrationStatusCards status={status} />
 

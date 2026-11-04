@@ -1,5 +1,4 @@
 import type { ReactNode } from 'react';
-import Link from 'next/link';
 import type { LegalDocumentPublicDto } from '@bouquet-one/contracts';
 import { extractMarkdownToc, SafeMarkdown } from './safe-markdown';
 
@@ -20,6 +19,14 @@ function formatEffectiveDate(iso: string | null): string | null {
   });
 }
 
+export function LegalPageShell({ children }: { children: ReactNode }) {
+  return (
+    <main id="main-content" className="sf-legal-page">
+      <div className="sf-container sf-legal-page__inner">{children}</div>
+    </main>
+  );
+}
+
 export function LegalDocumentView({ document, appendix }: Props) {
   const toc = extractMarkdownToc(document.bodyMarkdown);
   const effective = formatEffectiveDate(document.effectiveAt ?? document.publishedAt);
@@ -27,20 +34,24 @@ export function LegalDocumentView({ document, appendix }: Props) {
   return (
     <article className="sf-legal-doc">
       <header className="sf-legal-doc__header">
-        <h1 className="sf-display">{document.title}</h1>
+        <p className="sf-legal-doc__eyebrow">Документ сайта</p>
+        <h1 className="sf-legal-doc__title">{document.title}</h1>
         <p className="sf-legal-doc__meta">
           {effective ? <span>Действует с {effective}</span> : null}
           {effective ? <span aria-hidden="true"> · </span> : null}
-          <span>Версия {document.version}</span>
+          <span>Редакция {document.version}</span>
         </p>
       </header>
 
       {toc.length >= 3 ? (
         <nav className="sf-legal-toc" aria-label="Содержание">
-          <p className="sf-label">Содержание</p>
+          <p className="sf-legal-toc__label">Содержание</p>
           <ol>
-            {toc.map((item) => (
+            {toc.map((item, index) => (
               <li key={item.id}>
+                <span className="sf-legal-toc__num" aria-hidden="true">
+                  {String(index + 1).padStart(2, '0')}
+                </span>
                 <a href={`#${item.id}`}>{item.text}</a>
               </li>
             ))}
@@ -55,24 +66,18 @@ export function LegalDocumentView({ document, appendix }: Props) {
   );
 }
 
-export function LegalDocumentMissing({
-  title,
-  description,
+export function LegalRelatedNav({
+  links,
 }: {
-  title: string;
-  description?: string;
+  links: ReadonlyArray<{ href: string; label: string }>;
 }) {
   return (
-    <div className="sf-legal-missing">
-      <h1 className="sf-display">{title}</h1>
-      <p className="sf-body mt-6 text-muted">
-        {description ?? 'Документ готовится. Актуальные реквизиты и контакты — на странице контактов.'}
-      </p>
-      <p className="mt-8">
-        <Link href="/kontakty" className="text-sm font-medium text-brand hover:underline">
-          Контакты и реквизиты
-        </Link>
-      </p>
-    </div>
+    <nav className="sf-legal-related" aria-label="Связанные документы">
+      {links.map((link) => (
+        <a key={link.href} href={link.href}>
+          {link.label}
+        </a>
+      ))}
+    </nav>
   );
 }

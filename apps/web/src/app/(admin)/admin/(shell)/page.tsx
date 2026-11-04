@@ -6,6 +6,7 @@ import {
   type OrderAdminListItemDto,
   type SeoHealthSummary,
 } from '@bouquet-one/contracts';
+import { AdminPageHeader } from '@/components/admin/admin-page-header';
 import { fetchAdminMe, adminFetch } from '@/lib/admin-api';
 import { fetchTotal } from '@/lib/admin-catalog-api';
 import { adminEndpoints } from '@/lib/admin-endpoints';
@@ -112,23 +113,19 @@ export default async function AdminDashboardPage() {
 
   return (
     <main id="main-content" className="space-y-8">
-      <header className="admin-page-header">
-        <div className="admin-page-header__text">
-          <h1 className="admin-page-title">
-            {firstName ? `Добро пожаловать, ${firstName}` : 'Сводка'}
-          </h1>
-          <p className="admin-page-lead">
-            {formatToday()}. {canCreateCatalog ? 'Начните с товара или заказов.' : 'Что нужно сделать сейчас.'}
-          </p>
-        </div>
-        {canCreateCatalog ? (
-          <div className="admin-page-header__actions">
+      <AdminPageHeader
+        title={firstName ? `Добро пожаловать, ${firstName}` : 'Сводка'}
+        lead={`${formatToday()}. ${
+          canCreateCatalog ? 'Начните с товара или заказов.' : 'Что нужно сделать сейчас.'
+        }`}
+        actions={
+          canCreateCatalog ? (
             <Link href="/admin/catalog/products" className="admin-btn">
               Новый товар
             </Link>
-          </div>
-        ) : null}
-      </header>
+          ) : null
+        }
+      />
 
       {canReadOrders || canReadCatalog ? (
         <section className="admin-kpi-grid">

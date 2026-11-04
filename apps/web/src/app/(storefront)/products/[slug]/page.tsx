@@ -17,7 +17,6 @@ import { ProductRow } from '@/components/storefront/product-row';
 import {
   EMPTY_PRODUCT_PAGE,
   getFulfillmentOptions,
-  getLegalSeller,
   getProductBySlug,
   getStorefrontSettings,
   listProducts,
@@ -28,6 +27,7 @@ import { serializeJsonLd } from '@/lib/seo/json-ld';
 import { buildPageMetadata } from '@/lib/seo/metadata';
 import { buildBreadcrumbJsonLd, buildProductJsonLd } from '@/lib/seo/product-json-ld';
 import { pickDerivativeUrl, sortProductMedia } from '@/lib/media';
+import { getFixedLegalSeller } from '@/lib/legal-content';
 import { categoryNavHref } from '@/lib/storefront-nav';
 
 type Params = Promise<{ slug: string }>;
@@ -77,15 +77,15 @@ export default async function ProductPage({ params }: { params: Params }) {
   }
 
   const product = resolved.product;
-  const [related, settings, fulfillment, seller, postcardPage] = await Promise.all([
+  const [related, settings, fulfillment, postcardPage] = await Promise.all([
     listRelatedProducts(product.slug, 8).catch(() => []),
     getStorefrontSettings().catch(() => null),
     getFulfillmentOptions().catch(() => null),
-    getLegalSeller().catch(() => null),
     listProducts({ categorySlug: POSTCARD_CATEGORY_SLUG, pageSize: 12 }).catch(
       () => EMPTY_PRODUCT_PAGE,
     ),
   ]);
+  const seller = getFixedLegalSeller(settings);
 
   const postcards: PostcardOption[] = postcardPage.items
     .filter((item) => item.availability !== 'TEMPORARILY_UNAVAILABLE' && item.defaultVariant)

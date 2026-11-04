@@ -49,23 +49,56 @@ export function OrderDetailPanel({
             ← К заказам
           </Link>
           <h1 className="admin-page-title">Заказ {order.orderNumber}</h1>
-          <p className="admin-page-lead">
+          <div className="admin-page-lead flex flex-wrap items-center gap-2">
             <span className="admin-chip">{orderStatusLabel(order.status)}</span>
-            <span className="ml-2">
+            <span className="text-sm text-[var(--admin-muted)]">
               создан {new Date(order.createdAt).toLocaleString('ru-BY')}
             </span>
-          </p>
+          </div>
           <p className="text-sm text-[var(--admin-muted)]">
             Операционная обработка — в ERP. Ниже мониторинг оплаты и синхронизации.
           </p>
-          <div className="flex flex-wrap gap-2 text-xs">
-            <span className="admin-chip">
+          <div className="admin-status-row">
+            <span
+              className={`admin-chip ${
+                order.paymentStatus === 'PAID' || order.paymentStatus === 'NOT_REQUIRED'
+                  ? 'admin-chip--ok'
+                  : order.paymentStatus === 'FAILED'
+                    ? 'admin-chip--err'
+                    : order.paymentStatus === 'AWAITING_PAYMENT'
+                      ? 'admin-chip--warn'
+                      : 'admin-chip--muted'
+              }`}
+            >
               {paymentMethodLabel(order.paymentMethod)} ·{' '}
               {paymentStatusLabel(order.paymentStatus)}
             </span>
-            <span className="admin-chip">{erpSyncStatusLabel(order.erpSyncStatus)}</span>
-            <span className="admin-chip">
-              {telegramNotifyStatusLabel(order.telegramNotifyStatus)}
+            <span
+              className={`admin-chip ${
+                order.erpSyncStatus === 'SYNCED'
+                  ? 'admin-chip--ok'
+                  : order.erpSyncStatus === 'FAILED'
+                    ? 'admin-chip--err'
+                    : order.erpSyncStatus === 'PENDING' || order.erpSyncStatus === 'RETRYING'
+                      ? 'admin-chip--warn'
+                      : 'admin-chip--muted'
+              }`}
+            >
+              ERP · {erpSyncStatusLabel(order.erpSyncStatus)}
+            </span>
+            <span
+              className={`admin-chip ${
+                order.telegramNotifyStatus === 'SENT'
+                  ? 'admin-chip--ok'
+                  : order.telegramNotifyStatus === 'FAILED'
+                    ? 'admin-chip--err'
+                    : order.telegramNotifyStatus === 'PENDING' ||
+                        order.telegramNotifyStatus === 'RETRYING'
+                      ? 'admin-chip--warn'
+                      : 'admin-chip--muted'
+              }`}
+            >
+              TG · {telegramNotifyStatusLabel(order.telegramNotifyStatus)}
             </span>
           </div>
         </div>

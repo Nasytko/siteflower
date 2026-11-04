@@ -23,7 +23,10 @@ test('SUPER_ADMIN sees primary admin sections including catalog and orders', () 
   assert.ok(labels.includes('Подборки'));
   assert.ok(labels.includes('Страницы каталога'));
   assert.ok(labels.includes('Заказы'));
+  assert.ok(labels.includes('Instagram'));
   assert.ok(labels.includes('Пользователи'));
+  assert.equal(labels.includes('Юридические'), false);
+  assert.equal(labels.includes('Правовые документы'), false);
 
   assert.ok(hrefs.includes('/admin'));
   assert.ok(hrefs.includes('/admin/catalog/products'));
@@ -32,6 +35,8 @@ test('SUPER_ADMIN sees primary admin sections including catalog and orders', () 
   assert.ok(hrefs.includes('/admin/bestsellers'));
   assert.ok(hrefs.includes('/admin/catalog/pages'));
   assert.ok(hrefs.includes('/admin/orders'));
+  assert.ok(hrefs.includes('/admin/storefront/instagram'));
+  assert.equal(hrefs.some((href) => href.startsWith('/admin/legal')), false);
 });
 
 test('CONTENT_MANAGER keeps catalog links but not users admin', () => {

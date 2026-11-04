@@ -1,9 +1,10 @@
 import type { Metadata } from 'next';
 import {
-  LegalDocumentMissing,
   LegalDocumentView,
+  LegalPageShell,
+  LegalRelatedNav,
 } from '@/components/storefront/legal-document-view';
-import { getLegalDocument, PublicApiError } from '@/lib/public-api';
+import { getFixedLegalDocument } from '@/lib/legal-content';
 import { buildPageMetadata } from '@/lib/seo/metadata';
 
 export const metadata: Metadata = buildPageMetadata({
@@ -12,24 +13,20 @@ export const metadata: Metadata = buildPageMetadata({
   path: '/oferta',
 });
 
-export default async function OrderTermsPage() {
-  const document = await getLegalDocument('order_terms').catch((error: unknown) => {
-    if (error instanceof PublicApiError && (error.status === 404 || error.status === 400)) {
-      return null;
-    }
-    return null;
-  });
+export default function OrderTermsPage() {
+  const document = getFixedLegalDocument('order_terms');
 
   return (
-    <main id="main-content" className="sf-legal-page">
-      <div className="sf-legal-page__glow" aria-hidden="true" />
-      <div className="sf-container py-14 md:py-20">
-        {document ? (
-          <LegalDocumentView document={document} />
-        ) : (
-          <LegalDocumentMissing title="Условия заказа" />
-        )}
-      </div>
-    </main>
+    <LegalPageShell>
+      <LegalDocumentView document={document} />
+      <LegalRelatedNav
+        links={[
+          { href: '/vozvrat', label: 'Возврат и отмена' },
+          { href: '/privacy', label: 'Персональные данные' },
+          { href: '/dostavka', label: 'Доставка и оплата' },
+          { href: '/kontakty', label: 'Контакты' },
+        ]}
+      />
+    </LegalPageShell>
   );
 }

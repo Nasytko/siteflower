@@ -5,6 +5,7 @@ import type {
   OrderAdminListItemDto,
 } from '@bouquet-one/contracts';
 import { adminFetch, fetchAdminMe } from '@/lib/admin-api';
+import { AdminPageHeader } from '@/components/admin/admin-page-header';
 import { OrdersManager } from '@/components/admin/orders-manager';
 import { redirect } from 'next/navigation';
 
@@ -70,14 +71,10 @@ export default async function AdminOrdersPage({
 
   return (
     <main id="main-content" className="space-y-6">
-      <header className="admin-page-header">
-        <div className="admin-page-header__text">
-          <h1 className="admin-page-title">Заказы</h1>
-          <p className="admin-page-lead">
-            Мониторинг оплаты, ERP и Telegram. Операционная обработка — в ERP.
-          </p>
-        </div>
-      </header>
+      <AdminPageHeader
+        title="Заказы"
+        lead="Мониторинг оплаты, ERP и Telegram. Операционная обработка — в ERP."
+      />
       <Suspense fallback={<p className="admin-empty">Загрузка заказов…</p>}>
         <OrdersManager
           items={data.items}

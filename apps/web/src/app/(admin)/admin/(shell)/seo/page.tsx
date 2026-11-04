@@ -1,4 +1,6 @@
+import Link from 'next/link';
 import type { SeoHealthReportDto } from '@bouquet-one/contracts';
+import { AdminPageHeader } from '@/components/admin/admin-page-header';
 import { SeoHealthPanel } from '@/components/admin/seo-health-panel';
 import { adminFetch } from '@/lib/admin-api';
 import { adminEndpoints, withQuery } from '@/lib/admin-endpoints';
@@ -14,16 +16,18 @@ export default async function AdminSeoPage() {
 
   return (
     <main id="main-content" className="space-y-8">
-      <header>
-        <h1 className="admin-page-title">SEO сайта</h1>
-        <p className="admin-page-lead">
-          Проверка названий, описаний и фото для поиска. Технические детали (sitemap, canonical)
-          скрыты ниже списка страниц.{' '}
-          <a href="/admin/catalog/pages" className="underline underline-offset-2">
-            Страницы каталога
-          </a>
-        </p>
-      </header>
+      <AdminPageHeader
+        title="SEO сайта"
+        lead={
+          <>
+            Проверка названий, описаний и фото для поиска. Технические детали (sitemap, canonical)
+            скрыты ниже списка страниц.{' '}
+            <Link href="/admin/catalog/pages" className="admin-link">
+              Страницы каталога
+            </Link>
+          </>
+        }
+      />
       <SeoHealthPanel initial={initial} />
     </main>
   );

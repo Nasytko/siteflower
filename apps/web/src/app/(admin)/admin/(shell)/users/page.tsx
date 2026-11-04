@@ -1,15 +1,15 @@
 import { roleHasPermission } from '@bouquet-one/contracts';
 import type { AdminUserListResponse } from '@bouquet-one/contracts';
 import { adminFetch, fetchAdminMe } from '@/lib/admin-api';
+import { AdminPageHeader } from '@/components/admin/admin-page-header';
 import { UsersManager } from '@/components/admin/users-manager';
 
 export default async function AdminUsersPage() {
   const me = await fetchAdminMe();
   if (!me || !roleHasPermission(me.user.role, 'USERS_READ')) {
     return (
-      <main>
-        <h1 className="text-2xl font-semibold">Пользователи</h1>
-        <p className="mt-2 text-stone-600">Недостаточно прав.</p>
+      <main id="main-content" className="space-y-2">
+        <AdminPageHeader title="Пользователи" lead="Недостаточно прав." />
       </main>
     );
   }
@@ -18,10 +18,10 @@ export default async function AdminUsersPage() {
 
   return (
     <main id="main-content" className="space-y-6">
-      <header>
-        <h1 className="admin-page-title">Пользователи</h1>
-        <p className="admin-page-lead">Управление администраторами магазина</p>
-      </header>
+      <AdminPageHeader
+        title="Пользователи"
+        lead="Управление администраторами магазина"
+      />
       <UsersManager
         initial={data}
         permissions={{

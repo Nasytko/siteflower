@@ -12,7 +12,7 @@ export function AdminPageHeader({ title, lead, actions }: Props) {
     <header className="admin-page-header">
       <div className="admin-page-header__text">
         <h1 className="admin-page-title">{title}</h1>
-        {lead ? <p className="admin-page-lead">{lead}</p> : null}
+        {lead ? <div className="admin-page-lead">{lead}</div> : null}
       </div>
       {actions ? <div className="admin-page-header__actions">{actions}</div> : null}
     </header>

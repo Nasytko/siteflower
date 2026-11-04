@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useCallback, useEffect, useState, useTransition } from 'react';
 import {
@@ -36,13 +37,13 @@ type Props = {
 function chipClass(tone: 'ok' | 'warn' | 'err' | 'muted'): string {
   switch (tone) {
     case 'ok':
-      return 'rounded px-1.5 py-0.5 text-xs bg-emerald-50 text-emerald-900';
+      return 'admin-chip admin-chip--ok';
     case 'warn':
-      return 'rounded px-1.5 py-0.5 text-xs bg-amber-50 text-amber-900';
+      return 'admin-chip admin-chip--warn';
     case 'err':
-      return 'rounded px-1.5 py-0.5 text-xs bg-red-50 text-red-800';
+      return 'admin-chip admin-chip--err';
     default:
-      return 'rounded px-1.5 py-0.5 text-xs bg-[var(--admin-bg)] text-[var(--admin-muted)]';
+      return 'admin-chip admin-chip--muted';
   }
 }
 
@@ -111,17 +112,32 @@ export function OrdersManager({
     void loadDetail(selectedId);
   }, [selectedId, loadDetail]);
 
-  function setFilter(key: string, value: string) {
+  function navigateWith(mutate: (params: URLSearchParams) => void) {
     const params = new URLSearchParams(searchParams.toString());
-    if (!value || value === 'all' || value === '') {
-      if (key === 'date') params.set('date', 'all');
-      else params.delete(key);
-    } else {
-      params.set(key, value);
-    }
-    params.delete('page');
+    mutate(params);
     startTransition(() => {
       router.push(`/admin/orders?${params.toString()}`);
+    });
+  }
+
+  function setFilter(key: string, value: string) {
+    navigateWith((params) => {
+      if (!value || value === 'all' || value === '') {
+        if (key === 'date') params.set('date', 'all');
+        else params.delete(key);
+      } else {
+        params.set(key, value);
+      }
+      if (key !== 'page') params.delete('page');
+    });
+  }
+
+  function clearStatusFilters() {
+    navigateWith((params) => {
+      params.delete('erpSyncStatus');
+      params.delete('paymentStatus');
+      params.delete('telegramNotifyStatus');
+      params.delete('page');
     });
   }
 
@@ -170,50 +186,87 @@ export function OrdersManager({
 
   const pages = Math.max(1, Math.ceil(total / pageSize));
   const emptyMessage = 'Заказов по выбранным фильтрам нет.';
+  const activeErp = filters.erpSyncStatus;
+  const activePay = filters.paymentStatus;
+  const activeTg = filters.telegramNotifyStatus;
 
   return (
     <div className={`space-y-5 ${pending ? 'opacity-70' : ''}`}>
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+      <div className="admin-kpi-grid admin-kpi-grid--orders">
         {(
           [
-            ['Все', summary.total, null],
-            ['Ожидают ERP', summary.awaitingErp, () => setFilter('erpSyncStatus', 'PENDING')],
-            ['Ошибки ERP', summary.erpErrors, () => setFilter('erpSyncStatus', 'FAILED')],
-            ['Ошибки Telegram', summary.telegramErrors, () => setFilter('telegramNotifyStatus', 'FAILED')],
-            ['Ожидают оплаты', summary.awaitingPayment, () => setFilter('paymentStatus', 'AWAITING_PAYMENT')],
+            {
+              label: 'Все',
+              value: summary.total,
+              active: !activeErp && !activePay && !activeTg,
+              onClick: clearStatusFilters,
+            },
+            {
+              label: 'Ожидают ERP',
+              value: summary.awaitingErp,
+              active: activeErp === 'PENDING',
+              onClick: () => setFilter('erpSyncStatus', 'PENDING'),
+              emphasize: summary.awaitingErp > 0,
+            },
+            {
+              label: 'Ошибки ERP',
+              value: summary.erpErrors,
+              active: activeErp === 'FAILED',
+              onClick: () => setFilter('erpSyncStatus', 'FAILED'),
+              emphasize: summary.erpErrors > 0,
+            },
+            {
+              label: 'Ошибки Telegram',
+              value: summary.telegramErrors,
+              active: activeTg === 'FAILED',
+              onClick: () => setFilter('telegramNotifyStatus', 'FAILED'),
+              emphasize: summary.telegramErrors > 0,
+            },
+            {
+              label: 'Ожидают оплаты',
+              value: summary.awaitingPayment,
+              active: activePay === 'AWAITING_PAYMENT',
+              onClick: () => setFilter('paymentStatus', 'AWAITING_PAYMENT'),
+              emphasize: summary.awaitingPayment > 0,
+            },
           ] as const
-        ).map(([label, value, onClick]) => (
+        ).map((card) => (
           <button
-            key={label}
+            key={card.label}
             type="button"
-            className="admin-card p-3 text-left"
-            onClick={onClick ?? undefined}
+            className={`admin-card admin-card--kpi text-left${
+              'emphasize' in card && card.emphasize ? ' admin-card--urgent' : ''
+            }${card.active ? ' ring-1 ring-[var(--admin-ink)]' : ''}`}
+            onClick={card.onClick}
+            aria-pressed={card.active}
           >
-            <p className="text-xs text-[var(--admin-muted)]">{label}</p>
-            <p className="text-xl font-semibold tabular-nums">{value}</p>
+            <p className="admin-card__label">{card.label}</p>
+            <p className="admin-metric">{card.value}</p>
           </button>
         ))}
       </div>
 
-      <div className="admin-seg">
-        {(
-          [
-            ['today', 'Сегодня'],
-            ['tomorrow', 'Завтра'],
-            ['all', 'Все даты'],
-          ] as const
-        ).map(([value, label]) => (
-          <button
-            key={value}
-            type="button"
-            className={`admin-seg__btn ${
-              (filters.date || 'today') === value ? 'admin-seg__btn--active' : ''
-            }`}
-            onClick={() => setFilter('date', value)}
-          >
-            {label}
-          </button>
-        ))}
+      <div className="flex flex-wrap items-center gap-3">
+        <div className="admin-seg">
+          {(
+            [
+              ['today', 'Сегодня'],
+              ['tomorrow', 'Завтра'],
+              ['all', 'Все даты'],
+            ] as const
+          ).map(([value, label]) => (
+            <button
+              key={value}
+              type="button"
+              className={`admin-seg__btn ${
+                (filters.date || 'today') === value ? 'admin-seg__btn--active' : ''
+              }`}
+              onClick={() => setFilter('date', value)}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
       </div>
 
       <div className="admin-toolbar flex flex-wrap gap-3">
@@ -277,12 +330,12 @@ export function OrdersManager({
         </label>
       </div>
 
-      <div className="grid gap-4 lg:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)]">
-        <div className="admin-card overflow-x-auto">
+      <div className="admin-orders-layout">
+        <div className="admin-panel admin-table-wrap">
           {items.length === 0 ? (
-            <p className="admin-empty p-4">{emptyMessage}</p>
+            <p className="admin-empty">{emptyMessage}</p>
           ) : (
-            <table className="admin-table w-full text-sm">
+            <table className="admin-table admin-table--compact w-full text-sm">
               <thead>
                 <tr>
                   <th>Заказ</th>
@@ -296,11 +349,13 @@ export function OrdersManager({
                 {items.map((row) => (
                   <tr
                     key={row.id}
-                    className={`cursor-pointer ${selectedId === row.id ? 'bg-[var(--admin-brand-soft)]' : ''}`}
+                    className={`cursor-pointer ${
+                      selectedId === row.id ? 'bg-[var(--admin-brand-soft)]' : ''
+                    }`}
                     onClick={() => selectOrder(row.id)}
                   >
                     <td>
-                      <div className="font-medium">{row.orderNumber}</div>
+                      <div className="font-semibold">{row.orderNumber}</div>
                       <div className="text-xs text-[var(--admin-muted)]">
                         {row.purchaserName} · {row.fulfillmentDate}
                       </div>
@@ -320,7 +375,7 @@ export function OrdersManager({
                         {telegramNotifyStatusLabel(row.telegramNotifyStatus)}
                       </span>
                     </td>
-                    <td className="tabular-nums">
+                    <td className="tabular-nums font-medium">
                       {formatPriceFromMinor(row.totalMinor, row.currency)}
                     </td>
                   </tr>
@@ -355,39 +410,45 @@ export function OrdersManager({
           ) : null}
         </div>
 
-        <aside className="admin-card space-y-4 p-4">
+        <aside className="admin-card admin-orders-detail">
           {!selectedId ? (
-            <p className="admin-empty">Выберите заказ в таблице</p>
+            <p className="admin-empty admin-empty--compact">Выберите заказ в таблице</p>
           ) : detailLoading ? (
-            <p className="admin-empty">Загрузка…</p>
+            <p className="admin-empty admin-empty--compact">Загрузка…</p>
           ) : detailError ? (
-            <p className="text-sm text-red-700">{detailError}</p>
+            <p className="admin-error">{detailError}</p>
           ) : detail ? (
             <>
-              <header>
-                <h2 className="text-lg font-semibold">{detail.orderNumber}</h2>
+              <header className="space-y-1">
+                <div className="flex flex-wrap items-start justify-between gap-2">
+                  <h2 className="admin-orders-detail__title">{detail.orderNumber}</h2>
+                  <Link href={`/admin/orders/${detail.id}`} className="admin-link text-sm">
+                    Открыть полностью →
+                  </Link>
+                </div>
                 <p className="text-sm text-[var(--admin-muted)]">
                   Создан {new Date(detail.createdAt).toLocaleString('ru-BY')}
                 </p>
               </header>
 
-              <div className="flex flex-wrap gap-2">
+              <div className="admin-orders-detail__meta">
                 <span className={chipClass(payTone(detail.paymentStatus))}>
                   {paymentMethodLabel(detail.paymentMethod)} ·{' '}
                   {paymentStatusLabel(detail.paymentStatus)}
                 </span>
                 <span className={chipClass(erpTone(detail.erpSyncStatus))}>
-                  {erpSyncStatusLabel(detail.erpSyncStatus)}
+                  ERP · {erpSyncStatusLabel(detail.erpSyncStatus)}
                 </span>
                 <span className={chipClass(tgTone(detail.telegramNotifyStatus))}>
-                  {telegramNotifyStatusLabel(detail.telegramNotifyStatus)}
+                  TG · {telegramNotifyStatusLabel(detail.telegramNotifyStatus)}
                 </span>
               </div>
 
-              <section className="space-y-1 text-sm">
+              <div className="admin-orders-detail__block">
                 <p>
-                  <strong>{detail.purchaserName}</strong> · {detail.purchaserPhoneE164}
+                  <strong>{detail.purchaserName}</strong>
                 </p>
+                <p className="text-[var(--admin-muted)]">{detail.purchaserPhoneE164}</p>
                 <p>
                   {detail.fulfillmentType === 'DELIVERY' ? 'Доставка' : 'Самовывоз'}:{' '}
                   {detail.fulfillmentDate}, {detail.timeWindowLabel}
@@ -396,19 +457,22 @@ export function OrdersManager({
                 <p className="font-semibold tabular-nums">
                   Итого {formatPriceFromMinor(detail.totalMinor, detail.currency)}
                 </p>
-              </section>
+              </div>
 
-              <ul className="space-y-1 text-sm">
-                {detail.items.map((item) => (
-                  <li key={item.id}>
-                    {item.productName} ({item.variantName}) × {item.quantity}
-                    {item.optionsSnapshot && item.optionsSnapshot.length > 0
-                      ? ` · ${item.optionsSnapshot.map((o) => o.valueName).join(', ')}`
-                      : ''}{' '}
-                    — {formatPriceFromMinor(item.lineTotalMinor, item.currency)}
-                  </li>
-                ))}
-              </ul>
+              <div className="admin-orders-detail__block">
+                <p className="admin-card__label">Позиции</p>
+                <ul className="space-y-1">
+                  {detail.items.map((item) => (
+                    <li key={item.id}>
+                      {item.productName} ({item.variantName}) × {item.quantity}
+                      {item.optionsSnapshot && item.optionsSnapshot.length > 0
+                        ? ` · ${item.optionsSnapshot.map((o) => o.valueName).join(', ')}`
+                        : ''}{' '}
+                      — {formatPriceFromMinor(item.lineTotalMinor, item.currency)}
+                    </li>
+                  ))}
+                </ul>
+              </div>
 
               {canUpdate ? (
                 <div className="flex flex-wrap gap-2">
@@ -430,13 +494,13 @@ export function OrdersManager({
                   </button>
                 </div>
               ) : null}
-              {actionError ? <p className="text-sm text-red-700">{actionError}</p> : null}
+              {actionError ? <p className="admin-error">{actionError}</p> : null}
 
-              <section>
-                <h3 className="mb-2 text-sm font-semibold">Хронология и попытки</h3>
-                <ol className="space-y-2 text-xs">
+              <div className="admin-orders-detail__block">
+                <p className="admin-card__label">Хронология</p>
+                <ol className="admin-orders-timeline">
                   {detail.events.map((e) => (
-                    <li key={e.id} className="border-l-2 border-[var(--admin-border)] pl-2">
+                    <li key={e.id} className="admin-orders-timeline__item">
                       <div className="text-[var(--admin-muted)]">
                         {new Date(e.createdAt).toLocaleString('ru-BY')}
                       </div>
@@ -447,7 +511,10 @@ export function OrdersManager({
                     </li>
                   ))}
                   {detail.deliveryAttempts.map((a) => (
-                    <li key={a.id} className="border-l-2 border-[var(--admin-brand)] pl-2">
+                    <li
+                      key={a.id}
+                      className="admin-orders-timeline__item admin-orders-timeline__item--attempt"
+                    >
                       <div className="text-[var(--admin-muted)]">
                         {new Date(a.createdAt).toLocaleString('ru-BY')} · {a.channel} #
                         {a.attemptNumber}
@@ -458,7 +525,7 @@ export function OrdersManager({
                         {a.errorCode ? ` · ${a.errorCode}` : ''}
                       </div>
                       {a.errorSanitized ? (
-                        <div className="text-red-700">{a.errorSanitized}</div>
+                        <div className="text-[var(--color-danger)]">{a.errorSanitized}</div>
                       ) : null}
                       {a.nextAttemptAt ? (
                         <div className="text-[var(--admin-muted)]">
@@ -468,11 +535,16 @@ export function OrdersManager({
                     </li>
                   ))}
                 </ol>
-              </section>
+              </div>
 
-              <details open={techOpen} onToggle={(e) => setTechOpen((e.target as HTMLDetailsElement).open)}>
-                <summary className="cursor-pointer text-sm font-medium">Технические детали</summary>
-                <pre className="mt-2 overflow-x-auto rounded bg-[var(--admin-bg)] p-2 text-[11px]">
+              <details
+                open={techOpen}
+                onToggle={(e) => setTechOpen((e.target as HTMLDetailsElement).open)}
+              >
+                <summary className="cursor-pointer text-sm font-medium">
+                  Технические детали
+                </summary>
+                <pre className="mt-2 overflow-x-auto rounded-lg bg-[var(--admin-bg)] p-2 text-[11px]">
                   {JSON.stringify(
                     {
                       id: detail.id,
