@@ -10,7 +10,12 @@ export type AnalyticsEventMap = {
   select_filter: { key: string; value: string };
   add_to_favorites: { productId: string; slug: string };
   remove_from_favorites: { productId: string; slug: string };
-  add_to_cart: { productId: string; variantId: string; quantity: number };
+  add_to_cart: {
+    productId: string;
+    variantId: string;
+    quantity: number;
+    productKind?: string;
+  };
   remove_from_cart: { variantId: string };
   view_cart: { itemCount: number };
   begin_checkout: { itemCount: number };
