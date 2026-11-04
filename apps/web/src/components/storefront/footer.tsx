@@ -48,7 +48,7 @@ export function StorefrontFooter({ settings, seller = null }: Props) {
         <div className="sf-footer__grid sf-container-wide">
           <div className="sf-footer__about">
             <div className="sf-footer__brand">
-              <BrandLogo alt={settings.brandName} />
+              <BrandLogo />
             </div>
             <p className="sf-footer__text">
               {settings.aboutSummary ??

@@ -22,7 +22,7 @@ type Props = {
  */
 export function StorefrontHeader({
   city,
-  brandName,
+  brandName: _brandName,
   phone,
   workingHours,
   navItems = PRIMARY_NAV,
@@ -112,9 +112,9 @@ export function StorefrontHeader({
               <MenuIcon open={menuOpen} />
             </button>
 
-            <Link href="/" className="hidden hover:opacity-90 lg:block">
-              <BrandLogo compact={compact} alt={brandName} />
-            </Link>
+            <span className="hidden min-w-0 lg:inline-flex">
+              <BrandLogo compact={compact} />
+            </span>
 
             {telHref ? (
               <a
@@ -128,9 +128,9 @@ export function StorefrontHeader({
             ) : null}
           </div>
 
-          <Link href="/" className="justify-self-center hover:opacity-90 lg:hidden">
-            <BrandLogo compact alt={brandName} />
-          </Link>
+          <span className="justify-self-center lg:hidden">
+            <BrandLogo compact />
+          </span>
 
           <div className="sf-header-inline-nav hidden min-w-0 justify-self-stretch lg:block">
             <PrimaryNav items={navItems} inline />
@@ -149,7 +149,7 @@ export function StorefrontHeader({
           aria-label="Меню"
         >
           <div className="sf-container flex h-14 items-center justify-between">
-            <BrandLogo compact alt={brandName} />
+            <BrandLogo compact />
             <button
               ref={closeRef}
               type="button"

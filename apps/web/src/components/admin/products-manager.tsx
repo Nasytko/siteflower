@@ -12,10 +12,18 @@ import {
   type CommercialAvailability,
   type CompositionKind,
   type PaginatedResponse,
+  type ProductDeleteImpactDto,
   type ProductKind,
   type ProductListItemDto,
 } from '@bouquet-one/contracts';
-import { adminDelete, adminPatch, adminPost, AdminRequestError, errorMessage } from '@/lib/admin-client';
+import {
+  adminDelete,
+  adminGet,
+  adminPatch,
+  adminPost,
+  AdminRequestError,
+  errorMessage,
+} from '@/lib/admin-client';
 import { buildProductAvailabilityPatchBody } from '@/lib/admin-catalog-contract';
 import { adminEndpoints } from '@/lib/admin-endpoints';
 import {
@@ -26,6 +34,7 @@ import {
 } from '@/lib/admin-labels';
 import { availabilityChipClass, lifecycleChipClass } from '@/lib/admin-status';
 import { toSameOriginMediaUrl } from '@/lib/media';
+import { ProductDeleteDialog } from '@/components/admin/product-delete-dialog';
 
 export type ProductFilters = {
   search: string;
@@ -133,23 +142,23 @@ function ProductThumb({ item }: { item: ProductListItemDto }) {
       <img
         src={toSameOriginMediaUrl(item.primaryImageUrl) ?? item.primaryImageUrl}
         alt=""
-        className="sf-ap-card__photo"
+        className="sf-ap-thumb"
       />
     );
   }
-  return <div className="sf-ap-card__photo sf-ap-card__photo--empty" aria-hidden />;
+  return <div className="sf-ap-thumb sf-ap-thumb--empty" aria-hidden />;
 }
 
-function PriceBlock({ item }: { item: ProductListItemDto }) {
+function PriceCell({ item }: { item: ProductListItemDto }) {
   if (item.promotion) {
     return (
-      <span className="sf-ap-card__price sf-ap-card__price--sale">
+      <span className="sf-ap-price sf-ap-price--sale">
         <span>{item.promotion.salePrice.label}</span>
-        <span className="sf-ap-card__price-old">{item.promotion.originalPrice.label}</span>
+        <span className="sf-ap-price__old">{item.promotion.originalPrice.label}</span>
       </span>
     );
   }
-  return <span className="sf-ap-card__price">{item.price?.label ?? '—'}</span>;
+  return <span className="sf-ap-price">{item.price?.label ?? '—'}</span>;
 }
 
 type RowActionsProps = {
@@ -317,6 +326,11 @@ export function ProductsManager({
   const [duplicateTarget, setDuplicateTarget] = useState<ProductListItemDto | null>(null);
   const [duplicating, setDuplicating] = useState(false);
   const [duplicateSuccessId, setDuplicateSuccessId] = useState<string | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<ProductListItemDto | null>(null);
+  const [deleteImpact, setDeleteImpact] = useState<ProductDeleteImpactDto | null>(null);
+  const [deleteConfirm, setDeleteConfirm] = useState('');
+  const [deleteLoading, setDeleteLoading] = useState(false);
+  const [deletePending, setDeletePending] = useState(false);
   const [rows, setRows] = useState(data.items);
   const [savingAvailabilityId, setSavingAvailabilityId] = useState<string | null>(null);
   const [availabilitySuccessId, setAvailabilitySuccessId] = useState<string | null>(null);
@@ -535,18 +549,48 @@ export function ProductsManager({
       );
   }
 
-  function runDelete(item: ProductListItemDto) {
-    const confirmName = window.prompt(
-      `Удалить навсегда «${item.name}»? Введите точное название товара для подтверждения.`,
-    );
-    if (confirmName == null) return;
-    void adminDelete(adminEndpoints.product(item.id), {
-      expectedVersion: item.version,
-      confirmName,
-      detach: true,
-    })
-      .then(() => router.refresh())
-      .catch((err) => setError(errorMessage(err, 'Не удалось удалить товар')));
+  async function openDelete(item: ProductListItemDto) {
+    setDeleteTarget(item);
+    setDeleteConfirm('');
+    setDeleteImpact(null);
+    setDeleteLoading(true);
+    setError(null);
+    try {
+      setDeleteImpact(await adminGet<ProductDeleteImpactDto>(adminEndpoints.productDeleteImpact(item.id)));
+    } catch (err) {
+      setError(errorMessage(err, 'Не удалось проверить удаление'));
+      setDeleteTarget(null);
+    } finally {
+      setDeleteLoading(false);
+    }
+  }
+
+  function closeDelete() {
+    if (deletePending) return;
+    setDeleteTarget(null);
+    setDeleteImpact(null);
+    setDeleteConfirm('');
+  }
+
+  async function confirmDelete() {
+    if (!deleteTarget || !deleteImpact) return;
+    setDeletePending(true);
+    setError(null);
+    try {
+      await adminDelete(adminEndpoints.product(deleteTarget.id), {
+        expectedVersion: deleteTarget.version,
+        confirmName: deleteConfirm.trim(),
+        detach: deleteImpact.detachable.length > 0,
+      });
+      setDeleteTarget(null);
+      setDeleteImpact(null);
+      setDeleteConfirm('');
+      router.refresh();
+    } catch (err) {
+      setError(errorMessage(err, 'Не удалось удалить товар'));
+    } finally {
+      setDeletePending(false);
+    }
   }
 
   const pages = Math.max(1, Math.ceil(data.total / Math.max(1, data.pageSize)));
@@ -561,31 +605,24 @@ export function ProductsManager({
       );
     }
     return (
-      <div
-        className="sf-ap-avail"
-        role="group"
-        aria-label={`Наличие: ${item.name}`}
-        aria-busy={savingAvailability}
-        onClick={(event) => event.stopPropagation()}
-      >
-        {COMMERCIAL_AVAILABILITIES.map((value) => {
-          const active = item.availability === value;
-          return (
-            <button
-              key={value}
-              type="button"
-              className={`sf-ap-avail__chip ${active ? 'sf-ap-avail__chip--active' : ''} ${
-                value !== 'AVAILABLE' && active ? 'sf-ap-avail__chip--warn' : ''
-              }`}
-              disabled={savingAvailability || Boolean(savingAvailabilityId)}
-              aria-pressed={active}
-              onClick={() => void onAvailabilityChange(item, value)}
-            >
+      <label className="sf-ap-avail-select">
+        <span className="sr-only">Наличие: {item.name}</span>
+        <select
+          className={`admin-select ${item.availability === 'AVAILABLE' ? '' : 'sf-ap-avail-select--warn'}`}
+          value={item.availability}
+          disabled={savingAvailability || Boolean(savingAvailabilityId)}
+          aria-busy={savingAvailability}
+          onChange={(event) => {
+            void onAvailabilityChange(item, event.target.value as CommercialAvailability);
+          }}
+        >
+          {COMMERCIAL_AVAILABILITIES.map((value) => (
+            <option key={value} value={value}>
               {availabilityLabel(value)}
-            </button>
-          );
-        })}
-      </div>
+            </option>
+          ))}
+        </select>
+      </label>
     );
   }
 
@@ -603,7 +640,7 @@ export function ProductsManager({
         }}
         onArchive={() => runLifecycle(item, 'archive')}
         onRestore={() => runLifecycle(item, 'restore')}
-        onDelete={() => runDelete(item)}
+        onDelete={() => void openDelete(item)}
       />
     );
   }
@@ -624,7 +661,7 @@ export function ProductsManager({
         {canCreate ? (
           <button
             type="button"
-            className="admin-btn"
+            className="sf-ap-btn sf-ap-btn--primary"
             disabled={creating}
             onClick={() => {
               setCreateKind('BOUQUET');
@@ -669,7 +706,7 @@ export function ProductsManager({
             <div className="sf-ap-create__actions">
               <button
                 type="button"
-                className="admin-btn"
+                className="sf-ap-btn sf-ap-btn--primary"
                 disabled={creating}
                 onClick={() => void onCreate(createKind)}
               >
@@ -677,7 +714,7 @@ export function ProductsManager({
               </button>
               <button
                 type="button"
-                className="admin-btn-ghost"
+                className="sf-ap-btn"
                 disabled={creating}
                 onClick={() => setCreateOpen(false)}
               >
@@ -738,13 +775,13 @@ export function ProductsManager({
               type="button"
               disabled={duplicating}
               onClick={() => void onConfirmDuplicate()}
-              className="admin-btn"
+              className="sf-ap-btn sf-ap-btn--primary"
             >
               {duplicating ? 'Дублирование…' : 'Дублировать'}
             </button>
             <button
               type="button"
-              className="admin-btn-ghost"
+              className="sf-ap-btn"
               disabled={duplicating}
               onClick={() => setDuplicateTarget(null)}
             >
@@ -753,6 +790,29 @@ export function ProductsManager({
           </div>
         </div>
       ) : null}
+
+      <ProductDeleteDialog
+        open={Boolean(deleteTarget)}
+        productName={deleteTarget?.name ?? ''}
+        loading={deleteLoading}
+        pending={deletePending}
+        blockers={deleteImpact?.blockers ?? []}
+        detachable={deleteImpact?.detachable ?? []}
+        canDelete={Boolean(deleteImpact?.canDelete)}
+        confirmName={deleteConfirm}
+        onConfirmNameChange={setDeleteConfirm}
+        onConfirm={() => void confirmDelete()}
+        onClose={closeDelete}
+        onArchive={
+          deleteTarget && canPublish
+            ? () => {
+                const item = deleteTarget;
+                closeDelete();
+                runLifecycle(item, 'archive');
+              }
+            : undefined
+        }
+      />
 
       <div className="sf-ap-toolbar">
         <label className="sf-ap-search">
@@ -939,7 +999,7 @@ export function ProductsManager({
                   </select>
                 </label>
 
-                <button type="button" className="admin-btn-ghost" onClick={() => setMoreOpen(false)}>
+                <button type="button" className="sf-ap-btn" onClick={() => setMoreOpen(false)}>
                   Готово
                 </button>
               </div>
@@ -947,7 +1007,7 @@ export function ProductsManager({
           </div>
 
           {hasAnyFilter ? (
-            <Link href="/admin/catalog/products" className="admin-btn-ghost sf-ap-reset">
+            <Link href="/admin/catalog/products" className="sf-ap-btn sf-ap-reset">
               Сбросить
             </Link>
           ) : null}
@@ -959,7 +1019,7 @@ export function ProductsManager({
           {hasAnyFilter ? (
             <>
               <p>Ничего не найдено</p>
-              <Link href="/admin/catalog/products" className="admin-btn-ghost">
+              <Link href="/admin/catalog/products" className="sf-ap-btn">
                 Сбросить фильтры
               </Link>
             </>
@@ -970,7 +1030,7 @@ export function ProductsManager({
               {canCreate ? (
                 <button
                   type="button"
-                  className="admin-btn"
+                  className="sf-ap-btn sf-ap-btn--primary"
                   disabled={creating}
                   onClick={() => {
                     setCreateKind('BOUQUET');
@@ -984,38 +1044,57 @@ export function ProductsManager({
           )}
         </div>
       ) : (
-        <ul className="sf-ap-grid">
-          {rows.map((item) => {
-            const kind = item.productKind ?? 'BOUQUET';
-            const summary =
-              item.compositionSummary?.trim() ||
-              (item.cardSubtitle?.trim() ? item.cardSubtitle : productKindLabel(kind));
-            return (
-              <li key={item.id} className="sf-ap-card">
-                <Link href={`/admin/catalog/products/${item.id}`} className="sf-ap-card__main">
-                  <ProductThumb item={item} />
-                  <div className="sf-ap-card__body">
-                    <div className="sf-ap-card__title-row">
-                      <span className="sf-ap-card__name">{item.name}</span>
-                      <PriceBlock item={item} />
-                    </div>
-                    <p className="sf-ap-card__summary">{summary}</p>
-                    <div className="sf-ap-card__status">
+        <div className="sf-ap-table-wrap">
+          <table className="sf-ap-table">
+            <thead>
+              <tr>
+                <th>Товар</th>
+                <th>Тип</th>
+                <th className="sf-ap-table__price">Цена</th>
+                <th>Статус</th>
+                <th>Наличие</th>
+                <th className="sf-ap-table__actions">
+                  <span className="sr-only">Действия</span>
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((item) => {
+                const kind = item.productKind ?? 'BOUQUET';
+                const summary = item.compositionSummary?.trim();
+                return (
+                  <tr key={item.id}>
+                    <td>
+                      <div className="sf-ap-identity">
+                        <ProductThumb item={item} />
+                        <div className="min-w-0">
+                          <Link
+                            href={`/admin/catalog/products/${item.id}`}
+                            className="sf-ap-identity__name"
+                          >
+                            {item.name}
+                          </Link>
+                          {summary ? <p className="sf-ap-identity__meta">{summary}</p> : null}
+                        </div>
+                      </div>
+                    </td>
+                    <td className="sf-ap-table__muted">{productKindLabel(kind)}</td>
+                    <td className="sf-ap-table__price">
+                      <PriceCell item={item} />
+                    </td>
+                    <td>
                       <span className={lifecycleChipClass(item.lifecycle)}>
                         {lifecycleLabel(item.lifecycle)}
                       </span>
-                      <span className="sf-ap-card__kind">{productKindLabel(kind)}</span>
-                    </div>
-                  </div>
-                </Link>
-                <div className="sf-ap-card__footer">
-                  {renderAvailability(item)}
-                  {renderRowActions(item)}
-                </div>
-              </li>
-            );
-          })}
-        </ul>
+                    </td>
+                    <td>{renderAvailability(item)}</td>
+                    <td className="sf-ap-table__actions">{renderRowActions(item)}</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
       )}
 
       {data.total > 0 || pages > 1 ? (

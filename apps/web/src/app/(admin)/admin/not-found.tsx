@@ -1,5 +1,5 @@
-import Image from 'next/image';
 import Link from 'next/link';
+import { BrandLogo } from '@/components/storefront/brand-logo';
 
 export default function AdminNotFound() {
   return (
@@ -7,13 +7,7 @@ export default function AdminNotFound() {
       id="main-content"
       className="admin-not-found flex min-h-[70vh] flex-col items-center justify-center px-6 py-16 text-center"
     >
-      <Image
-        src="/brand/logo.png"
-        alt="BUKET №1"
-        width={125}
-        height={78}
-        className="h-12 w-auto rounded-sm opacity-90"
-      />
+      <BrandLogo />
       <p className="mt-8 text-xs font-semibold uppercase tracking-[0.18em] text-[var(--admin-brand)]">
         404
       </p>

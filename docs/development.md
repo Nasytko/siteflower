@@ -80,9 +80,9 @@ Local Docker maps Postgres to host port **5433** by default (`POSTGRES_PORT`) to
 - Web: small Node test runner checks for SEO/cart helpers
 - E2E: Playwright smoke + storefront + commerce; visual QA via `pnpm test:e2e:visual`
 
-### API DB integration ban (R21 = P0 OPEN)
+### API DB integration
 
-Organizational ban only (Task 00.1 rolled back — no technical gate): do **not** run `pnpm --filter @bouquet-one/api test:integration` or package `test` until a reviewed safety fix merges. Do not change working `DATABASE_URL` as a workaround. Details: [refactor/00.1-db-integration-ban.md](./refactor/00.1-db-integration-ban.md).
+Do **not** point working `DATABASE_URL` at production for local tests. Prefer the local Docker Postgres from `.env.example`.
 
 ## Production Docker
 

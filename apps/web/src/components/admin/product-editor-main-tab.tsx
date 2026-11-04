@@ -3,7 +3,6 @@
 import {
   COMMERCIAL_AVAILABILITIES,
   PRIMARY_PRODUCT_KINDS,
-  PRODUCT_KINDS,
   normalizeSlug,
   productKindNeedsGiftSubtype,
   suggestProductNameFromComposition,
@@ -140,50 +139,23 @@ export function ProductEditorMainTab(props: Props) {
   return (
     <div className="space-y-4">
       {show('kind') ? (
-        <section className="sf-pe-card">
-          <div className="sf-pe-card__head">
-            <div>
-              <h2>Тип товара</h2>
-            </div>
-          </div>
+        <section className="sf-pe-card sf-pe-card--quiet">
           <div className="sf-pe-card__body">
-            <div className="sf-pe-kind sf-pe-kind--compact" role="group" aria-label="Тип товара">
-              {PRIMARY_PRODUCT_KINDS.filter((value) => value === 'BOUQUET' || value === 'STEM').map(
-                (value) => (
-                  <button
-                    key={value}
-                    type="button"
-                    className={`sf-pe-kind__chip ${productKind === value ? 'sf-pe-kind__chip--active' : ''}`}
-                    disabled={!canUpdate}
-                    aria-pressed={productKind === value}
-                    onClick={() => setProductKind(value)}
-                  >
-                    {productKindLabel(value)}
-                  </button>
-                ),
-              )}
+            <p className="sf-pe-label">Тип</p>
+            <div className="sf-pe-seg" role="group" aria-label="Тип товара">
+              {PRIMARY_PRODUCT_KINDS.map((value) => (
+                <button
+                  key={value}
+                  type="button"
+                  className={`sf-pe-seg__btn ${productKind === value ? 'sf-pe-seg__btn--on' : ''}`}
+                  disabled={!canUpdate}
+                  aria-pressed={productKind === value}
+                  onClick={() => setProductKind(value)}
+                >
+                  {productKindLabel(value)}
+                </button>
+              ))}
             </div>
-            <label className="admin-field mt-3 max-w-xs">
-              <span>Другой тип</span>
-              <select
-                className="admin-select"
-                value={productKind === 'BOUQUET' || productKind === 'STEM' ? '' : productKind}
-                disabled={!canUpdate}
-                onChange={(event) => {
-                  const next = event.target.value as ProductKind | '';
-                  if (next) setProductKind(next);
-                }}
-              >
-                <option value="">—</option>
-                {(PRODUCT_KINDS as readonly ProductKind[])
-                  .filter((value) => value !== 'BOUQUET' && value !== 'STEM')
-                  .map((value) => (
-                    <option key={value} value={value}>
-                      {productKindLabel(value)}
-                    </option>
-                  ))}
-              </select>
-            </label>
           </div>
         </section>
       ) : null}
@@ -192,17 +164,14 @@ export function ProductEditorMainTab(props: Props) {
       <section className="sf-pe-card">
         <div className="sf-pe-card__head">
           <div>
-            <h2>Название и цена</h2>
-            <p className="sf-pe-card__lead">
-              {productKind === 'STEM' ? 'Цена за одну ветку.' : 'Можно поправить название вручную.'}
-            </p>
+            <h2>Основное</h2>
           </div>
         </div>
-        <div className="sf-pe-card__body grid max-w-2xl gap-4">
-        <label className="admin-field" data-section="name">
+        <div className="sf-pe-card__body sf-pe-form">
+        <label className="sf-pe-field" data-section="name">
           <span>Название</span>
           <input
-            className="admin-input"
+            className="sf-pe-input"
             value={basic.name}
             disabled={!canUpdate}
             onChange={(event) => {
@@ -217,13 +186,12 @@ export function ProductEditorMainTab(props: Props) {
             }}
           />
           {commercialNamePreview.length > 0 && commercialNamePreview !== basic.name.trim() ? (
-            <span className="admin-field__hint flex flex-wrap items-center gap-2">
-              Предложение из состава:{' '}
-              <strong className="text-[var(--admin-ink)]">{commercialNamePreview}</strong>
+            <span className="sf-pe-suggest">
+              Из состава: <em>{commercialNamePreview}</em>
               {canUpdate ? (
                 <button
                   type="button"
-                  className="admin-btn-ghost px-2 py-0.5 text-xs"
+                  className="sf-pe-linkbtn"
                   onClick={() => {
                     setBasic((prev) => ({
                       ...prev,
@@ -240,13 +208,59 @@ export function ProductEditorMainTab(props: Props) {
           ) : null}
         </label>
 
-        <label className="admin-field" data-section="erpSku">
+        <div className="sf-pe-form__row" data-section="price">
+          <label className="sf-pe-field">
+            <span>{productKind === 'STEM' ? 'Цена за ветку, BYN' : 'Цена, BYN'}</span>
+            <input
+              className="sf-pe-input sf-pe-input--num"
+              value={simplePrice?.priceMajor ?? ''}
+              disabled={!canUpdate}
+              inputMode="decimal"
+              placeholder="0,00"
+              onChange={(event) => {
+                const value = event.target.value;
+                setVariants((prev) =>
+                  prev.map((item, i) => (i === 0 ? { ...item, priceMajor: value } : item)),
+                );
+                touch();
+              }}
+            />
+          </label>
+          <div className="sf-pe-field">
+            <span>Наличие</span>
+            <div className="sf-pe-seg sf-pe-seg--wrap" role="group" aria-label="Наличие">
+              {COMMERCIAL_AVAILABILITIES.map((value) => (
+                <button
+                  key={value}
+                  type="button"
+                  className={`sf-pe-seg__btn ${publication.availability === value ? 'sf-pe-seg__btn--on' : ''}`}
+                  disabled={!canUpdate}
+                  aria-pressed={publication.availability === value}
+                  onClick={() => {
+                    setPublication((prev) => ({ ...prev, availability: value }));
+                    touch();
+                  }}
+                >
+                  {availabilityLabel(value)}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        {multiSize ? (
+          <p className="sf-pe-note">
+            Несколько размеров из старой системы — на витрине первая активная цена.
+          </p>
+        ) : null}
+
+        <label className="sf-pe-field" data-section="erpSku">
           <span>Артикул ERP</span>
           <input
-            className="admin-input"
+            className="sf-pe-input"
             value={basic.erpSku}
             disabled={!canUpdate}
-            placeholder="Например: BQ-1042"
+            placeholder="BQ-1042"
             autoComplete="off"
             spellCheck={false}
             onChange={(event) => {
@@ -254,14 +268,13 @@ export function ProductEditorMainTab(props: Props) {
               touch();
             }}
           />
-          <span className="admin-field__hint">Из ERP, вручную. Без артикула публиковать можно.</span>
         </label>
 
         {productKindNeedsGiftSubtype(productKind) ? (
-          <label className="admin-field" data-section="category">
+          <label className="sf-pe-field" data-section="category">
             <span>Подтип подарка</span>
             <select
-              className="admin-select"
+              className="sf-pe-input"
               value={
                 giftSubtypeOptions(categories).some((option) => option.id === catalogCategoryId)
                   ? catalogCategoryId
@@ -273,66 +286,15 @@ export function ProductEditorMainTab(props: Props) {
                 touch();
               }}
             >
-              <option value="">Без подтипа (раздел «Подарки»)</option>
+              <option value="">Без подтипа</option>
               {giftSubtypeOptions(categories).map((option) => (
                 <option key={option.id} value={option.id}>
                   {option.name}
                 </option>
               ))}
             </select>
-            <span className="admin-field__hint">Открытки, свечи и другие ветки «Подарков».</span>
           </label>
         ) : null}
-
-        <div className="admin-subsection space-y-3" data-section="price">
-          <h3 className="admin-subsection__title">
-            {multiSize ? 'Цена (несколько размеров)' : 'Цена товара'}
-          </h3>
-          {multiSize ? (
-            <p className="admin-help">
-              У этого товара несколько размеров из старой системы. На витрине действует первая
-              активная цена. Новые размеры создавайте отдельными связанными товарами.
-            </p>
-          ) : null}
-            <label className="admin-field max-w-xs">
-              <span>{productKind === 'STEM' ? 'Цена за 1 ветку, BYN' : 'Цена, BYN'}</span>
-              <input
-                className="admin-input tabular-nums"
-                value={simplePrice?.priceMajor ?? ''}
-                disabled={!canUpdate}
-                inputMode="decimal"
-                placeholder="0,00"
-                onChange={(event) => {
-                  const value = event.target.value;
-                  setVariants((prev) =>
-                    prev.map((item, i) => (i === 0 ? { ...item, priceMajor: value } : item)),
-                  );
-                  touch();
-                }}
-              />
-            </label>
-            <label className="admin-field max-w-xs">
-              <span>Наличие</span>
-              <select
-                className="admin-select"
-                value={publication.availability}
-                disabled={!canUpdate}
-                onChange={(event) => {
-                  setPublication((prev) => ({
-                    ...prev,
-                    availability: event.target.value as CommercialAvailability,
-                  }));
-                  touch();
-                }}
-              >
-                {COMMERCIAL_AVAILABILITIES.map((value) => (
-                  <option key={value} value={value}>
-                    {availabilityLabel(value)}
-                  </option>
-                ))}
-              </select>
-            </label>
-        </div>
         </div>
       </section>
       ) : null}
@@ -342,14 +304,13 @@ export function ProductEditorMainTab(props: Props) {
         <div className="sf-pe-card__head">
           <div>
             <h2>Описание</h2>
-            <p className="sf-pe-card__lead">Текст на карточке товара и в поиске (если SEO не задано вручную).</p>
           </div>
         </div>
-        <div className="sf-pe-card__body grid max-w-2xl gap-4">
-        <label className="admin-field" data-section="shortDescription">
-          <span>Описание товара</span>
+        <div className="sf-pe-card__body">
+        <label className="sf-pe-field" data-section="shortDescription">
+          <span>Текст на карточке и в поиске</span>
           <textarea
-            className="admin-input"
+            className="sf-pe-input"
             rows={4}
             value={basic.shortDescription}
             disabled={!canUpdate}
@@ -361,9 +322,8 @@ export function ProductEditorMainTab(props: Props) {
         </label>
 
         {legacyDescriptionConflict ? (
-          <p className="admin-help" role="status">
-            В базе есть старое «полное описание» с другим текстом — оно не удаляется при сохранении.
-            Перенесите нужные фразы сюда вручную.
+          <p className="sf-pe-note" role="status">
+            В базе есть старое полное описание с другим текстом — перенесите нужное сюда вручную.
           </p>
         ) : null}
         </div>
@@ -407,20 +367,17 @@ export function ProductEditorMainTab(props: Props) {
           />
         </div>
 
-        <div className="admin-subsection space-y-3" data-section="traits">
-          <h3 className="admin-subsection__title">Особенности</h3>
-          {traitOptions.length === 0 ? (
-            <p className="text-sm text-[var(--admin-muted)]">Справочник признаков пока пуст.</p>
-          ) : (
-            <ul className="space-y-2">
+        {traitOptions.length > 0 ? (
+          <div className="sf-pe-block lg:col-span-2" data-section="traits">
+            <p className="sf-pe-label">Особенности</p>
+            <ul className="sf-pe-trait-list">
               {traitOptions.map((trait) => {
                 const checked = discovery.traitKeys.includes(trait.key);
                 return (
                   <li key={trait.key}>
-                    <label className="flex cursor-pointer items-start gap-2 text-sm">
+                    <label className="sf-pe-trait">
                       <input
                         type="checkbox"
-                        className="mt-0.5"
                         checked={checked}
                         disabled={!canUpdate}
                         onChange={() => {
@@ -434,11 +391,9 @@ export function ProductEditorMainTab(props: Props) {
                         }}
                       />
                       <span>
-                        <span className="font-medium">{trait.name}</span>
+                        <span className="sf-pe-trait__name">{trait.name}</span>
                         {trait.description ? (
-                          <span className="block text-xs text-[var(--admin-muted)]">
-                            {trait.description}
-                          </span>
+                          <span className="sf-pe-trait__hint">{trait.description}</span>
                         ) : null}
                       </span>
                     </label>
@@ -446,13 +401,11 @@ export function ProductEditorMainTab(props: Props) {
                 );
               })}
             </ul>
-          )}
-        </div>
+          </div>
+        ) : null}
 
-        <details className="admin-subsection space-y-3">
-          <summary className="cursor-pointer text-sm font-medium text-[var(--admin-ink)]">
-            Цвета для фильтров
-          </summary>
+        <div className="sf-pe-block lg:col-span-2">
+          <p className="sf-pe-label">Цвета для фильтров</p>
           <TaxonomyQuickPick
             kind="colors"
             legend="Гамма"
@@ -466,7 +419,7 @@ export function ProductEditorMainTab(props: Props) {
             }}
             onCreated={(item) => onTaxonomyCreated('colors', item)}
           />
-        </details>
+        </div>
         </div>
       </section>
       ) : null}

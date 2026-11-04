@@ -25,7 +25,7 @@ This wraps `./scripts/release.sh production` (preflight → deploy). Lower-level
 
 | Path | Purpose |
 |------|---------|
-| `/opt/shopbuket1/repo` (or `current`) | Git checkout |
+| `/opt/shopbuket1` · `/opt/shopbuket1/repo` · `/opt/shopbuket1/current` | Git checkout (use whichever exists; ops scripts live in that tree) |
 | `/etc/shopbuket1/production.env` | Secrets (not in Git) |
 | `/var/backups/shopbuket1` | `pg_dump -Fc` backups (outside releases) |
 | `/var/lib/shopbuket1` | Deploy lock + release metadata |
@@ -36,32 +36,52 @@ Compose project: **`shopbuket1`**. Never touch **`erpbuket1`**.
 
 Production DB hostname inside Docker: **`postgres:5432`**.
 
+Resolve checkout once:
+
+```bash
+cd /opt/shopbuket1/repo 2>/dev/null || cd /opt/shopbuket1/current 2>/dev/null || cd /opt/shopbuket1
+pwd
+ls deploy.sh
+```
+
 ---
 
 ## 1. Publish the commit (developer workstation)
 
 ```bash
-# after CI is green — Task 04A must be on the remote before VPS can deploy it
+# after CI is green — the SHA must be on the remote before VPS can deploy it
 git push origin HEAD
 ```
 
-Do **not** deploy unpublished local commits via `origin/main`. Pin an explicit SHA after it is published.
+Do **not** deploy unpublished local commits. Pin an explicit SHA after it is published.
 
 ---
 
 ## 2. Fetch on the server (operator)
 
 ```bash
-cd /opt/shopbuket1/repo
+cd /opt/shopbuket1/repo 2>/dev/null || cd /opt/shopbuket1/current 2>/dev/null || cd /opt/shopbuket1
+export SHOPBUKET1_ENV_FILE=/etc/shopbuket1/production.env
 git fetch --tags --prune origin
-git checkout main
-git pull --ff-only origin main
+# tip of a published feature branch:
+git checkout feature/task-01-composition-simplify
+git pull --ff-only origin feature/task-01-composition-simplify
 # or pin: git checkout --detach <full-sha>
+# or main: git checkout main && git pull --ff-only origin main
 ```
 
 ---
 
 ## 3. Dry-run (optional, safe)
+
+Current VPS stack (no isolated rehearsal DB):
+
+```bash
+./deploy.sh staging --dry-run
+./deploy.sh staging --dry-run <full-sha>
+```
+
+Future production path (rehearsal DB):
 
 ```bash
 ./deploy.sh production --dry-run
@@ -72,7 +92,16 @@ Prints current HEAD, target SHA, live release pointer, and planned stages. **No*
 
 ---
 
-## 4. One-command production deploy
+## 4. One-command deploy
+
+**VPS / current live stack (use this):**
+
+```bash
+./deploy.sh staging
+# or: ./deploy.sh staging <full-sha>
+```
+
+**Future production path (rehearsal then switch):**
 
 ```bash
 ./deploy.sh production

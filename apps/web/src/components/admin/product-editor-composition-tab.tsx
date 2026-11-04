@@ -179,11 +179,11 @@ export function ProductEditorCompositionTab(props: Props) {
               </p>
             ) : null}
 
-            <label className="admin-field">
+            <label className="sf-pe-field">
               <span>Поиск цветка</span>
               <input
                 ref={searchRef}
-                className="admin-input"
+                className="sf-pe-input"
                 value={compositionSearch}
                 autoFocus={isReplacing}
                 placeholder="Название, вид, форма, сорт…"
@@ -325,7 +325,7 @@ export function ProductEditorCompositionTab(props: Props) {
                         {!isStem && index > 0 ? (
                           <button
                             type="button"
-                            className="admin-btn-ghost text-xs"
+                            className="sf-pe-btn sf-pe-btn--quiet"
                             onClick={() => moveRow(index, -1)}
                           >
                             ↑
@@ -334,7 +334,7 @@ export function ProductEditorCompositionTab(props: Props) {
                         {!isStem && index < components.length - 1 ? (
                           <button
                             type="button"
-                            className="admin-btn-ghost text-xs"
+                            className="sf-pe-btn sf-pe-btn--quiet"
                             onClick={() => moveRow(index, 1)}
                           >
                             ↓
@@ -342,7 +342,7 @@ export function ProductEditorCompositionTab(props: Props) {
                         ) : null}
                         <button
                           type="button"
-                          className="admin-btn-ghost text-xs"
+                          className="sf-pe-btn sf-pe-btn--quiet"
                           onClick={() => {
                             setCompositionReplaceKey(component.key);
                             setCompositionSearch('');
@@ -353,7 +353,7 @@ export function ProductEditorCompositionTab(props: Props) {
                         </button>
                         <button
                           type="button"
-                          className="admin-btn-ghost text-xs"
+                          className="sf-pe-btn sf-pe-btn--quiet"
                           onClick={() => {
                             setComponents((prev) => prev.filter((_, i) => i !== index));
                             touch();

@@ -68,8 +68,7 @@ import {
   type OptionGroupDraft,
 } from '@/components/admin/product-editor-options-tab';
 import { ProductEditorRelated } from '@/components/admin/product-editor-related';
-import { ProductPlacementPanel } from '@/components/admin/product-placement-panel';
-import { AdminDeletePanel } from '@/components/admin/admin-delete-panel';
+import { ProductDeleteDialog } from '@/components/admin/product-delete-dialog';
 import {
   compositionHitMeta,
   emptyComponentDraft,
@@ -154,6 +153,7 @@ export function ProductEditor({
   const [deleteImpact, setDeleteImpact] = useState<ProductDeleteImpactDto | null>(null);
   const [deleteConfirm, setDeleteConfirm] = useState('');
   const [deleteOpen, setDeleteOpen] = useState(false);
+  const [deleteLoading, setDeleteLoading] = useState(false);
 
   const [basic, setBasic] = useState({
     name: product.name,
@@ -226,9 +226,6 @@ export function ProductEditor({
     seoDescription: product.seoDescription ?? '',
     noIndex: product.noIndex,
   });
-  const [seoManualOpen, setSeoManualOpen] = useState(
-    () => Boolean(product.seoTitle?.trim() || product.seoDescription?.trim()),
-  );
   const [publication, setPublication] = useState({
     availability: product.availability,
     publishAt: toDateTimeLocalValue(product.publishAt),
@@ -276,7 +273,6 @@ export function ProductEditor({
       seoDescription: updated.seoDescription ?? '',
       noIndex: updated.noIndex,
     });
-    setSeoManualOpen(Boolean(updated.seoTitle?.trim() || updated.seoDescription?.trim()));
     setPublication({
       availability: updated.availability,
       publishAt: toDateTimeLocalValue(updated.publishAt),
@@ -715,11 +711,26 @@ export function ProductEditor({
     if (!canDelete) return;
     setDeleteOpen(true);
     setDeleteConfirm('');
+    setDeleteImpact(null);
+    setDeleteLoading(true);
+    setError(null);
     try {
-      setDeleteImpact(await adminGet<ProductDeleteImpactDto>(adminEndpoints.productDeleteImpact(server.id)));
+      setDeleteImpact(
+        await adminGet<ProductDeleteImpactDto>(adminEndpoints.productDeleteImpact(server.id)),
+      );
     } catch (err) {
-      setError(errorMessage(err, 'Не удалось проверить зависимости'));
+      setError(errorMessage(err, 'Не удалось проверить удаление'));
+      setDeleteOpen(false);
+    } finally {
+      setDeleteLoading(false);
     }
+  }
+
+  function closeDelete() {
+    if (savePending) return;
+    setDeleteOpen(false);
+    setDeleteImpact(null);
+    setDeleteConfirm('');
   }
 
   async function confirmDelete() {
@@ -999,8 +1010,8 @@ export function ProductEditor({
 
   return (
     <div className="sf-pe space-y-5">
-      <div className="admin-editor-header">
-        <div className="space-y-2 min-w-0">
+      <div className="sf-pe-bar">
+        <div className="sf-pe-bar__main min-w-0">
           <a
             href="/admin/catalog/products"
             className="admin-link text-sm"
@@ -1014,16 +1025,17 @@ export function ProductEditor({
           >
             ← Все товары
           </a>
-          <h1 className="truncate text-xl font-semibold text-[var(--admin-ink)]">
+          <h1 className="sf-pe-bar__title truncate">
             {basic.name.trim() || server.name || 'Без названия'}
           </h1>
-          <div className="admin-status-row">
-            <span className={lifecycleChipClass(server.lifecycle)}>
+          <div className="sf-pe-meta">
+            <span className={`sf-pe-pill ${lifecycleChipClass(server.lifecycle)}`}>
               {lifecycleLabel(server.lifecycle)}
             </span>
-            <span className={availabilityChipClass(publication.availability)}>
+            <span className={`sf-pe-pill ${availabilityChipClass(publication.availability)}`}>
               {availabilityLabel(publication.availability)}
             </span>
+            {dirty ? <span className="sf-pe-bar__dirty">Не сохранено</span> : null}
           </div>
           {!readiness.readyToPublish ? (
             <ProductReadinessPanel
@@ -1035,7 +1047,7 @@ export function ProductEditor({
           ) : null}
           <FormSaveStatus
             phase={savePending || mediaPending ? 'saving' : statusPhase}
-            savedLabel={savedAt ? `Товар сохранён · ${savedAt}` : 'Все изменения сохранены'}
+            savedLabel={savedAt ? `Сохранено · ${savedAt}` : 'Изменения сохранены'}
             errorMessage={error}
             requestId={requestId}
             onRetry={() => void onSave()}
@@ -1062,11 +1074,11 @@ export function ProductEditor({
             }}
           />
         </div>
-        <div className="admin-editor-header__actions">
+        <div className="sf-pe-bar__actions">
           {canUpdate ? (
             <button
               type="button"
-              className="admin-btn"
+              className="sf-pe-btn sf-pe-btn--primary"
               disabled={savePending || mediaPending}
               onClick={() => void onSave()}
             >
@@ -1076,7 +1088,7 @@ export function ProductEditor({
           {canPublish && server.lifecycle !== 'PUBLISHED' ? (
             <button
               type="button"
-              className="admin-btn-ghost"
+              className="sf-pe-btn"
               disabled={pending || !readiness.readyToPublish}
               title={
                 readiness.readyToPublish
@@ -1091,27 +1103,27 @@ export function ProductEditor({
           {canPublish && server.lifecycle === 'PUBLISHED' ? (
             <button
               type="button"
-              className="admin-btn-ghost"
+              className="sf-pe-btn sf-pe-btn--quiet"
               disabled={pending}
               onClick={() => void runLifecycle('unpublish')}
             >
-              Снять с витрины
+              С витрины
             </button>
           ) : null}
           {canPublish && server.lifecycle === 'ARCHIVED' ? (
             <button
               type="button"
-              className="admin-btn-ghost"
+              className="sf-pe-btn"
               disabled={pending}
               onClick={() => void runLifecycle('restore')}
             >
-              Восстановить
+              Из архива
             </button>
           ) : null}
           {canPublish && server.lifecycle !== 'ARCHIVED' ? (
             <button
               type="button"
-              className="admin-btn-ghost"
+              className="sf-pe-btn sf-pe-btn--quiet"
               disabled={pending}
               onClick={() => void runLifecycle('archive')}
             >
@@ -1130,89 +1142,91 @@ export function ProductEditor({
       {readOnlyNote}
 
       {justCreated ? (
-        <p className="admin-help">Черновик создан. Заполните название, цену, фото и описание.</p>
+        <div className="sf-pe-banner" role="status">
+          <strong>Черновик создан</strong>
+          <span>Заполните название, цену, фото и описание — затем опубликуйте.</span>
+        </div>
       ) : null}
 
       {server.promotion?.enabled ? (
-        <p className="admin-help">
-          Участвует в акции — условия меняются в разделе «Акции».
-        </p>
+        <p className="admin-help">Акция активна — условия в разделе «Акции».</p>
       ) : null}
 
-      <ProductEditorMainTab {...mainTabShared} blocks={['kind']} />
+      <div className="sf-pe-stack">
+        <ProductEditorMainTab {...mainTabShared} blocks={['kind']} />
 
-      <div className="admin-split admin-split--product">
-        <section className="sf-pe-card sf-pe-card--media-preview" aria-label="Главное фото">
-          <div className="sf-pe-card__body sf-pe-card__body--flush">
-            {primaryMedia ? (
-              <button
-                type="button"
-                className="block w-full"
-                onClick={() => jumpToReadinessIssue('photo')}
-              >
-                <img
-                  src={toSameOriginMediaUrl(primaryMedia.url) ?? primaryMedia.url}
-                  alt={primaryMedia.alt ?? ''}
-                  className="aspect-square w-full rounded-lg object-cover"
-                />
-              </button>
-            ) : (
-              <button
-                type="button"
-                className="admin-thumb-empty aspect-square w-full"
-                onClick={() => jumpToReadinessIssue('photo')}
-              >
-                Добавить фото
-              </button>
-            )}
-          </div>
-        </section>
-        <ProductEditorMainTab {...mainTabShared} blocks={['identity']} />
-      </div>
+        <div className="sf-pe-hero">
+          <section className="sf-pe-card sf-pe-card--media-preview" aria-label="Главное фото">
+            <div className="sf-pe-card__body sf-pe-card__body--flush">
+              {primaryMedia ? (
+                <button
+                  type="button"
+                  className="block w-full"
+                  onClick={() => jumpToReadinessIssue('photo')}
+                >
+                  <img
+                    src={toSameOriginMediaUrl(primaryMedia.url) ?? primaryMedia.url}
+                    alt={primaryMedia.alt ?? ''}
+                    className="sf-pe-hero__photo"
+                  />
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  className="admin-thumb-empty sf-pe-hero__photo"
+                  onClick={() => jumpToReadinessIssue('photo')}
+                >
+                  Добавить фото
+                </button>
+              )}
+            </div>
+          </section>
+          <ProductEditorMainTab {...mainTabShared} blocks={['identity']} />
+        </div>
 
-      {needsComposition ? (
-        <ProductEditorCompositionTab
-          canUpdate={canUpdate}
-          productKind={productKind}
-          components={components}
-          setComponents={setComponents}
-          compositionReplaceKey={compositionReplaceKey}
-          setCompositionReplaceKey={setCompositionReplaceKey}
-          compositionSearch={compositionSearch}
-          setCompositionSearch={setCompositionSearch}
-          compositionHits={compositionHits}
-          compositionSearchPending={compositionSearchPending}
-          compositionSearchError={compositionSearchError}
-          compositionBrowseMode={compositionBrowseMode}
-          onAddFlower={addFlowerItemToComposition}
-          touch={touch}
-        />
-      ) : null}
+        {needsComposition ? (
+          <ProductEditorCompositionTab
+            canUpdate={canUpdate}
+            productKind={productKind}
+            components={components}
+            setComponents={setComponents}
+            compositionReplaceKey={compositionReplaceKey}
+            setCompositionReplaceKey={setCompositionReplaceKey}
+            compositionSearch={compositionSearch}
+            setCompositionSearch={setCompositionSearch}
+            compositionHits={compositionHits}
+            compositionSearchPending={compositionSearchPending}
+            compositionSearchError={compositionSearchError}
+            compositionBrowseMode={compositionBrowseMode}
+            onAddFlower={addFlowerItemToComposition}
+            touch={touch}
+          />
+        ) : null}
 
-      <ProductEditorMainTab {...mainTabShared} blocks={['copy']} />
+        <ProductEditorMainTab {...mainTabShared} blocks={['copy']} />
 
-      <section className="admin-section sf-pe-card" data-section="photo">
+        <section className="sf-pe-card" data-section="photo">
           <div className="sf-pe-card__head">
             <div>
               <h2>Фотографии</h2>
               <p className="sf-pe-card__lead">
-                {server.media.length}/12 · главное фото — в каталоге
+                {server.media.length}/12 · сохраняются сразу · главное — в каталоге
               </p>
             </div>
           </div>
-          {canUpdate ? (
-            <div
-              className="admin-panel mt-4"
-              onDragOver={(event) => event.preventDefault()}
-              onDrop={(event) => {
-                event.preventDefault();
-                if (event.dataTransfer.files?.length) {
-                  void onUploadMany(event.dataTransfer.files);
-                }
-              }}
-            >
-              <label className="admin-field">
-                <span className="admin-btn-ghost inline-flex cursor-pointer px-3 py-2">
+          <div className="sf-pe-card__body space-y-4">
+            {canUpdate ? (
+              <div
+                className="sf-pe-dropzone"
+                onDragOver={(event) => event.preventDefault()}
+                onDrop={(event) => {
+                  event.preventDefault();
+                  if (event.dataTransfer.files?.length) {
+                    void onUploadMany(event.dataTransfer.files);
+                  }
+                }}
+              >
+                <label className="sf-pe-btn inline-flex cursor-pointer">
                   Добавить фото
                   <input
                     type="file"
@@ -1226,80 +1240,79 @@ export function ProductEditor({
                       event.target.value = '';
                     }}
                   />
-                </span>
-              </label>
-              <p className="admin-help mt-2">JPG, PNG, WebP, AVIF · до 25 МБ · можно перетащить сюда</p>
-            </div>
-          ) : null}
-          {uploadStates.length > 0 ? (
-            <ul className="admin-upload-status" aria-live="polite">
-              {uploadStates.map((row) => {
-                const icon =
-                  row.status === 'error'
-                    ? '✕'
-                    : row.status === 'uploaded' || row.status === 'done'
-                      ? '✓'
-                      : row.status === 'preparing' || row.status === 'uploading'
-                        ? '↻'
-                        : '◌';
-                return (
-                  <li
-                    key={row.id}
-                    className={`admin-upload-status__row${
-                      row.status === 'uploaded' || row.status === 'done'
-                        ? ' admin-upload-status__row--done'
-                        : row.status === 'error'
-                          ? ' admin-upload-status__row--error'
-                          : ''
-                    }`}
-                  >
-                    <span>
-                      {icon} {row.name}
-                      {row.sizeLabel ? ` · ${row.sizeLabel}` : ''}
-                      {row.prepareSummary ? ` · ${row.prepareSummary}` : ''}
-                    </span>
-                    <span className="admin-upload-status__meta">
-                      {mediaPreflightStatusLabel(row.status)}
-                    </span>
-                    {row.error ? (
-                      <span className="admin-field-error">
-                        Не удалось обработать фотографию
-                        <br />
-                        Причина: {row.error}
-                        {row.requestId ? (
-                          <>
-                            <br />
-                            <span className="text-xs text-[var(--admin-muted)]">
-                              Код запроса: {row.requestId}
-                            </span>
-                          </>
-                        ) : null}
-                      </span>
-                    ) : null}
-                  </li>
-                );
-              })}
-            </ul>
-          ) : null}
+                </label>
+                <p className="sf-pe-note">JPG, PNG, WebP, AVIF · до 25 МБ · можно перетащить</p>
+              </div>
+            ) : null}
 
-          {server.media.length === 0 ? (
-            <p className="admin-empty mt-3">Без фото товар нельзя опубликовать.</p>
-          ) : (
-            <>
-              <ul className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {uploadStates.length > 0 ? (
+              <ul className="admin-upload-status" aria-live="polite">
+                {uploadStates.map((row) => {
+                  const icon =
+                    row.status === 'error'
+                      ? '✕'
+                      : row.status === 'uploaded' || row.status === 'done'
+                        ? '✓'
+                        : row.status === 'preparing' || row.status === 'uploading'
+                          ? '↻'
+                          : '◌';
+                  return (
+                    <li
+                      key={row.id}
+                      className={`admin-upload-status__row${
+                        row.status === 'uploaded' || row.status === 'done'
+                          ? ' admin-upload-status__row--done'
+                          : row.status === 'error'
+                            ? ' admin-upload-status__row--error'
+                            : ''
+                      }`}
+                    >
+                      <span>
+                        {icon} {row.name}
+                        {row.sizeLabel ? ` · ${row.sizeLabel}` : ''}
+                        {row.prepareSummary ? ` · ${row.prepareSummary}` : ''}
+                      </span>
+                      <span className="admin-upload-status__meta">
+                        {mediaPreflightStatusLabel(row.status)}
+                      </span>
+                      {row.error ? (
+                        <span className="admin-field-error">
+                          Не удалось обработать фотографию
+                          <br />
+                          Причина: {row.error}
+                          {row.requestId ? (
+                            <>
+                              <br />
+                              <span className="text-xs text-[var(--admin-muted)]">
+                                Код запроса: {row.requestId}
+                              </span>
+                            </>
+                          ) : null}
+                        </span>
+                      ) : null}
+                    </li>
+                  );
+                })}
+              </ul>
+            ) : null}
+
+            {server.media.length === 0 ? (
+              <p className="sf-pe-note">Без фото товар нельзя опубликовать.</p>
+            ) : (
+              <ul className="sf-pe-media-grid">
                 {[...server.media]
                   .sort((a, b) => a.sortOrder - b.sortOrder)
                   .map((media, index, sorted) => (
-                    <li key={media.id} className="admin-media-card">
+                    <li key={media.id} className="sf-pe-media">
                       <img
                         src={toSameOriginMediaUrl(media.url) ?? media.url}
                         alt={media.alt ?? ''}
-                        className="aspect-square w-full rounded-lg object-cover"
+                        className="sf-pe-media__img"
                       />
-                      <label className="admin-field mt-2">
-                        <span>Описание фото (alt)</span>
+                      <label className="sf-pe-field">
+                        <span>Подпись</span>
                         <input
-                          className="admin-input"
+                          className="sf-pe-input"
                           defaultValue={media.alt ?? ''}
                           maxLength={300}
                           disabled={!canUpdate}
@@ -1311,22 +1324,22 @@ export function ProductEditor({
                           }}
                         />
                       </label>
-                      <div className="admin-row-actions mt-2">
+                      <div className="sf-pe-media__actions">
                         {media.isPrimary ? (
-                          <span className="admin-chip">★ Главное</span>
+                          <span className="sf-pe-pill sf-pe-pill--accent">Главное</span>
                         ) : (
                           <button
                             type="button"
-                            className="admin-btn-ghost"
+                            className="sf-pe-btn sf-pe-btn--quiet"
                             disabled={!canUpdate || pending}
                             onClick={() => void patchMedia(media.id, { isPrimary: true })}
                           >
-                            Сделать главным
+                            Главное
                           </button>
                         )}
                         <button
                           type="button"
-                          className="admin-icon-btn"
+                          className="sf-pe-iconbtn"
                           aria-label="Раньше"
                           disabled={!canUpdate || pending || index === 0}
                           onClick={() => void reorderMedia(media.id, -1)}
@@ -1335,7 +1348,7 @@ export function ProductEditor({
                         </button>
                         <button
                           type="button"
-                          className="admin-icon-btn"
+                          className="sf-pe-iconbtn"
                           aria-label="Позже"
                           disabled={!canUpdate || pending || index === sorted.length - 1}
                           onClick={() => void reorderMedia(media.id, 1)}
@@ -1344,7 +1357,7 @@ export function ProductEditor({
                         </button>
                         <button
                           type="button"
-                          className="admin-btn-ghost"
+                          className="sf-pe-btn sf-pe-btn--quiet"
                           disabled={!canUpdate || pending}
                           onClick={() => void removeMedia(media.id)}
                         >
@@ -1354,149 +1367,149 @@ export function ProductEditor({
                     </li>
                   ))}
               </ul>
-            </>
-          )}
-          <p className="admin-help mt-3">Фото сохраняются сразу, отдельно от «Сохранить».</p>
-        </section>
-
-      <ProductEditorOptionsTab
-        canUpdate={canUpdate}
-        optionGroups={optionGroups}
-        setOptionGroups={setOptionGroups}
-        variants={variants}
-        touch={touch}
-      />
-
-      <details className="admin-disclosure">
-        <summary>Повод и кому</summary>
-        <div className="admin-disclosure__body">
-          <ProductEditorMainTab {...mainTabShared} blocks={['audience']} />
-        </div>
-      </details>
-
-      <details className="admin-disclosure">
-        <summary>Связанные товары</summary>
-        <div className="admin-disclosure__body">
-          <ProductEditorRelated
-            product={server}
-            canUpdate={canUpdate}
-            members={familyMembers}
-            onChanged={(updated) => {
-              setServer(updated);
-              setVersion(updated.version);
-              setFamilyId(updated.family?.id ?? '');
-              setFamilyMemberSortOrder(familyMemberSortOrderFor(updated));
-              router.refresh();
-            }}
-          />
-        </div>
-      </details>
-
-      <details className="admin-disclosure">
-        <summary>Где показывается в каталоге</summary>
-        <div className="admin-disclosure__body">
-          <p className="admin-help mb-3">
-            Справочно: разделы считаются по типу, составу и правилам страниц.
-          </p>
-          <ProductPlacementPanel productId={server.id} refreshKey={server.version} />
-        </div>
-      </details>
-
-      <details
-        className="admin-disclosure"
-        open={seoManualOpen}
-        data-section="seo"
-        onToggle={(event) => setSeoManualOpen(event.currentTarget.open)}
-      >
-        <summary>Адрес и SEO</summary>
-        <div className="admin-disclosure__body space-y-3">
-          <p className="admin-help">
-            Обычно заполняется само. Меняйте вручную только если нужен особый текст в поиске.
-          </p>
-          <label className="admin-field">
-            <span>Адрес в ссылке</span>
-            <input
-              className="admin-input"
-              value={basic.slug}
-              disabled={!canUpdate}
-              onChange={(event) => {
-                setSlugManual(true);
-                setBasic((prev) => ({ ...prev, slug: event.target.value }));
-                touch();
-              }}
-            />
-          </label>
-          <label className="admin-field">
-            <span>SEO title {titleIsAutomatic ? '(авто)' : ''}</span>
-            <input
-              className="admin-input"
-              value={seo.seoTitle}
-              disabled={!canUpdate}
-              placeholder={previewTitle}
-              onChange={(event) => {
-                setSeo((prev) => ({ ...prev, seoTitle: event.target.value }));
-                setSeoManualOpen(true);
-                touch();
-              }}
-            />
-          </label>
-          <label className="admin-field">
-            <span>Meta description {descriptionIsAutomatic ? '(авто)' : ''}</span>
-            <textarea
-              className="admin-input"
-              rows={3}
-              value={seo.seoDescription}
-              disabled={!canUpdate}
-              placeholder={previewDescription}
-              onChange={(event) => {
-                setSeo((prev) => ({ ...prev, seoDescription: event.target.value }));
-                setSeoManualOpen(true);
-                touch();
-              }}
-            />
-          </label>
-          <label className="admin-check">
-            <input
-              type="checkbox"
-              checked={seo.noIndex}
-              disabled={!canUpdate}
-              onChange={(event) => {
-                setSeo((prev) => ({ ...prev, noIndex: event.target.checked }));
-                touch();
-              }}
-            />
-            Не индексировать
-          </label>
-          <p className="admin-help">Статус SEO: {seoHealth.status}</p>
-        </div>
-      </details>
-
-      {canDelete ? (
-        <details className="admin-disclosure">
-          <summary>Удалить навсегда</summary>
-          <div className="admin-disclosure__body space-y-3">
-            {!deleteOpen ? (
-              <button type="button" className="admin-btn-ghost" onClick={() => void openDelete()}>
-                Проверить зависимости
-              </button>
-            ) : (
-              <AdminDeletePanel
-                title="Удаление товара"
-                lead="Если есть заказы — удаление запрещено, используйте архив."
-                blockers={deleteImpact?.blockers ?? []}
-                detachable={deleteImpact?.detachable ?? []}
-                canDelete={Boolean(deleteImpact?.canDelete)}
-                confirmName={deleteConfirm}
-                expectedName={server.name}
-                onConfirmNameChange={setDeleteConfirm}
-                onConfirm={() => void confirmDelete()}
-                pending={pending}
-                archiveHint="Физическое удаление недоступно — архивируйте товар."
-              />
             )}
           </div>
-        </details>
+        </section>
+
+        <ProductEditorOptionsTab
+          canUpdate={canUpdate}
+          optionGroups={optionGroups}
+          setOptionGroups={setOptionGroups}
+          variants={variants}
+          touch={touch}
+        />
+
+        <ProductEditorMainTab {...mainTabShared} blocks={['audience']} />
+
+        <ProductEditorRelated
+          product={server}
+          canUpdate={canUpdate}
+          members={familyMembers}
+          onChanged={(updated) => {
+            setServer(updated);
+            setVersion(updated.version);
+            setFamilyId(updated.family?.id ?? '');
+            setFamilyMemberSortOrder(familyMemberSortOrderFor(updated));
+            router.refresh();
+          }}
+        />
+
+        <section className="sf-pe-card" data-section="seo">
+          <div className="sf-pe-card__head">
+            <div>
+              <h2>Адрес и SEO</h2>
+            </div>
+          </div>
+          <div className="sf-pe-card__body sf-pe-form sf-pe-form--seo">
+            <label className="sf-pe-field sf-pe-field--full">
+              <span>Адрес в ссылке</span>
+              <input
+                className="sf-pe-input"
+                value={basic.slug}
+                disabled={!canUpdate}
+                onChange={(event) => {
+                  setSlugManual(true);
+                  setBasic((prev) => ({ ...prev, slug: event.target.value }));
+                  touch();
+                }}
+              />
+            </label>
+            <label className="sf-pe-field">
+              <span>SEO title {titleIsAutomatic ? '(авто)' : ''}</span>
+              <input
+                className="sf-pe-input"
+                value={seo.seoTitle}
+                disabled={!canUpdate}
+                placeholder={previewTitle}
+                onChange={(event) => {
+                  setSeo((prev) => ({ ...prev, seoTitle: event.target.value }));
+                  touch();
+                }}
+              />
+            </label>
+            <label className="sf-pe-field">
+              <span>Meta description {descriptionIsAutomatic ? '(авто)' : ''}</span>
+              <textarea
+                className="sf-pe-input"
+                rows={3}
+                value={seo.seoDescription}
+                disabled={!canUpdate}
+                placeholder={previewDescription}
+                onChange={(event) => {
+                  setSeo((prev) => ({ ...prev, seoDescription: event.target.value }));
+                  touch();
+                }}
+              />
+            </label>
+            <label className="sf-pe-check sf-pe-field--full">
+              <input
+                type="checkbox"
+                checked={seo.noIndex}
+                disabled={!canUpdate}
+                onChange={(event) => {
+                  setSeo((prev) => ({ ...prev, noIndex: event.target.checked }));
+                  touch();
+                }}
+              />
+              Не индексировать
+            </label>
+            <p className="sf-pe-note sf-pe-field--full">SEO: {seoHealth.status}</p>
+          </div>
+        </section>
+      </div>
+
+      {(canDelete || canPublish) && server.lifecycle !== 'ARCHIVED' ? (
+        <section className="sf-pe-danger">
+          <div>
+            <h2>Опасная зона</h2>
+            <p>Архив скрывает товар с витрины. Удаление навсегда — только без заказов.</p>
+          </div>
+          <div className="sf-pe-danger__actions">
+            {canPublish ? (
+              <button
+                type="button"
+                className="sf-pe-btn sf-pe-btn--quiet"
+                disabled={pending}
+                onClick={() => void runLifecycle('archive')}
+              >
+                В архив
+              </button>
+            ) : null}
+            {canDelete ? (
+              <button
+                type="button"
+                className="sf-pe-btn sf-pe-btn--danger"
+                disabled={pending}
+                onClick={() => void openDelete()}
+              >
+                Удалить навсегда
+              </button>
+            ) : null}
+          </div>
+        </section>
       ) : null}
+
+      <ProductDeleteDialog
+        open={deleteOpen}
+        productName={server.name}
+        loading={deleteLoading}
+        pending={savePending}
+        blockers={deleteImpact?.blockers ?? []}
+        detachable={deleteImpact?.detachable ?? []}
+        canDelete={Boolean(deleteImpact?.canDelete)}
+        confirmName={deleteConfirm}
+        onConfirmNameChange={setDeleteConfirm}
+        onConfirm={() => void confirmDelete()}
+        onClose={closeDelete}
+        onArchive={
+          canPublish
+            ? () => {
+                closeDelete();
+                void runLifecycle('archive');
+              }
+            : undefined
+        }
+      />
     </div>
   );
 }

@@ -49,17 +49,17 @@ export function AdminDeletePanel({
       ))}
       {canDelete ? (
         <>
-          <label className="admin-field">
+          <label className="sf-pe-field">
             <span>Введите название «{expectedName}»</span>
             <input
-              className="admin-input"
+              className="sf-pe-input"
               value={confirmName}
               onChange={(event) => onConfirmNameChange(event.target.value)}
             />
           </label>
           <button
             type="button"
-            className="admin-btn-ghost"
+            className="sf-pe-btn sf-pe-btn--danger"
             disabled={pending || confirmName.trim() !== expectedName.trim()}
             onClick={onConfirm}
           >

@@ -12,4 +12,4 @@ passes approval gates (`status=approved`, matching `SHOPBUKET1_CLEANUP_APPROVAL_
 
 Do not invent DROP statements from schema diffs. Each plan is a fixed, reviewed SQL set.
 
-See also: `prisma/deferred/` (historical staging) and `docs/task05-cleanup-audit.md`.
+See also: `prisma/deferred/` (historical staging) and `docs/seo-legacy-reconcile.md`.

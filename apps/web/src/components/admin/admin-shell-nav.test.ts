@@ -59,12 +59,13 @@ test('globals.css does not hide sidebar nav behind closed details', () => {
   assert.doesNotMatch(source, /\.admin-aside__menu/);
 });
 
-test('SEO disclosure stays toggleable when open is controlled', () => {
+test('product editor SEO section stays always visible (no disclosure)', () => {
   const editorPath = path.join(here, 'product-editor.tsx');
   const source = readFileSync(editorPath, 'utf8');
   assert.match(source, /data-section="seo"/);
-  assert.match(source, /open=\{seoManualOpen\}/);
-  assert.match(source, /onToggle=\{/);
+  assert.match(source, /Адрес и SEO/);
+  assert.doesNotMatch(source, /seoManualOpen/);
+  assert.doesNotMatch(source, /admin-disclosure/);
 });
 
 test('product edit route mounts ProductEditor, not a legacy editor', () => {
@@ -88,28 +89,34 @@ test('product list route mounts ProductsManager', () => {
   assert.match(source, /ProductsManager/);
 });
 
-test('products list UI: create dialog, card grid, row menu, no bulk bar', () => {
+test('products list UI: table rows, create dialog, delete modal, no bulk bar', () => {
   const managerPath = path.join(here, 'products-manager.tsx');
   const source = readFileSync(managerPath, 'utf8');
   assert.match(source, /Добавить товар/);
   assert.match(source, /Создать черновик/);
   assert.match(source, /sf-ap-menu/);
-  assert.match(source, /sf-ap-grid/);
+  assert.match(source, /sf-ap-table/);
   assert.match(source, /sf-ap-create/);
+  assert.match(source, /ProductDeleteDialog/);
   assert.match(source, /SEARCH_DEBOUNCE_MS/);
   assert.doesNotMatch(source, /id="create-product"/);
   assert.doesNotMatch(source, /admin-bulkbar/);
-  assert.doesNotMatch(source, /admin-products-table/);
+  assert.doesNotMatch(source, /sf-ap-grid/);
 });
 
 test('product editor exposes redesigned sections used by the live card', () => {
   const editorPath = path.join(here, 'product-editor.tsx');
   const source = readFileSync(editorPath, 'utf8');
-  assert.match(source, /admin-split--product/);
+  assert.match(source, /sf-pe-hero/);
+  assert.match(source, /sf-pe-stack/);
+  assert.match(source, /sf-pe-bar/);
+  assert.match(source, /sf-pe-danger/);
+  assert.match(source, /ProductDeleteDialog/);
   assert.match(source, /ProductEditorMainTab/);
   assert.match(source, /ProductEditorCompositionTab/);
   assert.match(source, /data-section="photo"/);
-  assert.match(source, /Повод и кому/);
-  assert.match(source, /Участвует в акции/);
+  assert.match(source, /blocks=\{\['audience'\]\}/);
+  assert.doesNotMatch(source, /ProductPlacementPanel/);
+  assert.doesNotMatch(source, /admin-disclosure/);
   assert.equal(source.includes('groupIds'), false);
 });

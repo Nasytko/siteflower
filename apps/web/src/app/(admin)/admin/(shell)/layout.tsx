@@ -1,11 +1,11 @@
 import type { ReactNode } from 'react';
-import Image from 'next/image';
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { fetchAdminMe } from '@/lib/admin-api';
 import { adminRoleLabel } from '@/lib/admin-labels';
 import { AdminShellNav } from '@/components/admin/admin-shell-nav';
 import { LogoutButton } from '@/components/admin/logout-button';
+import { BrandLogo } from '@/components/storefront/brand-logo';
 
 export default async function AdminShellLayout({ children }: { children: ReactNode }) {
   const me = await fetchAdminMe();
@@ -17,16 +17,7 @@ export default async function AdminShellLayout({ children }: { children: ReactNo
     <div className="admin-shell">
       <aside className="admin-aside">
         <div className="admin-aside__brand">
-          <Link href="/admin" className="admin-aside__brand-link">
-            <span className="admin-aside__eyebrow">БУКЕТ №1</span>
-            <Image
-              src="/brand/logo.png"
-              alt=""
-              width={125}
-              height={78}
-              className="mt-1 h-9 w-auto rounded-sm"
-            />
-          </Link>
+          <BrandLogo compact className="admin-aside__brand-link" />
           <Link href="/" className="admin-aside__storefront" target="_blank" rel="noreferrer">
             Открыть витрину ↗
           </Link>

@@ -210,17 +210,17 @@ export function ProductEditorOptionsTab(props: Props) {
             className="space-y-3 rounded-lg border border-[var(--admin-border)] px-3 py-3"
           >
             <div className="grid gap-3 sm:grid-cols-2">
-              <label className="admin-field">
+              <label className="sf-pe-field">
                 <span>Группа</span>
                 <input
-                  className="admin-input"
+                  className="sf-pe-input"
                   value={group.name}
                   disabled={!canUpdate}
                   placeholder="Например: Упаковка"
                   onChange={(event) => updateGroup(groupIndex, { name: event.target.value })}
                 />
               </label>
-              <label className="admin-field">
+              <label className="sf-pe-field">
                 <span>Выбор</span>
                 <select
                   className="admin-select"
@@ -257,10 +257,10 @@ export function ProductEditorOptionsTab(props: Props) {
                   className="space-y-2 rounded-md border border-[var(--admin-border)] px-3 py-2"
                 >
                   <div className="grid gap-3 sm:grid-cols-3">
-                    <label className="admin-field sm:col-span-1">
+                    <label className="sf-pe-field sm:col-span-1">
                       <span>Значение</span>
                       <input
-                        className="admin-input"
+                        className="sf-pe-input"
                         value={value.name}
                         disabled={!canUpdate}
                         placeholder="Крафт"
@@ -269,10 +269,10 @@ export function ProductEditorOptionsTab(props: Props) {
                         }
                       />
                     </label>
-                    <label className="admin-field">
+                    <label className="sf-pe-field">
                       <span>Доплата</span>
                       <input
-                        className="admin-input tabular-nums"
+                        className="sf-pe-input sf-pe-input--num"
                         value={value.surchargeMajor}
                         disabled={!canUpdate}
                         onChange={(event) =>
@@ -282,7 +282,7 @@ export function ProductEditorOptionsTab(props: Props) {
                         }
                       />
                     </label>
-                    <label className="admin-field">
+                    <label className="sf-pe-field">
                       <span>Как считать</span>
                       <select
                         className="admin-select"
@@ -302,10 +302,10 @@ export function ProductEditorOptionsTab(props: Props) {
                       </select>
                     </label>
                   </div>
-                  <label className="admin-field">
+                  <label className="sf-pe-field">
                     <span>Артикул ERP (склад)</span>
                     <input
-                      className="admin-input"
+                      className="sf-pe-input"
                       value={value.erpSku}
                       disabled={!canUpdate}
                       placeholder="Необязательно — если есть в ERP"
@@ -315,7 +315,7 @@ export function ProductEditorOptionsTab(props: Props) {
                         updateValue(groupIndex, valueIndex, { erpSku: event.target.value })
                       }
                     />
-                    <span className="admin-field__hint">
+                    <span className="sf-pe-note">
                       Для упаковки и ленты — артикул складской позиции в ERP, без отдельного
                       товара на сайте.
                     </span>
@@ -324,12 +324,12 @@ export function ProductEditorOptionsTab(props: Props) {
                   {variants.length > 1 ? (
                     <div className="grid gap-2 sm:grid-cols-2">
                       {variants.map((variant) => (
-                        <label key={variant.key} className="admin-field">
+                        <label key={variant.key} className="sf-pe-field">
                           <span className="text-xs">
                             Доплата для «{variant.name || 'размера'}» (пусто = общая)
                           </span>
                           <input
-                            className="admin-input tabular-nums"
+                            className="sf-pe-input sf-pe-input--num"
                             value={value.variantSurchargeMajor[variant.key] ?? ''}
                             disabled={!canUpdate}
                             onChange={(event) =>
@@ -360,7 +360,7 @@ export function ProductEditorOptionsTab(props: Props) {
                       </label>
                       <button
                         type="button"
-                        className="admin-btn-ghost text-xs"
+                        className="sf-pe-btn sf-pe-btn--quiet"
                         onClick={() => {
                           setOptionGroups((prev) =>
                             prev.map((g, gi) =>
@@ -387,7 +387,7 @@ export function ProductEditorOptionsTab(props: Props) {
               <div className="admin-row-actions">
                 <button
                   type="button"
-                  className="admin-btn-ghost text-xs"
+                  className="sf-pe-btn sf-pe-btn--quiet"
                   onClick={() => {
                     setOptionGroups((prev) =>
                       prev.map((g, gi) =>
@@ -403,7 +403,7 @@ export function ProductEditorOptionsTab(props: Props) {
                 </button>
                 <button
                   type="button"
-                  className="admin-btn-ghost text-xs"
+                  className="sf-pe-btn sf-pe-btn--quiet"
                   onClick={() => {
                     setOptionGroups((prev) => prev.filter((_, i) => i !== groupIndex));
                     touch();
@@ -419,7 +419,7 @@ export function ProductEditorOptionsTab(props: Props) {
         {canUpdate ? (
           <button
             type="button"
-            className="admin-btn-ghost"
+            className="sf-pe-btn"
             onClick={() => {
               setOptionGroups((prev) => [...prev, emptyOptionGroupDraft()]);
               touch();

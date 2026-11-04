@@ -31,7 +31,6 @@ type Props = {
 };
 
 export function ProductEditorRelated({ product, canUpdate, members, onChanged }: Props) {
-  const [open, setOpen] = useState(members.length > 1);
   const [query, setQuery] = useState('');
   const [hits, setHits] = useState<SearchHit[]>([]);
   const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
@@ -108,112 +107,105 @@ export function ProductEditorRelated({ product, canUpdate, members, onChanged }:
 
   return (
     <section className="sf-pe-card">
-      <button
-        type="button"
-        className="sf-pe-card__toggle"
-        onClick={() => setOpen((value) => !value)}
-        aria-expanded={open}
-      >
-        <span>
-          <strong>Связанные товары</strong>
-          <span className="sf-pe-card__lead">
-            Отдельные карточки одной линейки — например разная длина стебля. Необязательно.
-          </span>
-        </span>
-      </button>
-      {open ? (
-        <div className="sf-pe-card__body space-y-4">
-          {error ? <p className="admin-field-error">{error}</p> : null}
-          {others.length === 0 ? (
-            <p className="admin-help">Пока нет связанных карточек.</p>
-          ) : (
-            <ul className="space-y-2">
-              {others.map((member) => (
-                <li
-                  key={member.productId}
-                  className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-[var(--admin-border)] px-3 py-2"
-                >
-                  <div>
-                    <p className="font-medium">{member.name}</p>
-                    <p className="text-xs text-[var(--admin-muted)]">
-                      {member.heightCm != null ? `${member.heightCm} см` : 'без высоты'}
-                      {member.price
-                        ? ` · ${formatPriceFromMinor(member.price.minMinor, product.currency)}`
-                        : ''}
-                    </p>
-                  </div>
-                  {canUpdate ? (
+      <div className="sf-pe-card__head">
+        <div>
+          <h2>Связанные товары</h2>
+          <p className="sf-pe-card__lead">
+            Другие карточки одной линейки — например разная длина стебля.
+          </p>
+        </div>
+      </div>
+      <div className="sf-pe-card__body space-y-4">
+        {error ? <p className="admin-field-error">{error}</p> : null}
+        {others.length === 0 ? (
+          <p className="sf-pe-note">Пока нет связанных карточек.</p>
+        ) : (
+          <ul className="space-y-2">
+            {others.map((member) => (
+              <li
+                key={member.productId}
+                className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-[var(--admin-border)] px-3 py-2"
+              >
+                <div>
+                  <p className="font-medium">{member.name}</p>
+                  <p className="text-xs text-[var(--admin-muted)]">
+                    {member.heightCm != null ? `${member.heightCm} см` : 'без высоты'}
+                    {member.price
+                      ? ` · ${formatPriceFromMinor(member.price.minMinor, product.currency)}`
+                      : ''}
+                  </p>
+                </div>
+                {canUpdate ? (
+                  <button
+                    type="button"
+                    className="sf-pe-btn sf-pe-btn--quiet"
+                    disabled={pending}
+                    onClick={() => void unlink(member.productId)}
+                  >
+                    Отвязать
+                  </button>
+                ) : null}
+              </li>
+            ))}
+          </ul>
+        )}
+
+        {canUpdate ? (
+          <>
+            <label className="sf-pe-field">
+              <span>Найти существующий товар</span>
+              <input
+                className="sf-pe-input"
+                value={query}
+                placeholder="Название или адрес"
+                onChange={(event) => setQuery(event.target.value)}
+              />
+            </label>
+            {hits.length > 0 ? (
+              <ul className="space-y-1">
+                {hits.map((hit) => (
+                  <li key={hit.id}>
                     <button
                       type="button"
-                      className="admin-btn-ghost text-xs"
+                      className="admin-link text-sm"
                       disabled={pending}
-                      onClick={() => void unlink(member.productId)}
+                      onClick={() => void link(hit.id)}
                     >
-                      Отвязать
+                      + {hit.name}
                     </button>
-                  ) : null}
-                </li>
-              ))}
-            </ul>
-          )}
+                  </li>
+                ))}
+              </ul>
+            ) : null}
 
-          {canUpdate ? (
-            <>
-              <label className="admin-field">
-                <span>Найти существующий товар</span>
-                <input
-                  className="admin-input"
-                  value={query}
-                  placeholder="Название или адрес"
-                  onChange={(event) => setQuery(event.target.value)}
-                />
-              </label>
-              {hits.length > 0 ? (
+            {suggestions.length > 0 ? (
+              <div className="space-y-2">
+                <p className="text-xs font-medium uppercase tracking-wide text-[var(--admin-muted)]">
+                  Похожие по виду и сорту
+                </p>
                 <ul className="space-y-1">
-                  {hits.map((hit) => (
-                    <li key={hit.id}>
+                  {suggestions.map((row) => (
+                    <li key={row.id} className="flex flex-wrap items-center justify-between gap-2">
+                      <span className="text-sm">
+                        {row.name}
+                        {row.heightCm != null ? ` · ${row.heightCm} см` : ''}
+                      </span>
                       <button
                         type="button"
-                        className="admin-link text-sm"
+                        className="sf-pe-btn sf-pe-btn--quiet"
                         disabled={pending}
-                        onClick={() => void link(hit.id)}
+                        onClick={() => void link(row.id)}
                       >
-                        + {hit.name}
+                        Связать
                       </button>
                     </li>
                   ))}
                 </ul>
-              ) : null}
-
-              {suggestions.length > 0 ? (
-                <div className="space-y-2">
-                  <p className="text-xs font-medium uppercase tracking-wide text-[var(--admin-muted)]">
-                    Похожие по виду и сорту
-                  </p>
-                  <ul className="space-y-1">
-                    {suggestions.map((row) => (
-                      <li key={row.id} className="flex flex-wrap items-center justify-between gap-2">
-                        <span className="text-sm">
-                          {row.name}
-                          {row.heightCm != null ? ` · ${row.heightCm} см` : ''}
-                        </span>
-                        <button
-                          type="button"
-                          className="admin-btn-ghost text-xs"
-                          disabled={pending}
-                          onClick={() => void link(row.id)}
-                        >
-                          Связать
-                        </button>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              ) : null}
-            </>
-          ) : null}
-        </div>
-      ) : null}
+              </div>
+            ) : null}
+          </>
+        ) : null}
+      </div>
     </section>
   );
 }
