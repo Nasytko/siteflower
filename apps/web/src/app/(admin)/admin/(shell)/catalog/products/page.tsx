@@ -83,7 +83,7 @@ export default async function AdminProductsPage({
     <main id="main-content">
       <Suspense
         fallback={
-          <div className="admin-products">
+          <div className="sf-ap">
             <div className="admin-products-skeleton" aria-busy="true">
               Загрузка списка товаров…
             </div>

@@ -62,11 +62,20 @@ type AvailabilityPatchResult = {
   updatedAt: string;
 };
 
+const CREATE_KINDS = PRIMARY_PRODUCT_KINDS;
+
+const CREATE_KIND_HINT: Record<(typeof CREATE_KINDS)[number], string> = {
+  BOUQUET: 'Состав из цветов, цена за букет',
+  COMPOSITION: 'Композиция в упаковке или корзине',
+  STEM: 'Продажа по ветке',
+  GIFT: 'Открытка, свеча и другие подарки',
+};
+
 const SORTS: Array<[string, string]> = [
   ['', 'Сначала изменённые'],
   ['recommended', 'Порядок витрины'],
-  ['price_asc', 'Цена: по возрастанию'],
-  ['price_desc', 'Цена: по убыванию'],
+  ['price_asc', 'Цена ↑'],
+  ['price_desc', 'Цена ↓'],
   ['newest', 'Сначала новые'],
 ];
 
@@ -81,15 +90,6 @@ function IconSearch({ className }: { className?: string }) {
     <svg className={className} width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden>
       <circle cx="11" cy="11" r="7" stroke="currentColor" strokeWidth="1.75" />
       <path d="M20 20l-3.5-3.5" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" />
-    </svg>
-  );
-}
-
-function IconSliders({ className }: { className?: string }) {
-  return (
-    <svg className={className} width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden>
-      <path d="M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" />
-      <path d="M1 14h6M9 8h6M17 16h6" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" />
     </svg>
   );
 }
@@ -133,23 +133,23 @@ function ProductThumb({ item }: { item: ProductListItemDto }) {
       <img
         src={toSameOriginMediaUrl(item.primaryImageUrl) ?? item.primaryImageUrl}
         alt=""
-        className="admin-products-thumb"
+        className="sf-ap-card__photo"
       />
     );
   }
-  return <div className="admin-products-thumb admin-products-thumb--empty" title="Нет фото" />;
+  return <div className="sf-ap-card__photo sf-ap-card__photo--empty" aria-hidden />;
 }
 
-function PriceCell({ item }: { item: ProductListItemDto }) {
+function PriceBlock({ item }: { item: ProductListItemDto }) {
   if (item.promotion) {
     return (
-      <span className="admin-products-price admin-products-price--sale">
-        <span className="admin-products-price__sale">{item.promotion.salePrice.label}</span>
-        <span className="admin-products-price__old">{item.promotion.originalPrice.label}</span>
+      <span className="sf-ap-card__price sf-ap-card__price--sale">
+        <span>{item.promotion.salePrice.label}</span>
+        <span className="sf-ap-card__price-old">{item.promotion.originalPrice.label}</span>
       </span>
     );
   }
-  return <span className="admin-products-price">{item.price?.label ?? '—'}</span>;
+  return <span className="sf-ap-card__price">{item.price?.label ?? '—'}</span>;
 }
 
 type RowActionsProps = {
@@ -199,43 +199,47 @@ function ProductRowActions({
     item.lifecycle === 'PUBLISHED' ? storefrontHref(item) : `/admin/catalog/products/${item.id}/preview`;
 
   return (
-    <div className="admin-products-menu" ref={rootRef}>
+    <div className="sf-ap-menu" ref={rootRef}>
       <button
         type="button"
-        className="admin-products-menu__trigger"
+        className="sf-ap-menu__trigger"
         aria-haspopup="menu"
         aria-expanded={open}
         aria-controls={menuId}
         aria-label={`Действия: ${item.name}`}
-        onClick={() => setOpen((value) => !value)}
+        onClick={(event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          setOpen((value) => !value);
+        }}
       >
         <IconMore />
       </button>
       {open ? (
-        <div id={menuId} role="menu" className="admin-products-menu__panel">
+        <div id={menuId} role="menu" className="sf-ap-menu__panel">
           <Link
             role="menuitem"
             href={`/admin/catalog/products/${item.id}`}
-            className="admin-products-menu__item"
+            className="sf-ap-menu__item"
             onClick={() => setOpen(false)}
           >
-            Редактировать
+            Открыть
           </Link>
           <Link
             role="menuitem"
             href={viewHref}
-            className="admin-products-menu__item"
+            className="sf-ap-menu__item"
             target={item.lifecycle === 'PUBLISHED' ? '_blank' : undefined}
             rel={item.lifecycle === 'PUBLISHED' ? 'noreferrer' : undefined}
             onClick={() => setOpen(false)}
           >
-            Посмотреть на сайте
+            На сайте
           </Link>
           {canCreate ? (
             <button
               type="button"
               role="menuitem"
-              className="admin-products-menu__item"
+              className="sf-ap-menu__item"
               disabled={duplicating}
               onClick={() => {
                 setOpen(false);
@@ -249,39 +253,39 @@ function ProductRowActions({
             <button
               type="button"
               role="menuitem"
-              className="admin-products-menu__item"
+              className="sf-ap-menu__item"
               onClick={() => {
                 setOpen(false);
                 onArchive();
               }}
             >
-              Архивировать
+              В архив
             </button>
           ) : null}
           {canPublish && item.lifecycle === 'ARCHIVED' ? (
             <button
               type="button"
               role="menuitem"
-              className="admin-products-menu__item"
+              className="sf-ap-menu__item"
               onClick={() => {
                 setOpen(false);
                 onRestore();
               }}
             >
-              Восстановить
+              Из архива
             </button>
           ) : null}
           {canDelete ? (
             <button
               type="button"
               role="menuitem"
-              className="admin-products-menu__item admin-products-menu__item--danger"
+              className="sf-ap-menu__item sf-ap-menu__item--danger"
               onClick={() => {
                 setOpen(false);
                 onDelete();
               }}
             >
-              Удалить навсегда
+              Удалить
             </button>
           ) : null}
         </div>
@@ -308,6 +312,7 @@ export function ProductsManager({
   const [requestId, setRequestId] = useState<string | null>(null);
   const [retryable, setRetryable] = useState(false);
   const [creating, setCreating] = useState(false);
+  const [createOpen, setCreateOpen] = useState(false);
   const [createKind, setCreateKind] = useState<ProductKind>('BOUQUET');
   const [duplicateTarget, setDuplicateTarget] = useState<ProductListItemDto | null>(null);
   const [duplicating, setDuplicating] = useState(false);
@@ -320,8 +325,9 @@ export function ProductsManager({
     availability: CommercialAvailability;
   } | null>(null);
   const [searchDraft, setSearchDraft] = useState(filters.search);
-  const [filtersOpen, setFiltersOpen] = useState(false);
-  const filtersPanelRef = useRef<HTMLDivElement>(null);
+  const [moreOpen, setMoreOpen] = useState(false);
+  const morePanelRef = useRef<HTMLDivElement>(null);
+  const createDialogRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     setRows(data.items);
@@ -347,12 +353,12 @@ export function ProductsManager({
   }, [searchDraft, filters.search, searchParams, router, startTransition]);
 
   useEffect(() => {
-    if (!filtersOpen) return;
+    if (!moreOpen) return;
     function onPointerDown(event: MouseEvent) {
-      if (!filtersPanelRef.current?.contains(event.target as Node)) setFiltersOpen(false);
+      if (!morePanelRef.current?.contains(event.target as Node)) setMoreOpen(false);
     }
     function onKey(event: KeyboardEvent) {
-      if (event.key === 'Escape') setFiltersOpen(false);
+      if (event.key === 'Escape') setMoreOpen(false);
     }
     document.addEventListener('mousedown', onPointerDown);
     document.addEventListener('keydown', onKey);
@@ -360,7 +366,16 @@ export function ProductsManager({
       document.removeEventListener('mousedown', onPointerDown);
       document.removeEventListener('keydown', onKey);
     };
-  }, [filtersOpen]);
+  }, [moreOpen]);
+
+  useEffect(() => {
+    if (!createOpen) return;
+    function onKey(event: KeyboardEvent) {
+      if (event.key === 'Escape' && !creating) setCreateOpen(false);
+    }
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [createOpen, creating]);
 
   const showGiftSubtype = filters.productKind === 'GIFT' && giftSubtypes.length > 0;
   const showCompositionKind =
@@ -408,7 +423,7 @@ export function ProductsManager({
     return `/admin/catalog/products?${params.toString()}`;
   }
 
-  async function onCreate(kind: ProductKind = 'BOUQUET') {
+  async function onCreate(kind: ProductKind = createKind) {
     if (!canCreate || creating) return;
     setCreating(true);
     setError(null);
@@ -418,6 +433,7 @@ export function ProductsManager({
         name: DEFAULT_NEW_PRODUCT_NAMES[kind],
         productKind: kind,
       });
+      setCreateOpen(false);
       router.push(`/admin/catalog/products/${created.id}?created=1`);
     } catch (err) {
       setError(errorMessage(err, 'Не удалось создать товар'));
@@ -545,29 +561,31 @@ export function ProductsManager({
       );
     }
     return (
-      <label className="admin-products-availability">
-        <span className="sr-only">Наличие: {item.name}</span>
-        <select
-          className={`admin-select admin-products-availability__select ${
-            item.availability === 'AVAILABLE' ? '' : 'admin-products-availability__select--warn'
-          }`}
-          value={item.availability}
-          disabled={savingAvailability || Boolean(savingAvailabilityId)}
-          aria-busy={savingAvailability}
-          onChange={(event) => {
-            void onAvailabilityChange(item, event.target.value as CommercialAvailability);
-          }}
-        >
-          {COMMERCIAL_AVAILABILITIES.map((value) => (
-            <option key={value} value={value}>
+      <div
+        className="sf-ap-avail"
+        role="group"
+        aria-label={`Наличие: ${item.name}`}
+        aria-busy={savingAvailability}
+        onClick={(event) => event.stopPropagation()}
+      >
+        {COMMERCIAL_AVAILABILITIES.map((value) => {
+          const active = item.availability === value;
+          return (
+            <button
+              key={value}
+              type="button"
+              className={`sf-ap-avail__chip ${active ? 'sf-ap-avail__chip--active' : ''} ${
+                value !== 'AVAILABLE' && active ? 'sf-ap-avail__chip--warn' : ''
+              }`}
+              disabled={savingAvailability || Boolean(savingAvailabilityId)}
+              aria-pressed={active}
+              onClick={() => void onAvailabilityChange(item, value)}
+            >
               {availabilityLabel(value)}
-            </option>
-          ))}
-        </select>
-        {savingAvailability ? (
-          <span className="admin-products-availability__hint">Сохранение…</span>
-        ) : null}
-      </label>
+            </button>
+          );
+        })}
+      </div>
     );
   }
 
@@ -591,46 +609,95 @@ export function ProductsManager({
   }
 
   return (
-    <div className={`admin-products ${navigating ? 'admin-products--loading' : ''}`}>
-      <header className="admin-products-header">
+    <div className={`sf-ap ${navigating ? 'sf-ap--loading' : ''}`}>
+      <header className="sf-ap-header">
         <div>
           <h1 className="admin-page-title">Товары</h1>
-          <p className="admin-page-lead">Управление ассортиментом магазина</p>
+          <p className="admin-page-lead">
+            {navigating
+              ? 'Обновляем…'
+              : data.total === 0
+                ? 'Пока пусто'
+                : `${data.total} в каталоге`}
+          </p>
         </div>
         {canCreate ? (
-          <label className="admin-products-header__create flex flex-wrap items-center gap-2">
-            <select
-              className="admin-select"
-              aria-label="Тип нового товара"
-              disabled={creating}
-              value={createKind}
-              onChange={(event) => setCreateKind(event.target.value as ProductKind)}
-            >
-              {PRIMARY_PRODUCT_KINDS.map((kind) => (
-                <option key={kind} value={kind}>
-                  {productKindLabel(kind)}
-                </option>
-              ))}
-            </select>
-            <button
-              type="button"
-              className="admin-btn"
-              disabled={creating}
-              onClick={() => void onCreate(createKind)}
-            >
-              <IconPlus />
-              {creating ? 'Создаём…' : 'Добавить товар'}
-            </button>
-          </label>
+          <button
+            type="button"
+            className="admin-btn"
+            disabled={creating}
+            onClick={() => {
+              setCreateKind('BOUQUET');
+              setCreateOpen(true);
+            }}
+          >
+            <IconPlus />
+            Добавить товар
+          </button>
         ) : null}
       </header>
+
+      {createOpen ? (
+        <div
+          className="sf-ap-create"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="sf-ap-create-title"
+          ref={createDialogRef}
+        >
+          <div className="sf-ap-create__panel">
+            <div className="sf-ap-create__head">
+              <h2 id="sf-ap-create-title">Новый товар</h2>
+              <p>Выберите тип — откроется черновик.</p>
+            </div>
+            <div className="sf-ap-create__kinds" role="radiogroup" aria-label="Тип товара">
+              {CREATE_KINDS.map((kind) => (
+                <button
+                  key={kind}
+                  type="button"
+                  role="radio"
+                  aria-checked={createKind === kind}
+                  className={`sf-ap-create__kind ${createKind === kind ? 'sf-ap-create__kind--active' : ''}`}
+                  disabled={creating}
+                  onClick={() => setCreateKind(kind)}
+                >
+                  <strong>{productKindLabel(kind)}</strong>
+                  <span>{CREATE_KIND_HINT[kind]}</span>
+                </button>
+              ))}
+            </div>
+            <div className="sf-ap-create__actions">
+              <button
+                type="button"
+                className="admin-btn"
+                disabled={creating}
+                onClick={() => void onCreate(createKind)}
+              >
+                {creating ? 'Создаём…' : 'Создать черновик'}
+              </button>
+              <button
+                type="button"
+                className="admin-btn-ghost"
+                disabled={creating}
+                onClick={() => setCreateOpen(false)}
+              >
+                Отмена
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       {error ? (
         <div role="alert" className="admin-error">
           <p>{error}</p>
           {requestId ? <p className="text-xs text-[var(--admin-muted)]">Код: {requestId}</p> : null}
           {retryable && pendingAvailabilityRetry ? (
-            <button type="button" className="admin-link mt-2 block text-sm" onClick={() => void onRetryAvailability()}>
+            <button
+              type="button"
+              className="admin-link mt-2 block text-sm"
+              onClick={() => void onRetryAvailability()}
+            >
               Повторить
             </button>
           ) : null}
@@ -646,7 +713,10 @@ export function ProductsManager({
       {duplicateSuccessId ? (
         <p role="status" className="admin-notice admin-notice--success">
           Товар создан как черновик.{' '}
-          <Link href={`/admin/catalog/products/${duplicateSuccessId}`} className="admin-link font-semibold">
+          <Link
+            href={`/admin/catalog/products/${duplicateSuccessId}`}
+            className="admin-link font-semibold"
+          >
             Открыть товар
           </Link>
         </p>
@@ -657,16 +727,13 @@ export function ProductsManager({
           role="dialog"
           aria-modal="true"
           aria-labelledby="duplicate-product-title"
-          className="admin-panel space-y-3 border border-[var(--admin-brand)]/30 p-4"
+          className="sf-ap-dialog"
         >
-          <h2 id="duplicate-product-title" className="text-base font-semibold text-[var(--admin-ink)]">
-            Дублировать товар?
-          </h2>
-          <p className="text-sm text-[var(--admin-muted)]">
-            Будет создан новый черновик на основе «{duplicateTarget.name}». Акции и подборки не
-            переносятся.
+          <h2 id="duplicate-product-title">Дублировать товар?</h2>
+          <p>
+            Новый черновик на основе «{duplicateTarget.name}». Акции и подборки не переносятся.
           </p>
-          <div className="flex flex-wrap gap-2">
+          <div className="sf-ap-dialog__actions">
             <button
               type="button"
               disabled={duplicating}
@@ -687,12 +754,12 @@ export function ProductsManager({
         </div>
       ) : null}
 
-      <div className="admin-products-toolbar">
-        <label className="admin-products-search">
-          <IconSearch className="admin-products-search__icon" />
+      <div className="sf-ap-toolbar">
+        <label className="sf-ap-search">
+          <IconSearch className="sf-ap-search__icon" />
           <span className="sr-only">Поиск</span>
           <input
-            className="admin-products-search__input"
+            className="sf-ap-search__input"
             value={searchDraft}
             onChange={(event) => setSearchDraft(event.target.value)}
             onKeyDown={(event) => {
@@ -701,207 +768,197 @@ export function ProductsManager({
                 pushFilters({ search: searchDraft.trim() || null });
               }
             }}
-            placeholder="Поиск по названию или адресу…"
+            placeholder="Название или адрес…"
             autoComplete="off"
           />
         </label>
 
-        <label className="admin-products-select">
-          <span className="sr-only">Тип</span>
-          <select
-            className="admin-select"
-            value={filters.productKind}
-            onChange={(event) => setFilter('productKind', event.target.value)}
-          >
-            <option value="">Тип</option>
-            {PRIMARY_PRODUCT_KINDS.map((value) => (
-              <option key={value} value={value}>
-                {productKindLabel(value)}
-              </option>
-            ))}
-          </select>
-        </label>
-
-        <label className="admin-products-select">
-          <span className="sr-only">Статус</span>
-          <select
-            className="admin-select"
-            value={filters.lifecycle}
-            onChange={(event) => setFilter('lifecycle', event.target.value)}
-          >
-            <option value="">Статус</option>
-            {PRODUCT_LIFECYCLES.map((value) => (
-              <option key={value} value={value}>
-                {lifecycleLabel(value)}
-              </option>
-            ))}
-          </select>
-        </label>
-
-        <label className="admin-products-select">
-          <span className="sr-only">Наличие</span>
-          <select
-            className="admin-select"
-            value={filters.availability}
-            onChange={(event) => setFilter('availability', event.target.value)}
-          >
-            <option value="">Наличие</option>
-            {COMMERCIAL_AVAILABILITIES.map((value) => (
-              <option key={value} value={value}>
-                {availabilityLabel(value)}
-              </option>
-            ))}
-          </select>
-        </label>
-
-        <div className="admin-products-filters" ref={filtersPanelRef}>
+        <div className="sf-ap-chips" role="group" aria-label="Тип">
           <button
             type="button"
-            className={`admin-products-filters__btn ${extraFilterCount > 0 ? 'admin-products-filters__btn--active' : ''}`}
-            aria-expanded={filtersOpen}
-            onClick={() => setFiltersOpen((value) => !value)}
+            className={`sf-ap-chip ${filters.productKind === '' ? 'sf-ap-chip--active' : ''}`}
+            onClick={() => setFilter('productKind', '')}
           >
-            <IconSliders />
-            Фильтры
-            {extraFilterCount > 0 ? (
-              <span className="admin-products-filters__count">{extraFilterCount}</span>
-            ) : null}
+            Все
           </button>
-          {filtersOpen ? (
-            <div className="admin-products-filters__panel" role="dialog" aria-label="Дополнительные фильтры">
-              {flowerTypes.length > 0 ? (
+          {CREATE_KINDS.map((value) => (
+            <button
+              key={value}
+              type="button"
+              className={`sf-ap-chip ${filters.productKind === value ? 'sf-ap-chip--active' : ''}`}
+              onClick={() => setFilter('productKind', value)}
+            >
+              {productKindLabel(value)}
+            </button>
+          ))}
+        </div>
+
+        <div className="sf-ap-toolbar__row">
+          <label className="sf-ap-select">
+            <span className="sr-only">Статус</span>
+            <select
+              className="admin-select"
+              value={filters.lifecycle}
+              onChange={(event) => setFilter('lifecycle', event.target.value)}
+            >
+              <option value="">Любой статус</option>
+              {PRODUCT_LIFECYCLES.map((value) => (
+                <option key={value} value={value}>
+                  {lifecycleLabel(value)}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <label className="sf-ap-select">
+            <span className="sr-only">Наличие</span>
+            <select
+              className="admin-select"
+              value={filters.availability}
+              onChange={(event) => setFilter('availability', event.target.value)}
+            >
+              <option value="">Любое наличие</option>
+              {COMMERCIAL_AVAILABILITIES.map((value) => (
+                <option key={value} value={value}>
+                  {availabilityLabel(value)}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <div className="sf-ap-more" ref={morePanelRef}>
+            <button
+              type="button"
+              className={`sf-ap-more__btn ${extraFilterCount > 0 ? 'sf-ap-more__btn--active' : ''}`}
+              aria-expanded={moreOpen}
+              onClick={() => setMoreOpen((value) => !value)}
+            >
+              Ещё
+              {extraFilterCount > 0 ? (
+                <span className="sf-ap-more__count">{extraFilterCount}</span>
+              ) : null}
+            </button>
+            {moreOpen ? (
+              <div className="sf-ap-more__panel" role="dialog" aria-label="Дополнительные фильтры">
+                {flowerTypes.length > 0 ? (
+                  <label className="admin-field">
+                    <span>Вид цветка</span>
+                    <select
+                      className="admin-select"
+                      value={filters.flowerTypeId}
+                      onChange={(event) => setFilter('flowerTypeId', event.target.value)}
+                    >
+                      <option value="">Любой</option>
+                      {flowerTypes.map((option) => (
+                        <option key={option.id} value={option.id}>
+                          {option.name}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                ) : null}
+
+                {showCompositionKind ? (
+                  <label className="admin-field">
+                    <span>Моно / микс</span>
+                    <select
+                      className="admin-select"
+                      value={filters.compositionKind}
+                      onChange={(event) => setFilter('compositionKind', event.target.value)}
+                    >
+                      <option value="">Любой</option>
+                      {COMPOSITION_FILTER_KINDS.map((value) => (
+                        <option key={value} value={value}>
+                          {compositionKindLabel(value)}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                ) : null}
+
+                {showGiftSubtype ? (
+                  <label className="admin-field">
+                    <span>Подтип подарка</span>
+                    <select
+                      className="admin-select"
+                      value={filters.catalogCategoryId}
+                      onChange={(event) => setFilter('catalogCategoryId', event.target.value)}
+                    >
+                      <option value="">Любой</option>
+                      {giftSubtypes.map((option) => (
+                        <option key={option.id} value={option.id}>
+                          {option.name}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                ) : null}
+
                 <label className="admin-field">
-                  <span>Вид цветка</span>
+                  <span>Акция</span>
                   <select
                     className="admin-select"
-                    value={filters.flowerTypeId}
-                    onChange={(event) => setFilter('flowerTypeId', event.target.value)}
+                    value={filters.promotionalOnly}
+                    onChange={(event) => setFilter('promotionalOnly', event.target.value)}
                   >
-                    <option value="">Любой</option>
-                    {flowerTypes.map((option) => (
-                      <option key={option.id} value={option.id}>
-                        {option.name}
+                    <option value="">Не важно</option>
+                    <option value="true">Идёт сейчас</option>
+                  </select>
+                </label>
+
+                {bestsellerGroups.length > 0 ? (
+                  <label className="admin-field">
+                    <span>Подборка</span>
+                    <select
+                      className="admin-select"
+                      value={filters.bestsellerGroupIds}
+                      onChange={(event) => setFilter('bestsellerGroupIds', event.target.value)}
+                    >
+                      <option value="">Все</option>
+                      {bestsellerGroups.map((group) => (
+                        <option key={group.id} value={group.id}>
+                          {group.name}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                ) : null}
+
+                <label className="admin-field">
+                  <span>Сортировка</span>
+                  <select
+                    className="admin-select"
+                    value={filters.sort}
+                    onChange={(event) => setFilter('sort', event.target.value)}
+                  >
+                    {SORTS.map(([value, label]) => (
+                      <option key={value || 'default'} value={value}>
+                        {label}
                       </option>
                     ))}
                   </select>
                 </label>
-              ) : null}
 
-              {showCompositionKind ? (
-                <label className="admin-field">
-                  <span>Тип состава</span>
-                  <select
-                    className="admin-select"
-                    value={filters.compositionKind}
-                    onChange={(event) => setFilter('compositionKind', event.target.value)}
-                  >
-                    <option value="">Любой</option>
-                    {COMPOSITION_FILTER_KINDS.map((value) => (
-                      <option key={value} value={value}>
-                        {compositionKindLabel(value)}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-              ) : null}
-
-              {showGiftSubtype ? (
-                <label className="admin-field">
-                  <span>Подтип подарка</span>
-                  <select
-                    className="admin-select"
-                    value={filters.catalogCategoryId}
-                    onChange={(event) => setFilter('catalogCategoryId', event.target.value)}
-                  >
-                    <option value="">Любой</option>
-                    {giftSubtypes.map((option) => (
-                      <option key={option.id} value={option.id}>
-                        {option.name}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-              ) : null}
-
-              <label className="admin-field">
-                <span>Акция</span>
-                <select
-                  className="admin-select"
-                  value={filters.promotionalOnly}
-                  onChange={(event) => setFilter('promotionalOnly', event.target.value)}
-                >
-                  <option value="">Не важно</option>
-                  <option value="true">Идёт сейчас</option>
-                </select>
-              </label>
-
-              {bestsellerGroups.length > 0 ? (
-                <label className="admin-field">
-                  <span>Подборки</span>
-                  <select
-                    className="admin-select"
-                    value={filters.bestsellerGroupIds}
-                    onChange={(event) => setFilter('bestsellerGroupIds', event.target.value)}
-                  >
-                    <option value="">Все товары</option>
-                    {bestsellerGroups.map((group) => (
-                      <option key={group.id} value={group.id}>
-                        {group.name}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-              ) : null}
-
-              <label className="admin-field">
-                <span>Сортировка</span>
-                <select
-                  className="admin-select"
-                  value={filters.sort}
-                  onChange={(event) => setFilter('sort', event.target.value)}
-                >
-                  {SORTS.map(([value, label]) => (
-                    <option key={value || 'default'} value={value}>
-                      {label}
-                    </option>
-                  ))}
-                </select>
-              </label>
-
-              <div className="admin-products-filters__footer">
-                <button type="button" className="admin-btn-ghost" onClick={() => setFiltersOpen(false)}>
+                <button type="button" className="admin-btn-ghost" onClick={() => setMoreOpen(false)}>
                   Готово
                 </button>
               </div>
-            </div>
+            ) : null}
+          </div>
+
+          {hasAnyFilter ? (
+            <Link href="/admin/catalog/products" className="admin-btn-ghost sf-ap-reset">
+              Сбросить
+            </Link>
           ) : null}
         </div>
-
-        {hasAnyFilter ? (
-          <Link href="/admin/catalog/products" className="admin-btn-ghost admin-products-reset">
-            Сбросить
-          </Link>
-        ) : null}
-      </div>
-
-      <div className="admin-products-meta">
-        <span>
-          {navigating
-            ? 'Обновляем…'
-            : data.total === 0
-              ? 'Нет товаров'
-              : `Найдено: ${data.total}`}
-        </span>
       </div>
 
       {rows.length === 0 ? (
-        <div className="admin-products-empty">
+        <div className="sf-ap-empty">
           {hasAnyFilter ? (
             <>
               <p>Ничего не найдено</p>
-              <p className="text-sm text-[var(--admin-muted)]">
-                Измените поиск или сбросьте фильтры.
-              </p>
               <Link href="/admin/catalog/products" className="admin-btn-ghost">
                 Сбросить фильтры
               </Link>
@@ -909,15 +966,16 @@ export function ProductsManager({
           ) : (
             <>
               <p>Товаров пока нет</p>
-              <p className="text-sm text-[var(--admin-muted)]">
-                Создайте первый товар — откроется карточка для фото, цены и состава.
-              </p>
+              <p className="sf-ap-empty__hint">Создайте черновик — дальше фото, цена и состав.</p>
               {canCreate ? (
                 <button
                   type="button"
                   className="admin-btn"
                   disabled={creating}
-                  onClick={() => void onCreate(createKind)}
+                  onClick={() => {
+                    setCreateKind('BOUQUET');
+                    setCreateOpen(true);
+                  }}
                 >
                   Добавить товар
                 </button>
@@ -926,99 +984,43 @@ export function ProductsManager({
           )}
         </div>
       ) : (
-        <>
-          <div className="admin-products-table-wrap">
-            <table className="admin-products-table">
-              <thead>
-                <tr>
-                  <th>Товар</th>
-                  <th>Тип</th>
-                  <th className="admin-products-table__price">Цена</th>
-                  <th>Статус</th>
-                  <th>Наличие</th>
-                  <th className="admin-products-table__actions">
-                    <span className="sr-only">Действия</span>
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {rows.map((item) => {
-                  const kind = item.productKind ?? 'BOUQUET';
-                  return (
-                    <tr key={item.id}>
-                      <td>
-                        <div className="admin-products-identity">
-                          <ProductThumb item={item} />
-                          <div className="min-w-0">
-                            <Link
-                              href={`/admin/catalog/products/${item.id}`}
-                              className="admin-products-identity__name"
-                            >
-                              {item.name}
-                            </Link>
-                            <p className="admin-products-identity__slug">/{item.slug}</p>
-                          </div>
-                        </div>
-                      </td>
-                      <td className="admin-products-table__muted">{productKindLabel(kind)}</td>
-                      <td className="admin-products-table__price">
-                        <PriceCell item={item} />
-                      </td>
-                      <td>
-                        <span className={lifecycleChipClass(item.lifecycle)}>
-                          {lifecycleLabel(item.lifecycle)}
-                        </span>
-                      </td>
-                      <td>{renderAvailability(item)}</td>
-                      <td className="admin-products-table__actions">{renderRowActions(item)}</td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-
-          <ul className="admin-products-cards">
-            {rows.map((item) => {
-              const kind = item.productKind ?? 'BOUQUET';
-              return (
-                <li key={item.id} className="admin-products-card">
-                  <div className="admin-products-card__top">
-                    <ProductThumb item={item} />
-                    <div className="min-w-0 flex-1">
-                      <Link
-                        href={`/admin/catalog/products/${item.id}`}
-                        className="admin-products-identity__name"
-                      >
-                        {item.name}
-                      </Link>
-                      <p className="admin-products-identity__slug">
-                        {productKindLabel(kind)} · /{item.slug}
-                      </p>
+        <ul className="sf-ap-grid">
+          {rows.map((item) => {
+            const kind = item.productKind ?? 'BOUQUET';
+            const summary =
+              item.compositionSummary?.trim() ||
+              (item.cardSubtitle?.trim() ? item.cardSubtitle : productKindLabel(kind));
+            return (
+              <li key={item.id} className="sf-ap-card">
+                <Link href={`/admin/catalog/products/${item.id}`} className="sf-ap-card__main">
+                  <ProductThumb item={item} />
+                  <div className="sf-ap-card__body">
+                    <div className="sf-ap-card__title-row">
+                      <span className="sf-ap-card__name">{item.name}</span>
+                      <PriceBlock item={item} />
                     </div>
-                    {renderRowActions(item)}
+                    <p className="sf-ap-card__summary">{summary}</p>
+                    <div className="sf-ap-card__status">
+                      <span className={lifecycleChipClass(item.lifecycle)}>
+                        {lifecycleLabel(item.lifecycle)}
+                      </span>
+                      <span className="sf-ap-card__kind">{productKindLabel(kind)}</span>
+                    </div>
                   </div>
-                  <div className="admin-products-card__meta">
-                    <PriceCell item={item} />
-                    <span className={lifecycleChipClass(item.lifecycle)}>
-                      {lifecycleLabel(item.lifecycle)}
-                    </span>
-                  </div>
-                  <div className="admin-products-card__availability">{renderAvailability(item)}</div>
-                </li>
-              );
-            })}
-          </ul>
-        </>
+                </Link>
+                <div className="sf-ap-card__footer">
+                  {renderAvailability(item)}
+                  {renderRowActions(item)}
+                </div>
+              </li>
+            );
+          })}
+        </ul>
       )}
 
       {data.total > 0 || pages > 1 ? (
-        <div className="admin-products-pagination">
-          <span>
-            {pages > 1
-              ? `Стр. ${data.page} из ${pages}`
-              : null}
-          </span>
+        <div className="sf-ap-pagination">
+          <span>{pages > 1 ? `Стр. ${data.page} из ${pages}` : null}</span>
           <div className="flex gap-3">
             {data.page > 1 ? (
               <Link href={pageHref(data.page - 1)} className="admin-link">
