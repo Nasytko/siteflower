@@ -4,7 +4,9 @@ import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useCallback, useEffect, useState, useTransition } from 'react';
 import {
+  ORDER_STATUSES,
   erpSyncStatusLabel,
+  orderStatusLabel,
   paymentMethodLabel,
   paymentStatusLabel,
   telegramNotifyStatusLabel,
@@ -192,6 +194,10 @@ export function OrdersManager({
 
   return (
     <div className={`space-y-5 ${pending ? 'opacity-70' : ''}`}>
+      <p className="admin-notice">
+        Карточки сверху фильтруют по оплате, ERP и Telegram. Статус заказа (новый, готов…) —
+        отдельным списком ниже. Сборка и выдача ведутся в ERP.
+      </p>
       <div className="admin-kpi-grid admin-kpi-grid--orders">
         {(
           [
@@ -270,6 +276,21 @@ export function OrdersManager({
       </div>
 
       <div className="admin-toolbar flex flex-wrap gap-3">
+        <label className="admin-field">
+          <span>Статус заказа</span>
+          <select
+            className="admin-select"
+            value={filters.status ?? ''}
+            onChange={(e) => setFilter('status', e.target.value)}
+          >
+            <option value="">Все</option>
+            {ORDER_STATUSES.map((value) => (
+              <option key={value} value={value}>
+                {orderStatusLabel(value)}
+              </option>
+            ))}
+          </select>
+        </label>
         <label className="admin-field">
           <span>Оплата</span>
           <select
@@ -440,7 +461,7 @@ export function OrdersManager({
                   ERP · {erpSyncStatusLabel(detail.erpSyncStatus)}
                 </span>
                 <span className={chipClass(tgTone(detail.telegramNotifyStatus))}>
-                  TG · {telegramNotifyStatusLabel(detail.telegramNotifyStatus)}
+                  Telegram · {telegramNotifyStatusLabel(detail.telegramNotifyStatus)}
                 </span>
               </div>
 

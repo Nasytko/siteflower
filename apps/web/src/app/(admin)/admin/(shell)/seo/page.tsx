@@ -17,14 +17,14 @@ export default async function AdminSeoPage() {
   return (
     <main id="main-content" className="space-y-8">
       <AdminPageHeader
-        title="SEO сайта"
+        title="Диагностика SEO"
         lead={
           <>
-            Проверка названий, описаний и фото для поиска. Технические детали (sitemap, canonical)
-            скрыты ниже списка страниц.{' '}
+            Проверка названий, описаний и фото для поиска. Исправляйте в карточке товара или на{' '}
             <Link href="/admin/catalog/pages" className="admin-link">
-              Страницы каталога
+              странице каталога
             </Link>
+            — по ссылке из таблицы.
           </>
         }
       />

@@ -5,6 +5,7 @@ import type {
   ProductPublicDto,
 } from '@bouquet-one/contracts';
 import { pickDerivativeUrl, productImageAlt, sortProductMedia } from '@/lib/media';
+import { ProductDeliveryGuide } from './product-delivery-guide';
 import { ProductInfoTabs, type ProductInfoSection } from './product-info-tabs';
 
 type Props = {
@@ -23,12 +24,6 @@ export function formatDeliveryFee(minor: string, currency: string): string | nul
   const value = Number(minor);
   if (!Number.isFinite(value) || value <= 0) return null;
   return `${(value / 100).toFixed(2).replace('.', ',')} ${currency}`;
-}
-
-function leadTimeLabel(minutes: number): string | null {
-  if (!Number.isFinite(minutes) || minutes <= 0) return null;
-  if (minutes % 60 === 0) return `${minutes / 60} ч.`;
-  return `${minutes} мин.`;
 }
 
 /** Paragraphs split by blank lines; `**text**` → bold. */
@@ -146,46 +141,15 @@ function CompositionPanel({
 
 function DeliveryPanel({
   fulfillment,
-  deliverySummary,
   outOfCityDeliveryNote,
   city,
-}: Pick<Props, 'fulfillment' | 'deliverySummary' | 'outOfCityDeliveryNote' | 'city'>) {
-  const rows: Array<{ label: string; value: string }> = [];
-  if (fulfillment?.deliveryEnabled) {
-    const fee = formatDeliveryFee(fulfillment.deliveryFeeMinor, fulfillment.currency);
-    rows.push({
-      label: city ? `Доставка по ${city}` : 'Доставка курьером',
-      value: fee ?? 'бесплатно',
-    });
-  }
-  if (outOfCityDeliveryNote) rows.push({ label: 'За городом', value: outOfCityDeliveryNote });
-  if (fulfillment?.pickupEnabled) rows.push({ label: 'Самовывоз', value: 'бесплатно' });
-  const lead = fulfillment ? leadTimeLabel(fulfillment.minLeadTimeMinutes) : null;
-  if (lead) rows.push({ label: 'Время на сборку', value: `от ${lead}` });
+}: Pick<Props, 'fulfillment' | 'outOfCityDeliveryNote' | 'city'>) {
   return (
-    <div className="sf-pdp-panel-stack">
-      {deliverySummary ? <p className="sf-pdp-muted">{deliverySummary}</p> : null}
-      {rows.length > 0 ? (
-        <dl className="sf-pdp-facts">
-          {rows.map((row) => (
-            <div key={row.label}>
-              <dt>{row.label}</dt>
-              <dd>{row.value}</dd>
-            </div>
-          ))}
-        </dl>
-      ) : null}
-      {fulfillment?.deliveryEnabled ? (
-        <p className="sf-pdp-muted">
-          Доставка каждый час с 9:00 до 21:00. Ближайший слот — через час. Вне рабочих часов —
-          по согласованию с менеджером.
-        </p>
-      ) : null}
-      {fulfillment?.pickupInstructions ? (
-        <p className="sf-pdp-muted">{fulfillment.pickupInstructions}</p>
-      ) : null}
-      <p className="sf-pdp-muted">Способ, дату и время выбираете при оформлении заказа.</p>
-    </div>
+    <ProductDeliveryGuide
+      fulfillment={fulfillment}
+      outOfCityDeliveryNote={outOfCityDeliveryNote}
+      city={city}
+    />
   );
 }
 

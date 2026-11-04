@@ -12,6 +12,10 @@ export default async function AdminCatalogPagesPage() {
         title="Страницы каталога"
         lead="Основные разделы заполняются сами по типу товара. Тематические страницы — по правилам состава (например «с розами» или «из роз»). Черновики на сайте не видны."
       />
+      <p className="admin-notice">
+        Системные страницы (букеты, розы, подарки) нельзя удалить — только править тексты. Для
+        тематических: «из роз» — только розы, «с розами» — розы плюс другие цветы.
+      </p>
       <CatalogPagesManager
         canCreate={roleHasPermission(me.user.role, 'CATALOG_CREATE')}
         canUpdate={roleHasPermission(me.user.role, 'CATALOG_UPDATE')}

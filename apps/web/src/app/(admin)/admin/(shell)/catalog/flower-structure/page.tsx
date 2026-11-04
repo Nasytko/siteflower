@@ -24,6 +24,10 @@ export default async function AdminFlowerStructurePage() {
         title="Цветы"
         lead="Конкретные позиции для состава букетов. Вид, форма, сорт, цвет, происхождение и высота стебля — название собирается само."
       />
+      <p className="admin-notice">
+        1) Добавьте позицию цветка → 2) В карточке товара откройте «Состав» и выберите её → 3)
+        Опубликуйте товар. Другие справочники (цвета, поводы) — во вкладках выше.
+      </p>
       <TaxonomyKindTabs />
       <FlowerStructureManager
         initialTypes={flowerTypes}

@@ -6,7 +6,6 @@ import { useEffect, useState } from 'react';
 import { formatPriceFromMinor } from '@/lib/media';
 import { trackEvent } from '@/lib/analytics';
 import {
-  cartItemCount,
   clearCart,
   readCart,
   cartLineKey,
@@ -15,6 +14,14 @@ import {
   writeCart,
   type CartState,
 } from '@/lib/cart';
+import {
+  cartCompositionCount,
+  cartLineSubtitle,
+  compositionCountLabel,
+  isStemBouquetLine,
+  stemCountLabel,
+  unitPriceSuffix,
+} from '@/lib/cart-labels';
 
 export function CartView() {
   const [cart, setCart] = useState<CartState>({ version: 1, items: [] });
@@ -24,7 +31,7 @@ export function CartView() {
     const sync = () => setCart(readCart());
     sync();
     setReady(true);
-    trackEvent('view_cart', { itemCount: cartItemCount(readCart()) });
+    trackEvent('view_cart', { itemCount: cartCompositionCount(readCart()) });
     window.addEventListener('bouquet:cart', sync as EventListener);
     return () => window.removeEventListener('bouquet:cart', sync as EventListener);
   }, []);
@@ -59,7 +66,7 @@ export function CartView() {
     // Do not bake options into unitPriceMinor — avoids double-counting at checkout.
     return sum + unit * BigInt(line.quantity) + options;
   }, 0n);
-  const count = cartItemCount(cart);
+  const count = cartCompositionCount(cart);
 
   return (
     <div className="grid gap-8 lg:grid-cols-[1fr_20rem] lg:items-start lg:gap-10">
@@ -69,6 +76,8 @@ export function CartView() {
           const unit = BigInt(line.unitPriceMinor ?? '0');
           const options = BigInt(line.optionsTotalMinor ?? '0');
           const lineTotal = unit * BigInt(line.quantity) + options;
+          const stemLine = isStemBouquetLine(line);
+          const subtitle = cartLineSubtitle(line);
           return (
             <li
               key={key}
@@ -98,15 +107,15 @@ export function CartView() {
                     >
                       {line.productName ?? 'Букет'}
                     </Link>
-                    {line.variantName ? (
+                    {subtitle ? (
+                      <p className="sf-small mt-1 text-muted">{subtitle}</p>
+                    ) : null}
+                    {!stemLine && line.variantName && subtitle !== line.variantName ? (
                       <p className="sf-small mt-1 text-muted">{line.variantName}</p>
                     ) : null}
-                    {line.optionValueIds && line.optionValueIds.length > 0 ? (
+                    {line.optionValueIds && line.optionValueIds.length > 0 && options > 0n ? (
                       <p className="sf-small mt-1 text-muted">
-                        С доп. опциями
-                        {options > 0n
-                          ? ` (+${formatPriceFromMinor(options.toString())})`
-                          : ''}
+                        +{formatPriceFromMinor(options.toString())} упаковка
                       </p>
                     ) : null}
                   </div>
@@ -116,14 +125,14 @@ export function CartView() {
                 </div>
 
                 <p className="sf-small mt-2 tabular-nums text-muted">
-                  {formatPriceFromMinor(unit.toString())} за шт.
+                  {formatPriceFromMinor(unit.toString())} {unitPriceSuffix(line.productKind)}
                 </p>
 
                 <div className="mt-auto flex flex-wrap items-center justify-between gap-3 pt-4">
                   <div
                     className="inline-flex items-center rounded-full bg-surface ring-1 ring-border"
                     role="group"
-                    aria-label="Количество"
+                    aria-label={stemLine ? 'Количество веток в букете' : 'Количество'}
                   >
                     <button
                       type="button"
@@ -150,6 +159,9 @@ export function CartView() {
                       +
                     </button>
                   </div>
+                  {stemLine ? (
+                    <span className="sf-small text-muted">{stemCountLabel(line.quantity)}</span>
+                  ) : null}
 
                   <button
                     type="button"
@@ -170,9 +182,7 @@ export function CartView() {
 
       <aside className="sf-panel-ink p-5 sm:p-6 lg:sticky lg:top-24">
         <p className="sf-label text-brand-foreground/55">Ваш заказ</p>
-        <p className="sf-h2 mt-2 text-white">
-          {count} {count === 1 ? 'букет' : count < 5 ? 'букета' : 'букетов'}
-        </p>
+        <p className="sf-h2 mt-2 text-white">{compositionCountLabel(count)}</p>
         <div className="mt-5 flex items-end justify-between gap-3 border-t border-white/15 pt-5">
           <div>
             <p className="sf-label text-brand-foreground/55">Итого</p>

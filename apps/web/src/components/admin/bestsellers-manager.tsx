@@ -206,9 +206,14 @@ export function BestsellersManager({ initial, canCreate, canUpdate }: Props) {
 
       <div className="admin-split">
         <div className="admin-panel space-y-4 p-4">
-          <h2 className="admin-section__title">Подборки</h2>
+          <h2 className="admin-section__title">Список</h2>
           {groups.length === 0 ? (
-            <p className="admin-empty">Подборок пока нет</p>
+            <div className="admin-empty admin-empty--action">
+              <p>Подборок пока нет</p>
+              <p className="text-sm text-[var(--admin-muted)]">
+                Создайте группу для блока на главной. Это не акция и цену не меняет.
+              </p>
+            </div>
           ) : (
             <ul className="space-y-1">
               {groups.map((group) => (

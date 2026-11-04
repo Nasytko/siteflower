@@ -14,8 +14,8 @@ export default async function AdminInstagramPage() {
   return (
     <main id="main-content" className="space-y-6">
       <AdminPageHeader
-        title="Лента Instagram"
-        lead="Кадры для блока на главной. Добавляются вручную — без автоподтягивания из профиля."
+        title="Instagram"
+        lead="Кадры для блока на главной. Добавляйте вручную 6–12 живых фото — без автоподтягивания из профиля."
       />
       <InstagramManager
         initial={posts}

@@ -2,7 +2,12 @@
  * Client cart — productId/variantId/quantity (+ optional optionValueIds).
  * Display fields are UX cache; server re-quotes on validate/checkout.
  * Option surcharges are never trusted from the browser.
+ *
+ * For STEM products, `quantity` is stem count inside **one** assembled bouquet
+ * (7 roses + ribbon = one cart composition, not seven bouquets).
  */
+
+import type { ProductKind } from '@bouquet-one/contracts';
 
 export const CART_STORAGE_KEY = 'bouquet-one:cart:v1';
 export const MAX_LINE_QTY = 20;
@@ -13,6 +18,8 @@ export type CartLine = {
   quantity: number;
   /** Selected ProductOptionValue ids (server-validated at checkout). */
   optionValueIds?: string[];
+  /** Display cache — STEM means qty = stems in one bouquet. */
+  productKind?: ProductKind;
   /** Display cache only — never trust for checkout totals. */
   productName?: string;
   productSlug?: string;
@@ -91,9 +98,12 @@ export function writeCart(state: CartState): void {
   }
 }
 
+/** Raw sum of line quantities (stems + bouquet units + gifts). Prefer cartCompositionCount for UX. */
 export function cartItemCount(state: CartState): number {
   return state.items.reduce((sum, line) => sum + line.quantity, 0);
 }
+
+export { cartCompositionCount } from '@/lib/cart-labels';
 
 export function addToCart(state: CartState, line: CartLine): CartState {
   const qty = Math.min(MAX_LINE_QTY, Math.max(1, line.quantity));

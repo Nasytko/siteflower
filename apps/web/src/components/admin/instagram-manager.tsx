@@ -114,7 +114,8 @@ export function InstagramManager({ initial, profileUrl, canUpdate }: Props) {
         </p>
       ) : (
         <p className="admin-notice">
-          Ссылка на профиль Instagram задаётся в шаблоне витрины (`storefront-content`).
+          Ссылка на профиль Instagram задаётся разработчиком в шаблоне сайта и здесь не
+          редактируется.
         </p>
       )}
 
@@ -125,7 +126,7 @@ export function InstagramManager({ initial, profileUrl, canUpdate }: Props) {
             <input
               name="imageUrl"
               required
-              placeholder="Ссылка на изображение"
+              placeholder="Прямая ссылка на картинку (не страница поста)"
               className="admin-input"
             />
           </label>

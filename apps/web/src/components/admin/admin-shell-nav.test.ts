@@ -18,13 +18,14 @@ test('SUPER_ADMIN sees primary admin sections including catalog and orders', () 
 
   assert.ok(labels.includes('Главная'));
   assert.ok(labels.includes('Товары'));
-  assert.ok(labels.includes('Цветы'));
+  assert.ok(labels.includes('Справочники'));
   assert.ok(labels.includes('Акции'));
   assert.ok(labels.includes('Подборки'));
   assert.ok(labels.includes('Страницы каталога'));
   assert.ok(labels.includes('Заказы'));
   assert.ok(labels.includes('Instagram'));
   assert.ok(labels.includes('Пользователи'));
+  assert.equal(labels.includes('Цветы'), false);
   assert.equal(labels.includes('Главная страница'), false);
   assert.equal(labels.includes('Меню сайта'), false);
   assert.equal(labels.includes('Настройки магазина'), false);
@@ -33,7 +34,7 @@ test('SUPER_ADMIN sees primary admin sections including catalog and orders', () 
 
   assert.ok(hrefs.includes('/admin'));
   assert.ok(hrefs.includes('/admin/catalog/products'));
-  assert.ok(hrefs.includes('/admin/catalog/flower-structure'));
+  assert.ok(hrefs.includes('/admin/catalog/dictionaries'));
   assert.ok(hrefs.includes('/admin/promotions'));
   assert.ok(hrefs.includes('/admin/bestsellers'));
   assert.ok(hrefs.includes('/admin/catalog/pages'));

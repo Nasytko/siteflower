@@ -20,8 +20,11 @@ export default async function AdminUsersPage() {
     <main id="main-content" className="space-y-6">
       <AdminPageHeader
         title="Пользователи"
-        lead="Управление администраторами магазина"
+        lead="Кто может входить в панель. Роли задают доступ к товарам, заказам и системе."
       />
+      <p className="admin-notice">
+        Не отключайте собственный аккаунт. Сброс пароля сразу разлогинивает пользователя.
+      </p>
       <UsersManager
         initial={data}
         permissions={{

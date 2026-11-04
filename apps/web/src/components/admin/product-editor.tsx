@@ -1371,13 +1371,15 @@ export function ProductEditor({
           </div>
         </section>
 
-        <ProductEditorOptionsTab
-          canUpdate={canUpdate}
-          optionGroups={optionGroups}
-          setOptionGroups={setOptionGroups}
-          variants={variants}
-          touch={touch}
-        />
+        {needsComposition ? (
+          <ProductEditorOptionsTab
+            canUpdate={canUpdate}
+            optionGroups={optionGroups}
+            setOptionGroups={setOptionGroups}
+            variants={variants}
+            touch={touch}
+          />
+        ) : null}
 
         <ProductEditorMainTab {...mainTabShared} blocks={['audience']} />
 

@@ -73,7 +73,7 @@ export default async function AdminOrdersPage({
     <main id="main-content" className="space-y-6">
       <AdminPageHeader
         title="Заказы"
-        lead="Мониторинг оплаты, ERP и Telegram. Операционная обработка — в ERP."
+        lead="По умолчанию — заказы на сегодня. ERP — учётная система, Telegram — уведомление магазину. Сборка и выдача ведутся в ERP."
       />
       <Suspense fallback={<p className="admin-empty">Загрузка заказов…</p>}>
         <OrdersManager

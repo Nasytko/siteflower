@@ -22,9 +22,13 @@ export default async function AdminIntegrationErpPage() {
   return (
     <main id="main-content" className="space-y-8">
       <AdminPageHeader
-        title="ERP-интеграция"
-        lead="Исходящая доставка заказов в NewERP: статус воркера, очередь outbox и операционные действия."
+        title="Синхронизация заказов"
+        lead="Отправка заказов в учётную систему (ERP). Очередь и повтор при ошибках. Обычная сборка заказов — в ERP, здесь только мониторинг."
       />
+      <p className="admin-notice">
+        Если заказ «завис» — смотрите ошибки в таблице ниже и нажмите повтор. Менять состав заказа
+        здесь нельзя.
+      </p>
 
       <IntegrationStatusCards status={status} />
 

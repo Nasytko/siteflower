@@ -31,6 +31,24 @@ const SHORTCUTS = [
     hint: 'Скидки и сроки',
     permission: 'CATALOG_READ' as const,
   },
+  {
+    href: '/admin/bestsellers',
+    label: 'Подборки',
+    hint: 'Блоки на главной',
+    permission: 'CATALOG_READ' as const,
+  },
+  {
+    href: '/admin/catalog/pages',
+    label: 'Страницы каталога',
+    hint: 'Разделы витрины',
+    permission: 'CATALOG_READ' as const,
+  },
+  {
+    href: '/admin/storefront/instagram',
+    label: 'Instagram',
+    hint: 'Кадры для главной',
+    permission: 'CONTENT_READ' as const,
+  },
 ];
 
 function Metric({
@@ -126,6 +144,12 @@ export default async function AdminDashboardPage() {
           ) : null
         }
       />
+
+      <p className="admin-notice">
+        Здесь правятся товары, акции, подборки, страницы каталога и Instagram. Меню сайта, тексты
+        главной, контакты, юридические страницы и правила доставки задаются в шаблоне сайта — без
+        отдельного редактора в панели.
+      </p>
 
       {canReadOrders || canReadCatalog ? (
         <section className="admin-kpi-grid">
@@ -243,7 +267,7 @@ export default async function AdminDashboardPage() {
       {shortcuts.length > 0 ? (
         <section className="space-y-3">
           <h2 className="admin-section__eyebrow">Быстрые действия</h2>
-          <ul className="grid gap-3 sm:grid-cols-3">
+          <ul className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
             {shortcuts.map((item) => (
               <li key={item.href}>
                 <Link href={item.href} className="admin-quick-link">

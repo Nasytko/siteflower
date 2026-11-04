@@ -69,6 +69,13 @@ const nextConfig: NextConfig = {
   async redirects() {
     return [
       ...LEGACY_PATH_REDIRECTS,
+      // Removed admin CMS surfaces → dashboard / catalog
+      { source: '/admin/storefront/settings', destination: '/admin', permanent: true },
+      { source: '/admin/storefront/homepage', destination: '/admin/bestsellers', permanent: true },
+      { source: '/admin/storefront/navigation', destination: '/admin', permanent: true },
+      { source: '/admin/fulfillment', destination: '/admin', permanent: true },
+      { source: '/admin/legal', destination: '/admin', permanent: true },
+      { source: '/admin/legal/:path*', destination: '/admin', permanent: true },
       {
         source: '/catalog/bouquets',
         has: [{ type: 'query', key: 'featured' }],

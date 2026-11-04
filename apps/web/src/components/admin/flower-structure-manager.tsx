@@ -918,6 +918,9 @@ export function FlowerStructureManager({
               />
               <span className="text-sm text-[var(--admin-muted)]">см</span>
             </div>
+            <span className="admin-field__hint">
+              Необязательно. Попадает в название позиции, если задана (например «60 см»).
+            </span>
           </label>
 
           <label className="admin-field">

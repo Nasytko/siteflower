@@ -32,8 +32,7 @@ function isDictionaryPath(pathname: string): boolean {
 }
 
 /**
- * Florist store panel IA:
- * Работа → orders · Каталог → goods & merchandising · Сайт → public site · Настройки + Система
+ * Florist panel IA: Каталог · Заказы · Сайт (Instagram) · Пользователи · Система
  */
 export const ADMIN_NAV_GROUPS: AdminNavGroup[] = [
   {
@@ -53,8 +52,8 @@ export const ADMIN_NAV_GROUPS: AdminNavGroup[] = [
     items: [
       { href: '/admin/catalog/products', label: 'Товары', permission: 'CATALOG_READ' },
       {
-        href: '/admin/catalog/flower-structure',
-        label: 'Цветы',
+        href: '/admin/catalog/dictionaries',
+        label: 'Справочники',
         permission: 'CATALOG_READ',
         isActive: isDictionaryPath,
       },
@@ -82,17 +81,6 @@ export const ADMIN_NAV_GROUPS: AdminNavGroup[] = [
           pathname === '/admin/seo/landings' ||
           pathname.startsWith('/admin/seo/landings/'),
       },
-    ],
-  },
-  {
-    id: 'work',
-    label: 'Работа',
-    items: [{ href: '/admin/orders', label: 'Заказы', permission: 'ORDERS_READ' }],
-  },
-  {
-    id: 'site',
-    label: 'Сайт',
-    items: [
       {
         href: '/admin/storefront/instagram',
         label: 'Instagram',
@@ -104,6 +92,11 @@ export const ADMIN_NAV_GROUPS: AdminNavGroup[] = [
     ],
   },
   {
+    id: 'work',
+    label: 'Работа',
+    items: [{ href: '/admin/orders', label: 'Заказы', permission: 'ORDERS_READ' }],
+  },
+  {
     id: 'admin',
     label: 'Администрирование',
     items: [
@@ -112,7 +105,7 @@ export const ADMIN_NAV_GROUPS: AdminNavGroup[] = [
   },
   {
     id: 'system',
-    label: 'Система и диагностика',
+    label: 'Система',
     tier: 'system',
     items: [
       { href: '/admin/audit', label: 'Журнал действий', permission: 'AUDIT_READ' },

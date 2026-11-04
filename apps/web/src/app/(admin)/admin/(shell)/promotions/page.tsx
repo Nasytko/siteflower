@@ -25,6 +25,10 @@ export default async function AdminPromotionsPage() {
           </>
         }
       />
+      <p className="admin-notice">
+        Скидку задавайте здесь, не в карточке товара. Фиксированная цена — по каждому размеру
+        отдельно. Даты действуют по местному времени магазина.
+      </p>
       <PromotionsManager
         initial={rows}
         canUpdate={roleHasPermission(me.user.role, 'CATALOG_UPDATE')}

@@ -1,7 +1,6 @@
 'use client';
 
 import {
-  PRODUCT_OPTION_CHARGE_MODES,
   PRODUCT_OPTION_SELECTIONS,
   type ProductOptionChargeMode,
   type ProductOptionSelection,
@@ -15,6 +14,7 @@ export type OptionValueDraft = {
   /** ERP stock article for packaging/ribbon; empty when unset. */
   erpSku: string;
   surchargeMajor: string;
+  /** Always PER_LINE in UI — once per bouquet / cart line. */
   chargeMode: ProductOptionChargeMode;
   active: boolean;
   /** variant draft key → surcharge major override (empty = use default) */
@@ -35,11 +35,6 @@ type Props = {
   setOptionGroups: React.Dispatch<React.SetStateAction<OptionGroupDraft[]>>;
   variants: VariantDraft[];
   touch: () => void;
-};
-
-const CHARGE_LABELS: Record<ProductOptionChargeMode, string> = {
-  PER_LINE: 'Один раз за позицию',
-  PER_UNIT: 'За каждую единицу',
 };
 
 export function emptyOptionValueDraft(): OptionValueDraft {
@@ -99,7 +94,7 @@ export function toOptionGroupDrafts(
         name: value.name,
         erpSku: value.erpSku ?? '',
         surchargeMajor: minorToMajorInput(value.surchargeMinor),
-        chargeMode: value.chargeMode,
+        chargeMode: 'PER_LINE',
         active: value.active,
         variantSurchargeMajor,
       };
@@ -149,7 +144,8 @@ export function optionGroupsToPayload(
             name: value.name.trim(),
             erpSku: erpSku.length > 0 ? erpSku : null,
             surchargeMinor: majorInputToMinor(value.surchargeMajor) ?? '0',
-            chargeMode: value.chargeMode,
+            // Florist rule: ribbon / wrap / vase — once per bouquet, never × stems.
+            chargeMode: 'PER_LINE' as const,
             sortOrder: valueIndex,
             active: value.active,
             variantSurcharges,
@@ -192,16 +188,19 @@ export function ProductEditorOptionsTab(props: Props) {
     <section className="sf-pe-card space-y-6" data-section="options">
       <div className="sf-pe-card__head">
         <div>
-          <h2>Доплаты</h2>
+          <h2>Лента и упаковка</h2>
           <p className="sf-pe-card__lead">
-            Упаковка, лента, ваза — доплата к выбранному варианту, не размер.
+            Доплата один раз к букету. Если клиент берёт 7 роз — лента считается один раз, не
+            семь.
           </p>
         </div>
       </div>
 
       <div className="sf-pe-card__body space-y-6">
         {optionGroups.length === 0 ? (
-          <p className="text-sm text-[var(--admin-muted)]">Опций пока нет.</p>
+          <p className="text-sm text-[var(--admin-muted)]">
+            Пока пусто. Добавьте, например, группу «Упаковка» или «Лента».
+          </p>
         ) : null}
 
         {optionGroups.map((group, groupIndex) => (
@@ -211,17 +210,17 @@ export function ProductEditorOptionsTab(props: Props) {
           >
             <div className="grid gap-3 sm:grid-cols-2">
               <label className="sf-pe-field">
-                <span>Группа</span>
+                <span>Название</span>
                 <input
                   className="sf-pe-input"
                   value={group.name}
                   disabled={!canUpdate}
-                  placeholder="Например: Упаковка"
+                  placeholder="Лента"
                   onChange={(event) => updateGroup(groupIndex, { name: event.target.value })}
                 />
               </label>
               <label className="sf-pe-field">
-                <span>Выбор</span>
+                <span>Выбор на сайте</span>
                 <select
                   className="admin-select"
                   value={group.selection}
@@ -234,7 +233,7 @@ export function ProductEditorOptionsTab(props: Props) {
                 >
                   {PRODUCT_OPTION_SELECTIONS.map((mode) => (
                     <option key={mode} value={mode}>
-                      {mode === 'SINGLE' ? 'Одно значение' : 'Несколько значений'}
+                      {mode === 'SINGLE' ? 'Один вариант' : 'Можно несколько'}
                     </option>
                   ))}
                 </select>
@@ -247,7 +246,7 @@ export function ProductEditorOptionsTab(props: Props) {
                 disabled={!canUpdate}
                 onChange={(event) => updateGroup(groupIndex, { required: event.target.checked })}
               />
-              Обязательная группа
+              Обязательно выбрать
             </label>
 
             <ul className="space-y-3">
@@ -256,21 +255,21 @@ export function ProductEditorOptionsTab(props: Props) {
                   key={value.key}
                   className="space-y-2 rounded-md border border-[var(--admin-border)] px-3 py-2"
                 >
-                  <div className="grid gap-3 sm:grid-cols-3">
-                    <label className="sf-pe-field sm:col-span-1">
-                      <span>Значение</span>
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <label className="sf-pe-field">
+                      <span>Вариант</span>
                       <input
                         className="sf-pe-input"
                         value={value.name}
                         disabled={!canUpdate}
-                        placeholder="Крафт"
+                        placeholder="Атласная"
                         onChange={(event) =>
                           updateValue(groupIndex, valueIndex, { name: event.target.value })
                         }
                       />
                     </label>
                     <label className="sf-pe-field">
-                      <span>Доплата</span>
+                      <span>Доплата, BYN</span>
                       <input
                         className="sf-pe-input sf-pe-input--num"
                         value={value.surchargeMajor}
@@ -282,68 +281,52 @@ export function ProductEditorOptionsTab(props: Props) {
                         }
                       />
                     </label>
-                    <label className="sf-pe-field">
-                      <span>Как считать</span>
-                      <select
-                        className="admin-select"
-                        value={value.chargeMode}
-                        disabled={!canUpdate}
-                        onChange={(event) =>
-                          updateValue(groupIndex, valueIndex, {
-                            chargeMode: event.target.value as ProductOptionChargeMode,
-                          })
-                        }
-                      >
-                        {PRODUCT_OPTION_CHARGE_MODES.map((mode) => (
-                          <option key={mode} value={mode}>
-                            {CHARGE_LABELS[mode]}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
                   </div>
                   <label className="sf-pe-field">
-                    <span>Артикул ERP (склад)</span>
+                    <span>Артикул в ERP</span>
                     <input
                       className="sf-pe-input"
                       value={value.erpSku}
                       disabled={!canUpdate}
-                      placeholder="Необязательно — если есть в ERP"
+                      placeholder="Если есть на складе"
                       autoComplete="off"
                       spellCheck={false}
                       onChange={(event) =>
                         updateValue(groupIndex, valueIndex, { erpSku: event.target.value })
                       }
                     />
-                    <span className="sf-pe-note">
-                      Для упаковки и ленты — артикул складской позиции в ERP, без отдельного
-                      товара на сайте.
+                    <span className="admin-help">
+                      Необязательно. Нужен, чтобы списывать ленту или упаковку со склада.
                     </span>
                   </label>
 
                   {variants.length > 1 ? (
-                    <div className="grid gap-2 sm:grid-cols-2">
-                      {variants.map((variant) => (
-                        <label key={variant.key} className="sf-pe-field">
-                          <span className="text-xs">
-                            Доплата для «{variant.name || 'размера'}» (пусто = общая)
-                          </span>
-                          <input
-                            className="sf-pe-input sf-pe-input--num"
-                            value={value.variantSurchargeMajor[variant.key] ?? ''}
-                            disabled={!canUpdate}
-                            onChange={(event) =>
-                              updateValue(groupIndex, valueIndex, {
-                                variantSurchargeMajor: {
-                                  ...value.variantSurchargeMajor,
-                                  [variant.key]: event.target.value,
-                                },
-                              })
-                            }
-                          />
-                        </label>
-                      ))}
-                    </div>
+                    <details className="text-sm">
+                      <summary className="cursor-pointer text-[var(--admin-muted)]">
+                        Разная доплата по размерам
+                      </summary>
+                      <div className="mt-2 grid gap-2 sm:grid-cols-2">
+                        {variants.map((variant) => (
+                          <label key={variant.key} className="sf-pe-field">
+                            <span className="text-xs">{variant.name || 'Размер'}</span>
+                            <input
+                              className="sf-pe-input sf-pe-input--num"
+                              value={value.variantSurchargeMajor[variant.key] ?? ''}
+                              disabled={!canUpdate}
+                              placeholder="как общая"
+                              onChange={(event) =>
+                                updateValue(groupIndex, valueIndex, {
+                                  variantSurchargeMajor: {
+                                    ...value.variantSurchargeMajor,
+                                    [variant.key]: event.target.value,
+                                  },
+                                })
+                              }
+                            />
+                          </label>
+                        ))}
+                      </div>
+                    </details>
                   ) : null}
 
                   {canUpdate ? (
@@ -356,7 +339,7 @@ export function ProductEditorOptionsTab(props: Props) {
                             updateValue(groupIndex, valueIndex, { active: event.target.checked })
                           }
                         />
-                        Активна
+                        Показывать
                       </label>
                       <button
                         type="button"
@@ -375,7 +358,7 @@ export function ProductEditorOptionsTab(props: Props) {
                           touch();
                         }}
                       >
-                        Удалить значение
+                        Удалить
                       </button>
                     </div>
                   ) : null}
@@ -399,7 +382,7 @@ export function ProductEditorOptionsTab(props: Props) {
                     touch();
                   }}
                 >
-                  Добавить значение
+                  Ещё вариант
                 </button>
                 <button
                   type="button"
@@ -425,7 +408,7 @@ export function ProductEditorOptionsTab(props: Props) {
               touch();
             }}
           >
-            Добавить группу опций
+            Добавить ленту или упаковку
           </button>
         ) : null}
       </div>

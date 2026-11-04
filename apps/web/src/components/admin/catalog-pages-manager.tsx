@@ -888,7 +888,7 @@ export function CatalogPagesManager({ canCreate, canUpdate, canPublish }: Props)
                   SEO
                 </h3>
                 <label className="admin-field">
-                  <span>Title</span>
+                  <span>Заголовок для поиска</span>
                   <input
                     className="admin-input"
                     value={draft.seoTitle}
@@ -897,7 +897,7 @@ export function CatalogPagesManager({ canCreate, canUpdate, canPublish }: Props)
                   />
                 </label>
                 <label className="admin-field">
-                  <span>Description</span>
+                  <span>Описание для поиска</span>
                   <textarea
                     className="admin-input"
                     rows={2}
@@ -965,7 +965,7 @@ export function CatalogPagesManager({ canCreate, canUpdate, canPublish }: Props)
                     Удалить
                   </button>
                 ) : null}
-                {editing?.status === 'LIVE' ? (
+                {editing?.isSystem || editing?.pageKind === 'SYSTEM_HUB' ? (
                   <span className="text-sm text-emerald-700">Системный раздел</span>
                 ) : null}
                 {editing?.productsCount != null ? (

@@ -20,6 +20,9 @@ export default async function AdminBestsellersPage() {
           </Link>
         }
       />
+      <p className="admin-notice">
+        Подборка не меняет цену. Скидки настраиваются в разделе «Акции».
+      </p>
       <BestsellersManager
         initial={groups}
         canCreate={roleHasPermission(me.user.role, 'CATALOG_CREATE')}

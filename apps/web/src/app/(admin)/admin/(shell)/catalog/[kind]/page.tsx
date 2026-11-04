@@ -1,10 +1,11 @@
 import { notFound } from 'next/navigation';
 import { roleHasPermission } from '@bouquet-one/contracts';
+import { AdminPageHeader } from '@/components/admin/admin-page-header';
+import { TaxonomyCrud } from '@/components/admin/taxonomy-crud';
+import { TaxonomyKindTabs } from '@/components/admin/taxonomy-kind-tabs';
 import { fetchTaxonomy } from '@/lib/admin-catalog-api';
 import { isTaxonomyKind, TAXONOMY_KIND_META } from '@/lib/admin-endpoints';
 import { requireAdminPermission } from '@/lib/admin-page-auth';
-import { TaxonomyCrud } from '@/components/admin/taxonomy-crud';
-import { TaxonomyKindTabs } from '@/components/admin/taxonomy-kind-tabs';
 
 type Props = { params: Promise<{ kind: string }> };
 
@@ -20,10 +21,13 @@ export default async function CatalogDictionaryPage({ params }: Props) {
 
   return (
     <main id="main-content" className="space-y-6">
-      <header>
-        <h1 className="admin-page-title">Справочники</h1>
-        <p className="admin-page-lead">{meta.lead}</p>
-      </header>
+      <AdminPageHeader title={meta.title} lead={meta.lead} />
+
+      <p className="admin-notice">
+        {kind === 'colors'
+          ? 'Цвета привязываются к позициям в «Цветах и сортах» и к аудитории товара. Правила «с розами / из роз» настраиваются на страницах каталога.'
+          : 'Эти метки не создают отдельные разделы сайта — только помогают отфильтровать товары.'}
+      </p>
 
       <TaxonomyKindTabs />
 

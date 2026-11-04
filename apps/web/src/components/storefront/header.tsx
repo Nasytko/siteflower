@@ -3,7 +3,8 @@
 import Link from 'next/link';
 import { useEffect, useId, useRef, useState } from 'react';
 import { usePathname } from 'next/navigation';
-import { cartItemCount, readCart } from '@/lib/cart';
+import { readCart } from '@/lib/cart';
+import { cartCompositionCount } from '@/lib/cart-labels';
 import { nextCompactFromScroll } from '@/lib/scroll-chrome';
 import { BrandLogo } from './brand-logo';
 import { PRIMARY_NAV, PrimaryNav, type PrimaryNavItem } from './primary-nav';
@@ -41,7 +42,7 @@ export function StorefrontHeader({
   }, [pathname]);
 
   useEffect(() => {
-    const syncCart = () => setCartCount(cartItemCount(readCart()));
+    const syncCart = () => setCartCount(cartCompositionCount(readCart()));
     syncCart();
     window.addEventListener('bouquet:cart', syncCart as EventListener);
     return () => window.removeEventListener('bouquet:cart', syncCart as EventListener);

@@ -125,6 +125,7 @@ export default async function ProductPage({ params }: { params: Params }) {
     id: product.id,
     name: product.name,
     slug: product.slug,
+    productKind: product.productKind,
     currency: product.currency,
     availability: product.availability,
     price: product.price,

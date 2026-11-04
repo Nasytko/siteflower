@@ -21,6 +21,7 @@ import {
   writeCart,
   type CartState,
 } from '@/lib/cart';
+import { isStemBouquetLine, stemCountLabel } from '@/lib/cart-labels';
 import { selectableHourlyWindows } from '@/lib/fulfillment-slots';
 
 const IDEMPOTENCY_STORAGE_KEY = 'bouquet-one:checkout-idempotency';
@@ -661,30 +662,50 @@ export function CheckoutForm() {
         <h2 className="sf-h3">Ваш заказ</h2>
         <ul className="space-y-3">
           {(validated?.items ?? []).length > 0
-            ? validated!.items.map((line) => (
-                <li
-                  key={`${line.variantId}:${(line.optionsSnapshot ?? []).map((o) => o.valueId).join(',')}`}
-                  className="sf-small"
-                >
-                  <span className="font-medium text-foreground">
-                    {line.productName} · {line.variantName}
-                  </span>
-                  {line.optionsSnapshot && line.optionsSnapshot.length > 0 ? (
-                    <span className="mt-0.5 block text-muted">
-                      {line.optionsSnapshot.map((o) => o.valueName).join(', ')}
+            ? validated!.items.map((line) => {
+                const cartMatch = cart.items.find(
+                  (c) =>
+                    c.variantId === line.variantId &&
+                    (c.optionValueIds ?? []).slice().sort().join(',') ===
+                      (line.optionsSnapshot ?? [])
+                        .map((o) => o.valueId)
+                        .sort()
+                        .join(','),
+                );
+                const stem = cartMatch ? isStemBouquetLine(cartMatch) : false;
+                return (
+                  <li
+                    key={`${line.variantId}:${(line.optionsSnapshot ?? []).map((o) => o.valueId).join(',')}`}
+                    className="sf-small"
+                  >
+                    <span className="font-medium text-foreground">
+                      {line.productName}
+                      {line.variantName ? ` · ${line.variantName}` : ''}
                     </span>
-                  ) : null}
-                  <span className="mt-0.5 block text-muted">
-                    × {line.quantity} · {formatPriceFromMinor(line.lineTotalMinor)}
-                  </span>
-                </li>
-              ))
+                    {line.optionsSnapshot && line.optionsSnapshot.length > 0 ? (
+                      <span className="mt-0.5 block text-muted">
+                        {line.optionsSnapshot.map((o) => o.valueName).join(', ')}
+                      </span>
+                    ) : null}
+                    <span className="mt-0.5 block text-muted">
+                      {stem
+                        ? `${stemCountLabel(line.quantity)} · ${formatPriceFromMinor(line.lineTotalMinor)}`
+                        : `× ${line.quantity} · ${formatPriceFromMinor(line.lineTotalMinor)}`}
+                    </span>
+                  </li>
+                );
+              })
             : cart.items.map((line) => (
                 <li key={`${line.variantId}:${(line.optionValueIds ?? []).join(',')}`} className="sf-small">
                   <span className="font-medium text-foreground">
-                    {line.productName ?? 'Букет'} · {line.variantName ?? ''}
+                    {line.productName ?? 'Букет'}
+                    {line.variantName ? ` · ${line.variantName}` : ''}
                   </span>
-                  <span className="mt-0.5 block text-muted">× {line.quantity}</span>
+                  <span className="mt-0.5 block text-muted">
+                    {isStemBouquetLine(line)
+                      ? stemCountLabel(line.quantity)
+                      : `× ${line.quantity}`}
+                  </span>
                 </li>
               ))}
         </ul>

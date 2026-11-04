@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { AdminPageHeader } from '@/components/admin/admin-page-header';
 import { TaxonomyKindTabs } from '@/components/admin/taxonomy-kind-tabs';
 import { requireAdminPermission } from '@/lib/admin-page-auth';
 import { TAXONOMY_KIND_META, TAXONOMY_KINDS } from '@/lib/admin-endpoints';
@@ -26,25 +27,26 @@ export default async function AdminCatalogDictionariesPage() {
 
   return (
     <main id="main-content" className="space-y-6">
-      <header>
-        <h1 className="admin-page-title">Справочники</h1>
-        <p className="admin-page-lead">
-          Виды цветов, цвета, поводы и получатели. Страницы каталога — разделы витрины и
-          тематические подборки.
-        </p>
-      </header>
+      <AdminPageHeader
+        title="Справочники"
+        lead="Цветы для состава, цвета, поводы и получатели. Страницы каталога — отдельно в своём разделе."
+      />
+
+      <p className="admin-notice">
+        Сначала заведите позиции цветов, затем используйте их во вкладке «Состав» у товара.
+      </p>
 
       <TaxonomyKindTabs />
 
       <ul className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {HUB_LINKS.map((item) => (
           <li key={item.href}>
-            <Link
-              href={item.href}
-              className="block rounded-lg border border-[var(--admin-border)] p-4 transition-colors hover:border-[var(--admin-brand)]"
-            >
-              <h2 className="font-semibold text-[var(--admin-ink)]">{item.title}</h2>
-              <p className="mt-1 text-sm text-[var(--admin-muted)]">{item.lead}</p>
+            <Link href={item.href} className="admin-quick-link h-full">
+              <span>
+                <span className="block font-semibold">{item.title}</span>
+                <span className="mt-0.5 block text-sm text-[var(--admin-muted)]">{item.lead}</span>
+              </span>
+              <span aria-hidden>→</span>
             </Link>
           </li>
         ))}

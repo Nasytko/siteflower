@@ -18,6 +18,7 @@ import {
   writeCardDraft,
   writeCart,
 } from '@/lib/cart';
+import { cartCompositionCount, stemCountLabel } from '@/lib/cart-labels';
 import {
   estimateOptionsTotalMinor,
   requiredOptionsMissing,
@@ -31,6 +32,7 @@ type PurchaseProduct = Pick<
   | 'id'
   | 'name'
   | 'slug'
+  | 'productKind'
   | 'currency'
   | 'availability'
   | 'price'
@@ -150,8 +152,7 @@ export function ProductPurchaseProvider({
     const draft = readCardDraft();
     if (draft.trim()) setCardMessageState(draft);
     const sync = () => {
-      const cart = readCart();
-      setCartCount(cart.items.reduce((s, i) => s + i.quantity, 0));
+      setCartCount(cartCompositionCount(readCart()));
     };
     sync();
     window.addEventListener('bouquet:cart', sync as EventListener);
@@ -180,10 +181,12 @@ export function ProductPurchaseProvider({
       quantity: qty,
       baseUnitPriceMinor: selected.effectivePriceMinor,
     });
+    const isStem = product.productKind === 'STEM';
     let next = addToCart(readCart(), {
       productId: product.id,
       variantId: selected.id,
       quantity: qty,
+      productKind: product.productKind,
       optionValueIds: estimate.optionValueIds.length ? estimate.optionValueIds : undefined,
       productName: product.name,
       productSlug: product.slug,
@@ -200,6 +203,7 @@ export function ProductPurchaseProvider({
           productId: postcard.id,
           variantId: postcard.defaultVariant.id,
           quantity: 1,
+          productKind: 'GIFT',
           productName: postcard.name,
           productSlug: postcard.slug,
           variantName: postcard.defaultVariant.name,
@@ -213,8 +217,10 @@ export function ProductPurchaseProvider({
       productId: product.id,
       variantId: selected.id,
       quantity: qty,
+      productKind: product.productKind,
     });
-    setFeedback(postcard ? 'Букет и открытка добавлены в корзину' : 'Добавлено в корзину');
+    const stemFeedback = isStem ? `Букет · ${stemCountLabel(qty)}` : 'Добавлено в корзину';
+    setFeedback(postcard ? `${stemFeedback} + открытка` : stemFeedback);
     window.setTimeout(() => setFeedback(null), 2800);
   }
 
@@ -417,13 +423,27 @@ export function ProductBuyCard({
               </s>
             ) : null}
           </p>
-          <p className="sf-pdp-buy__unit">Цена за 1 шт.</p>
+          <p className="sf-pdp-buy__unit">
+            {product.productKind === 'STEM' ? 'Цена за ветку' : 'Цена за 1 шт.'}
+          </p>
           {optionsTotalLabel ? (
             <p className="sf-pdp-buy__unit">Опции: {optionsTotalLabel}</p>
           ) : null}
         </div>
-        <QtyStepper qty={qty} setQty={setQty} disabled={product.availability === 'TEMPORARILY_UNAVAILABLE' || !selected} />
+        <QtyStepper
+          qty={qty}
+          setQty={setQty}
+          disabled={product.availability === 'TEMPORARILY_UNAVAILABLE' || !selected}
+          stemMode={product.productKind === 'STEM'}
+        />
       </div>
+
+      {product.productKind === 'STEM' ? (
+        <p className="sf-pdp-buy__stem-note">
+          {stemCountLabel(qty)} → один букет
+          {optionGroups.length > 0 ? ' · лента и упаковка один раз' : ''}
+        </p>
+      ) : null}
 
       <button
         type="button"
@@ -479,13 +499,19 @@ function QtyStepper({
   qty,
   setQty,
   disabled,
+  stemMode = false,
 }: {
   qty: number;
   setQty: (n: number) => void;
   disabled: boolean;
+  stemMode?: boolean;
 }) {
   return (
-    <div className="sf-pdp-stepper" role="group" aria-label="Количество">
+    <div
+      className="sf-pdp-stepper"
+      role="group"
+      aria-label={stemMode ? 'Количество веток в букете' : 'Количество'}
+    >
       <button
         type="button"
         aria-label="Меньше"

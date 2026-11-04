@@ -24,7 +24,7 @@ export const TAXONOMY_KIND_META: Record<TaxonomyKind, TaxonomyKindMeta> = {
   colors: {
     kind: 'colors',
     title: 'Цвета',
-    lead: 'Палитра для подбора букета. Оттенок можно задать для наглядности в админке.',
+    lead: 'Палитра для позиций в справочнике цветов и фильтров на витрине. Не путать со страницами каталога.',
     itemLabel: 'цвет',
     hasSwatch: true,
     hasDescription: true,
@@ -33,7 +33,7 @@ export const TAXONOMY_KIND_META: Record<TaxonomyKind, TaxonomyKindMeta> = {
   occasions: {
     kind: 'occasions',
     title: 'Поводы',
-    lead: 'Поводы для подбора букета: день рождения, свадьба, извинение.',
+    lead: 'Поводы в карточке товара (день рождения, свадьба). Помогают клиенту найти букет на витрине.',
     itemLabel: 'повод',
     hasSwatch: false,
     hasDescription: true,
@@ -42,7 +42,7 @@ export const TAXONOMY_KIND_META: Record<TaxonomyKind, TaxonomyKindMeta> = {
   recipients: {
     kind: 'recipients',
     title: 'Кому',
-    lead: 'Получатели: маме, девушке, коллеге.',
+    lead: 'Для кого букет (маме, девушке, коллеге). Ставятся в карточке товара и в фильтрах.',
     itemLabel: 'получателя',
     hasSwatch: false,
     hasDescription: true,
