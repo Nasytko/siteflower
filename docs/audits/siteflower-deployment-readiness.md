@@ -245,7 +245,7 @@ Conditions: GitHub commit published; staging expand applied; classification + sm
 ### A. Pre-deploy
 
 ```bash
-cd /opt/shopbuket1/current   # or repo path
+cd /opt/shopbuket1
 git fetch --all && git rev-parse HEAD && git status
 docker compose -p shopbuket1 -f deploy/docker-compose.prod.yml ps
 df -h

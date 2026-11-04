@@ -10,7 +10,7 @@
 | Project | `-p shopbuket1` |
 | Services | `postgres`, `api`, `web` |
 | Env | `/etc/shopbuket1/production.env` |
-| Checkout | `/opt/shopbuket1/current` (symlink) or `/opt/shopbuket1/repo` |
+| Checkout | `/opt/shopbuket1` (ops root — `deploy.sh` / `backup.sh` live here) |
 | Branch | `feature/task-01-composition-simplify` |
 | Deploy ref | `origin/feature/task-01-composition-simplify` (**always tip** after `git fetch`) |
 | Task 01 expand SHA | `0ea13cebaac10917ccd0b0c69d2d88b83d8c0075` (must be ancestor of tip) |
@@ -36,7 +36,7 @@ checkout SHA → build SHA-tagged API/Web images → **backup** → **`prisma mi
 
 ```bash
 export SHOPBUKET1_ENV_FILE=/etc/shopbuket1/production.env
-cd /opt/shopbuket1/current   # or: cd /opt/shopbuket1/repo
+cd /opt/shopbuket1
 
 test -f "$SHOPBUKET1_ENV_FILE" || { echo "Missing env"; exit 1; }
 test -x ./deploy.sh && test -x ./backup.sh && test -x ./rollback.sh
@@ -84,7 +84,7 @@ Optional dry-run (read-only; no mutate):
 Still take an **extra labelled dump** first.
 
 ```bash
-cd /opt/shopbuket1/current   # or repo
+cd /opt/shopbuket1
 export SHOPBUKET1_ENV_FILE=/etc/shopbuket1/production.env
 
 # First-time Task 01 expand on this VPS:
@@ -102,7 +102,7 @@ ls -lh /var/backups/shopbuket1/shopbuket1-*-pre-*.dump | head
 ## Шаг 3–4 — Migrations + deployment
 
 ```bash
-cd /opt/shopbuket1/current
+cd /opt/shopbuket1
 export SHOPBUKET1_ENV_FILE=/etc/shopbuket1/production.env
 
 git fetch --all --tags
@@ -139,7 +139,7 @@ What this does:
 
 ```bash
 export SHOPBUKET1_ENV_FILE=/etc/shopbuket1/production.env
-cd /opt/shopbuket1/current
+cd /opt/shopbuket1
 
 git rev-parse HEAD   # = tip SHA you passed to deploy.sh (detached)
 git log -1 --oneline
@@ -229,7 +229,7 @@ Browser / admin checklist:
 ### App images only
 
 ```bash
-cd /opt/shopbuket1/current
+cd /opt/shopbuket1
 export SHOPBUKET1_ENV_FILE=/etc/shopbuket1/production.env
 ./rollback.sh
 ```
@@ -263,7 +263,7 @@ Until FlowerTypes are marked BLOOM/DECORATIVE manually, catalog MONO/MIXED/SEO m
 
 ```bash
 export SHOPBUKET1_ENV_FILE=/etc/shopbuket1/production.env
-cd /opt/shopbuket1/current && git fetch --all --tags && git status && git rev-parse HEAD && ./backup.sh pre-task01-expand
+cd /opt/shopbuket1 && git fetch --all --tags && git status && git rev-parse HEAD && ./backup.sh pre-task01-expand
 ```
 
 After backup OK:
