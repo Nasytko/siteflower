@@ -164,7 +164,7 @@ Order: **expand → new app → classify → validate → contract** (later, own
 4. New app before expand **FAIL** (inserts + `composition_class` SELECT).
 5. Contract DROP still deferred.
 6. Live seed idempotency unproven on DB.
-7. Task 02: ProductColor / `suggestVisualPaletteColorIds`.
+7. Task 02: ProductColor manual palette (helper `suggestVisualPaletteColorIds` already removed).
 8. Dev seed fixture `chernovik-unknown` must not become production merchandising.
 9. After new app rewrites components, rolled-back old UI may show empty `display_name` (`''`) — acceptable; NULL would have crashed Prisma.
 

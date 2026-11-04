@@ -32,4 +32,4 @@ Scripts here are **not** applied by `prisma migrate deploy`.
 
 **Removal task:** promote contract SQL into `prisma/migrations` after gates; then delete this deferred entry.
 
-**Out of scope here (Task 02):** manual `ProductColor` palette + deprecated `suggestVisualPaletteColorIds`.
+**Out of scope here (Task 02):** manual `ProductColor` palette (`suggestVisualPaletteColorIds` already removed from contracts).

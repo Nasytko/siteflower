@@ -114,7 +114,6 @@ export function ProductEditorRelated({ product, canUpdate, members, onChanged }:
         onClick={() => setOpen((value) => !value)}
         aria-expanded={open}
       >
-        <span className="sf-pe-card__index">7</span>
         <span>
           <strong>Связанные товары</strong>
           <span className="sf-pe-card__lead">

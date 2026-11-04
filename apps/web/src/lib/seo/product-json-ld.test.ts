@@ -56,7 +56,6 @@ function baseProduct(overrides: Partial<ProductPublicDto> = {}): ProductPublicDt
     occasions: [],
     recipients: [],
     colors: [],
-    badgeLabel: null,
     productKind: 'BOUQUET',
     compositionKind: 'UNKNOWN',
     ...overrides,

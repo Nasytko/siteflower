@@ -14,7 +14,6 @@ function baseProduct(
     name: 'Test',
     shortDescription: null,
     description: null,
-    badgeLabel: null,
     erpSku: null,
     bouquetHeightCm: 45,
     catalogCategoryId: null,

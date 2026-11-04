@@ -8,7 +8,6 @@ import {
   productKindNeedsGiftSubtype,
   suggestProductNameFromComposition,
   type CommercialAvailability,
-  type ProductAdminDto,
   type ProductKind,
 } from '@bouquet-one/contracts';
 import { TaxonomyQuickPick } from '@/components/admin/taxonomy-quick-pick';
@@ -26,11 +25,8 @@ export type {
 type ColorOption = PickerOption & { swatch?: string | null };
 
 type Props = {
-  server: ProductAdminDto;
   canUpdate: boolean;
   canCreate: boolean;
-  canPublish: boolean;
-  pending: boolean;
   productKind: ProductKind;
   setProductKind: (value: ProductKind) => void;
   basic: {
@@ -38,7 +34,6 @@ type Props = {
     slug: string;
     erpSku: string;
     shortDescription: string;
-    badgeLabel: string;
     description: string;
     heightCm: string;
   };
@@ -48,13 +43,11 @@ type Props = {
       slug: string;
       erpSku: string;
       shortDescription: string;
-      badgeLabel: string;
       description: string;
       heightCm: string;
     }>
   >;
   slugManual: boolean;
-  nameManual?: boolean;
   onNameTyped?: () => void;
   blocks?: Array<'kind' | 'identity' | 'copy' | 'audience'>;
   components: ComponentDraft[];
@@ -97,13 +90,6 @@ type Props = {
       unpublishAt: string;
     }>
   >;
-  hasPrimaryImage: boolean;
-  mediaCount: number;
-  onGoPhotos: () => void;
-  onGoExtraVariants: () => void;
-  onPublish: () => void;
-  onUnpublish: () => void;
-  onArchive: () => void;
   touch: () => void;
   /** Legacy DB `description` differs from the editable short field — do not auto-merge. */
   legacyDescriptionConflict?: boolean;
@@ -111,11 +97,8 @@ type Props = {
 
 export function ProductEditorMainTab(props: Props) {
   const {
-    server: _server,
     canUpdate,
     canCreate,
-    canPublish: _canPublish,
-    pending: _pending,
     productKind,
     setProductKind,
     basic,
@@ -139,9 +122,6 @@ export function ProductEditorMainTab(props: Props) {
     publication,
     setPublication,
     legacyDescriptionConflict = false,
-    onPublish: _onPublish,
-    onUnpublish: _onUnpublish,
-    onArchive: _onArchive,
     touch,
   } = props;
 
@@ -386,21 +366,6 @@ export function ProductEditorMainTab(props: Props) {
             Перенесите нужные фразы сюда вручную.
           </p>
         ) : null}
-
-        <label className="admin-field" data-section="badgeLabel">
-          <span>Бейдж (необязательно)</span>
-          <input
-            className="admin-input"
-            maxLength={40}
-            placeholder="Например: Хит сезона"
-            value={basic.badgeLabel}
-            disabled={!canUpdate}
-            onChange={(event) => {
-              setBasic((prev) => ({ ...prev, badgeLabel: event.target.value }));
-              touch();
-            }}
-          />
-        </label>
         </div>
       </section>
       ) : null}

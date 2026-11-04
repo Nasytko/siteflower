@@ -25,5 +25,8 @@ describe('catalog filter pool public runtime gate', () => {
   it('keeps pool keys that may exist in admin but stay off public PLP', () => {
     const poolOnly = CATALOG_FILTER_KEYS.filter((key) => !PUBLIC_RUNTIME_FILTER_KEYS.has(key));
     expect(poolOnly).toContain('bouquet_height');
+    // Component qty removed from ProductComponent — filter key remains in pool until contract.
+    expect(poolOnly).toContain('quantity');
+    expect(PUBLIC_RUNTIME_FILTER_KEYS.has('quantity')).toBe(false);
   });
 });

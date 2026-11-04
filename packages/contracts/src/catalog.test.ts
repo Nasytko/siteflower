@@ -46,7 +46,6 @@ import {
   resolveCategoryListingScope,
   resolveFlowerTypeCompositionClass,
   resolveStoredCompositionKind,
-  suggestVisualPaletteColorIds,
   deriveProductEditorReadiness,
   resolveProductDescription,
   productDescriptionHasLegacyConflict,
@@ -559,23 +558,6 @@ test('formatCompositionSummaryLine hides mono label for STEM', () => {
       productKind: 'BOUQUET',
     }),
     'Монобукет · Роза · Красный гамма',
-  );
-});
-
-test('suggestVisualPaletteColorIds skips DECORATIVE types', () => {
-  assert.deepEqual(
-    suggestVisualPaletteColorIds([
-      { colorId: 'c1', compositionClass: 'BLOOM' },
-      {
-        flowerItem: {
-          colorId: 'c2',
-          flowerType: { compositionClass: 'DECORATIVE' },
-        },
-      },
-      { colorId: 'c1', compositionClass: 'BLOOM' },
-      { flowerItem: { colorId: 'c3', flowerType: { compositionClass: 'BLOOM' } } },
-    ]),
-    ['c1', 'c3'],
   );
 });
 

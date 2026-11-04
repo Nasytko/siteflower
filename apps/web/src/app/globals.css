@@ -3068,10 +3068,6 @@ select:focus-visible,
   font-weight: 400;
 }
 
-.sf-pe-card__index {
-  display: none;
-}
-
 .sf-pe-card__body {
   margin-top: 0.85rem;
 }
@@ -5147,11 +5143,6 @@ a.sf-instagram__handle:hover {
   color: #2f6b45;
 }
 
-.sf-pdp-badge--accent {
-  background: var(--pdp-pink-soft);
-  color: #d63f61;
-}
-
 .sf-pdp-badge--sale {
   background: var(--pdp-pink);
   color: #fff;
@@ -5169,8 +5160,7 @@ a.sf-instagram__handle:hover {
 
 @media (max-width: 767px) {
   .sf-pdp-buy__lead,
-  .sf-pdp-badge--ok,
-  .sf-pdp-badge--accent {
+  .sf-pdp-badge--ok {
     display: none;
   }
 

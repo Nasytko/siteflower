@@ -1511,32 +1511,6 @@ export function computeLinePriceMinor(input: {
   };
 }
 
-/**
- * @deprecated Task ProductColor: delete with manual product palette.
- * No web callers left. Do not extend. Tests kept only until that task removes the export.
- */
-export function suggestVisualPaletteColorIds(
-  rows: Array<{
-    colorId?: string | null;
-    compositionClass?: FlowerTypeCompositionClass | null;
-    flowerItem?: {
-      colorId?: string | null;
-      flowerType?: { compositionClass?: FlowerTypeCompositionClass | null } | null;
-    } | null;
-  }>,
-): string[] {
-  const seen = new Set<string>();
-  const out: string[] = [];
-  for (const row of rows) {
-    if (resolveFlowerTypeCompositionClass(row) !== 'BLOOM') continue;
-    const id = row.colorId?.trim() || row.flowerItem?.colorId?.trim();
-    if (!id || seen.has(id)) continue;
-    seen.add(id);
-    out.push(id);
-  }
-  return out;
-}
-
 export function isCompositionKind(value: string): value is CompositionKind {
   return (COMPOSITION_KINDS as readonly string[]).includes(value);
 }
@@ -2018,8 +1992,6 @@ export type ProductAdminDto = {
   name: string;
   shortDescription: string | null;
   description: string | null;
-  /** Product page badge next to availability (e.g. «Хит сезона»). */
-  badgeLabel: string | null;
   /** ERP permanent article; null until manager links. Not required for publish pre-integration. */
   erpSku: string | null;
   lifecycle: ProductLifecycle;
@@ -2088,7 +2060,6 @@ export type ProductPublicDto = {
   name: string;
   shortDescription: string | null;
   description: string | null;
-  badgeLabel: string | null;
   availability: CommercialAvailability;
   heightCm: number | null;
   productKind: ProductKind;

@@ -160,7 +160,6 @@ export function ProductEditor({
     slug: product.slug,
     erpSku: product.erpSku ?? '',
     shortDescription: product.shortDescription ?? '',
-    badgeLabel: product.badgeLabel ?? '',
     description: product.description ?? '',
     heightCm: product.heightCm === null ? '' : String(product.heightCm),
   });
@@ -255,7 +254,6 @@ export function ProductEditor({
       slug: updated.slug,
       erpSku: updated.erpSku ?? '',
       shortDescription: updated.shortDescription ?? '',
-      badgeLabel: updated.badgeLabel ?? '',
       description: updated.description ?? '',
       heightCm: updated.heightCm === null ? '' : String(updated.heightCm),
     });
@@ -621,7 +619,6 @@ export function ProductEditor({
         slug: basic.slug.trim(),
         erpSku: normalizeErpSku(basic.erpSku),
         shortDescription: basic.shortDescription.trim() || null,
-        badgeLabel: basic.badgeLabel.trim() || null,
         // Task 03: do not send `description` — omit keeps legacy long body intact in DB.
         heightCm: basic.heightCm.trim().length > 0 ? Number(basic.heightCm) : null,
         productKind,
@@ -969,17 +966,13 @@ export function ProductEditor({
   );
 
   const mainTabShared = {
-    server,
     canUpdate,
     canCreate,
-    canPublish,
-    pending,
     productKind,
     setProductKind: changeProductKind,
     basic,
     setBasic,
     slugManual,
-    nameManual,
     onNameTyped: () => setNameManual(true),
     components,
     variants,
@@ -996,13 +989,6 @@ export function ProductEditor({
     onTaxonomyCreated,
     publication,
     setPublication,
-    hasPrimaryImage,
-    mediaCount: server.media.length,
-    onGoPhotos: () => jumpToReadinessIssue('photo'),
-    onGoExtraVariants: () => undefined,
-    onPublish: () => void runLifecycle('publish'),
-    onUnpublish: () => void runLifecycle('unpublish'),
-    onArchive: () => void runLifecycle('archive'),
     touch,
     legacyDescriptionConflict,
   };

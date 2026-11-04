@@ -38,7 +38,6 @@ type PurchaseProduct = Pick<
   | 'media'
   | 'variants'
   | 'shortDescription'
-  | 'badgeLabel'
   | 'optionGroups'
 >;
 
@@ -300,7 +299,6 @@ export function ProductBuyCard({
   const sorted = [...product.variants].sort((a, b) => a.sortOrder - b.sortOrder);
   const availability = availabilityBadge(product.availability);
   const percentOff = product.promotion?.percentOff ?? null;
-  const badgeLabel = product.badgeLabel?.trim() || null;
   const optionsTotalLabel =
     optionsTotalMinor !== '0'
       ? formatPriceFromMinor(optionsTotalMinor, product.currency)
@@ -320,9 +318,6 @@ export function ProductBuyCard({
         <span className={`sf-pdp-badge sf-pdp-badge--${availability.tone}`}>
           {availability.label}
         </span>
-        {badgeLabel ? (
-          <span className="sf-pdp-badge sf-pdp-badge--accent">{badgeLabel}</span>
-        ) : null}
         {percentOff != null ? (
           <span className="sf-pdp-badge sf-pdp-badge--sale">−{percentOff}%</span>
         ) : null}
