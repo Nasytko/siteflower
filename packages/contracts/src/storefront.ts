@@ -478,17 +478,17 @@ export function defaultStorefrontSettings(): StorefrontSettingsPublicDto {
     address: 'пр-т Янки Купалы, 67А, г. Гродно, 230000',
     workingHours: '9:00–21:00',
     deliverySummary:
-      'Доставляем букеты по Гродно. После оформления заказа менеджер свяжется для подтверждения деталей.',
+      'Доставляем букеты по Гродно каждый час с 9:00 до 21:00. Ближайший слот — не раньше чем через час. Вне рабочего времени можно согласовать доставку с менеджером.',
     aboutSummary:
       'BUKET №1 — цветочный магазин в Гродно. Собираем букеты, которые хочется дарить: свежие цветы, аккуратная сборка, понятная доставка.',
-    instagramUrl: null,
+    instagramUrl: 'https://www.instagram.com/buket_n1/',
     telegramUrl: null,
     substitutionNote:
       'Цветы — сезонный продукт. Отдельные позиции могут быть заменены на равноценные с сохранением стиля, палитры и стоимости букета.',
     whatsappUrl: null,
-    outOfCityDeliveryNote: null,
-    photoReportNote: null,
-    packagingNote: null,
+    outOfCityDeliveryNote: 'Доставка за пределы Гродно — по согласованию с менеджером.',
+    photoReportNote: 'По запросу пришлём фото собранного букета перед отправкой.',
+    packagingNote: 'Аккуратная упаковка и вода для транспортировки — в каждом заказе.',
     packagingImageUrl: null,
   };
 }

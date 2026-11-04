@@ -57,6 +57,7 @@ export function compareBusinessDates(a: string, b: string): number {
  * - fulfillmentDate < today
  * - fulfillmentDate > today + maxAdvanceDays
  * - fulfillmentDate === today AND window.startMinutes < nowMinutes + leadMinutes
+ *   (skipped when skipLeadTime — e.g. «согласовать с менеджером»)
  */
 export function isTimeWindowSelectable(input: {
   fulfillmentDate: string;
@@ -65,13 +66,15 @@ export function isTimeWindowSelectable(input: {
   minLeadTimeMinutes: number;
   maxAdvanceDays: number;
   timeZone?: string;
+  /** Manager-agreed / custom time — only civil date bounds apply. */
+  skipLeadTime?: boolean;
 }): boolean {
   const tz = input.timeZone ?? MINSK;
   const today = businessDateString(input.now, tz);
   const maxDate = addBusinessDays(today, input.maxAdvanceDays);
   if (compareBusinessDates(input.fulfillmentDate, today) < 0) return false;
   if (compareBusinessDates(input.fulfillmentDate, maxDate) > 0) return false;
-  if (input.fulfillmentDate === today) {
+  if (!input.skipLeadTime && input.fulfillmentDate === today) {
     const nowMin = businessMinutesSinceMidnight(input.now, tz);
     if (input.windowStartMinutes < nowMin + input.minLeadTimeMinutes) return false;
   }

@@ -490,55 +490,51 @@ export type CancelOrderRequest = {
   reason: string;
 };
 
-/** Default time windows used by seed / fresh DB. */
+/** Special slot: customer asks manager to pick a time (incl. outside 09:00–21:00). */
+export const MANAGER_TIME_WINDOW_ID = 'tw-manager';
+
+/** Shop working hours for fulfillment slots (Europe/Minsk). */
+export const FULFILLMENT_OPEN_HOUR = 9;
+export const FULFILLMENT_CLOSE_HOUR = 21;
+/** Nearest regular slot must start at least this many minutes from now. */
+export const FULFILLMENT_MIN_LEAD_MINUTES = 60;
+export const FULFILLMENT_MAX_ADVANCE_DAYS = 14;
+
+export function isManagerTimeWindowId(id: string): boolean {
+  return id === MANAGER_TIME_WINDOW_ID;
+}
+
+/**
+ * Fixed hourly windows 09:00–21:00 plus a manager-agree option.
+ * Slot `tw-HH` covers HH:00–(HH+1):00 (end exclusive in minutes).
+ */
 export function defaultTimeWindows(): TimeWindowDto[] {
-  return [
-    {
-      id: 'tw-10-12',
-      label: '10:00–12:00',
-      startMinutes: 600,
-      endMinutes: 720,
+  const hourly: TimeWindowDto[] = [];
+  for (let hour = FULFILLMENT_OPEN_HOUR; hour < FULFILLMENT_CLOSE_HOUR; hour += 1) {
+    const startMinutes = hour * 60;
+    const endMinutes = (hour + 1) * 60;
+    const hh = String(hour).padStart(2, '0');
+    const hhNext = String(hour + 1).padStart(2, '0');
+    hourly.push({
+      id: `tw-${hh}`,
+      label: `${hh}:00–${hhNext}:00`,
+      startMinutes,
+      endMinutes,
       active: true,
-      sortOrder: 10,
+      sortOrder: hour * 10,
       appliesTo: 'BOTH',
-    },
-    {
-      id: 'tw-12-14',
-      label: '12:00–14:00',
-      startMinutes: 720,
-      endMinutes: 840,
-      active: true,
-      sortOrder: 20,
-      appliesTo: 'BOTH',
-    },
-    {
-      id: 'tw-14-16',
-      label: '14:00–16:00',
-      startMinutes: 840,
-      endMinutes: 960,
-      active: true,
-      sortOrder: 30,
-      appliesTo: 'BOTH',
-    },
-    {
-      id: 'tw-16-18',
-      label: '16:00–18:00',
-      startMinutes: 960,
-      endMinutes: 1080,
-      active: true,
-      sortOrder: 40,
-      appliesTo: 'BOTH',
-    },
-    {
-      id: 'tw-18-20',
-      label: '18:00–20:00',
-      startMinutes: 1080,
-      endMinutes: 1200,
-      active: true,
-      sortOrder: 50,
-      appliesTo: 'BOTH',
-    },
-  ];
+    });
+  }
+  hourly.push({
+    id: MANAGER_TIME_WINDOW_ID,
+    label: 'Согласовать с менеджером',
+    startMinutes: 0,
+    endMinutes: 24 * 60,
+    active: true,
+    sortOrder: 10_000,
+    appliesTo: 'BOTH',
+  });
+  return hourly;
 }
 
 /** Customer-facing Russian labels for order status. */

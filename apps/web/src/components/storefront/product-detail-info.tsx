@@ -162,8 +162,6 @@ function DeliveryPanel({
   if (fulfillment?.pickupEnabled) rows.push({ label: 'Самовывоз', value: 'бесплатно' });
   const lead = fulfillment ? leadTimeLabel(fulfillment.minLeadTimeMinutes) : null;
   if (lead) rows.push({ label: 'Время на сборку', value: `от ${lead}` });
-  const windows = fulfillment?.timeWindows.filter((w) => w.active).map((w) => w.label) ?? [];
-
   return (
     <div className="sf-pdp-panel-stack">
       {deliverySummary ? <p className="sf-pdp-muted">{deliverySummary}</p> : null}
@@ -177,8 +175,11 @@ function DeliveryPanel({
           ))}
         </dl>
       ) : null}
-      {windows.length > 0 ? (
-        <p className="sf-pdp-muted">Интервалы: {windows.join(', ')}.</p>
+      {fulfillment?.deliveryEnabled ? (
+        <p className="sf-pdp-muted">
+          Доставка каждый час с 9:00 до 21:00. Ближайший слот — через час. Вне рабочих часов —
+          по согласованию с менеджером.
+        </p>
       ) : null}
       {fulfillment?.pickupInstructions ? (
         <p className="sf-pdp-muted">{fulfillment.pickupInstructions}</p>

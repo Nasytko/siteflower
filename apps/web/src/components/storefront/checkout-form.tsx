@@ -10,6 +10,7 @@ import type {
   FulfillmentType,
   OrderCreatedResponse,
 } from '@bouquet-one/contracts';
+import { MANAGER_TIME_WINDOW_ID } from '@bouquet-one/contracts';
 import { formatPriceFromMinor } from '@/lib/media';
 import { trackEvent } from '@/lib/analytics';
 import {
@@ -20,6 +21,7 @@ import {
   writeCart,
   type CartState,
 } from '@/lib/cart';
+import { selectableHourlyWindows } from '@/lib/fulfillment-slots';
 
 const IDEMPOTENCY_STORAGE_KEY = 'bouquet-one:checkout-idempotency';
 
@@ -74,6 +76,8 @@ export function CheckoutForm() {
   const [dateMode, setDateMode] = useState<'today' | 'tomorrow' | 'pick'>('tomorrow');
   const [fulfillmentDate, setFulfillmentDate] = useState('');
   const [timeWindowId, setTimeWindowId] = useState('');
+  const [agreeWithManager, setAgreeWithManager] = useState(false);
+  const [desiredTimeNote, setDesiredTimeNote] = useState('');
   const [purchaserName, setPurchaserName] = useState('');
   const [purchaserPhone, setPurchaserPhone] = useState('');
   const [recipientIsMe, setRecipientIsMe] = useState(true);
@@ -130,9 +134,12 @@ export function CheckoutForm() {
         if (optRes.ok) {
           const opt = (await optRes.json()) as FulfillmentSettingsPublicDto;
           setOptions(opt);
-          setFulfillmentDate(opt.todayBusinessDate);
-          const first = opt.timeWindows[0];
-          if (first) setTimeWindowId(first.id);
+          // Prefer tomorrow — more slots usually available than "today + 1h".
+          const [y, m, d] = opt.todayBusinessDate.split('-').map(Number);
+          const t = new Date(Date.UTC(y!, m! - 1, d! + 1));
+          const tomorrow = `${t.getUTCFullYear()}-${String(t.getUTCMonth() + 1).padStart(2, '0')}-${String(t.getUTCDate()).padStart(2, '0')}`;
+          setFulfillmentDate(tomorrow);
+          setDateMode('tomorrow');
           if (!opt.deliveryEnabled && opt.pickupEnabled) setFulfillmentType('PICKUP');
         }
         if (valRes.ok) {
@@ -157,19 +164,51 @@ export function CheckoutForm() {
   }, [dateMode, options]);
 
   const windows = useMemo(() => {
-    if (!options) return [];
-    return options.timeWindows.filter(
-      (w) =>
-        w.appliesTo === 'BOTH' ||
-        w.appliesTo === fulfillmentType,
-    );
-  }, [options, fulfillmentType]);
+    if (!options || !fulfillmentDate) return [];
+    return selectableHourlyWindows({
+      windows: options.timeWindows,
+      fulfillmentDate,
+      fulfillmentType,
+      minLeadMinutes: options.minLeadTimeMinutes,
+    });
+  }, [options, fulfillmentType, fulfillmentDate]);
+
+  useEffect(() => {
+    if (agreeWithManager) {
+      setTimeWindowId(MANAGER_TIME_WINDOW_ID);
+      return;
+    }
+    if (windows.length === 0) {
+      setTimeWindowId('');
+      return;
+    }
+    if (!windows.some((w) => w.id === timeWindowId)) {
+      setTimeWindowId(windows[0]!.id);
+    }
+  }, [agreeWithManager, windows, timeWindowId]);
 
   async function onSubmit(event: FormEvent) {
     event.preventDefault();
     if (pending) return;
     setPending(true);
     setError(null);
+
+    if (agreeWithManager) {
+      if (!desiredTimeNote.trim()) {
+        setError('Укажите желаемое время для согласования с менеджером');
+        setPending(false);
+        return;
+      }
+    } else if (!timeWindowId || windows.length === 0) {
+      setError('Нет доступных интервалов на эту дату — выберите другой день или согласуйте время с менеджером');
+      setPending(false);
+      return;
+    }
+
+    const managerNote = agreeWithManager
+      ? `Согласовать время с менеджером: ${desiredTimeNote.trim()}`
+      : null;
+    const mergedComment = [managerNote, customerComment.trim() || null].filter(Boolean).join('\n');
 
     const body: CreateOrderRequest = {
       idempotencyKey,
@@ -183,11 +222,11 @@ export function CheckoutForm() {
       purchaserName,
       purchaserPhone,
       fulfillmentDate,
-      timeWindowId,
+      timeWindowId: agreeWithManager ? MANAGER_TIME_WINDOW_ID : timeWindowId,
       surprise,
       cardMessage: wantCard && cardMessage.trim() ? cardMessage.trim() : null,
       anonymousCard: wantCard ? anonymousCard : false,
-      customerComment: customerComment || null,
+      customerComment: mergedComment || null,
       paymentMethod: 'CASH_ON_DELIVERY',
     };
 
@@ -345,20 +384,63 @@ export function CheckoutForm() {
           ) : (
             <p className="sf-small text-muted">{fulfillmentDate}</p>
           )}
-          <label className="block text-sm">
-            Интервал
-            <select
-              required
-              value={timeWindowId}
-              onChange={(e) => setTimeWindowId(e.target.value)}
-              className="mt-1 w-full rounded-[var(--radius-lg)] border border-border bg-white px-3 py-2"
-            >
-              {windows.map((w) => (
-                <option key={w.id} value={w.id}>
-                  {w.label}
-                </option>
-              ))}
-            </select>
+
+          {!agreeWithManager ? (
+            <div className="space-y-2">
+              <p className="text-sm font-medium">Время (каждый час, ближайшее — через час)</p>
+              {windows.length === 0 ? (
+                <p className="sf-small text-muted">
+                  На эту дату свободных слотов нет. Выберите другой день или согласуйте время с
+                  менеджером.
+                </p>
+              ) : (
+                <div className="flex flex-wrap gap-2">
+                  {windows.map((w) => (
+                    <button
+                      key={w.id}
+                      type="button"
+                      className={`min-h-11 rounded-full border px-3.5 py-2 text-sm tabular-nums transition ${
+                        timeWindowId === w.id
+                          ? 'border-brand bg-brand text-brand-foreground'
+                          : 'border-border-strong bg-surface hover:border-brand hover:text-brand'
+                      }`}
+                      onClick={() => setTimeWindowId(w.id)}
+                    >
+                      {w.label}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          ) : (
+            <label className="block text-sm">
+              Желаемое время
+              <input
+                required
+                value={desiredTimeNote}
+                onChange={(e) => setDesiredTimeNote(e.target.value)}
+                placeholder="Например: сегодня к 23:00 или к 8:30"
+                className="mt-1 w-full rounded-[var(--radius-lg)] border border-border bg-white px-3 py-2"
+              />
+              <span className="mt-1 block sf-small text-muted">
+                Менеджер подтвердит, получится ли доставить вне обычных часов 9:00–21:00.
+              </span>
+            </label>
+          )}
+
+          <label className="flex cursor-pointer items-start gap-3 rounded-[var(--radius-lg)] border border-border bg-surface-muted/40 px-3 py-3 text-sm">
+            <input
+              type="checkbox"
+              className="mt-1"
+              checked={agreeWithManager}
+              onChange={(e) => setAgreeWithManager(e.target.checked)}
+            />
+            <span>
+              <span className="font-medium">Согласовать уникальное время с менеджером</span>
+              <span className="mt-0.5 block text-muted">
+                Для доставки вне 9:00–21:00 или если нужен точный час, которого нет в списке.
+              </span>
+            </span>
           </label>
         </section>
 

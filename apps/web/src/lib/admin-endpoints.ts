@@ -144,16 +144,6 @@ export const adminEndpoints = {
   order: (id: string) => `${ADMIN}/orders/${id}`,
   orderRetryErp: (id: string) => `${ADMIN}/orders/${id}/retry-erp`,
   orderRetryTelegram: (id: string) => `${ADMIN}/orders/${id}/retry-telegram`,
-  storefrontSettings: `${ADMIN}/storefront/settings`,
-  homepage: `${ADMIN}/storefront/homepage`,
-  navigationMain: `${ADMIN}/storefront/navigation/main`,
-  navigationTargets: `${ADMIN}/storefront/navigation/targets`,
-  navigationItem: (id: string) => `${ADMIN}/storefront/navigation/main/items/${id}`,
-  navigationItems: `${ADMIN}/storefront/navigation/main/items`,
-  navigationItemReorder: (id: string) =>
-    `${ADMIN}/storefront/navigation/main/items/${id}/reorder`,
-  navigationItemMedia: (id: string) =>
-    `${ADMIN}/storefront/navigation/main/items/${id}/media`,
   instagramPosts: `${ADMIN}/storefront/instagram/posts`,
   instagramPost: (id: string) => `${ADMIN}/storefront/instagram/posts/${id}`,
   instagramPostsOrder: `${ADMIN}/storefront/instagram/posts/order`,

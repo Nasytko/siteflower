@@ -475,8 +475,8 @@ export class HomepageConfigService {
   ) {}
 
   async getPublic(): Promise<HomepageConfigDto> {
-    const row = await this.getOrCreate();
-    return this.configFromRow(row);
+    // Fixed homepage template — shelves still resolve products dynamically by slug.
+    return defaultHomepageConfig();
   }
 
   async getAdmin(): Promise<HomepageConfigAdminDto> {

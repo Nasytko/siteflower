@@ -29,8 +29,8 @@ export class StorefrontSettingsService {
   ) {}
 
   async getPublic(): Promise<StorefrontSettingsPublicDto> {
-    const row = await this.getOrCreate();
-    return this.toPublicDto(row);
+    // Fixed shop template — not editable via admin.
+    return defaultStorefrontSettings();
   }
 
   async getAdmin(): Promise<StorefrontSettingsAdminDto> {

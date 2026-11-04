@@ -1,7 +1,6 @@
 'use client';
 
 import { FormEvent, useState } from 'react';
-import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import type { InstagramPostDto } from '@bouquet-one/contracts';
 import {
@@ -101,15 +100,7 @@ export function InstagramManager({ initial, profileUrl, canUpdate }: Props) {
 
   return (
     <div className="space-y-6">
-      {!profileUrl ? (
-        <p className="admin-notice">
-          Укажите Instagram URL в{' '}
-          <Link href="/admin/storefront/settings" className="admin-link">
-            настройках магазина
-          </Link>
-          , чтобы на главной показывался профиль.
-        </p>
-      ) : (
+      {profileUrl ? (
         <p className="text-sm text-[var(--admin-muted)]">
           Профиль:{' '}
           <a
@@ -120,6 +111,10 @@ export function InstagramManager({ initial, profileUrl, canUpdate }: Props) {
           >
             {profileUrl}
           </a>
+        </p>
+      ) : (
+        <p className="admin-notice">
+          Ссылка на профиль Instagram задаётся в шаблоне витрины (`storefront-content`).
         </p>
       )}
 

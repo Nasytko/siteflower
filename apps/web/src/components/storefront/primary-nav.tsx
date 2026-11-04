@@ -34,9 +34,8 @@ export type PrimaryNavItem = {
 };
 
 /**
- * Outage-only fallback — used when NavigationMenu API throws/unavailable.
- * Successful empty menu must NOT fall back here (manager may have cleared items).
- * Service pages (О нас / Доставка / Контакты) live in the top utility bar only.
+ * Minimal fallback if FIXED_PRIMARY_NAV is not passed from the layout.
+ * Full smart menu lives in `@/lib/storefront-content`.
  */
 export const PRIMARY_NAV: PrimaryNavItem[] = [
   { id: 'bukety', label: 'Букеты', href: '/catalog/bouquets', panelLayout: 'COLUMNS' },

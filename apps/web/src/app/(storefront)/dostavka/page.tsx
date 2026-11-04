@@ -6,6 +6,7 @@ import {
   getFixedLegalDocument,
   getFixedLegalSeller,
 } from '@/lib/legal-content';
+import { isManagerTimeWindowId } from '@bouquet-one/contracts';
 import { getFulfillmentOptions, getStorefrontSettings } from '@/lib/public-api';
 import { buildPageMetadata } from '@/lib/seo/metadata';
 
@@ -42,7 +43,7 @@ export default async function DeliveryPage() {
   const offlinePayment = FIXED_SELLER.actualOfflinePaymentDescription;
   const windows =
     fulfillment?.timeWindows
-      .filter((w) => w.active !== false)
+      .filter((w) => w.active !== false && !isManagerTimeWindowId(w.id))
       .sort((a, b) => a.sortOrder - b.sortOrder) ?? [];
 
   return (
@@ -122,9 +123,14 @@ export default async function DeliveryPage() {
 
               {windows.length > 0 ? (
                 <div>
-                  <dt>Окна времени</dt>
+                  <dt>Интервалы доставки</dt>
                   <dd>
-                    <ul className="mt-1 space-y-1">
+                    <p className="mb-2">
+                      Каждый час с 9:00 до 21:00. Ближайший слот — не раньше чем через час от
+                      момента заказа. Вне рабочих часов можно согласовать время с менеджером при
+                      оформлении.
+                    </p>
+                    <ul className="mt-1 grid grid-cols-2 gap-1 sm:grid-cols-3">
                       {windows.map((window) => (
                         <li key={window.id ?? `${window.label}-${window.startMinutes}`}>
                           {window.label}

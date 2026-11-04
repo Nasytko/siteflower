@@ -94,44 +94,12 @@ export const ADMIN_NAV_GROUPS: AdminNavGroup[] = [
     label: 'Сайт',
     items: [
       {
-        href: '/admin/storefront/homepage',
-        label: 'Главная страница',
-        permission: 'CONTENT_READ',
-        isActive: (pathname) =>
-          pathname === '/admin/storefront/homepage' ||
-          pathname.startsWith('/admin/storefront/homepage/'),
-      },
-      {
-        href: '/admin/storefront/navigation',
-        label: 'Меню сайта',
-        permission: 'SETTINGS_READ',
-        isActive: (pathname) =>
-          pathname === '/admin/storefront/navigation' ||
-          pathname.startsWith('/admin/storefront/navigation/'),
-      },
-      {
         href: '/admin/storefront/instagram',
         label: 'Instagram',
         permission: 'CONTENT_READ',
         isActive: (pathname) =>
           pathname === '/admin/storefront/instagram' ||
           pathname.startsWith('/admin/storefront/instagram/'),
-      },
-    ],
-  },
-  {
-    id: 'settings',
-    label: 'Настройки',
-    items: [
-      {
-        href: '/admin/fulfillment',
-        label: 'Доставка и самовывоз',
-        permission: 'SETTINGS_READ',
-      },
-      {
-        href: '/admin/storefront/settings',
-        label: 'Настройки магазина',
-        permission: 'SETTINGS_READ',
       },
     ],
   },

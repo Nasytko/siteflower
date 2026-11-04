@@ -25,8 +25,11 @@ test('SUPER_ADMIN sees primary admin sections including catalog and orders', () 
   assert.ok(labels.includes('Заказы'));
   assert.ok(labels.includes('Instagram'));
   assert.ok(labels.includes('Пользователи'));
+  assert.equal(labels.includes('Главная страница'), false);
+  assert.equal(labels.includes('Меню сайта'), false);
+  assert.equal(labels.includes('Настройки магазина'), false);
+  assert.equal(labels.includes('Доставка и самовывоз'), false);
   assert.equal(labels.includes('Юридические'), false);
-  assert.equal(labels.includes('Правовые документы'), false);
 
   assert.ok(hrefs.includes('/admin'));
   assert.ok(hrefs.includes('/admin/catalog/products'));

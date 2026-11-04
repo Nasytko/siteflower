@@ -1,12 +1,14 @@
 import type { ReactNode } from 'react';
-import { defaultStorefrontSettings } from '@bouquet-one/contracts';
 import { FavoritesProvider } from '@/components/storefront/favorites-provider';
 import { StorefrontFooter } from '@/components/storefront/footer';
 import { StorefrontHeader } from '@/components/storefront/header';
-import { PRIMARY_NAV, type PrimaryNavItem } from '@/components/storefront/primary-nav';
-import { getMainNavigation, getStorefrontSettings } from '@/lib/public-api';
+import { listFlowerTypes } from '@/lib/public-api';
 import { getFixedLegalSeller } from '@/lib/legal-content';
-import { navItemsFromNavigationMenu } from '@/lib/storefront-nav';
+import {
+  enrichNavWithFlowerTypes,
+  getFixedPrimaryNav,
+  getFixedStorefrontSettings,
+} from '@/lib/storefront-content';
 import { buildOrganizationJsonLd, serializeJsonLd } from '@/lib/seo/json-ld';
 import { getSiteUrl } from '@/lib/seo/site-url';
 
@@ -14,25 +16,10 @@ import { getSiteUrl } from '@/lib/seo/site-url';
 export const dynamic = 'force-dynamic';
 
 export default async function StorefrontLayout({ children }: { children: ReactNode }) {
-  let settings;
-  try {
-    settings = await getStorefrontSettings();
-  } catch {
-    settings = defaultStorefrontSettings();
-  }
-
+  const settings = getFixedStorefrontSettings();
   const seller = getFixedLegalSeller(settings);
-
-  // NavigationMenu is source of truth. Empty successful response = empty nav
-  // (do not resurrect PRIMARY_NAV after the manager cleared/disabled items).
-  // PRIMARY_NAV only when the navigation API itself is unavailable (outage).
-  let navItems: PrimaryNavItem[] = [];
-  try {
-    const menu = await getMainNavigation();
-    navItems = navItemsFromNavigationMenu(menu.items);
-  } catch {
-    navItems = PRIMARY_NAV;
-  }
+  const flowers = await listFlowerTypes().catch(() => []);
+  const navItems = enrichNavWithFlowerTypes(getFixedPrimaryNav(), flowers);
 
   const orgLd = buildOrganizationJsonLd({
     name: settings.brandName,

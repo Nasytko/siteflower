@@ -18,6 +18,10 @@ import type {
   TaxonomyRefDto,
 } from '@bouquet-one/contracts';
 import type { FulfillmentSettingsPublicDto } from '@bouquet-one/contracts';
+import {
+  getFixedHomepageConfig,
+  getFixedStorefrontSettings,
+} from '@/lib/storefront-content';
 
 const API_URL = process.env.API_URL ?? 'http://localhost:3001';
 
@@ -279,23 +283,12 @@ export function getSitemapEntries() {
   });
 }
 
-export function getStorefrontSettings() {
-  return publicFetch<StorefrontSettingsPublicDto>('/storefront/settings', {
-    tags: ['storefront', 'settings'],
-  });
+export function getStorefrontSettings(): Promise<StorefrontSettingsPublicDto> {
+  return Promise.resolve(getFixedStorefrontSettings());
 }
 
-export function getMainNavigation() {
-  return publicFetch<import('@bouquet-one/contracts').NavigationMenuPublicDto>(
-    '/storefront/navigation/main',
-    { tags: ['storefront', 'navigation'] },
-  );
-}
-
-export function getHomepageConfig() {
-  return publicFetch<HomepageConfigDto>('/storefront/homepage', {
-    tags: ['storefront', 'homepage'],
-  });
+export function getHomepageConfig(): Promise<HomepageConfigDto> {
+  return Promise.resolve(getFixedHomepageConfig());
 }
 
 export function getInstagramFeed() {

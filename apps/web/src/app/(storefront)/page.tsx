@@ -121,27 +121,13 @@ async function loadShelfProducts(opts: {
 
 export default async function StorefrontHomePage() {
   const [homepage, settings, flowers, recipients, occasions, categoryTree] = await Promise.all([
-    getHomepageConfig().catch(() => null),
-    getStorefrontSettings().catch(() => null),
+    getHomepageConfig(),
+    getStorefrontSettings(),
     listFlowerTypes().catch(() => []),
     listRecipients().catch(() => []),
     listOccasions().catch(() => []),
     listCatalogCategoryTree().catch(() => []),
   ]);
-
-  if (!homepage || !settings) {
-    return (
-      <main id="main-content" className="sf-container py-20">
-        <p className="sf-display">BUKET №1</p>
-        <p className="sf-body mt-4 text-muted">
-          Витрина временно недоступна. Попробуйте обновить страницу чуть позже.
-        </p>
-        <Link href="/catalog/bouquets" className="sf-cta mt-8">
-          Перейти в каталог
-        </Link>
-      </main>
-    );
-  }
 
   const now = new Date();
   const telHref = settings.phone ? `tel:${settings.phone.replace(/\s+/g, '')}` : null;

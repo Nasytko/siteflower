@@ -1,16 +1,15 @@
-import { roleHasPermission, type InstagramPostDto, type StorefrontSettingsAdminDto } from '@bouquet-one/contracts';
+import { roleHasPermission, type InstagramPostDto } from '@bouquet-one/contracts';
 import { AdminPageHeader } from '@/components/admin/admin-page-header';
 import { InstagramManager } from '@/components/admin/instagram-manager';
 import { adminFetch } from '@/lib/admin-api';
 import { adminEndpoints } from '@/lib/admin-endpoints';
 import { requireAdminPermission } from '@/lib/admin-page-auth';
+import { getFixedStorefrontSettings } from '@/lib/storefront-content';
 
 export default async function AdminInstagramPage() {
   const me = await requireAdminPermission('CONTENT_READ');
-  const [posts, settings] = await Promise.all([
-    adminFetch<InstagramPostDto[]>(adminEndpoints.instagramPosts),
-    adminFetch<StorefrontSettingsAdminDto>(adminEndpoints.storefrontSettings),
-  ]);
+  const posts = await adminFetch<InstagramPostDto[]>(adminEndpoints.instagramPosts);
+  const settings = getFixedStorefrontSettings();
 
   return (
     <main id="main-content" className="space-y-6">

@@ -28,6 +28,7 @@ import {
   type PaymentStatus,
   type TelegramNotifyStatus,
   type TimeWindowDto,
+  isManagerTimeWindowId,
 } from '@bouquet-one/contracts';
 import type { OrderEventType, Prisma } from '@bouquet-one/database';
 import { createHash, randomUUID } from 'node:crypto';
@@ -298,7 +299,7 @@ export class OrdersService {
       throw new BadRequestException('Invalid fulfillmentType');
     }
 
-    const settings = await this.fulfillment.getOrCreate();
+    const settings = await this.fulfillment.getPublic();
     if (dto.fulfillmentType === 'DELIVERY' && !settings.deliveryEnabled) {
       throw new BadRequestException('Доставка сейчас недоступна');
     }
@@ -306,7 +307,7 @@ export class OrdersService {
       throw new BadRequestException('Самовывоз сейчас недоступен');
     }
 
-    const windows = (settings.timeWindows as unknown as TimeWindowDto[]) ?? [];
+    const windows = settings.timeWindows;
     const window = windows.find((w) => w.id === dto.timeWindowId && w.active);
     if (!window) {
       throw new BadRequestException('Выберите доступный интервал времени');
@@ -330,6 +331,7 @@ export class OrdersService {
         minLeadTimeMinutes: settings.minLeadTimeMinutes,
         maxAdvanceDays: settings.maxAdvanceDays,
         timeZone: tz,
+        skipLeadTime: isManagerTimeWindowId(window.id),
       })
     ) {
       throw new BadRequestException('Выбранные дата или время недоступны');
@@ -389,7 +391,7 @@ export class OrdersService {
     }
 
     const deliveryFee =
-      dto.fulfillmentType === 'DELIVERY' ? settings.deliveryFeeMinor : 0n;
+      dto.fulfillmentType === 'DELIVERY' ? BigInt(settings.deliveryFeeMinor) : 0n;
     const trackingToken = generateTrackingToken();
     const trackingTokenHash = hashTrackingToken(trackingToken);
     const businessDate = businessDateString(now, tz);
