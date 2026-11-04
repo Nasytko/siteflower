@@ -191,12 +191,10 @@ export function ProductEditorOptionsTab(props: Props) {
   return (
     <section className="sf-pe-card space-y-6" data-section="options">
       <div className="sf-pe-card__head">
-        <span className="sf-pe-card__index">+</span>
         <div>
-          <h2>Дополнительные опции</h2>
+          <h2>Доплаты</h2>
           <p className="sf-pe-card__lead">
-            Упаковка, лента, ваза и другие доплаты. Это не варианты размера — доплата к выбранному
-            варианту.
+            Упаковка, лента, ваза — доплата к выбранному варианту, не размер.
           </p>
         </div>
       </div>

@@ -757,7 +757,11 @@ export class ProductsService {
         name: input.name.trim(),
         slug: nextSlug,
         shortDescription: trimmedOrNull(input.shortDescription ?? null),
-        description: trimmedOrNull(input.description ?? null),
+        // Task 03: omit description unless explicitly sent — never wipe legacy long copy
+        // by sending null from the single-field editor.
+        ...(input.description === undefined
+          ? {}
+          : { description: trimmedOrNull(input.description) }),
         ...(input.badgeLabel === undefined
           ? {}
           : { badgeLabel: trimmedOrNull(input.badgeLabel) }),

@@ -6,7 +6,8 @@
 import type { Prisma } from '@bouquet-one/database';
 import {
   publicProductCompositionSummary,
-  defaultProductSeoDescription,
+  resolveProductDescription,
+  resolveProductMetaDescription,
   defaultProductSeoTitle,
   derivePriceRange,
   flowerItemDisplayName,
@@ -210,9 +211,12 @@ function toProductSeo(product: ProductWithRelations): SeoFieldsDto {
     seoDescription: product.seoDescription,
     noIndex: product.noIndex,
     resolvedTitle: product.seoTitle ?? defaultProductSeoTitle(product.name),
-    resolvedDescription:
-      product.seoDescription ??
-      defaultProductSeoDescription(product.name, product.shortDescription),
+    resolvedDescription: resolveProductMetaDescription({
+      name: product.name,
+      seoDescription: product.seoDescription,
+      shortDescription: product.shortDescription,
+      description: product.description,
+    }),
   };
 }
 
@@ -443,12 +447,18 @@ export function toProductPublicDto(
       : null);
 
   const displayFlower = productDisplayFlowerAttrs(product);
+  // Task 03: one canonical body for storefront; both fields carry the same resolved
+  // text for API compat. PDP must render a single block (not both).
+  const resolvedDescription = resolveProductDescription({
+    shortDescription: product.shortDescription,
+    description: product.description,
+  });
   return {
     id: product.id,
     slug: product.slug,
     name: product.name,
-    shortDescription: product.shortDescription,
-    description: product.description,
+    shortDescription: resolvedDescription,
+    description: resolvedDescription,
     badgeLabel: product.badgeLabel ?? null,
     availability: product.availability,
     heightCm: product.bouquetHeightCm ?? null,

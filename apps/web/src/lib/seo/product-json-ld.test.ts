@@ -106,6 +106,18 @@ test('buildProductJsonLd advertises the promotional price, not the regular one',
   assert.equal(offers.price, '89.00');
 });
 
+test('buildProductJsonLd uses resolved product description for JSON-LD', () => {
+  process.env.NEXT_PUBLIC_SITE_URL = 'http://localhost:3000';
+  const fromShort = buildProductJsonLd(
+    baseProduct({ shortDescription: 'Лид', description: 'Другое' }),
+  );
+  assert.equal(fromShort.description, 'Лид');
+  const fromLegacy = buildProductJsonLd(
+    baseProduct({ shortDescription: null, description: 'Legacy long' }),
+  );
+  assert.equal(fromLegacy.description, 'Legacy long');
+});
+
 test('buildProductJsonLd maps commercial availability truthfully', () => {
   process.env.NEXT_PUBLIC_SITE_URL = 'http://localhost:3000';
 

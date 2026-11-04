@@ -143,30 +143,22 @@ export function ProductEditorCompositionTab(props: Props) {
   return (
     <section className="sf-pe-card space-y-6" data-section="composition">
       <div className="sf-pe-card__head">
-        <span className="sf-pe-card__index">2</span>
         <div>
           <h2>{isStem ? 'Выбор цветка' : 'Состав'}</h2>
           <p className="sf-pe-card__lead">
             {isStem
-              ? 'Выберите одну позицию справочника. Вид, форма, сорт и высота подставятся сами.'
-              : 'Добавьте цветы из справочника — каждый цветок один раз, порядок можно менять.'}
+              ? 'Одна позиция из справочника — вид и параметры подставятся сами.'
+              : 'Цветы из справочника. Каждый вид один раз, порядок можно менять.'}
           </p>
         </div>
       </div>
       <div className="sf-pe-card__body space-y-6">
-        {showKindPreview ? (
-          <p className="text-sm text-[var(--admin-muted)]">
-            Классификация: <strong>{derivedKind}</strong>
-            {derivedKind === 'MONO'
-              ? ' — один основной вид'
-              : derivedKind === 'MIXED'
-                ? ' — несколько основных видов'
-                : ' — недостаточно данных'}
-          </p>
-        ) : null}
-
         {summaryLine ? (
           <p className="text-sm text-[var(--admin-muted)]">{summaryLine}</p>
+        ) : showKindPreview && derivedKind === 'UNKNOWN' && components.length > 0 ? (
+          <p className="text-sm text-[var(--admin-muted)]">
+            Добавьте основной цветок из справочника — так определится вид букета.
+          </p>
         ) : null}
 
         {canUpdate ? (

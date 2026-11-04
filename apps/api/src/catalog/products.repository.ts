@@ -633,6 +633,8 @@ export function buildProductWhere(
       { name: { contains: filters.search, mode: 'insensitive' } },
       { slug: { contains: filters.search, mode: 'insensitive' } },
       { shortDescription: { contains: filters.search, mode: 'insensitive' } },
+      // Legacy-only long body (Task 03) — still searchable until operators consolidate.
+      { description: { contains: filters.search, mode: 'insensitive' } },
     ];
   }
 

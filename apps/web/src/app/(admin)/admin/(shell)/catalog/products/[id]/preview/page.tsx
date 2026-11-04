@@ -1,5 +1,5 @@
 import { notFound } from 'next/navigation';
-import type { ProductAdminDto } from '@bouquet-one/contracts';
+import { resolveProductDescription, type ProductAdminDto } from '@bouquet-one/contracts';
 import { AdminApiError, adminFetch } from '@/lib/admin-api';
 import { adminEndpoints } from '@/lib/admin-endpoints';
 import { lifecycleLabel } from '@/lib/admin-labels';
@@ -32,10 +32,15 @@ export default async function ProductPreviewPage({ params }: Props) {
       ) : null}
       <h1 className="text-4xl font-semibold text-stone-900">{product.name}</h1>
       <p className="text-xl text-stone-700">{product.price?.label ?? 'Цена не задана'}</p>
-      <p className="text-stone-600">{product.shortDescription}</p>
-      <div className="prose prose-stone max-w-none whitespace-pre-wrap text-stone-800">
-        {product.description}
-      </div>
+      {(() => {
+        const body = resolveProductDescription({
+          shortDescription: product.shortDescription,
+          description: product.description,
+        });
+        return body ? (
+          <div className="prose prose-stone max-w-none whitespace-pre-wrap text-stone-800">{body}</div>
+        ) : null;
+      })()}
       {product.components.length ? (
         <section>
           <h2 className="text-lg font-medium">Состав</h2>

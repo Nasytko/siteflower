@@ -48,6 +48,9 @@ import {
   resolveStoredCompositionKind,
   suggestVisualPaletteColorIds,
   deriveProductEditorReadiness,
+  resolveProductDescription,
+  productDescriptionHasLegacyConflict,
+  resolveProductMetaDescription,
 } from './catalog.js';
 
 test('normalizeErpSku: trim, uppercase, strip spaces; empty → null', () => {
@@ -689,6 +692,22 @@ test('deriveProductEditorReadiness', () => {
     compositionHasFlowerItem: true,
   });
   assert.equal(ready.readyToPublish, true);
+  assert.equal(
+    ready.items.find((item) => item.id === 'shortDescription')?.label,
+    'Описание товара',
+  );
+  assert.equal(ready.items.some((item) => item.id === 'description'), false);
+  const legacyOnlyLong = deriveProductEditorReadiness({
+    name: 'Букет',
+    slug: 'buket',
+    catalogCategoryId: 'cat-1',
+    variants: [{ status: 'ACTIVE', priceMajor: '69,00' }],
+    hasPrimaryImage: true,
+    shortDescription: '',
+    description: 'Только полное',
+    compositionHasFlowerItem: true,
+  });
+  assert.equal(legacyOnlyLong.readyToPublish, true);
   const withoutLongDesc = deriveProductEditorReadiness({
     name: 'Букет',
     slug: 'buket',
@@ -700,7 +719,6 @@ test('deriveProductEditorReadiness', () => {
     compositionHasFlowerItem: true,
   });
   assert.equal(withoutLongDesc.readyToPublish, true);
-  assert.equal(withoutLongDesc.items.find((item) => item.id === 'description')?.requiredForPublish, false);
   const zeroPrice = deriveProductEditorReadiness({
     name: 'Букет',
     slug: 'buket',
@@ -738,6 +756,86 @@ test('deriveProductEditorReadiness', () => {
   });
   assert.equal(giftReady.readyToPublish, true);
   assert.equal(giftReady.items.find((item) => item.id === 'composition')?.requiredForPublish, false);
+});
+
+test('resolveProductDescription prefers short, falls back to legacy long', () => {
+  assert.equal(
+    resolveProductDescription({ shortDescription: 'Коротко', description: 'Длинно' }),
+    'Коротко',
+  );
+  assert.equal(
+    resolveProductDescription({ shortDescription: '  ', description: 'Только полное' }),
+    'Только полное',
+  );
+  assert.equal(resolveProductDescription({ shortDescription: null, description: null }), null);
+  assert.equal(
+    productDescriptionHasLegacyConflict({
+      shortDescription: 'A',
+      description: 'B',
+    }),
+    true,
+  );
+  assert.equal(
+    productDescriptionHasLegacyConflict({
+      shortDescription: 'Same',
+      description: 'Same',
+    }),
+    false,
+  );
+});
+
+test('resolveProductMetaDescription priority: seo → body → name fallback', () => {
+  assert.equal(
+    resolveProductMetaDescription({
+      name: 'Амели',
+      seoDescription: 'Ручное SEO',
+      shortDescription: 'Тело',
+      description: 'Legacy',
+    }),
+    'Ручное SEO',
+  );
+  assert.equal(
+    resolveProductMetaDescription({
+      name: 'Амели',
+      seoDescription: null,
+      shortDescription: 'Тело товара',
+      description: 'Другое',
+    }),
+    'Тело товара',
+  );
+  assert.equal(
+    resolveProductMetaDescription({
+      name: 'Амели',
+      seoDescription: '   ',
+      shortDescription: '',
+      description: 'Только legacy полное',
+    }),
+    'Только legacy полное',
+  );
+  const fallback = resolveProductMetaDescription({
+    name: 'Амели',
+    seoDescription: null,
+    shortDescription: null,
+    description: null,
+  });
+  assert.match(fallback, /Амели/);
+  assert.notEqual(
+    fallback,
+    resolveProductMetaDescription({
+      name: 'Розы',
+      seoDescription: null,
+      shortDescription: null,
+      description: null,
+    }),
+  );
+  const long = 'слово '.repeat(200).trim();
+  const meta = resolveProductMetaDescription({
+    name: 'X',
+    seoDescription: null,
+    shortDescription: long,
+  });
+  assert.ok(meta.length <= 500);
+  assert.equal(long.includes(meta.slice(0, 20)), true);
 });
 
 test('derivePriceRange single', () => {

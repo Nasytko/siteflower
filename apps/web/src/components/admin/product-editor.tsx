@@ -4,7 +4,6 @@ import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   analyzeProductSeo,
-  defaultProductSeoDescription,
   defaultProductSeoTitle,
   isPlaceholderProductName,
   isValidErpSkuFormat,
@@ -12,8 +11,10 @@ import {
   normalizeSlug,
   deriveProductEditorReadiness,
   parsePositivePriceMajor,
+  productDescriptionHasLegacyConflict,
   productKindNeedsComposition,
   productKindNeedsGiftSubtype,
+  resolveProductMetaDescription,
   suggestProductNameFromComposition,
   suggestStemProductName,
   type ProductAdminDto,
@@ -100,7 +101,6 @@ type Props = {
 const READINESS_SECTION: Record<string, string> = {
   name: 'name',
   shortDescription: 'shortDescription',
-  description: 'description',
   price: 'price',
   category: 'category',
   photo: 'photo',
@@ -490,16 +490,25 @@ export function ProductEditor({
     return [...server.family.members].sort((a, b) => a.sortOrder - b.sortOrder);
   }, [server.family]);
 
+  const legacyDescriptionConflict = useMemo(
+    () =>
+      productDescriptionHasLegacyConflict({
+        shortDescription: basic.shortDescription,
+        description: basic.description || server.description,
+      }),
+    [basic.shortDescription, basic.description, server.description],
+  );
+
   const seoHealth = useMemo(() => {
     const titleManual = seo.seoTitle.trim();
     const descriptionManual = seo.seoDescription.trim();
     const resolvedTitle = titleManual || defaultProductSeoTitle(basic.name.trim() || server.name);
-    const resolvedDescription =
-      descriptionManual ||
-      defaultProductSeoDescription(
-        basic.name.trim() || server.name,
-        basic.shortDescription.trim() || server.shortDescription,
-      );
+    const resolvedDescription = resolveProductMetaDescription({
+      name: basic.name.trim() || server.name,
+      seoDescription: descriptionManual || null,
+      shortDescription: basic.shortDescription.trim() || server.shortDescription,
+      description: basic.description || server.description,
+    });
     const slug = basic.slug.trim() || server.slug;
     const now = Date.now();
     const publishAtMs = server.publishAt ? Date.parse(server.publishAt) : NaN;
@@ -536,12 +545,12 @@ export function ProductEditor({
 
   const previewTitle =
     seo.seoTitle.trim() || defaultProductSeoTitle(basic.name.trim() || server.name);
-  const previewDescription =
-    seo.seoDescription.trim() ||
-    defaultProductSeoDescription(
-      basic.name.trim() || server.name,
-      basic.shortDescription.trim() || server.shortDescription,
-    );
+  const previewDescription = resolveProductMetaDescription({
+    name: basic.name.trim() || server.name,
+    seoDescription: seo.seoDescription.trim() || null,
+    shortDescription: basic.shortDescription.trim() || server.shortDescription,
+    description: basic.description || server.description,
+  });
   const titleIsAutomatic = !seo.seoTitle.trim();
   const descriptionIsAutomatic = !seo.seoDescription.trim();
 
@@ -613,7 +622,7 @@ export function ProductEditor({
         erpSku: normalizeErpSku(basic.erpSku),
         shortDescription: basic.shortDescription.trim() || null,
         badgeLabel: basic.badgeLabel.trim() || null,
-        description: basic.description.trim() || null,
+        // Task 03: do not send `description` — omit keeps legacy long body intact in DB.
         heightCm: basic.heightCm.trim().length > 0 ? Number(basic.heightCm) : null,
         productKind,
         availability: publication.availability,
@@ -959,8 +968,51 @@ export function ProductEditor({
     <p className="admin-help">Только просмотр: у вашей роли нет прав на изменение каталога.</p>
   );
 
+  const mainTabShared = {
+    server,
+    canUpdate,
+    canCreate,
+    canPublish,
+    pending,
+    productKind,
+    setProductKind: changeProductKind,
+    basic,
+    setBasic,
+    slugManual,
+    nameManual,
+    onNameTyped: () => setNameManual(true),
+    components,
+    variants,
+    setVariants,
+    catalogCategoryId,
+    setCatalogCategoryId,
+    categories: options.categories,
+    discovery,
+    setDiscovery,
+    occasions: taxonomyOptions.occasions,
+    recipients: taxonomyOptions.recipients,
+    colors: taxonomyOptions.colors,
+    traitOptions,
+    onTaxonomyCreated,
+    publication,
+    setPublication,
+    hasPrimaryImage,
+    mediaCount: server.media.length,
+    onGoPhotos: () => jumpToReadinessIssue('photo'),
+    onGoExtraVariants: () => undefined,
+    onPublish: () => void runLifecycle('publish'),
+    onUnpublish: () => void runLifecycle('unpublish'),
+    onArchive: () => void runLifecycle('archive'),
+    touch,
+    legacyDescriptionConflict,
+  };
+
+  const primaryMedia =
+    server.media.find((item) => item.isPrimary) ??
+    [...server.media].sort((a, b) => a.sortOrder - b.sortOrder)[0];
+
   return (
-    <div className="space-y-6">
+    <div className="sf-pe space-y-5">
       <div className="admin-editor-header">
         <div className="space-y-2 min-w-0">
           <a
@@ -987,15 +1039,14 @@ export function ProductEditor({
               {availabilityLabel(publication.availability)}
             </span>
           </div>
-          <ProductReadinessPanel
-            compact
-            readyToPublish={readiness.readyToPublish}
-            issues={readiness.issues}
-            recommendations={readiness.items
-              .filter((item) => !item.requiredForPublish && !item.ok)
-              .map((item) => ({ id: item.id, label: item.label }))}
-            onJump={jumpToReadinessIssue}
-          />
+          {!readiness.readyToPublish ? (
+            <ProductReadinessPanel
+              compact
+              readyToPublish={false}
+              issues={readiness.issues}
+              onJump={jumpToReadinessIssue}
+            />
+          ) : null}
           <FormSaveStatus
             phase={savePending || mediaPending ? 'saving' : statusPhase}
             savedLabel={savedAt ? `Товар сохранён · ${savedAt}` : 'Все изменения сохранены'}
@@ -1093,128 +1144,44 @@ export function ProductEditor({
       {readOnlyNote}
 
       {justCreated ? (
-        <p className="text-sm text-[var(--admin-muted)]">
-          Черновик создан. Состав и цена — на этой странице. Фото можно добавить сразу.
-        </p>
+        <p className="admin-help">Черновик создан. Заполните название, цену, фото и описание.</p>
       ) : null}
 
       {server.promotion?.enabled ? (
         <p className="admin-help">
-          Участвует в акции. Условия меняются в разделе «Акции», не в карточке товара.
+          Участвует в акции — условия меняются в разделе «Акции».
         </p>
       ) : null}
 
-      <ProductEditorMainTab
-        server={server}
-        canUpdate={canUpdate}
-        canCreate={canCreate}
-        canPublish={canPublish}
-        pending={pending}
-        productKind={productKind}
-        setProductKind={changeProductKind}
-        basic={basic}
-        setBasic={setBasic}
-        slugManual={slugManual}
-        nameManual={nameManual}
-        onNameTyped={() => setNameManual(true)}
-        blocks={['kind']}
-        components={components}
-        variants={variants}
-        setVariants={setVariants}
-        catalogCategoryId={catalogCategoryId}
-        setCatalogCategoryId={setCatalogCategoryId}
-        categories={options.categories}
-        discovery={discovery}
-        setDiscovery={setDiscovery}
-        occasions={taxonomyOptions.occasions}
-        recipients={taxonomyOptions.recipients}
-        colors={taxonomyOptions.colors}
-        traitOptions={traitOptions}
-        onTaxonomyCreated={onTaxonomyCreated}
-        publication={publication}
-        setPublication={setPublication}
-        hasPrimaryImage={hasPrimaryImage}
-        mediaCount={server.media.length}
-        onGoPhotos={() => jumpToReadinessIssue('photo')}
-        onGoExtraVariants={() => undefined}
-        onPublish={() => void runLifecycle('publish')}
-        onUnpublish={() => void runLifecycle('unpublish')}
-        onArchive={() => void runLifecycle('archive')}
-        touch={touch}
-      />
+      <ProductEditorMainTab {...mainTabShared} blocks={['kind']} />
 
       <div className="admin-split admin-split--product">
-        <section className="sf-pe-card">
-          <div className="sf-pe-card__body">
-            {(() => {
-              const primary =
-                server.media.find((item) => item.isPrimary) ??
-                [...server.media].sort((a, b) => a.sortOrder - b.sortOrder)[0];
-              if (!primary) {
-                return (
-                  <button
-                    type="button"
-                    className="admin-thumb-empty aspect-square w-full max-w-sm"
-                    onClick={() => jumpToReadinessIssue('photo')}
-                  >
-                    Нет фото — добавить
-                  </button>
-                );
-              }
-              return (
-                <button
-                  type="button"
-                  className="block w-full"
-                  onClick={() => jumpToReadinessIssue('photo')}
-                >
-                  <img
-                    src={toSameOriginMediaUrl(primary.url) ?? primary.url}
-                    alt={primary.alt ?? ''}
-                    className="aspect-square w-full rounded-lg object-cover"
-                  />
-                </button>
-              );
-            })()}
+        <section className="sf-pe-card sf-pe-card--media-preview" aria-label="Главное фото">
+          <div className="sf-pe-card__body sf-pe-card__body--flush">
+            {primaryMedia ? (
+              <button
+                type="button"
+                className="block w-full"
+                onClick={() => jumpToReadinessIssue('photo')}
+              >
+                <img
+                  src={toSameOriginMediaUrl(primaryMedia.url) ?? primaryMedia.url}
+                  alt={primaryMedia.alt ?? ''}
+                  className="aspect-square w-full rounded-lg object-cover"
+                />
+              </button>
+            ) : (
+              <button
+                type="button"
+                className="admin-thumb-empty aspect-square w-full"
+                onClick={() => jumpToReadinessIssue('photo')}
+              >
+                Добавить фото
+              </button>
+            )}
           </div>
         </section>
-        <ProductEditorMainTab
-          server={server}
-          canUpdate={canUpdate}
-          canCreate={canCreate}
-          canPublish={canPublish}
-          pending={pending}
-          productKind={productKind}
-          setProductKind={changeProductKind}
-          basic={basic}
-          setBasic={setBasic}
-          slugManual={slugManual}
-          nameManual={nameManual}
-          onNameTyped={() => setNameManual(true)}
-          blocks={['identity']}
-          components={components}
-          variants={variants}
-          setVariants={setVariants}
-          catalogCategoryId={catalogCategoryId}
-          setCatalogCategoryId={setCatalogCategoryId}
-          categories={options.categories}
-          discovery={discovery}
-          setDiscovery={setDiscovery}
-          occasions={taxonomyOptions.occasions}
-          recipients={taxonomyOptions.recipients}
-          colors={taxonomyOptions.colors}
-          traitOptions={traitOptions}
-          onTaxonomyCreated={onTaxonomyCreated}
-          publication={publication}
-          setPublication={setPublication}
-          hasPrimaryImage={hasPrimaryImage}
-          mediaCount={server.media.length}
-          onGoPhotos={() => jumpToReadinessIssue('photo')}
-          onGoExtraVariants={() => undefined}
-          onPublish={() => void runLifecycle('publish')}
-          onUnpublish={() => void runLifecycle('unpublish')}
-          onArchive={() => void runLifecycle('archive')}
-          touch={touch}
-        />
+        <ProductEditorMainTab {...mainTabShared} blocks={['identity']} />
       </div>
 
       {needsComposition ? (
@@ -1234,37 +1201,22 @@ export function ProductEditor({
           onAddFlower={addFlowerItemToComposition}
           touch={touch}
         />
-      ) : (
-        <section className="sf-pe-card">
+      ) : null}
+
+      <ProductEditorMainTab {...mainTabShared} blocks={['copy']} />
+
+      <section className="admin-section sf-pe-card" data-section="photo">
           <div className="sf-pe-card__head">
-            <span className="sf-pe-card__index">2</span>
             <div>
-              <h2>Состав</h2>
+              <h2>Фотографии</h2>
               <p className="sf-pe-card__lead">
-                Для подарка, растения или другого типа состав из справочника цветов не нужен.
+                {server.media.length}/12 · главное фото — в каталоге
               </p>
             </div>
           </div>
-        </section>
-      )}
-
-      <ProductEditorOptionsTab
-        canUpdate={canUpdate}
-        optionGroups={optionGroups}
-        setOptionGroups={setOptionGroups}
-        variants={variants}
-        touch={touch}
-      />
-
-        <section className="admin-section sf-pe-card" data-section="photo">
-          <h2 className="admin-section__title">Фотографии</h2>
-          <p className="admin-section__lead">
-            Добавьте до 12 фотографий товара. {server.media.length} из 12 уже загружено. Главное фото
-            показывается в каталоге и на карточке товара.
-          </p>
           {canUpdate ? (
             <div
-              className="admin-panel"
+              className="admin-panel mt-4"
               onDragOver={(event) => event.preventDefault()}
               onDrop={(event) => {
                 event.preventDefault();
@@ -1273,15 +1225,9 @@ export function ProductEditor({
                 }
               }}
             >
-              <p className="admin-help">JPG, PNG, WebP, AVIF.</p>
-              <p className="admin-field__hint mb-3">
-                Можно загружать фотографии большого размера — система автоматически уменьшит и
-                оптимизирует их для сайта. Максимальный размер исходного файла — 25 МБ. Перетащите
-                файлы сюда или выберите кнопкой ниже.
-              </p>
               <label className="admin-field">
                 <span className="admin-btn-ghost inline-flex cursor-pointer px-3 py-2">
-                  Добавить фотографии
+                  Добавить фото
                   <input
                     type="file"
                     className="sr-only"
@@ -1296,6 +1242,7 @@ export function ProductEditor({
                   />
                 </span>
               </label>
+              <p className="admin-help mt-2">JPG, PNG, WebP, AVIF · до 25 МБ · можно перетащить сюда</p>
             </div>
           ) : null}
           {uploadStates.length > 0 ? (
@@ -1350,13 +1297,10 @@ export function ProductEditor({
           ) : null}
 
           {server.media.length === 0 ? (
-            <p className="admin-empty">Фото пока нет. Без фото товар нельзя опубликовать.</p>
+            <p className="admin-empty mt-3">Без фото товар нельзя опубликовать.</p>
           ) : (
             <>
-              <p className="admin-help mb-3">
-                Используйте стрелки, чтобы изменить порядок. Перетаскивание не обязательно.
-              </p>
-              <ul className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              <ul className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
                 {[...server.media]
                   .sort((a, b) => a.sortOrder - b.sortOrder)
                   .map((media, index, sorted) => (
@@ -1426,74 +1370,47 @@ export function ProductEditor({
               </ul>
             </>
           )}
-          <p className="admin-help">
-            Фото сохраняются сразу, отдельно от кнопки «Сохранить». Удаление убирает фото из товара;
-            файл в хранилище очищается позже служебной задачей.
-          </p>
+          <p className="admin-help mt-3">Фото сохраняются сразу, отдельно от «Сохранить».</p>
         </section>
 
+      <ProductEditorOptionsTab
+        canUpdate={canUpdate}
+        optionGroups={optionGroups}
+        setOptionGroups={setOptionGroups}
+        variants={variants}
+        touch={touch}
+      />
+
       <details className="admin-disclosure">
-        <summary>Описание, повод и получатель</summary>
+        <summary>Повод и кому</summary>
         <div className="admin-disclosure__body">
-          <ProductEditorMainTab
-            server={server}
+          <ProductEditorMainTab {...mainTabShared} blocks={['audience']} />
+        </div>
+      </details>
+
+      <details className="admin-disclosure">
+        <summary>Связанные товары</summary>
+        <div className="admin-disclosure__body">
+          <ProductEditorRelated
+            product={server}
             canUpdate={canUpdate}
-            canCreate={canCreate}
-            canPublish={canPublish}
-            pending={pending}
-            productKind={productKind}
-            setProductKind={changeProductKind}
-            basic={basic}
-            setBasic={setBasic}
-            slugManual={slugManual}
-            nameManual={nameManual}
-            onNameTyped={() => setNameManual(true)}
-            blocks={['copy', 'audience']}
-            components={components}
-            variants={variants}
-            setVariants={setVariants}
-            catalogCategoryId={catalogCategoryId}
-            setCatalogCategoryId={setCatalogCategoryId}
-            categories={options.categories}
-            discovery={discovery}
-            setDiscovery={setDiscovery}
-            occasions={taxonomyOptions.occasions}
-            recipients={taxonomyOptions.recipients}
-            colors={taxonomyOptions.colors}
-            traitOptions={traitOptions}
-            onTaxonomyCreated={onTaxonomyCreated}
-            publication={publication}
-            setPublication={setPublication}
-            hasPrimaryImage={hasPrimaryImage}
-            mediaCount={server.media.length}
-            onGoPhotos={() => jumpToReadinessIssue('photo')}
-            onGoExtraVariants={() => undefined}
-            onPublish={() => void runLifecycle('publish')}
-            onUnpublish={() => void runLifecycle('unpublish')}
-            onArchive={() => void runLifecycle('archive')}
-            touch={touch}
+            members={familyMembers}
+            onChanged={(updated) => {
+              setServer(updated);
+              setVersion(updated.version);
+              setFamilyId(updated.family?.id ?? '');
+              setFamilyMemberSortOrder(familyMemberSortOrderFor(updated));
+              router.refresh();
+            }}
           />
         </div>
       </details>
 
-      <ProductEditorRelated
-        product={server}
-        canUpdate={canUpdate}
-        members={familyMembers}
-        onChanged={(updated) => {
-          setServer(updated);
-          setVersion(updated.version);
-          setFamilyId(updated.family?.id ?? '');
-          setFamilyMemberSortOrder(familyMemberSortOrderFor(updated));
-          router.refresh();
-        }}
-      />
-
       <details className="admin-disclosure">
-        <summary>Размещение в каталоге</summary>
+        <summary>Где показывается в каталоге</summary>
         <div className="admin-disclosure__body">
           <p className="admin-help mb-3">
-            Только информация. Разделы считаются по типу, составу, цене и опубликованным правилам.
+            Справочно: разделы считаются по типу, составу и правилам страниц.
           </p>
           <ProductPlacementPanel productId={server.id} refreshKey={server.version} />
         </div>
@@ -1505,10 +1422,10 @@ export function ProductEditor({
         data-section="seo"
         onToggle={(event) => setSeoManualOpen(event.currentTarget.open)}
       >
-        <summary>SEO</summary>
+        <summary>Адрес и SEO</summary>
         <div className="admin-disclosure__body space-y-3">
           <p className="admin-help">
-            Адрес, title и description создаются автоматически. Ручная правка — только при необходимости.
+            Обычно заполняется само. Меняйте вручную только если нужен особый текст в поиске.
           </p>
           <label className="admin-field">
             <span>Адрес в ссылке</span>

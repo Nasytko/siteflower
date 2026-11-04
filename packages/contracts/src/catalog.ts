@@ -1672,7 +1672,8 @@ export function deriveProductEditorReadiness(input: {
   variants: Array<{ status: string; priceMajor: string | null | undefined }>;
   hasPrimaryImage: boolean;
   shortDescription: string | null | undefined;
-  description: string | null | undefined;
+  /** Legacy long body — used only as fallback when short is empty (Task 03). */
+  description?: string | null | undefined;
   compositionHasFlowerItem: boolean;
 }): {
   items: ProductEditorReadinessItem[];
@@ -1689,16 +1690,19 @@ export function deriveProductEditorReadiness(input: {
     activeVariants.length > 0 &&
     activeVariants.every((v) => parsePositivePriceMajor(v.priceMajor) !== null);
   const photoOk = input.hasPrimaryImage;
-  const shortOk = Boolean(input.shortDescription?.trim());
-  const longOk = Boolean(input.description?.trim());
+  const descriptionOk = Boolean(
+    resolveProductDescription({
+      shortDescription: input.shortDescription,
+      description: input.description,
+    }),
+  );
   const compositionOk = !needsComposition || input.compositionHasFlowerItem;
   // Category is no longer a commercial type — ProductKind is SSoT. Gift subtype is optional.
 
   const items: ProductEditorReadinessItem[] = [
     { id: 'name', label: 'Название', ok: nameOk, requiredForPublish: true },
     { id: 'slug', label: 'Адрес в ссылке', ok: slugOk, requiredForPublish: true },
-    { id: 'shortDescription', label: 'Короткое описание', ok: shortOk, requiredForPublish: true },
-    { id: 'description', label: 'Полное описание', ok: longOk, requiredForPublish: false },
+    { id: 'shortDescription', label: 'Описание товара', ok: descriptionOk, requiredForPublish: true },
     { id: 'price', label: 'Цена', ok: priceOk, requiredForPublish: true },
     { id: 'photo', label: 'Основное фото', ok: photoOk, requiredForPublish: true },
     {
@@ -2348,9 +2352,63 @@ export function defaultProductSeoTitle(name: string): string {
   return `Букет «${name}» с доставкой по Гродно | BUKET №1`;
 }
 
+/**
+ * Canonical product body copy (Task 03).
+ * Prefer `shortDescription`; fall back to legacy `description` when short is empty.
+ * Does not invent text and does not merge differing values.
+ */
+export function resolveProductDescription(input: {
+  shortDescription?: string | null;
+  description?: string | null;
+}): string | null {
+  const short = input.shortDescription?.trim() ?? '';
+  if (short.length > 0) return short;
+  const legacy = input.description?.trim() ?? '';
+  return legacy.length > 0 ? legacy : null;
+}
+
+/** True when both fields are non-empty and differ — needs operator review, never auto-merge. */
+export function productDescriptionHasLegacyConflict(input: {
+  shortDescription?: string | null;
+  description?: string | null;
+}): boolean {
+  const short = input.shortDescription?.trim() ?? '';
+  const legacy = input.description?.trim() ?? '';
+  return short.length > 0 && legacy.length > 0 && short !== legacy;
+}
+
+/** Collapse whitespace and truncate for meta tags only (stored copy stays intact). */
+export function normalizeProductMetaDescription(text: string, maxLen = 500): string {
+  const collapsed = text.replace(/\s+/g, ' ').trim();
+  if (collapsed.length <= maxLen) return collapsed;
+  const slice = collapsed.slice(0, maxLen);
+  const lastSpace = slice.lastIndexOf(' ');
+  const base = lastSpace > Math.floor(maxLen * 0.6) ? slice.slice(0, lastSpace) : slice;
+  return base.trimEnd();
+}
+
+/**
+ * Meta description priority:
+ * 1) manual seoDescription
+ * 2) canonical product description (short, else legacy long)
+ * 3) name-based safe fallback (not a shared static string across all products)
+ */
+export function resolveProductMetaDescription(input: {
+  name: string;
+  seoDescription?: string | null;
+  shortDescription?: string | null;
+  description?: string | null;
+}): string {
+  const manual = input.seoDescription?.trim() ?? '';
+  if (manual.length > 0) return normalizeProductMetaDescription(manual);
+  const body = resolveProductDescription(input);
+  if (body) return normalizeProductMetaDescription(body);
+  return defaultProductSeoDescription(input.name);
+}
+
 export function defaultProductSeoDescription(name: string, shortDescription?: string | null): string {
   if (shortDescription && shortDescription.trim().length > 0) {
-    return shortDescription.trim().slice(0, 500);
+    return normalizeProductMetaDescription(shortDescription);
   }
   return `Закажите букет «${name}» в BUKET №1 — доставка цветов по Гродно.`;
 }

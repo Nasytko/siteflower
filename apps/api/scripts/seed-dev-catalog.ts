@@ -559,7 +559,7 @@ async function upsertBouquet(
       slug: bouquet.slug,
       name: bouquet.name,
       shortDescription: bouquet.shortDescription,
-      description: bouquet.description,
+      // Task 03: canonical body is shortDescription; leave legacy description null in seed.
       lifecycle: 'PUBLISHED',
       availability: 'AVAILABLE',
       bouquetHeightCm: bouquet.heightCm ?? null,
@@ -571,7 +571,7 @@ async function upsertBouquet(
     update: {
       name: bouquet.name,
       shortDescription: bouquet.shortDescription,
-      description: bouquet.description,
+      // Task 03: canonical body is shortDescription; leave legacy description null in seed.
       lifecycle: 'PUBLISHED',
       availability: 'AVAILABLE',
       bouquetHeightCm: bouquet.heightCm ?? null,

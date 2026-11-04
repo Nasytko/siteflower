@@ -188,9 +188,9 @@ function DeliveryPanel({
   );
 }
 
-/** Tabs (desktop) / accordions (mobile): Состав · Доставка · Оплата · Описание. */
+/** Tabs (desktop) / accordions (mobile): Состав · Доставка · Оплата. */
 export function ProductDetailInfo(props: Props) {
-  const { product, paymentDescription } = props;
+  const { paymentDescription } = props;
   const sections: ProductInfoSection[] = [
     {
       id: 'composition',
@@ -213,14 +213,7 @@ export function ProductDetailInfo(props: Props) {
       content: <RichText text={paymentDescription} />,
     });
   }
-  if (product.description) {
-    sections.push({
-      id: 'description',
-      label: 'Описание',
-      icon: <TextIcon />,
-      content: <RichText text={product.description} />,
-    });
-  }
+  // Task 03: product body lives once under the buy panel lead — do not duplicate here.
   return <ProductInfoTabs sections={sections} />;
 }
 
@@ -256,14 +249,6 @@ function WalletIcon() {
     <Svg>
       <rect x="3" y="6" width="18" height="13" rx="2" />
       <path d="M3 10h18M16 14.5h2" />
-    </Svg>
-  );
-}
-
-function TextIcon() {
-  return (
-    <Svg>
-      <path d="M5 6h14M5 10h14M5 14h10M5 18h7" />
     </Svg>
   );
 }

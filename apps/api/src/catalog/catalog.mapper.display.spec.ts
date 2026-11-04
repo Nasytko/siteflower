@@ -300,4 +300,31 @@ describe('toProductPublicDto composition (Task 04A)', () => {
     expect(withSku).not.toHaveProperty('erpSku');
     expect(without).not.toHaveProperty('erpSku');
   });
+
+  it('resolves one canonical description for public DTO (Task 03)', () => {
+    const preferShort = toProductPublicDto(
+      baseProduct({ shortDescription: 'Коротко', description: 'Длинно иное' }),
+      urlFor,
+    );
+    expect(preferShort.shortDescription).toBe('Коротко');
+    expect(preferShort.description).toBe('Коротко');
+    expect(preferShort.seo.resolvedDescription).toBe('Коротко');
+
+    const legacyOnly = toProductPublicDto(
+      baseProduct({ shortDescription: null, description: 'Только полное' }),
+      urlFor,
+    );
+    expect(legacyOnly.shortDescription).toBe('Только полное');
+    expect(legacyOnly.description).toBe('Только полное');
+
+    const manualSeo = toProductPublicDto(
+      baseProduct({
+        shortDescription: 'Тело',
+        description: null,
+        seoDescription: 'Ручное SEO',
+      }),
+      urlFor,
+    );
+    expect(manualSeo.seo.resolvedDescription).toBe('Ручное SEO');
+  });
 });

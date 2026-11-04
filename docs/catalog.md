@@ -50,6 +50,10 @@ Display price is **derived** from active variants (after any effective promotion
 
 Never denormalize a stale `product.price`. Checkout uses `effectiveVariantPriceMinor` — never browser math. See [commerce-invariants.md](./commerce-invariants.md).
 
+## Product description (Task 03)
+
+Canonical commercial body is **`shortDescription`** («Описание товара» in admin). Legacy column **`description`** remains in the DB until a later cleanup; runtime prefers short, falls back to legacy long when short is empty. Admin save omits `description` so legacy long text is not wiped. Public PDP shows **one** block (buy-panel lead). Meta description: manual `seoDescription` → resolved body → name-based fallback. Inventory: `packages/database/prisma/ops/inventory-product-descriptions.sql` (read-only; do not auto-merge differing texts).
+
 ## Composition
 
 `ProductComponent` is an identity list: **`flowerItemId` + `sortOrder`** only (must reference a reusable **FlowerItem**). Recipe stem counts live in ERP, not on the site composition row. Legacy DB columns (`role` / `quantity` / `unit` / `display_name` / component `color_id`) remain until the deferred contract migration; runtime code does not read or write them.

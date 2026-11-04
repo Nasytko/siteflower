@@ -1,4 +1,4 @@
-import type { ProductPublicDto } from '@bouquet-one/contracts';
+import { resolveProductDescription, type ProductPublicDto } from '@bouquet-one/contracts';
 import { buildJsonLd, type JsonLd } from './json-ld';
 import { absoluteUrl } from './site-url';
 import { pickDerivativeUrl } from '@/lib/media';
@@ -63,7 +63,11 @@ export function buildProductJsonLd(product: ProductPublicDto): JsonLd {
   return buildJsonLd({
     '@type': 'Product',
     name: product.name,
-    description: product.shortDescription ?? product.description ?? undefined,
+    description:
+      resolveProductDescription({
+        shortDescription: product.shortDescription,
+        description: product.description,
+      }) ?? undefined,
     image: images.length > 0 ? images : undefined,
     brand: {
       '@type': 'Brand',
