@@ -285,15 +285,25 @@ export default async function StorefrontHomePage() {
 
       <HomePerks items={homepage.perks ?? []} />
 
-      {promoSection?.enabled && promoProducts.length > 0 ? (
+      {promoSection?.enabled ? (
         <section className="sf-home-shelf">
           <div className="sf-container-wide">
             <HomeSectionHead
-              title={promoSection.heading || 'Акционные товары'}
+              title={promoSection.heading || 'Товары на акции'}
               href={promoSection.viewAllHref || '/akcii'}
               badge={promoBadgePercent ? `Скидки до −${promoBadgePercent}%` : null}
             />
-            <ProductRow products={promoProducts.slice(0, promoLimit)} tone="promo" />
+            {promoProducts.length > 0 ? (
+              <ProductRow products={promoProducts.slice(0, promoLimit)} tone="promo" />
+            ) : (
+              <p className="sf-home-shelf__empty">
+                Сейчас тихий момент без скидок — загляните чуть позже или{' '}
+                <Link href="/catalog/bouquets" className="sf-link">
+                  выберите букет в каталоге
+                </Link>
+                .
+              </p>
+            )}
           </div>
         </section>
       ) : null}

@@ -1,14 +1,21 @@
 import type { ReactNode } from 'react';
 import { FavoritesProvider } from '@/components/storefront/favorites-provider';
+import { MobileCallChip } from '@/components/storefront/mobile-call-chip';
 import { StorefrontFooter } from '@/components/storefront/footer';
 import { StorefrontHeader } from '@/components/storefront/header';
-import { listFlowerTypes } from '@/lib/public-api';
-import { getFixedLegalSeller } from '@/lib/legal-content';
 import {
-  enrichNavWithFlowerTypes,
-  getFixedPrimaryNav,
-  getFixedStorefrontSettings,
-} from '@/lib/storefront-content';
+  listCatalogCategoryTree,
+  listFlowerTypes,
+  listOccasions,
+  listRecipients,
+} from '@/lib/public-api';
+import { getFixedLegalSeller } from '@/lib/legal-content';
+import { getFixedStorefrontSettings } from '@/lib/storefront-content';
+import {
+  buildSmartPrimaryNav,
+  shortShopAddress,
+  yandexMapsHref,
+} from '@/lib/smart-nav';
 import { buildOrganizationJsonLd, serializeJsonLd } from '@/lib/seo/json-ld';
 import { getSiteUrl } from '@/lib/seo/site-url';
 
@@ -18,8 +25,21 @@ export const dynamic = 'force-dynamic';
 export default async function StorefrontLayout({ children }: { children: ReactNode }) {
   const settings = getFixedStorefrontSettings();
   const seller = getFixedLegalSeller(settings);
-  const flowers = await listFlowerTypes().catch(() => []);
-  const navItems = enrichNavWithFlowerTypes(getFixedPrimaryNav(), flowers);
+  const [flowers, occasions, recipients, categoryTree] = await Promise.all([
+    listFlowerTypes().catch(() => []),
+    listOccasions().catch(() => []),
+    listRecipients().catch(() => []),
+    listCatalogCategoryTree().catch(() => []),
+  ]);
+  const navItems = buildSmartPrimaryNav({
+    flowers,
+    occasions,
+    recipients,
+    categoryTree,
+  });
+
+  const addressLabel = shortShopAddress(settings.address) ?? settings.city;
+  const mapsHref = settings.address ? yandexMapsHref(settings.address) : null;
 
   const orgLd = buildOrganizationJsonLd({
     name: settings.brandName,
@@ -36,12 +56,15 @@ export default async function StorefrontLayout({ children }: { children: ReactNo
         <StorefrontHeader
           brandName={settings.brandName}
           city={settings.city}
+          addressLabel={addressLabel}
+          mapsHref={mapsHref}
           phone={settings.phone}
           workingHours={settings.workingHours}
           navItems={navItems}
         />
         <div className="flex-1">{children}</div>
         <StorefrontFooter settings={settings} seller={seller} />
+        {settings.phone ? <MobileCallChip phone={settings.phone} /> : null}
         <script
           type="application/ld+json"
           dangerouslySetInnerHTML={{ __html: serializeJsonLd(orgLd) }}

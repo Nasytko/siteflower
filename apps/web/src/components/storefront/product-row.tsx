@@ -29,7 +29,7 @@ export function ProductRow({
             product={product}
             priority={index < priorityCount}
             variant="compact"
-            sizes="(max-width: 640px) 46vw, (max-width: 1100px) 30vw, 17rem"
+            sizes="(max-width: 640px) 58vw, (max-width: 1100px) 32vw, 18rem"
           />
         </li>
       ))}

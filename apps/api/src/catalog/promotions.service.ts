@@ -22,7 +22,7 @@ import { AppConfigService } from '../config/app-config.service';
 import { PrismaService } from '../database/prisma.service';
 import { MediaService } from '../media/media.service';
 import { StorefrontRevalidateService } from '../storefront/storefront-revalidate.service';
-import { OCC_CONFLICT_MESSAGE } from './catalog.logic';
+import { isEffectivelyPublished, OCC_CONFLICT_MESSAGE } from './catalog.logic';
 import {
   PRODUCT_INCLUDE,
   toPromotionAdminDto,
@@ -33,7 +33,14 @@ import {
 import { ProductsRepository } from './products.repository';
 import { adminPromotionListStatus, validatePromotionInput } from './promotion.util';
 
-export const PROMOTION_STATUSES = ['all', 'active', 'scheduled', 'ended', 'disabled'] as const;
+export const PROMOTION_STATUSES = [
+  'all',
+  'active',
+  'scheduled',
+  'ended',
+  'disabled',
+  'not_published',
+] as const;
 export type PromotionStatus = (typeof PROMOTION_STATUSES)[number];
 
 export type UpsertPromotionInput = {
@@ -332,10 +339,15 @@ export class PromotionsService {
       const promotionAdmin = toPromotionAdminDto(product, now);
       if (!promotionAdmin) return null;
       const listItem = toProductListItemDto(product, this.urlFor, now);
+      const onStorefrontEligible = isEffectivelyPublished(product, now);
+      const status = adminPromotionListStatus(promotionAdmin, now, {
+        onStorefrontEligible,
+      });
       return {
         ...listItem,
         promotionAdmin,
-        status: adminPromotionListStatus(promotionAdmin, now),
+        status,
+        onStorefront: status === 'active',
       };
     } catch (err) {
       const detail = err instanceof Error ? err.message : String(err);

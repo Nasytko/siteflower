@@ -12,10 +12,11 @@ export type PromotionStatusView = {
 };
 
 const STATUS_VIEW: Record<AdminPromotionListStatus, PromotionStatusView> = {
-  active: { label: 'Идёт сейчас', tone: 'active' },
+  active: { label: 'На витрине', tone: 'active' },
   scheduled: { label: 'Запланирована', tone: 'planned' },
   ended: { label: 'Завершена', tone: 'ended' },
   disabled: { label: 'Выключена', tone: 'off' },
+  not_published: { label: 'Не опубликовано', tone: 'planned' },
 };
 
 export function promotionStatusView(row: AdminPromotionListItemDto): PromotionStatusView {

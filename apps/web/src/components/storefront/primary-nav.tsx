@@ -74,13 +74,36 @@ export function PrimaryNav({ items = PRIMARY_NAV, inline = false }: Props) {
   const pathname = usePathname();
   const [openId, setOpenId] = useState<string | null>(null);
   const rootRef = useRef<HTMLElement>(null);
+  const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const baseId = useId();
 
   const close = useCallback(() => setOpenId(null), []);
 
+  const openNow = useCallback((id: string) => {
+    if (closeTimer.current) {
+      clearTimeout(closeTimer.current);
+      closeTimer.current = null;
+    }
+    setOpenId(id);
+  }, []);
+
+  const closeSoon = useCallback(() => {
+    if (closeTimer.current) clearTimeout(closeTimer.current);
+    closeTimer.current = setTimeout(() => {
+      setOpenId(null);
+      closeTimer.current = null;
+    }, 140);
+  }, []);
+
   useEffect(() => {
     close();
   }, [pathname, close]);
+
+  useEffect(() => {
+    return () => {
+      if (closeTimer.current) clearTimeout(closeTimer.current);
+    };
+  }, []);
 
   useEffect(() => {
     if (!openId) return;
@@ -106,20 +129,23 @@ export function PrimaryNav({ items = PRIMARY_NAV, inline = false }: Props) {
       {showDim ? (
         <button
           type="button"
-          className="fixed inset-0 z-40 hidden bg-ink/25 lg:block"
+          className="sf-nav-dim fixed inset-0 z-[45] hidden lg:block"
           aria-label="Закрыть меню"
           onClick={close}
         />
       ) : null}
 
-      <nav ref={rootRef} aria-label="Основное меню" className={`relative z-50 ${inline ? 'min-w-0' : ''}`}>
+      <nav
+        ref={rootRef}
+        aria-label="Основное меню"
+        className={`sf-primary-nav relative z-[60] ${inline ? 'sf-primary-nav--inline min-w-0' : ''}`}
+      >
         <ul
           className={
             inline
-              ? 'flex flex-nowrap items-center justify-center gap-x-4 overflow-x-auto xl:gap-x-6'
+              ? 'flex flex-nowrap items-center justify-center gap-x-4 xl:gap-x-6'
               : 'sf-container-wide flex flex-wrap items-center justify-center gap-x-6 gap-y-1 py-1 md:gap-x-8'
           }
-          style={inline ? { scrollbarWidth: 'none' } : undefined}
         >
           {items.map((item) => {
             const current = isCurrentBranch(pathname, item);
@@ -133,10 +159,10 @@ export function PrimaryNav({ items = PRIMARY_NAV, inline = false }: Props) {
                 key={item.id}
                 className={`shrink-0 ${dropdown ? 'relative' : ''}`}
                 onMouseEnter={() => {
-                  if (dropdown) setOpenId(item.id);
+                  if (dropdown) openNow(item.id);
                 }}
                 onMouseLeave={() => {
-                  if (openId === item.id) setOpenId(null);
+                  if (dropdown) closeSoon();
                 }}
               >
                 <div className="flex items-center">
@@ -162,7 +188,7 @@ export function PrimaryNav({ items = PRIMARY_NAV, inline = false }: Props) {
                       aria-expanded={open}
                       aria-haspopup="true"
                       aria-controls={panelId}
-                      onClick={() => setOpenId(open ? null : item.id)}
+                      onClick={() => (open ? close() : openNow(item.id))}
                     >
                       <span aria-hidden>▾</span>
                       <span className="sr-only">Подменю «{item.label}»</span>
@@ -176,13 +202,9 @@ export function PrimaryNav({ items = PRIMARY_NAV, inline = false }: Props) {
                     role="region"
                     aria-label={`Подменю ${item.label}`}
                     hidden={!open}
-                    className={`absolute top-full z-50 hidden pt-2 lg:block ${
-                      isTiles
-                        ? 'left-1/2 w-[min(72rem,calc(100vw-2rem))] -translate-x-1/2'
-                        : 'left-1/2 min-w-[16rem] -translate-x-1/2'
-                    } ${
-                      open ? 'pointer-events-auto opacity-100' : 'pointer-events-none opacity-0'
-                    } transition-opacity duration-150`}
+                    className={`sf-nav-panel absolute left-1/2 top-full z-[70] hidden -translate-x-1/2 pt-3 lg:block ${
+                      isTiles ? 'w-[min(72rem,calc(100vw-2rem))]' : 'min-w-[16rem]'
+                    } ${open ? 'sf-nav-panel--open' : ''}`}
                   >
                     <div className="rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] p-5 shadow-[var(--shadow-soft)]">
                       {isTiles && item.children && item.children.length > 0 ? (

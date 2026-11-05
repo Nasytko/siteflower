@@ -197,11 +197,15 @@ export function listFlowerOrigins() {
   });
 }
 
-/** Currently effective promotional products for homepage /akcii. */
+/**
+ * Currently effective promotional products for homepage /akcii.
+ * No Data Cache — promo changes must appear immediately after admin save.
+ */
 export function listPromotionalProducts(limit = 8) {
   return publicFetch<ProductListItemDto[]>('/catalog/promotions', {
     searchParams: { limit },
     tags: ['catalog', 'products', 'promotions'],
+    revalidate: false,
   });
 }
 

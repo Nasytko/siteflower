@@ -40,7 +40,6 @@ import { toFlowerItemDto, type FlowerItemRow } from './flower-item.util';
 import {
   buildPublicPromotionDto,
   effectiveVariantPriceMinor,
-  isPromotionEffective,
   type PromotionRow,
 } from './promotion.util';
 
@@ -318,6 +317,13 @@ export function toPromotionAdminDto(
 ): ProductPromotionAdminDto | null {
   if (!product.promotion) return null;
   const promo = toPromotionRow(product);
+  // Same discount truth as the public catalog — not schedule-only.
+  const publicPromo = buildPublicPromotionDto(
+    product.currency,
+    product.variants,
+    promo,
+    now,
+  );
   return {
     enabled: product.promotion.enabled,
     type: product.promotion.type,
@@ -329,7 +335,7 @@ export function toPromotionAdminDto(
       salePriceMinor: row.salePriceMinor.toString(),
     })),
     version: product.promotion.version,
-    currentlyEffective: isPromotionEffective(promo, now),
+    currentlyEffective: publicPromo !== null,
   };
 }
 

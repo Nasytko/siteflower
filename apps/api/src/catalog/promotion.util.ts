@@ -95,21 +95,30 @@ export function buildPublicPromotionDto(
 
 export type { PromotionValidationIssue };
 
-/** List-chip status for admin promotions overview. */
+/**
+ * List-chip status for admin promotions overview.
+ * `active` means the product would appear in GET /catalog/promotions (published + live discount).
+ */
 export function adminPromotionListStatus(
   promotion: ProductPromotionAdminDto,
   now: Date,
+  opts?: { onStorefrontEligible?: boolean },
 ): AdminPromotionListStatus {
   if (!promotion.enabled) return 'disabled';
-  if (promotion.currentlyEffective) return 'active';
   if (promotion.startsAt && new Date(promotion.startsAt).getTime() > now.getTime()) {
     return 'scheduled';
   }
   if (promotion.endsAt && new Date(promotion.endsAt).getTime() <= now.getTime()) {
     return 'ended';
   }
-  // Enabled but not currently discounted (e.g. FIXED prices no longer below regular).
-  return 'disabled';
+  if (!promotion.currentlyEffective) {
+    // Enabled but not currently discounted (e.g. FIXED prices no longer below regular).
+    return 'disabled';
+  }
+  if (opts?.onStorefrontEligible === false) {
+    return 'not_published';
+  }
+  return 'active';
 }
 
 /**

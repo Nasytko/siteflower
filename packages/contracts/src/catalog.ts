@@ -1933,7 +1933,11 @@ export type ProductPromotionAdminDto = {
   /** Required when type = FIXED: sale price per variant id. */
   variantSalePrices: Array<{ variantId: string; salePriceMinor: string }>;
   version: number;
-  /** Whether currently effective (Europe/Minsk clock at read time). */
+  /**
+   * True when the discount would apply on the storefront pricing math
+   * (schedule + enabled + real sale below regular). Does **not** require
+   * the product to be published — see admin list `status` / `onStorefront`.
+   */
   currentlyEffective: boolean;
 };
 
@@ -1943,6 +1947,8 @@ export const ADMIN_PROMOTION_LIST_STATUSES = [
   'scheduled',
   'ended',
   'disabled',
+  /** Discount is live, but product is not on the public catalog yet. */
+  'not_published',
 ] as const;
 export type AdminPromotionListStatus = (typeof ADMIN_PROMOTION_LIST_STATUSES)[number];
 
@@ -1950,11 +1956,13 @@ export type AdminPromotionListStatus = (typeof ADMIN_PROMOTION_LIST_STATUSES)[nu
  * Admin «Акции» overview row.
  * - `promotion` — public display prices when currently effective (else null)
  * - `promotionAdmin` — full schedule/config for the row
- * - `status` — derived chip state for the list
+ * - `status` — derived chip state for the list (`active` = visible on /akcii + homepage)
+ * - `onStorefront` — shortcut: status === 'active'
  */
 export type AdminPromotionListItemDto = ProductListItemDto & {
   promotionAdmin: ProductPromotionAdminDto;
   status: AdminPromotionListStatus;
+  onStorefront: boolean;
 };
 
 export type ProductListItemDto = {

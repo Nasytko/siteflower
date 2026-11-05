@@ -397,7 +397,7 @@ export function defaultHomepageConfig(): HomepageConfigDto {
         id: 'promotions',
         kind: 'promotions',
         enabled: true,
-        heading: 'Акционные товары',
+        heading: 'Товары на акции',
         sortOrder: 10,
         viewAllHref: '/akcii',
         limit: 5,

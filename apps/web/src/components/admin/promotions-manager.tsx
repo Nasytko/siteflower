@@ -36,6 +36,8 @@ type Draft = {
   productId: string;
   productName: string;
   expectedVersion: number;
+  /** False when the product is not live on the storefront yet. */
+  published: boolean;
   enabled: boolean;
   type: 'PERCENT' | 'FIXED';
   percentOff: string;
@@ -57,6 +59,7 @@ function draftFromRow(row: AdminPromotionListItemDto, variants: VariantSaleDraft
     productId: row.id,
     productName: row.name,
     expectedVersion: row.version,
+    published: row.onStorefront || row.lifecycle === 'PUBLISHED',
     enabled: row.promotionAdmin.enabled,
     type: row.promotionAdmin.type === 'FIXED' ? 'FIXED' : 'PERCENT',
     percentOff: row.promotionAdmin.percentOff != null ? String(row.promotionAdmin.percentOff) : '',
@@ -145,6 +148,7 @@ export function PromotionsManager({ initial, canUpdate }: Props) {
         productId: product.id,
         productName: product.name,
         expectedVersion: product.version,
+        published: product.lifecycle === 'PUBLISHED',
         enabled: true,
         type: 'PERCENT',
         percentOff: '10',
@@ -227,6 +231,11 @@ export function PromotionsManager({ initial, canUpdate }: Props) {
         </p>
       ) : null}
 
+      <p className="admin-notice">
+        На главной и в «Акциях» видны только товары со статусом «На витрине»: скидка включена, даты
+        актуальны, цена реально ниже обычной, товар опубликован. Черновики в витрину не попадают.
+      </p>
+
       {canUpdate ? (
         <div className="admin-panel space-y-3 p-4">
           <h2 className="admin-subsection__title">Новая акция</h2>
@@ -257,6 +266,7 @@ export function PromotionsManager({ initial, canUpdate }: Props) {
                     <p className="font-semibold">{item.name}</p>
                     <p className="text-xs text-[var(--admin-muted)]">
                       {item.price?.label ?? 'без цены'}
+                      {item.lifecycle !== 'PUBLISHED' ? ' · не опубликован' : ''}
                     </p>
                   </div>
                   <button
@@ -280,6 +290,12 @@ export function PromotionsManager({ initial, canUpdate }: Props) {
             {existingIds.has(draft.productId) ? 'Изменить акцию' : 'Условия акции'}
           </h2>
           <p className="text-sm text-[var(--admin-muted)]">{draft.productName}</p>
+          {!draft.published ? (
+            <p className="admin-notice">
+              Товар ещё не опубликован. После сохранения скидки опубликуйте его в карточке —
+              иначе блок «Товары на акции» на сайте останется пустым.
+            </p>
+          ) : null}
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
             <label className="admin-field">
               <span>Тип скидки</span>
@@ -457,6 +473,11 @@ export function PromotionsManager({ initial, canUpdate }: Props) {
                         {row.name}
                       </Link>
                       <p className="text-xs text-[var(--admin-muted)]">{promotionTypeForRow(row)}</p>
+                      {row.status === 'not_published' ? (
+                        <p className="mt-1 text-xs text-amber-800">
+                          Опубликуйте товар — иначе скидка не появится на сайте.
+                        </p>
+                      ) : null}
                     </td>
                     <td data-label="Обычная" className="tabular-nums admin-price-old">
                       {promotionRegularPriceLabel(row)}

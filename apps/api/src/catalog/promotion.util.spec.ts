@@ -293,9 +293,14 @@ describe('adminPromotionListStatus', () => {
     };
   }
 
-  it('maps disabled / active / scheduled / ended', () => {
+  it('maps disabled / active / scheduled / ended / not_published', () => {
     expect(adminPromotionListStatus(admin({ enabled: false }), now)).toBe('disabled');
     expect(adminPromotionListStatus(admin({ currentlyEffective: true }), now)).toBe('active');
+    expect(
+      adminPromotionListStatus(admin({ currentlyEffective: true }), now, {
+        onStorefrontEligible: false,
+      }),
+    ).toBe('not_published');
     expect(
       adminPromotionListStatus(
         admin({

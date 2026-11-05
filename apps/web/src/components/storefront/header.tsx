@@ -12,6 +12,10 @@ import { PRIMARY_NAV, PrimaryNav, type PrimaryNavItem } from './primary-nav';
 type Props = {
   city: string;
   brandName: string;
+  /** Short street line shown instead of city alone. */
+  addressLabel?: string | null;
+  /** Yandex Maps / Navigator link for the address. */
+  mapsHref?: string | null;
   phone?: string | null;
   workingHours?: string | null;
   navItems?: PrimaryNavItem[];
@@ -24,6 +28,8 @@ type Props = {
 export function StorefrontHeader({
   city,
   brandName: _brandName,
+  addressLabel,
+  mapsHref,
   phone,
   workingHours,
   navItems = PRIMARY_NAV,
@@ -81,11 +87,25 @@ export function StorefrontHeader({
       >
         <div className="hidden border-b border-border/70 bg-[color-mix(in_oklab,var(--color-surface-muted)_70%,var(--color-background))] lg:block">
           <div className="sf-utility-bar sf-container-wide">
-            <span className="sf-utility-bar__item truncate">
-              <PinIcon />
-              {city}
-              {workingHours ? ` · ${workingHours}` : ''}
-            </span>
+            {mapsHref && addressLabel ? (
+              <a
+                href={mapsHref}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="sf-utility-bar__item truncate hover:text-brand"
+                title="Открыть в Яндекс Картах"
+              >
+                <PinIcon />
+                <span className="truncate">{addressLabel}</span>
+                {workingHours ? <span className="shrink-0"> · {workingHours}</span> : null}
+              </a>
+            ) : (
+              <span className="sf-utility-bar__item truncate">
+                <PinIcon />
+                {addressLabel || city}
+                {workingHours ? ` · ${workingHours}` : ''}
+              </span>
+            )}
             <nav className="flex items-center gap-7" aria-label="Служебные ссылки">
               <Link href="/dostavka" className="hover:text-brand">
                 Доставка и оплата
@@ -276,10 +296,22 @@ export function StorefrontHeader({
                   {phone}
                 </a>
               ) : null}
-              <p>
-                {city}
-                {workingHours ? ` · ${workingHours}` : ''}
-              </p>
+              {mapsHref && addressLabel ? (
+                <a
+                  href={mapsHref}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="block hover:text-brand"
+                >
+                  {addressLabel}
+                  {workingHours ? ` · ${workingHours}` : ''}
+                </a>
+              ) : (
+                <p>
+                  {addressLabel || city}
+                  {workingHours ? ` · ${workingHours}` : ''}
+                </p>
+              )}
             </div>
           </nav>
         </div>
