@@ -2,6 +2,7 @@ import { notFound } from 'next/navigation';
 import { roleHasPermission, type ProductAdminDto } from '@bouquet-one/contracts';
 import { AdminApiError } from '@/lib/admin-api';
 import {
+  fetchPackagingAddons,
   fetchProduct,
   fetchProductEditorPickers,
   fetchProductTaxonomies,
@@ -30,9 +31,10 @@ export default async function AdminProductEditPage({ params, searchParams }: Pro
     throw error;
   }
 
-  const [taxonomies, structure] = await Promise.all([
+  const [taxonomies, structure, packagingAddons] = await Promise.all([
     fetchProductTaxonomies(),
     fetchProductEditorPickers(),
+    fetchPackagingAddons(true),
   ]);
 
   return (
@@ -68,6 +70,7 @@ export default async function AdminProductEditPage({ params, searchParams }: Pro
             swatch: item.swatch,
           })),
           categories: categoryPickerOptions(structure.categories),
+          packagingAddons,
         }}
         canUpdate={roleHasPermission(me.user.role, 'CATALOG_UPDATE')}
         canCreate={roleHasPermission(me.user.role, 'CATALOG_CREATE')}

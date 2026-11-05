@@ -12,6 +12,12 @@ const EXTRA_TABS = [
     match: (p: string) => p === '/admin/catalog/flower-structure' || p.startsWith('/admin/catalog/flower-structure/'),
   },
   {
+    href: '/admin/catalog/packaging',
+    title: 'Лента и упаковка',
+    match: (p: string) =>
+      p === '/admin/catalog/packaging' || p.startsWith('/admin/catalog/packaging/'),
+  },
+  {
     href: '/admin/catalog/pages',
     title: 'Страницы каталога',
     match: (p: string) =>

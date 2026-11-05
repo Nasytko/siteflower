@@ -50,6 +50,7 @@ import { CatalogCategoriesService } from './catalog-categories.service';
 import { OCC_CONFLICT_MESSAGE, validatePublishRequirements } from './catalog.logic';
 import { toProductAdminDto, toProductListItemDto, toProductPublicDto } from './catalog.mapper';
 import { FlowerRefsService } from './flower-refs.service';
+import { PackagingAddonsService } from './packaging-addons.service';
 import { ProductFamiliesService } from './product-families.service';
 import { lockProductRows } from './product-lock.util';
 import {
@@ -130,6 +131,7 @@ export class ProductsService {
     private readonly budgetRanges: BudgetRangesService,
     private readonly categories: CatalogCategoriesService,
     private readonly flowerRefs: FlowerRefsService,
+    private readonly packagingAddons: PackagingAddonsService,
     private readonly families: ProductFamiliesService,
     private readonly media: MediaService,
     private readonly audit: AuditService,
@@ -532,7 +534,8 @@ export class ProductsService {
             sortOrder: group.sortOrder ?? groupIndex,
             values: group.values.map((value, valueIndex) => ({
               name: value.name,
-              // Duplicate must not reuse unique ERP SKUs — manager re-links after copy.
+              // Shared catalog rows stay linked; free-text ERP is cleared (unique).
+              addonId: value.addonId ?? null,
               erpSku: null,
               surchargeMinor: value.surchargeMinor,
               chargeMode: value.chargeMode,
@@ -828,14 +831,9 @@ export class ProductsService {
             })
           ).map((row) => row.id),
         );
-        const createdValues = await this.products.replaceOptionGroups(
-          id,
-          input.optionGroups.map((group, groupIndex) => ({
-            name: group.name.trim(),
-            selection: group.selection ?? 'SINGLE',
-            required: group.required ?? false,
-            sortOrder: group.sortOrder ?? groupIndex,
-            values: group.values.map((value, valueIndex) => {
+        const resolvedGroups = await Promise.all(
+          input.optionGroups.map(async (group, groupIndex) => {
+            const rawValues = group.values.map((value, valueIndex) => {
               const surchargeMinor = BigInt(value.surchargeMinor);
               const variantSurcharges = Object.entries(value.variantSurcharges ?? {})
                 .filter(([variantId]) => variantIds.has(variantId))
@@ -845,17 +843,26 @@ export class ProductsService {
                 }));
               return {
                 name: value.name.trim(),
+                addonId: value.addonId ?? null,
                 erpSku: value.erpSku === undefined ? null : normalizeErpSku(value.erpSku),
                 surchargeMinor: surchargeMinor < 0n ? 0n : surchargeMinor,
-                chargeMode: value.chargeMode ?? 'PER_LINE',
+                chargeMode: (value.chargeMode ?? 'PER_LINE') as 'PER_LINE' | 'PER_UNIT',
                 sortOrder: value.sortOrder ?? valueIndex,
                 active: value.active ?? true,
                 variantSurcharges,
               };
-            }),
-          })),
-          tx,
+            });
+            const values = await this.packagingAddons.resolveOptionValuesForSave(tx, rawValues);
+            return {
+              name: group.name.trim(),
+              selection: group.selection ?? 'SINGLE',
+              required: group.required ?? false,
+              sortOrder: group.sortOrder ?? groupIndex,
+              values,
+            };
+          }),
         );
+        const createdValues = await this.products.replaceOptionGroups(id, resolvedGroups, tx);
         await claimOptionValueErpSkus(
           tx,
           createdValues.map((row) => ({ ownerId: row.id, sku: row.erpSku })),
@@ -1954,6 +1961,8 @@ export class ProductsService {
     const seen = new Set<string>();
     for (const group of groups) {
       for (const value of group.values) {
+        // Catalog-linked rows own ERP on PackagingAddon — skip denormalized value SKU.
+        if (value.addonId) continue;
         const sku = value.erpSku === undefined ? null : normalizeErpSku(value.erpSku);
         if (!sku) continue;
         if (seen.has(sku)) {

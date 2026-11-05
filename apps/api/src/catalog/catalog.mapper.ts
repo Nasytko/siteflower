@@ -408,6 +408,7 @@ export function toProductAdminDto(
       values: group.values.map((value) => ({
         id: value.id,
         groupId: value.groupId,
+        addonId: value.addonId ?? null,
         name: value.name,
         erpSku: value.erpSku ?? null,
         surchargeMinor: value.surchargeMinor.toString(),
@@ -525,6 +526,7 @@ export function toProductPublicDto(
           .map((value) => ({
             id: value.id,
             groupId: value.groupId,
+            addonId: value.addonId ?? null,
             name: value.name,
             // Storefront does not need ERP SKUs; checkout resolves from DB.
             erpSku: null,

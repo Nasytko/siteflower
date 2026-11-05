@@ -313,7 +313,13 @@ export class EditorOptionValueInputDto {
   @MaxLength(120)
   name!: string;
 
-  /** ERP stock article for packaging/ribbon; empty/null clears. */
+  /** Shared packaging directory item — price/ERP come from the catalog when set. */
+  @IsOptional()
+  @ValidateIf((_, value) => value !== null && value !== undefined)
+  @IsUUID()
+  addonId?: string | null;
+
+  /** ERP stock article for packaging/ribbon; empty/null clears. Ignored when addonId is set. */
   @IsOptional()
   @Transform(({ value }) => {
     if (value === undefined) return undefined;

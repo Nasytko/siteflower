@@ -515,6 +515,7 @@ export class ProductsRepository {
       sortOrder: number;
       values: Array<{
         name: string;
+        addonId?: string | null;
         erpSku?: string | null;
         surchargeMinor: bigint;
         chargeMode: 'PER_LINE' | 'PER_UNIT';
@@ -538,6 +539,7 @@ export class ProductsRepository {
           values: {
             create: group.values.map((value) => ({
               name: value.name,
+              addonId: value.addonId ?? null,
               erpSku: value.erpSku ?? null,
               surchargeMinor: value.surchargeMinor,
               chargeMode: value.chargeMode,

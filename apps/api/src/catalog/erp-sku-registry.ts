@@ -9,7 +9,27 @@ import type { ErpSkuOwnerKind, Prisma } from '@bouquet-one/database';
 export const ERP_SKU_OWNER = {
   PRODUCT: 'PRODUCT' as const satisfies ErpSkuOwnerKind,
   OPTION_VALUE: 'OPTION_VALUE' as const satisfies ErpSkuOwnerKind,
+  PACKAGING_ADDON: 'PACKAGING_ADDON' as const satisfies ErpSkuOwnerKind,
 };
+
+/**
+ * Assign/replace/release a packaging-addon ERP SKU inside an open transaction.
+ */
+export async function syncPackagingAddonErpSkuRegistry(
+  tx: Prisma.TransactionClient,
+  addonId: string,
+  previousSku: string | null,
+  nextSku: string | null,
+): Promise<void> {
+  const plan = planErpSkuChange(previousSku, nextSku);
+  if (plan.action === 'noop') return;
+  if (plan.action === 'release' || plan.action === 'reassign') {
+    await releaseOwner(tx, ERP_SKU_OWNER.PACKAGING_ADDON, addonId);
+  }
+  if (plan.next) {
+    await claimSku(tx, ERP_SKU_OWNER.PACKAGING_ADDON, addonId, plan.next);
+  }
+}
 
 export type ErpSkuClaim = {
   ownerKind: ErpSkuOwnerKind;

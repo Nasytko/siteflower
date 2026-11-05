@@ -8,6 +8,7 @@ import { AdminBudgetRangesController } from './admin-budget-ranges.controller';
 import { AdminCatalogCategoriesController } from './admin-catalog-categories.controller';
 import { AdminCatalogPagesController } from './admin-catalog-pages.controller';
 import { AdminFlowerRefsController } from './admin-flower-refs.controller';
+import { AdminPackagingAddonsController } from './admin-packaging-addons.controller';
 import { CatalogPagesService } from './catalog-pages.service';
 import { AdminProductFamiliesController } from './admin-product-families.controller';
 import { AdminProductsController } from './admin-products.controller';
@@ -19,6 +20,7 @@ import { CatalogCategoriesService } from './catalog-categories.service';
 import { CatalogFiltersService } from './catalog-filters.service';
 import { CatalogMatchService } from './catalog-match.service';
 import { FlowerRefsService } from './flower-refs.service';
+import { PackagingAddonsService } from './packaging-addons.service';
 import { ProductFamiliesService } from './product-families.service';
 import { ProductsRepository } from './products.repository';
 import { ProductsBulkService } from './products-bulk.service';
@@ -45,6 +47,7 @@ import { TaxonomyService } from './taxonomy.service';
     AdminCatalogCategoriesController,
     AdminCatalogPagesController,
     AdminFlowerRefsController,
+    AdminPackagingAddonsController,
     AdminProductFamiliesController,
     AdminSeoController,
     TaxonomyController,
@@ -62,6 +65,7 @@ import { TaxonomyService } from './taxonomy.service';
     CatalogFiltersService,
     CatalogMatchService,
     FlowerRefsService,
+    PackagingAddonsService,
     ProductFamiliesService,
     PromotionsService,
     PublicCatalogService,

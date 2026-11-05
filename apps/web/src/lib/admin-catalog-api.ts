@@ -13,6 +13,7 @@ import type {
   FlowerOriginAdminDto,
   FlowerTypeAdminDto,
   FlowerVarietyAdminDto,
+  PackagingAddonDto,
   PaginatedResponse,
   ProductAdminDto,
   ProductListItemDto,
@@ -181,6 +182,14 @@ export async function fetchCatalogStructurePickers(): Promise<CatalogStructurePi
 
 export function fetchBudgetRanges(): Promise<BudgetRangeDto[]> {
   return safeList<BudgetRangeDto>(adminEndpoints.budgetRanges);
+}
+
+export function fetchPackagingAddons(includeInactive = true): Promise<PackagingAddonDto[]> {
+  return safeList<PackagingAddonDto>(
+    withQuery(adminEndpoints.packagingAddons, {
+      includeInactive: includeInactive ? '1' : undefined,
+    }),
+  );
 }
 
 export function fetchBestsellerGroups(): Promise<BestsellerGroupAdminDto[]> {

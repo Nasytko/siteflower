@@ -17,6 +17,7 @@ import {
   resolveProductMetaDescription,
   suggestProductNameFromComposition,
   suggestStemProductName,
+  type PackagingAddonDto,
   type ProductAdminDto,
   type ProductDeleteImpactDto,
   type ProductKind,
@@ -90,6 +91,7 @@ type Props = {
     recipients: PickerOption[];
     colors: Array<PickerOption & { swatch?: string | null }>;
     categories: CategoryPickerOption[];
+    packagingAddons: PackagingAddonDto[];
   };
   canUpdate: boolean;
   canCreate: boolean;
@@ -1377,6 +1379,7 @@ export function ProductEditor({
             optionGroups={optionGroups}
             setOptionGroups={setOptionGroups}
             variants={variants}
+            packagingAddons={options.packagingAddons}
             touch={touch}
           />
         ) : null}

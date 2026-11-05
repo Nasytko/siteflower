@@ -58,6 +58,9 @@ enum AuditAction {
   PROMOTION_UPDATED
   BESTSELLER_UPDATED
   BUDGET_RANGE_UPDATED
+  PACKAGING_ADDON_CREATED
+  PACKAGING_ADDON_UPDATED
+  PACKAGING_ADDON_DELETED
   SELLER_LEGAL_DETAILS_UPDATED
   BANK_DETAILS_UPDATED
   TRADE_REGISTER_DETAILS_UPDATED
@@ -189,6 +192,14 @@ enum ProductOptionChargeMode {
 enum ErpSkuOwnerKind {
   PRODUCT
   OPTION_VALUE
+  PACKAGING_ADDON
+}
+
+/// Shared ribbon / wrap / vase catalog (priced once, picked on products).
+enum PackagingAddonKind {
+  RIBBON
+  PACKAGING
+  OTHER
 }
 
 /// Sellable product shape — drives editor UI (composition required or not).
@@ -724,11 +735,15 @@ model ProductOptionGroup {
 model ProductOptionValue {
   id             String                  @id @default(uuid()) @db.Uuid
   groupId        String                  @map("group_id") @db.Uuid
+  /// Optional link to shared packaging/ribbon catalog. When set, name/price refresh from addon;
+  /// ERP article lives on PackagingAddon (not duplicated here).
+  addonId        String?                 @map("addon_id") @db.Uuid
   name           String                  @db.VarChar(120)
   /// ERP stock article for packaging/ribbon/etc. Not a separate Product unless sold alone.
-  /// Denormalized for reads/orders. Global uniqueness is ErpSkuRegistry.sku (PK).
+  /// Denormalized for legacy free-text rows. Prefer PackagingAddon.erpSku + addonId.
+  /// Global uniqueness is ErpSkuRegistry.sku (PK).
   erpSku         String?                 @unique @map("erp_sku") @db.VarChar(64)
-  /// Default surcharge in minor units (may be 0).
+  /// Default surcharge in minor units (may be 0). Copied from PackagingAddon when linked.
   surchargeMinor BigInt                  @default(0) @map("surcharge_minor")
   chargeMode     ProductOptionChargeMode @default(PER_LINE) @map("charge_mode")
   sortOrder      Int                     @default(0) @map("sort_order")
@@ -737,10 +752,32 @@ model ProductOptionValue {
   updatedAt      DateTime                @updatedAt @map("updated_at") @db.Timestamptz(3)
 
   group         ProductOptionGroup           @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  addon         PackagingAddon?              @relation(fields: [addonId], references: [id], onDelete: Restrict)
   variantPrices ProductOptionVariantPrice[]
 
   @@index([groupId, sortOrder])
+  @@index([addonId])
   @@map("product_option_values")
+}
+
+/// Shop-wide ribbon / packaging / vase catalog with price and optional ERP article.
+model PackagingAddon {
+  id             String             @id @default(uuid()) @db.Uuid
+  name           String             @db.VarChar(120)
+  kind           PackagingAddonKind @default(OTHER)
+  surchargeMinor BigInt             @default(0) @map("surcharge_minor")
+  erpSku         String?            @unique @map("erp_sku") @db.VarChar(64)
+  active         Boolean            @default(true)
+  sortOrder      Int                @default(0) @map("sort_order")
+  version        Int                @default(1)
+  createdAt      DateTime           @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt      DateTime           @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  optionValues ProductOptionValue[]
+
+  @@index([kind, sortOrder])
+  @@index([active, sortOrder])
+  @@map("packaging_addons")
 }
 
 /// Optional per-variant surcharge override for an option value.

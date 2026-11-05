@@ -1819,6 +1819,29 @@ export type BudgetRangeDto = {
   updatedAt: string;
 };
 
+export const PACKAGING_ADDON_KINDS = ['RIBBON', 'PACKAGING', 'OTHER'] as const;
+export type PackagingAddonKind = (typeof PACKAGING_ADDON_KINDS)[number];
+
+export const PACKAGING_ADDON_KIND_LABELS: Record<PackagingAddonKind, string> = {
+  RIBBON: 'Лента',
+  PACKAGING: 'Упаковка',
+  OTHER: 'Другое',
+};
+
+/** Shared ribbon / packaging / vase row for product option pickers. */
+export type PackagingAddonDto = {
+  id: string;
+  name: string;
+  kind: PackagingAddonKind;
+  surchargeMinor: string;
+  erpSku: string | null;
+  active: boolean;
+  sortOrder: number;
+  version: number;
+  createdAt: string;
+  updatedAt: string;
+};
+
 export type BudgetRangePublicDto = {
   id: string;
   label: string;
@@ -2042,8 +2065,10 @@ export type ProductAdminDto = {
 export type ProductOptionValueDto = {
   id: string;
   groupId: string;
+  /** Shared packaging catalog item, when chosen from the directory. */
+  addonId: string | null;
   name: string;
-  /** ERP stock article for this option value (packaging/ribbon); null when unset. */
+  /** ERP stock article for this option value (packaging/ribbon); null when unset or owned by addon. */
   erpSku: string | null;
   surchargeMinor: string;
   chargeMode: ProductOptionChargeMode;

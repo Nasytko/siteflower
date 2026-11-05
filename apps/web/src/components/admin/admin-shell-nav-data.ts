@@ -21,6 +21,7 @@ export type AdminNavGroup = {
 const DICTIONARY_PATHS = [
   '/admin/catalog/dictionaries',
   '/admin/catalog/flower-structure',
+  '/admin/catalog/packaging',
   '/admin/catalog/categories',
   ...TAXONOMY_KINDS.map((kind) => `/admin/catalog/${kind}`),
 ];

@@ -88,6 +88,9 @@ export const adminEndpoints = {
   budgetRange: (id: string) => `${ADMIN}/catalog/budget-ranges/${id}`,
   budgetRangesOrder: `${ADMIN}/catalog/budget-ranges/order`,
 
+  packagingAddons: `${ADMIN}/catalog/packaging-addons`,
+  packagingAddon: (id: string) => `${ADMIN}/catalog/packaging-addons/${id}`,
+
   bestsellerGroups: `${ADMIN}/catalog/bestsellers`,
   bestsellerGroup: (id: string) => `${ADMIN}/catalog/bestsellers/${id}`,
   bestsellerGroupProducts: (id: string) => `${ADMIN}/catalog/bestsellers/${id}/products`,

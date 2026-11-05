@@ -10,6 +10,11 @@ const HUB_LINKS = [
     title: 'Цветы',
     lead: 'Позиции для состава: вид, форма, сорт, происхождение, высота стебля.',
   },
+  {
+    href: '/admin/catalog/packaging',
+    title: 'Лента и упаковка',
+    lead: 'Доплаты к букету: название, цена и артикул ERP — один раз, на товаре только выбор.',
+  },
   ...TAXONOMY_KINDS.map((kind) => ({
     href: `/admin/catalog/${kind}`,
     title: TAXONOMY_KIND_META[kind].title,
@@ -29,11 +34,11 @@ export default async function AdminCatalogDictionariesPage() {
     <main id="main-content" className="space-y-6">
       <AdminPageHeader
         title="Справочники"
-        lead="Цветы для состава, цвета, поводы и получатели. Страницы каталога — отдельно в своём разделе."
+        lead="Цветы для состава, лента и упаковка с ценами, цвета, поводы и получатели."
       />
 
       <p className="admin-notice">
-        Сначала заведите позиции цветов, затем используйте их во вкладке «Состав» у товара.
+        Сначала заведите позиции цветов и упаковки, затем выбирайте их в карточке товара.
       </p>
 
       <TaxonomyKindTabs />
