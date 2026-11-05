@@ -640,12 +640,19 @@ export function toProductFamilyDto(
   urlFor: MediaUrlResolver,
   currentProductId?: string,
 ): ProductFamilyDto {
+  const now = new Date();
   const mapped: ProductFamilyMemberDto[] = members
     .slice()
     .sort((a, b) => a.sortOrder - b.sortOrder)
     .map((member) => {
       const primary = primaryMedia(member.product);
       const displayFlower = productDisplayFlowerAttrs(member.product);
+      const promo = buildPublicPromotionDto(
+        member.product.currency,
+        member.product.variants,
+        toPromotionRow(member.product),
+        now,
+      );
       return {
         productId: member.productId,
         slug: member.product.slug,
@@ -670,6 +677,7 @@ export function toProductFamilyDto(
         availability: member.product.availability,
         lifecycle: member.product.lifecycle,
         isCurrent: currentProductId ? member.productId === currentProductId : undefined,
+        percentOff: promo?.percentOff ?? null,
       };
     });
   return {

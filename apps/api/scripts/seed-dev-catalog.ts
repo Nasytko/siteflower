@@ -843,6 +843,9 @@ async function upsertStorefront(prisma: PrismaClient): Promise<void> {
         workingHours: defaults.workingHours,
         city: defaults.city,
         aboutSummary: defaults.aboutSummary,
+        substitutionNote: defaults.substitutionNote,
+        packagingNote: null,
+        packagingImageUrl: null,
       },
     });
     console.log('Updated StorefrontSettings brand + contact details.');

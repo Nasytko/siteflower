@@ -92,7 +92,7 @@ export function PrimaryNav({ items = PRIMARY_NAV, inline = false }: Props) {
     closeTimer.current = setTimeout(() => {
       setOpenId(null);
       closeTimer.current = null;
-    }, 140);
+    }, 180);
   }, []);
 
   useEffect(() => {
@@ -121,8 +121,10 @@ export function PrimaryNav({ items = PRIMARY_NAV, inline = false }: Props) {
     };
   }, [openId, close]);
 
-  const openItem = items.find((item) => item.id === openId);
-  const showDim = Boolean(openItem && hasDropdown(openItem));
+  const openItem = items.find((item) => item.id === openId && hasDropdown(item)) ?? null;
+  const showDim = Boolean(openItem);
+  const panelId = openItem ? `${baseId}-${openItem.id}-panel` : undefined;
+  const isTiles = openItem?.panelLayout === 'TILES';
 
   return (
     <>
@@ -139,11 +141,18 @@ export function PrimaryNav({ items = PRIMARY_NAV, inline = false }: Props) {
         ref={rootRef}
         aria-label="Основное меню"
         className={`sf-primary-nav relative z-[60] ${inline ? 'sf-primary-nav--inline min-w-0' : ''}`}
+        onMouseLeave={closeSoon}
+        onMouseEnter={() => {
+          if (closeTimer.current) {
+            clearTimeout(closeTimer.current);
+            closeTimer.current = null;
+          }
+        }}
       >
         <ul
           className={
             inline
-              ? 'flex flex-nowrap items-center justify-center gap-x-4 xl:gap-x-6'
+              ? 'sf-primary-nav__list flex flex-nowrap items-center justify-center gap-x-1 xl:gap-x-2'
               : 'sf-container-wide flex flex-wrap items-center justify-center gap-x-6 gap-y-1 py-1 md:gap-x-8'
           }
         >
@@ -151,168 +160,138 @@ export function PrimaryNav({ items = PRIMARY_NAV, inline = false }: Props) {
             const current = isCurrentBranch(pathname, item);
             const dropdown = hasDropdown(item);
             const open = openId === item.id;
-            const panelId = `${baseId}-${item.id}-panel`;
-            const isTiles = item.panelLayout === 'TILES';
 
             return (
-              <li
-                key={item.id}
-                className={`shrink-0 ${dropdown ? 'relative' : ''}`}
-                onMouseEnter={() => {
-                  if (dropdown) openNow(item.id);
-                }}
-                onMouseLeave={() => {
-                  if (dropdown) closeSoon();
-                }}
-              >
-                <div className="flex items-center">
+              <li key={item.id} className="shrink-0">
+                <div
+                  className={`sf-primary-nav__trigger ${open ? 'sf-primary-nav__trigger--open' : ''}`}
+                  onMouseEnter={() => {
+                    if (dropdown) openNow(item.id);
+                    else close();
+                  }}
+                >
                   <Link
                     href={item.href || '#'}
                     aria-current={current ? 'page' : undefined}
-                    className={`sf-nav-link relative ${inline ? 'min-h-10 text-[0.8125rem]' : ''} ${
+                    aria-expanded={dropdown ? open : undefined}
+                    aria-haspopup={dropdown ? 'true' : undefined}
+                    aria-controls={dropdown && open ? panelId : undefined}
+                    className={`sf-nav-link relative ${inline ? 'min-h-10 px-2.5 text-[0.8125rem]' : ''} ${
                       item.accent ? 'text-accent hover:text-accent' : 'hover:text-brand'
-                    } ${current ? 'text-brand' : ''}`}
+                    } ${current || open ? 'text-brand' : ''}`}
+                    onFocus={() => {
+                      if (dropdown) openNow(item.id);
+                    }}
                   >
                     {item.label}
+                    {dropdown ? (
+                      <span className="sf-primary-nav__chevron" aria-hidden>
+                        ▾
+                      </span>
+                    ) : null}
                     <span
-                      className={`absolute inset-x-0 bottom-1.5 h-px rounded-full bg-current transition-opacity ${
-                        current ? 'opacity-100' : 'opacity-0'
+                      className={`absolute inset-x-2.5 bottom-1.5 h-px rounded-full bg-current transition-opacity ${
+                        current || open ? 'opacity-100' : 'opacity-0'
                       }`}
                       aria-hidden
                     />
                   </Link>
-                  {dropdown ? (
-                    <button
-                      type="button"
-                      className="ml-0.5 inline-flex h-8 w-7 items-center justify-center rounded text-[0.65rem] text-muted hover:text-brand"
-                      aria-expanded={open}
-                      aria-haspopup="true"
-                      aria-controls={panelId}
-                      onClick={() => (open ? close() : openNow(item.id))}
-                    >
-                      <span aria-hidden>▾</span>
-                      <span className="sr-only">Подменю «{item.label}»</span>
-                    </button>
-                  ) : null}
                 </div>
-
-                {dropdown ? (
-                  <div
-                    id={panelId}
-                    role="region"
-                    aria-label={`Подменю ${item.label}`}
-                    hidden={!open}
-                    className={`sf-nav-panel absolute left-1/2 top-full z-[70] hidden -translate-x-1/2 pt-3 lg:block ${
-                      isTiles ? 'w-[min(72rem,calc(100vw-2rem))]' : 'min-w-[16rem]'
-                    } ${open ? 'sf-nav-panel--open' : ''}`}
-                  >
-                    <div className="rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] p-5 shadow-[var(--shadow-soft)]">
-                      {isTiles && item.children && item.children.length > 0 ? (
-                        <ul className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4">
-                          {item.children.map((child) => (
-                            <li key={(child.id ?? '') + child.href + child.label}>
-                              <Link
-                                href={child.href}
-                                className="group relative block aspect-square overflow-hidden rounded-xl bg-[var(--color-surface-muted)]"
-                                onClick={close}
-                              >
-                                {child.imageUrl ? (
-                                  <img
-                                    src={child.imageUrl}
-                                    alt=""
-                                    className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-[1.03]"
-                                    loading="lazy"
-                                    decoding="async"
-                                  />
-                                ) : (
-                                  <span className="absolute inset-0 bg-[color-mix(in_oklab,var(--color-brand-soft)_70%,var(--color-surface-muted))]" />
-                                )}
-                                <span className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-ink/75 via-ink/35 to-transparent px-3 pb-2.5 pt-10">
-                                  <span className="block text-sm font-semibold text-white">
-                                    {child.label}
-                                  </span>
-                                </span>
-                              </Link>
-                            </li>
-                          ))}
-                        </ul>
-                      ) : item.groups && item.groups.length > 0 ? (
-                        <div
-                          className={`grid gap-6 ${
-                            item.groups.length >= 3
-                              ? 'grid-cols-3'
-                              : item.groups.length === 2
-                                ? 'grid-cols-2'
-                                : 'grid-cols-1'
-                          }`}
-                        >
-                          {item.groups.map((group) => (
-                            <div key={group.id} className="min-w-[9.5rem]">
-                              <p className="mb-2.5 flex items-center gap-1.5 text-[0.7rem] font-semibold uppercase tracking-[0.08em] text-muted">
-                                <NavigationGlyph iconKey={group.iconKey} className="h-3.5 w-3.5" />
-                                {group.label}
-                              </p>
-                              <ul className="space-y-1">
-                                {group.children.map((child) => (
-                                  <li key={child.href + child.label}>
-                                    <Link
-                                      href={child.href}
-                                      className={`block rounded-md px-1 py-1 text-sm transition-colors hover:text-brand ${
-                                        isCurrent(pathname, child.href)
-                                          ? 'font-semibold text-brand'
-                                          : 'text-foreground'
-                                      }`}
-                                      onClick={close}
-                                    >
-                                      {child.label}
-                                    </Link>
-                                  </li>
-                                ))}
-                              </ul>
-                            </div>
-                          ))}
-                        </div>
-                      ) : (
-                        <ul className="min-w-[11rem] space-y-1">
-                          {item.children?.map((child) => (
-                            <li key={child.href + child.label}>
-                              <Link
-                                href={child.href}
-                                className={`block rounded-md px-1 py-1.5 text-sm transition-colors hover:text-brand ${
-                                  isCurrent(pathname, child.href)
-                                    ? 'font-semibold text-brand'
-                                    : 'text-foreground'
-                                }`}
-                                onClick={close}
-                              >
-                                {child.label}
-                              </Link>
-                            </li>
-                          ))}
-                        </ul>
-                      )}
-                      {item.href ? (
-                        <div
-                          className={`mt-4 border-t border-border/70 pt-3 ${
-                            isTiles ? 'text-left' : 'text-center'
-                          }`}
-                        >
-                          <Link
-                            href={item.href}
-                            className="text-sm font-medium text-brand hover:underline"
-                            onClick={close}
-                          >
-                            Смотреть все {item.label.toLowerCase()} →
-                          </Link>
-                        </div>
-                      ) : null}
-                    </div>
-                  </div>
-                ) : null}
               </li>
             );
           })}
         </ul>
+
+        {openItem ? (
+          <div
+            id={panelId}
+            role="region"
+            aria-label={`Подменю ${openItem.label}`}
+            className={`sf-nav-panel sf-nav-panel--mega ${openItem ? 'sf-nav-panel--open' : ''}`}
+          >
+            <div className="sf-nav-panel__inner">
+              {isTiles && openItem.children && openItem.children.length > 0 ? (
+                <ul className="sf-nav-panel__tiles">
+                  {openItem.children.map((child) => (
+                    <li key={(child.id ?? '') + child.href + child.label}>
+                      <Link
+                        href={child.href}
+                        className="sf-nav-panel__tile"
+                        onClick={close}
+                      >
+                        {child.imageUrl ? (
+                          <img
+                            src={child.imageUrl}
+                            alt=""
+                            className="sf-nav-panel__tile-img"
+                            loading="lazy"
+                            decoding="async"
+                          />
+                        ) : (
+                          <span className="sf-nav-panel__tile-fallback" />
+                        )}
+                        <span className="sf-nav-panel__tile-label">{child.label}</span>
+                      </Link>
+                    </li>
+                  ))}
+                </ul>
+              ) : openItem.groups && openItem.groups.length > 0 ? (
+                <div
+                  className={`sf-nav-panel__cols sf-nav-panel__cols--${Math.min(openItem.groups.length, 4)}`}
+                >
+                  {openItem.groups.map((group) => (
+                    <div key={group.id} className="sf-nav-panel__col">
+                      <p className="sf-nav-panel__col-title">
+                        <NavigationGlyph iconKey={group.iconKey} className="h-3.5 w-3.5" />
+                        {group.label}
+                      </p>
+                      <ul className="sf-nav-panel__links">
+                        {group.children.map((child) => (
+                          <li key={child.href + child.label}>
+                            <Link
+                              href={child.href}
+                              className={`sf-nav-panel__link ${
+                                isCurrent(pathname, child.href) ? 'sf-nav-panel__link--current' : ''
+                              }`}
+                              onClick={close}
+                            >
+                              {child.label}
+                            </Link>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <ul className="sf-nav-panel__links sf-nav-panel__links--flat">
+                  {openItem.children?.map((child) => (
+                    <li key={child.href + child.label}>
+                      <Link
+                        href={child.href}
+                        className={`sf-nav-panel__link ${
+                          isCurrent(pathname, child.href) ? 'sf-nav-panel__link--current' : ''
+                        }`}
+                        onClick={close}
+                      >
+                        {child.label}
+                      </Link>
+                    </li>
+                  ))}
+                </ul>
+              )}
+
+              {openItem.href ? (
+                <div className="sf-nav-panel__footer">
+                  <Link href={openItem.href} className="sf-nav-panel__all" onClick={close}>
+                    Смотреть все {openItem.label.toLowerCase()}
+                    <span aria-hidden> →</span>
+                  </Link>
+                </div>
+              ) : null}
+            </div>
+          </div>
+        ) : null}
       </nav>
     </>
   );

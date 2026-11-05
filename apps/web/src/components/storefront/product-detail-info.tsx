@@ -4,7 +4,6 @@ import type {
   FulfillmentSettingsPublicDto,
   ProductPublicDto,
 } from '@bouquet-one/contracts';
-import { pickDerivativeUrl, productImageAlt, sortProductMedia } from '@/lib/media';
 import { ProductDeliveryGuide } from './product-delivery-guide';
 import { ProductInfoTabs, type ProductInfoSection } from './product-info-tabs';
 
@@ -15,8 +14,6 @@ type Props = {
   substitutionNote: string | null;
   outOfCityDeliveryNote: string | null;
   paymentDescription: string | null;
-  packagingNote: string | null;
-  packagingImageUrl: string | null;
   city?: string | null;
 };
 
@@ -52,12 +49,8 @@ function RichText({ text }: { text: string }) {
 function CompositionPanel({
   product,
   substitutionNote,
-  packagingNote,
-  packagingImageUrl,
-}: Pick<Props, 'product' | 'substitutionNote' | 'packagingNote' | 'packagingImageUrl'>) {
-  const media = sortProductMedia(product.media);
-  const detailPhoto = media.length > 1 ? media[media.length - 1] : null;
-  const columns = 1 + (substitutionNote ? 1 : 0) + (packagingNote ? 1 : 0);
+}: Pick<Props, 'product' | 'substitutionNote'>) {
+  const columns = 1 + (substitutionNote ? 1 : 0);
 
   return (
     <div className="sf-pdp-composition-grid" data-cols={columns}>
@@ -98,41 +91,6 @@ function CompositionPanel({
             <InfoIcon />
             <span>{substitutionNote}</span>
           </p>
-          {detailPhoto ? (
-            <div className="sf-pdp-note__photo">
-              <Image
-                src={pickDerivativeUrl(detailPhoto, 600) ?? detailPhoto.url}
-                alt={productImageAlt(product.name, detailPhoto.alt)}
-                fill
-                sizes="(max-width: 1023px) 90vw, 22rem"
-                className="object-cover"
-              />
-            </div>
-          ) : null}
-        </div>
-      ) : null}
-
-      {packagingNote ? (
-        <div className="sf-pdp-note sf-pdp-note--plain">
-          <p className="sf-pdp-note__text">
-            <BoxIcon />
-            <span>
-              <strong>Упаковка</strong>
-              {packagingNote}
-            </span>
-          </p>
-          {packagingImageUrl ? (
-            <div className="sf-pdp-note__photo">
-              <Image
-                src={packagingImageUrl}
-                alt="Упаковка букета"
-                fill
-                sizes="(max-width: 1023px) 90vw, 22rem"
-                className="object-cover"
-                unoptimized={!packagingImageUrl.startsWith('/')}
-              />
-            </div>
-          ) : null}
         </div>
       ) : null}
     </div>
@@ -153,20 +111,18 @@ function DeliveryPanel({
   );
 }
 
-/** Tabs (desktop) / accordions (mobile): Состав · Доставка · Оплата. */
+/** Accordion rows: Состав · Доставка · Оплата. */
 export function ProductDetailInfo(props: Props) {
   const { paymentDescription } = props;
   const sections: ProductInfoSection[] = [
     {
       id: 'composition',
       label: 'Состав',
-      icon: <FlowerIcon />,
       content: <CompositionPanel {...props} />,
     },
     {
       id: 'delivery',
       label: 'Доставка',
-      icon: <TruckIcon />,
       content: <DeliveryPanel {...props} />,
     },
   ];
@@ -174,7 +130,6 @@ export function ProductDetailInfo(props: Props) {
     sections.push({
       id: 'payment',
       label: 'Оплата',
-      icon: <WalletIcon />,
       content: <RichText text={paymentDescription} />,
     });
   }
@@ -199,38 +154,11 @@ function FlowerIcon() {
   );
 }
 
-function TruckIcon() {
-  return (
-    <Svg>
-      <path d="M3 6h11v10H3zM14 10h4l3 3v3h-7" />
-      <circle cx="7" cy="17.5" r="1.6" />
-      <circle cx="17" cy="17.5" r="1.6" />
-    </Svg>
-  );
-}
-
-function WalletIcon() {
-  return (
-    <Svg>
-      <rect x="3" y="6" width="18" height="13" rx="2" />
-      <path d="M3 10h18M16 14.5h2" />
-    </Svg>
-  );
-}
-
 function InfoIcon() {
   return (
     <svg viewBox="0 0 24 24" className="sf-pdp-note__icon" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" aria-hidden>
       <circle cx="12" cy="12" r="9" />
       <path d="M12 11v5M12 8h.01" />
-    </svg>
-  );
-}
-
-function BoxIcon() {
-  return (
-    <svg viewBox="0 0 24 24" className="sf-pdp-note__icon" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round" aria-hidden>
-      <path d="M4 11h16v9H4zM3 8h18v3H3zM12 8v12M12 8c-2 0-3.5-1.3-3.5-2.8S10 3 12 5.5C14 3 15.5 3.7 15.5 5.2S14 8 12 8Z" />
     </svg>
   );
 }

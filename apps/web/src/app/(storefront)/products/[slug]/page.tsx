@@ -202,8 +202,6 @@ export default async function ProductPage({ params }: { params: Params }) {
             substitutionNote={settings?.substitutionNote ?? null}
             outOfCityDeliveryNote={outOfCityDeliveryNote}
             paymentDescription={seller?.actualOfflinePaymentDescription ?? null}
-            packagingNote={settings?.packagingNote ?? null}
-            packagingImageUrl={settings?.packagingImageUrl ?? null}
             city={city}
           />
 

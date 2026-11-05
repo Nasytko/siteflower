@@ -102,7 +102,7 @@ export function ProductPurchaseProvider({
   const [feedback, setFeedback] = useState<string | null>(null);
   const [cartCount, setCartCount] = useState(0);
   const [hydrated, setHydrated] = useState(false);
-  const [cardEnabled, setCardEnabledState] = useState(true);
+  const [cardEnabled, setCardEnabledState] = useState(false);
   const [cardMessage, setCardMessageState] = useState('');
   const [postcardId, setPostcardId] = useState<string | null>(null);
   const optionGroups = useMemo(
@@ -162,7 +162,15 @@ export function ProductPurchaseProvider({
   function setCardEnabled(enabled: boolean) {
     setCardEnabledState(enabled);
     writeCardDraft(enabled ? cardMessage : '');
-    if (!enabled) setPostcardId(null);
+    if (!enabled) {
+      setPostcardId(null);
+      return;
+    }
+    setPostcardId((current) => {
+      if (current) return current;
+      const first = postcards.find((p) => p.id !== product.id && p.defaultVariant);
+      return first?.id ?? null;
+    });
   }
 
   function setCardMessage(message: string) {
@@ -424,7 +432,7 @@ export function ProductBuyCard({
             ) : null}
           </p>
           <p className="sf-pdp-buy__unit">
-            {product.productKind === 'STEM' ? 'Цена за ветку' : 'Цена за 1 шт.'}
+            {product.productKind === 'STEM' ? 'Цена за одну ветку' : 'Цена за 1 шт.'}
           </p>
           {optionsTotalLabel ? (
             <p className="sf-pdp-buy__unit">Опции: {optionsTotalLabel}</p>
@@ -439,10 +447,16 @@ export function ProductBuyCard({
       </div>
 
       {product.productKind === 'STEM' ? (
-        <p className="sf-pdp-buy__stem-note">
-          {stemCountLabel(qty)} → один букет
-          {optionGroups.length > 0 ? ' · лента и упаковка один раз' : ''}
-        </p>
+        <div className="sf-pdp-buy__stem-note" role="note">
+          <p>
+            <strong>Как собираем букет:</strong> вы выбираете число веток — мы собираем их в{' '}
+            <strong>один букет</strong>. Сейчас: {stemCountLabel(qty)} = 1 букет в корзине.
+          </p>
+          <p>
+            Цена считается за каждую ветку
+            {optionGroups.length > 0 ? ', а лента и упаковка — один раз на весь букет' : ''}.
+          </p>
+        </div>
       ) : null}
 
       <button
@@ -453,7 +467,9 @@ export function ProductBuyCard({
         className="sf-pdp-add"
       >
         <CartIcon />
-        Добавить в корзину
+        {product.productKind === 'STEM'
+          ? `В корзину · 1 букет (${stemCountLabel(qty)})`
+          : 'Добавить в корзину'}
       </button>
 
       {messengers.length > 0 ? (
@@ -596,20 +612,6 @@ export function ProductPostcardCard() {
                 role="radiogroup"
                 aria-label="Дизайн открытки"
               >
-                <li>
-                  <button
-                    type="button"
-                    role="radio"
-                    aria-checked={postcardId === null}
-                    className="sf-pdp-postcard__option sf-pdp-postcard__option--none"
-                    onClick={() => setPostcardId(null)}
-                  >
-                    <span aria-hidden className="sf-pdp-postcard__plus">
-                      +
-                    </span>
-                    <span className="sf-pdp-postcard__none-label">Без открытки</span>
-                  </button>
-                </li>
                 {options.map((option) => {
                   const priceLabel = option.defaultVariant
                     ? formatPriceFromMinor(option.defaultVariant.priceMinor, product.currency)

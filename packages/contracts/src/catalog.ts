@@ -1710,6 +1710,8 @@ export type ProductFamilyMemberDto = {
   lifecycle?: ProductLifecycle;
   /** Present on storefront when the member is the currently viewed product. */
   isCurrent?: boolean;
+  /** Effective sale percent for family chips (null when not on promotion). */
+  percentOff?: number | null;
 };
 
 export type ProductFamilyDto = {

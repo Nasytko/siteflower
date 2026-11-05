@@ -5,13 +5,13 @@ import { useState, type ReactNode } from 'react';
 export type ProductInfoSection = {
   id: string;
   label: string;
-  icon: ReactNode;
+  /** Kept for callers; accordion header is label + plus only. */
+  icon?: ReactNode;
   content: ReactNode;
 };
 
-/** Desktop: tabs. Mobile: accordions over the same panels. */
+/** Expandable info rows (состав / доставка / оплата) — same on mobile and desktop. */
 export function ProductInfoTabs({ sections }: { sections: ProductInfoSection[] }) {
-  const [active, setActive] = useState(sections[0]?.id ?? '');
   const [open, setOpen] = useState<Set<string>>(() => new Set());
 
   if (sections.length === 0) return null;
@@ -26,52 +26,35 @@ export function ProductInfoTabs({ sections }: { sections: ProductInfoSection[] }
   }
 
   return (
-    <section className="sf-pdp-card sf-pdp-tabs" aria-label="О букете">
-      <div className="sf-pdp-tabs__list" role="tablist">
-        {sections.map((section) => (
-          <button
-            key={section.id}
-            type="button"
-            role="tab"
-            id={`pdp-tab-${section.id}`}
-            aria-selected={active === section.id}
-            aria-controls={`pdp-panel-${section.id}`}
-            className="sf-pdp-tabs__tab"
-            onClick={() => setActive(section.id)}
-          >
-            {section.label}
-          </button>
-        ))}
-      </div>
-
+    <section className="sf-pdp-card sf-pdp-acc" aria-label="О букете">
       {sections.map((section) => {
         const isOpen = open.has(section.id);
+        const panelId = `pdp-acc-panel-${section.id}`;
+        const buttonId = `pdp-acc-btn-${section.id}`;
         return (
-          <div key={section.id} className="sf-pdp-tabs__item">
+          <div key={section.id} className="sf-pdp-acc__item">
             <button
               type="button"
-              className="sf-pdp-tabs__accordion"
+              id={buttonId}
+              className="sf-pdp-acc__trigger"
               aria-expanded={isOpen}
-              aria-controls={`pdp-panel-${section.id}`}
+              aria-controls={panelId}
               onClick={() => toggle(section.id)}
             >
-              <span className="sf-pdp-tabs__accordion-icon">{section.icon}</span>
-              <span className="sf-pdp-tabs__accordion-label">{section.label}</span>
-              <span className="sf-pdp-tabs__chevron" aria-hidden>
-                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="m9 6 6 6-6 6" />
-                </svg>
+              <span className="sf-pdp-acc__label">{section.label}</span>
+              <span className="sf-pdp-acc__mark" aria-hidden data-open={isOpen ? 'true' : 'false'}>
+                {isOpen ? '−' : '+'}
               </span>
             </button>
             <div
-              id={`pdp-panel-${section.id}`}
-              role="tabpanel"
-              aria-labelledby={`pdp-tab-${section.id}`}
-              className="sf-pdp-tabs__panel"
-              data-active={active === section.id ? 'true' : 'false'}
+              id={panelId}
+              role="region"
+              aria-labelledby={buttonId}
+              className="sf-pdp-acc__panel"
               data-open={isOpen ? 'true' : 'false'}
+              hidden={!isOpen}
             >
-              {section.content}
+              <div className="sf-pdp-acc__panel-inner">{section.content}</div>
             </div>
           </div>
         );

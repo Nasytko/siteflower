@@ -152,66 +152,60 @@ export function buildSmartPrimaryNav(sources: SmartNavSources = {}): PrimaryNavI
     href: recipientDiscoveryHref(item.slug),
   }));
 
-  const buketyGroups: PrimaryNavGroup[] = [
-    group(
-      'bukety-pages',
-      'Подборки',
-      'bouquet',
-      bouquetPages.length > 0
-        ? [
-            {
-              id: 'all-bouquets',
-              label: 'Все букеты',
-              href: catalogPublicHref(CATALOG_HUB_SLUG.BOUQUETS),
-            },
-            ...bouquetPages,
-          ]
-        : [
-            {
-              id: 'all-bouquets',
-              label: 'Все букеты',
-              href: catalogPublicHref(CATALOG_HUB_SLUG.BOUQUETS),
-            },
-            {
-              id: 'rose-bouquets',
-              label: 'Букеты из роз',
-              href: catalogPublicHref('rose-bouquets'),
-            },
-            {
-              id: 'with-roses',
-              label: 'Букеты с розами',
-              href: catalogPublicHref('bouquets-with-roses'),
-            },
-            {
-              id: 'mono',
-              label: 'Монобукеты',
-              href: catalogPublicHref('mono-bouquets'),
-            },
-            {
-              id: 'signature',
-              label: 'Авторские букеты',
-              href: catalogPublicHref('signature-bouquets'),
-            },
-            {
-              id: 'mixed',
-              label: 'Смешанные букеты',
-              href: catalogPublicHref('mixed-bouquets'),
-            },
-          ],
-    ),
-  ];
-  if (compositionPages.length > 0) {
+  const bouquetChildren: PrimaryNavChild[] =
+    bouquetPages.length > 0
+      ? [
+          {
+            id: 'all-bouquets',
+            label: 'Все букеты',
+            href: catalogPublicHref(CATALOG_HUB_SLUG.BOUQUETS),
+          },
+          ...bouquetPages,
+        ]
+      : [
+          {
+            id: 'all-bouquets',
+            label: 'Все букеты',
+            href: catalogPublicHref(CATALOG_HUB_SLUG.BOUQUETS),
+          },
+          {
+            id: 'rose-bouquets',
+            label: 'Букеты из роз',
+            href: catalogPublicHref('rose-bouquets'),
+          },
+          {
+            id: 'with-roses',
+            label: 'Букеты с розами',
+            href: catalogPublicHref('bouquets-with-roses'),
+          },
+          {
+            id: 'mono',
+            label: 'Монобукеты',
+            href: catalogPublicHref('mono-bouquets'),
+          },
+          {
+            id: 'signature',
+            label: 'Авторские букеты',
+            href: catalogPublicHref('signature-bouquets'),
+          },
+          {
+            id: 'mixed',
+            label: 'Смешанные букеты',
+            href: catalogPublicHref('mixed-bouquets'),
+          },
+        ];
+
+  const buketyGroups: PrimaryNavGroup[] = [];
+  if (compositionPages.length > 1) {
+    buketyGroups.push(group('bukety-pages', 'Разделы', 'bouquet', bouquetChildren));
     buketyGroups.push(group('bukety-comp', 'Композиции', 'leaf', compositionPages));
   } else {
-    buketyGroups.push(
-      group('bukety-comp', 'Композиции', 'leaf', [
-        {
-          id: 'compositions',
-          label: 'Все композиции',
-          href: catalogPublicHref(CATALOG_HUB_SLUG.COMPOSITIONS),
-        },
-      ]),
-    );
+    bouquetChildren.push({
+      id: 'compositions',
+      label: 'Композиции',
+      href: catalogPublicHref(CATALOG_HUB_SLUG.COMPOSITIONS),
+    });
+    buketyGroups.push(group('bukety-pages', 'Разделы', 'bouquet', bouquetChildren));
   }
 
   const cvetyGroups = flowerChunks.map((chunk, index) =>

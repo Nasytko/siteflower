@@ -488,7 +488,7 @@ export function defaultStorefrontSettings(): StorefrontSettingsPublicDto {
     whatsappUrl: null,
     outOfCityDeliveryNote: 'Доставка за пределы Гродно — по согласованию с менеджером.',
     photoReportNote: 'По запросу пришлём фото собранного букета перед отправкой.',
-    packagingNote: 'Аккуратная упаковка и вода для транспортировки — в каждом заказе.',
+    packagingNote: null,
     packagingImageUrl: null,
   };
 }
