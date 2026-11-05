@@ -7195,98 +7195,108 @@ a.sf-instagram__handle:hover {
 .sf-pdp-postcard__body {
   display: flex;
   flex-direction: column;
-  gap: 0.75rem;
+  gap: 0.85rem;
   margin-top: 0.9rem;
 }
 
 .sf-pdp-postcard__picker {
   display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+}
+
+.sf-pdp-postcard__preview {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 3 / 4;
+  overflow: hidden;
+  border: 1px solid #d8cfc3;
+  border-radius: 0.75rem;
+  background: var(--pdp-tile);
+}
+
+.sf-pdp-postcard__preview-fallback {
+  display: flex;
+  height: 100%;
   align-items: center;
-  gap: 0.5rem;
+  justify-content: center;
+  padding: 1rem;
+  text-align: center;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--pdp-muted);
+}
+
+.sf-pdp-postcard__meta {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.sf-pdp-postcard__name {
+  min-width: 0;
+  font-size: 0.875rem;
+  font-weight: 600;
+  line-height: 1.35;
+  color: var(--pdp-ink);
+}
+
+.sf-pdp-postcard__price {
+  flex-shrink: 0;
+  font-size: 0.875rem;
+  font-weight: 700;
+  color: var(--pdp-ink);
+  font-variant-numeric: tabular-nums;
+}
+
+.sf-pdp-postcard__nav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
 }
 
 .sf-pdp-round-nav {
   display: inline-flex;
   flex-shrink: 0;
-  width: 2rem;
-  height: 2rem;
+  width: 2.25rem;
+  height: 2.25rem;
   align-items: center;
   justify-content: center;
-  border: 1px solid var(--pdp-line);
+  border: 1px solid #cfc5b8;
   border-radius: 999px;
   background: #fff;
   color: var(--pdp-ink);
-  font-size: 1.15rem;
+  font-size: 1.25rem;
   line-height: 1;
 }
 
-.sf-pdp-postcard__list {
+.sf-pdp-round-nav:hover {
+  border-color: var(--pdp-ink);
+}
+
+.sf-pdp-postcard__dots {
   display: flex;
-  min-width: 0;
   flex: 1;
-  gap: 0.6rem;
-  margin: 0;
-  padding: 0.15rem;
-  overflow-x: auto;
-  list-style: none;
-  scroll-snap-type: x mandatory;
-  scrollbar-width: none;
-}
-
-.sf-pdp-postcard__list > li {
-  flex: 0 0 5.5rem;
-  scroll-snap-align: start;
-}
-
-.sf-pdp-postcard__option {
-  position: relative;
-  display: flex;
-  width: 100%;
-  aspect-ratio: 1 / 1.08;
-  flex-direction: column;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: center;
-  gap: 0.35rem;
-  overflow: hidden;
-  border: 1px solid var(--pdp-line);
-  border-radius: 0.6rem;
-  background: var(--pdp-tile);
-  color: var(--pdp-ink);
-  text-align: center;
+  gap: 0.4rem;
 }
 
-.sf-pdp-postcard__option[aria-checked='true'] {
-  border-color: var(--pdp-green);
-  box-shadow: 0 0 0 1px var(--pdp-green);
-}
-
-.sf-pdp-postcard__option--none {
-  background: #fff;
-}
-
-.sf-pdp-postcard__plus {
-  font-size: 1.5rem;
-  font-weight: 300;
-  line-height: 1;
-}
-
-.sf-pdp-postcard__none-label,
-.sf-pdp-postcard__name {
-  padding: 0 0.35rem;
-  font-size: 0.625rem;
-  line-height: 1.25;
-  color: var(--pdp-muted);
-}
-
-.sf-pdp-postcard__price {
-  position: absolute;
-  right: 0.25rem;
-  bottom: 0.25rem;
-  padding: 0.05rem 0.35rem;
+.sf-pdp-postcard__dot {
+  width: 0.5rem;
+  height: 0.5rem;
+  padding: 0;
+  border: 0;
   border-radius: 999px;
-  background: rgb(255 255 255 / 0.92);
-  font-size: 0.625rem;
-  font-weight: 600;
+  background: #cfc5b8;
+}
+
+.sf-pdp-postcard__dot[aria-selected='true'] {
+  background: var(--pdp-green);
+  transform: scale(1.15);
 }
 
 .sf-pdp-postcard__text {
@@ -7297,12 +7307,13 @@ a.sf-instagram__handle:hover {
 .sf-pdp-postcard__text textarea {
   display: block;
   width: 100%;
-  min-height: 3.4rem;
-  padding: 0.7rem 0.9rem 1.4rem;
-  border: 1px solid var(--pdp-line);
+  min-height: 4.25rem;
+  padding: 0.75rem 0.9rem 1.5rem;
+  border: 1px solid #cfc5b8;
   border-radius: 0.75rem;
   background: #fff;
-  font-size: 0.8125rem;
+  color: var(--pdp-ink);
+  font-size: 0.875rem;
   line-height: 1.45;
   resize: vertical;
 }
@@ -7310,6 +7321,7 @@ a.sf-instagram__handle:hover {
 .sf-pdp-postcard__text textarea:focus {
   border-color: var(--pdp-green);
   outline: none;
+  box-shadow: 0 0 0 1px var(--pdp-green);
 }
 
 .sf-pdp-postcard__count {

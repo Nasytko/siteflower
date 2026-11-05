@@ -570,11 +570,21 @@ export function ProductPostcardCard() {
     setPostcardId,
     postcards,
   } = usePurchase();
-  const [scroller, setScroller] = useState<HTMLUListElement | null>(null);
   const options = postcards.filter((p) => p.id !== product.id && p.defaultVariant);
+  const selectedIndex = Math.max(
+    0,
+    options.findIndex((option) => option.id === postcardId),
+  );
+  const selected = options[selectedIndex] ?? options[0] ?? null;
+  const selectedPriceLabel = selected?.defaultVariant
+    ? formatPriceFromMinor(selected.defaultVariant.priceMinor, product.currency)
+    : (selected?.price?.label ?? '');
+  const canBrowse = options.length > 1;
 
-  function scrollBy(dir: 1 | -1) {
-    scroller?.scrollBy({ left: dir * scroller.clientWidth * 0.8, behavior: 'smooth' });
+  function stepPostcard(dir: 1 | -1) {
+    if (!canBrowse) return;
+    const next = (selectedIndex + dir + options.length) % options.length;
+    setPostcardId(options[next]!.id);
   }
 
   return (
@@ -606,68 +616,69 @@ export function ProductPostcardCard() {
 
       {cardEnabled ? (
         <div className="sf-pdp-postcard__body">
-          {options.length > 0 ? (
-            <div className="sf-pdp-postcard__picker">
-              <button
-                type="button"
-                className="sf-pdp-round-nav"
-                aria-label="Прокрутить назад"
-                onClick={() => scrollBy(-1)}
-              >
-                ‹
-              </button>
-              <ul
-                ref={setScroller}
-                className="sf-pdp-postcard__list"
-                role="radiogroup"
-                aria-label="Дизайн открытки"
-              >
-                {options.map((option) => {
-                  const priceLabel = option.defaultVariant
-                    ? formatPriceFromMinor(option.defaultVariant.priceMinor, product.currency)
-                    : (option.price?.label ?? '');
-                  return (
-                    <li key={option.id}>
+          {selected ? (
+            <div className="sf-pdp-postcard__picker" role="group" aria-label="Дизайн открытки">
+              <div className="sf-pdp-postcard__preview">
+                {selected.primaryImageUrl ? (
+                  <Image
+                    src={selected.primaryImageUrl}
+                    alt={selected.name}
+                    fill
+                    sizes="(max-width: 1023px) 92vw, 360px"
+                    className="object-cover"
+                  />
+                ) : (
+                  <span className="sf-pdp-postcard__preview-fallback">{selected.name}</span>
+                )}
+              </div>
+
+              <div className="sf-pdp-postcard__meta">
+                <span className="sf-pdp-postcard__name">{selected.name}</span>
+                {selectedPriceLabel ? (
+                  <span className="sf-pdp-postcard__price">{selectedPriceLabel}</span>
+                ) : null}
+              </div>
+
+              {canBrowse ? (
+                <div className="sf-pdp-postcard__nav">
+                  <button
+                    type="button"
+                    className="sf-pdp-round-nav"
+                    aria-label="Предыдущая открытка"
+                    onClick={() => stepPostcard(-1)}
+                  >
+                    ‹
+                  </button>
+                  <div className="sf-pdp-postcard__dots" role="tablist" aria-label="Открытки">
+                    {options.map((option, index) => (
                       <button
+                        key={option.id}
                         type="button"
-                        role="radio"
-                        aria-checked={postcardId === option.id}
-                        className="sf-pdp-postcard__option"
+                        role="tab"
+                        aria-selected={index === selectedIndex}
+                        aria-label={option.name}
+                        className="sf-pdp-postcard__dot"
                         onClick={() => setPostcardId(option.id)}
-                        title={`${option.name} — ${priceLabel}`}
-                      >
-                        {option.primaryImageUrl ? (
-                          <Image
-                            src={option.primaryImageUrl}
-                            alt={option.name}
-                            fill
-                            sizes="96px"
-                            className="object-cover"
-                          />
-                        ) : (
-                          <span className="sf-pdp-postcard__name">{option.name}</span>
-                        )}
-                        <span className="sf-pdp-postcard__price">{priceLabel}</span>
-                      </button>
-                    </li>
-                  );
-                })}
-              </ul>
-              <button
-                type="button"
-                className="sf-pdp-round-nav"
-                aria-label="Прокрутить вперёд"
-                onClick={() => scrollBy(1)}
-              >
-                ›
-              </button>
+                      />
+                    ))}
+                  </div>
+                  <button
+                    type="button"
+                    className="sf-pdp-round-nav"
+                    aria-label="Следующая открытка"
+                    onClick={() => stepPostcard(1)}
+                  >
+                    ›
+                  </button>
+                </div>
+              ) : null}
             </div>
           ) : null}
 
           <label className="sf-pdp-postcard__text">
             <span className="sr-only">Текст для открытки</span>
             <textarea
-              rows={2}
+              rows={3}
               maxLength={CARD_MESSAGE_MAX}
               placeholder="Ваш текст для открытки..."
               value={cardMessage}
