@@ -7195,23 +7195,24 @@ a.sf-instagram__handle:hover {
 .sf-pdp-postcard__body {
   display: flex;
   flex-direction: column;
-  gap: 0.85rem;
-  margin-top: 0.9rem;
+  gap: 0.75rem;
+  margin-top: 0.85rem;
 }
 
 .sf-pdp-postcard__picker {
   display: flex;
-  flex-direction: column;
-  gap: 0.65rem;
+  align-items: center;
+  gap: 0.75rem;
 }
 
 .sf-pdp-postcard__preview {
   position: relative;
-  width: 100%;
-  aspect-ratio: 3 / 4;
+  flex-shrink: 0;
+  width: 6.5rem;
+  height: 6.5rem;
   overflow: hidden;
-  border: 1px solid #d8cfc3;
-  border-radius: 0.75rem;
+  border: 1px solid #cfc5b8;
+  border-radius: 0.65rem;
   background: var(--pdp-tile);
 }
 
@@ -7220,31 +7221,39 @@ a.sf-instagram__handle:hover {
   height: 100%;
   align-items: center;
   justify-content: center;
-  padding: 1rem;
+  padding: 0.45rem;
   text-align: center;
-  font-size: 0.875rem;
+  font-size: 0.6875rem;
   font-weight: 600;
+  line-height: 1.25;
   color: var(--pdp-muted);
 }
 
 .sf-pdp-postcard__meta {
   display: flex;
-  align-items: baseline;
+  min-width: 0;
+  flex: 1;
+  align-items: center;
   justify-content: space-between;
-  gap: 0.75rem;
+  gap: 0.5rem;
+}
+
+.sf-pdp-postcard__meta-text {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 0.2rem;
 }
 
 .sf-pdp-postcard__name {
-  min-width: 0;
   font-size: 0.875rem;
   font-weight: 600;
-  line-height: 1.35;
+  line-height: 1.3;
   color: var(--pdp-ink);
 }
 
 .sf-pdp-postcard__price {
-  flex-shrink: 0;
-  font-size: 0.875rem;
+  font-size: 0.8125rem;
   font-weight: 700;
   color: var(--pdp-ink);
   font-variant-numeric: tabular-nums;
@@ -7252,51 +7261,28 @@ a.sf-instagram__handle:hover {
 
 .sf-pdp-postcard__nav {
   display: flex;
+  flex-shrink: 0;
   align-items: center;
-  justify-content: space-between;
-  gap: 0.75rem;
+  gap: 0.35rem;
 }
 
 .sf-pdp-round-nav {
   display: inline-flex;
   flex-shrink: 0;
-  width: 2.25rem;
-  height: 2.25rem;
+  width: 2rem;
+  height: 2rem;
   align-items: center;
   justify-content: center;
   border: 1px solid #cfc5b8;
   border-radius: 999px;
   background: #fff;
   color: var(--pdp-ink);
-  font-size: 1.25rem;
+  font-size: 1.15rem;
   line-height: 1;
 }
 
 .sf-pdp-round-nav:hover {
   border-color: var(--pdp-ink);
-}
-
-.sf-pdp-postcard__dots {
-  display: flex;
-  flex: 1;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: center;
-  gap: 0.4rem;
-}
-
-.sf-pdp-postcard__dot {
-  width: 0.5rem;
-  height: 0.5rem;
-  padding: 0;
-  border: 0;
-  border-radius: 999px;
-  background: #cfc5b8;
-}
-
-.sf-pdp-postcard__dot[aria-selected='true'] {
-  background: var(--pdp-green);
-  transform: scale(1.15);
 }
 
 .sf-pdp-postcard__text {
@@ -7307,13 +7293,13 @@ a.sf-instagram__handle:hover {
 .sf-pdp-postcard__text textarea {
   display: block;
   width: 100%;
-  min-height: 4.25rem;
-  padding: 0.75rem 0.9rem 1.5rem;
+  min-height: 3.5rem;
+  padding: 0.65rem 0.85rem 1.35rem;
   border: 1px solid #cfc5b8;
-  border-radius: 0.75rem;
+  border-radius: 0.65rem;
   background: #fff;
   color: var(--pdp-ink);
-  font-size: 0.875rem;
+  font-size: 0.8125rem;
   line-height: 1.45;
   resize: vertical;
 }
@@ -7326,15 +7312,15 @@ a.sf-instagram__handle:hover {
 
 .sf-pdp-postcard__count {
   position: absolute;
-  right: 0.8rem;
-  bottom: 0.45rem;
+  right: 0.75rem;
+  bottom: 0.4rem;
   font-size: 0.6875rem;
   color: var(--pdp-muted);
   font-variant-numeric: tabular-nums;
 }
 
 .sf-pdp-postcard__note {
-  margin: -0.35rem 0 0;
+  margin: -0.3rem 0 0;
   font-size: 0.6875rem;
   color: var(--pdp-muted);
 }

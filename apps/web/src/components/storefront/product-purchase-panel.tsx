@@ -596,11 +596,7 @@ export function ProductPostcardCard() {
             <span className="sf-pdp-postcard__title-desktop">Добавить открытку</span>
             <span className="sf-pdp-postcard__title-mobile">Открытка к букету</span>
           </h2>
-          <p className="sf-pdp-postcard__hint">
-            {options.length > 0
-              ? 'Выберите открытку и добавьте пожелание — мы напишем его от вашего имени'
-              : 'Добавьте пожелание — мы напишем его на открытке от вашего имени'}
-          </p>
+          <p className="sf-pdp-postcard__hint">Мы напишем пожелание от вашего имени</p>
         </div>
         <button
           type="button"
@@ -624,7 +620,7 @@ export function ProductPostcardCard() {
                     src={selected.primaryImageUrl}
                     alt={selected.name}
                     fill
-                    sizes="(max-width: 1023px) 92vw, 360px"
+                    sizes="104px"
                     className="object-cover"
                   />
                 ) : (
@@ -633,52 +629,40 @@ export function ProductPostcardCard() {
               </div>
 
               <div className="sf-pdp-postcard__meta">
-                <span className="sf-pdp-postcard__name">{selected.name}</span>
-                {selectedPriceLabel ? (
-                  <span className="sf-pdp-postcard__price">{selectedPriceLabel}</span>
+                <div className="sf-pdp-postcard__meta-text">
+                  <span className="sf-pdp-postcard__name">{selected.name}</span>
+                  {selectedPriceLabel ? (
+                    <span className="sf-pdp-postcard__price">{selectedPriceLabel}</span>
+                  ) : null}
+                </div>
+                {canBrowse ? (
+                  <div className="sf-pdp-postcard__nav">
+                    <button
+                      type="button"
+                      className="sf-pdp-round-nav"
+                      aria-label="Предыдущая открытка"
+                      onClick={() => stepPostcard(-1)}
+                    >
+                      ‹
+                    </button>
+                    <button
+                      type="button"
+                      className="sf-pdp-round-nav"
+                      aria-label="Следующая открытка"
+                      onClick={() => stepPostcard(1)}
+                    >
+                      ›
+                    </button>
+                  </div>
                 ) : null}
               </div>
-
-              {canBrowse ? (
-                <div className="sf-pdp-postcard__nav">
-                  <button
-                    type="button"
-                    className="sf-pdp-round-nav"
-                    aria-label="Предыдущая открытка"
-                    onClick={() => stepPostcard(-1)}
-                  >
-                    ‹
-                  </button>
-                  <div className="sf-pdp-postcard__dots" role="tablist" aria-label="Открытки">
-                    {options.map((option, index) => (
-                      <button
-                        key={option.id}
-                        type="button"
-                        role="tab"
-                        aria-selected={index === selectedIndex}
-                        aria-label={option.name}
-                        className="sf-pdp-postcard__dot"
-                        onClick={() => setPostcardId(option.id)}
-                      />
-                    ))}
-                  </div>
-                  <button
-                    type="button"
-                    className="sf-pdp-round-nav"
-                    aria-label="Следующая открытка"
-                    onClick={() => stepPostcard(1)}
-                  >
-                    ›
-                  </button>
-                </div>
-              ) : null}
             </div>
           ) : null}
 
           <label className="sf-pdp-postcard__text">
             <span className="sr-only">Текст для открытки</span>
             <textarea
-              rows={3}
+              rows={2}
               maxLength={CARD_MESSAGE_MAX}
               placeholder="Ваш текст для открытки..."
               value={cardMessage}
