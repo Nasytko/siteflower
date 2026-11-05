@@ -174,11 +174,22 @@ export class OrdersService {
       const rows: OptionValueRow[] = [];
       for (const group of product.optionGroups ?? []) {
         for (const value of group.values) {
+          const pricingMode = value.addon?.pricingMode ?? 'FIXED';
           rows.push({
             id: value.id,
             name: value.name,
             erpSku: value.erpSku ?? null,
             surchargeMinor: value.surchargeMinor,
+            pricingMode,
+            tiers:
+              pricingMode === 'TIERED'
+                ? (value.addon?.priceTiers ?? []).map((tier) => ({
+                    id: tier.id,
+                    maxBaseMinor: tier.maxBaseMinor?.toString() ?? null,
+                    surchargeMinor: tier.surchargeMinor.toString(),
+                    sortOrder: tier.sortOrder,
+                  }))
+                : [],
             chargeMode: value.chargeMode,
             active: value.active,
             group: {
@@ -201,12 +212,14 @@ export class OrdersService {
       productId: string,
       variantId: string,
       optionValueIds: string[] | undefined,
+      baseLineMinor: bigint,
     ) =>
       resolvePricedOptions({
         productId,
         variantId,
         optionValueIds,
         values: valuesByProduct.get(productId) ?? [],
+        baseLineMinor,
       });
   }
 

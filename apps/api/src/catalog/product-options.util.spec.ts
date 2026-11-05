@@ -5,6 +5,8 @@ const baseValue = (overrides: Partial<OptionValueRow> & Pick<OptionValueRow, 'id
   name: overrides.name,
   erpSku: overrides.erpSku ?? null,
   surchargeMinor: overrides.surchargeMinor ?? 100n,
+  pricingMode: overrides.pricingMode ?? 'FIXED',
+  tiers: overrides.tiers ?? [],
   chargeMode: overrides.chargeMode ?? 'PER_LINE',
   active: overrides.active ?? true,
   group: overrides.group ?? {
@@ -122,6 +124,32 @@ describe('resolvePricedOptions', () => {
     expect(result.ok).toBe(true);
     if (result.ok) {
       expect(result.selections[0]?.erpSku).toBe('WRAP-01');
+    }
+  });
+
+  it('resolves TIERED packaging from flower/stem line total', () => {
+    const result = resolvePricedOptions({
+      productId: 'p1',
+      variantId: 'v1',
+      optionValueIds: ['o1'],
+      baseLineMinor: 7000n,
+      values: [
+        baseValue({
+          id: 'o1',
+          name: 'Упаковка',
+          pricingMode: 'TIERED',
+          surchargeMinor: 0n,
+          tiers: [
+            { maxBaseMinor: '6000', surchargeMinor: '800', sortOrder: 0 },
+            { maxBaseMinor: '11000', surchargeMinor: '1000', sortOrder: 1 },
+            { maxBaseMinor: null, surchargeMinor: '1500', sortOrder: 2 },
+          ],
+        }),
+      ],
+    });
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.selections[0]?.surchargeMinor).toBe(1000n);
     }
   });
 });

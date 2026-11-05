@@ -202,6 +202,12 @@ enum PackagingAddonKind {
   OTHER
 }
 
+/// How PackagingAddon.surcharge is determined.
+enum PackagingAddonPricingMode {
+  FIXED
+  TIERED
+}
+
 /// Sellable product shape — drives editor UI (composition required or not).
 enum ProductKind {
   BOUQUET
@@ -762,22 +768,42 @@ model ProductOptionValue {
 
 /// Shop-wide ribbon / packaging / vase catalog with price and optional ERP article.
 model PackagingAddon {
-  id             String             @id @default(uuid()) @db.Uuid
-  name           String             @db.VarChar(120)
-  kind           PackagingAddonKind @default(OTHER)
-  surchargeMinor BigInt             @default(0) @map("surcharge_minor")
-  erpSku         String?            @unique @map("erp_sku") @db.VarChar(64)
-  active         Boolean            @default(true)
-  sortOrder      Int                @default(0) @map("sort_order")
-  version        Int                @default(1)
-  createdAt      DateTime           @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt      DateTime           @updatedAt @map("updated_at") @db.Timestamptz(3)
+  id             String                    @id @default(uuid()) @db.Uuid
+  name           String                    @db.VarChar(120)
+  kind           PackagingAddonKind        @default(OTHER)
+  /// FIXED uses surchargeMinor; TIERED uses priceTiers from flower/stem line total.
+  pricingMode    PackagingAddonPricingMode @default(FIXED) @map("pricing_mode")
+  surchargeMinor BigInt                    @default(0) @map("surcharge_minor")
+  erpSku         String?                   @unique @map("erp_sku") @db.VarChar(64)
+  active         Boolean                   @default(true)
+  sortOrder      Int                       @default(0) @map("sort_order")
+  version        Int                       @default(1)
+  createdAt      DateTime                  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt      DateTime                  @updatedAt @map("updated_at") @db.Timestamptz(3)
 
   optionValues ProductOptionValue[]
+  priceTiers   PackagingAddonPriceTier[]
 
   @@index([kind, sortOrder])
   @@index([active, sortOrder])
   @@map("packaging_addons")
+}
+
+/// Inclusive upper bound of flower/stem line total (after promo, without options).
+/// null maxBaseMinor = open-ended top tier («свыше …»).
+model PackagingAddonPriceTier {
+  id             String   @id @default(uuid()) @db.Uuid
+  addonId        String   @map("addon_id") @db.Uuid
+  maxBaseMinor   BigInt?  @map("max_base_minor")
+  surchargeMinor BigInt   @map("surcharge_minor")
+  sortOrder      Int      @default(0) @map("sort_order")
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt      DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  addon PackagingAddon @relation(fields: [addonId], references: [id], onDelete: Cascade)
+
+  @@index([addonId, sortOrder])
+  @@map("packaging_addon_price_tiers")
 }
 
 /// Optional per-variant surcharge override for an option value.

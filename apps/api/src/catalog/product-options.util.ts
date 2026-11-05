@@ -2,15 +2,20 @@
  * Resolve selected product option values to priced selections for cart/order.
  */
 import type {
+  PackagingAddonPricingMode,
+  PackagingAddonPriceTierDto,
   ProductOptionChargeMode,
   PricedOptionSelection,
 } from '@bouquet-one/contracts';
+import { resolvePackagingAddonSurchargeMinor } from '@bouquet-one/contracts';
 
 export type OptionValueRow = {
   id: string;
   name: string;
   erpSku?: string | null;
   surchargeMinor: bigint;
+  pricingMode: PackagingAddonPricingMode;
+  tiers: PackagingAddonPriceTierDto[];
   chargeMode: ProductOptionChargeMode;
   active: boolean;
   group: {
@@ -30,15 +35,19 @@ export type ResolveOptionsResult =
 /**
  * Validate optionValueIds against loaded rows for a product+variant.
  * Enforces required groups and SINGLE selection cardinality.
+ * `baseLineMinor` = effective unit × qty (flowers/stems only) for TIERED packaging.
  */
 export function resolvePricedOptions(input: {
   productId: string;
   variantId: string;
   optionValueIds: string[] | undefined;
   values: OptionValueRow[];
+  /** Flower/stem line total after promo, before options. */
+  baseLineMinor?: bigint;
 }): ResolveOptionsResult {
   const requested = [...new Set((input.optionValueIds ?? []).filter(Boolean))];
   const byId = new Map(input.values.map((row) => [row.id, row]));
+  const baseLineMinor = input.baseLineMinor ?? 0n;
 
   const selections: PricedOptionSelection[] = [];
   const selectedByGroup = new Map<string, string[]>();
@@ -51,8 +60,20 @@ export function resolvePricedOptions(input: {
     if (row.group.productId !== input.productId) {
       return { ok: false, message: 'Опция не принадлежит этому товару' };
     }
-    const override = row.variantPrices.find((v) => v.variantId === input.variantId);
-    const surcharge = override?.surchargeMinor ?? row.surchargeMinor;
+    let surcharge: bigint;
+    if (row.pricingMode === 'TIERED') {
+      surcharge = resolvePackagingAddonSurchargeMinor(
+        {
+          pricingMode: 'TIERED',
+          surchargeMinor: row.surchargeMinor,
+          tiers: row.tiers,
+        },
+        baseLineMinor,
+      );
+    } else {
+      const override = row.variantPrices.find((v) => v.variantId === input.variantId);
+      surcharge = override?.surchargeMinor ?? row.surchargeMinor;
+    }
     selections.push({
       groupId: row.group.id,
       groupName: row.group.name,

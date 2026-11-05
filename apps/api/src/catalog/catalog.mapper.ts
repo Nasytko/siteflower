@@ -23,6 +23,7 @@ import {
   type ProductFamilyMemberDto,
   type ProductListItemDto,
   type ProductMediaDto,
+  type ProductOptionValueDto,
   type ProductPromotionAdminDto,
   type ProductPublicDto,
   type SeoFieldsDto,
@@ -78,13 +79,49 @@ export const PRODUCT_INCLUDE = {
     include: {
       values: {
         orderBy: { sortOrder: 'asc' },
-        include: { variantPrices: true },
+        include: {
+          variantPrices: true,
+          addon: {
+            include: { priceTiers: { orderBy: { sortOrder: 'asc' } } },
+          },
+        },
       },
     },
   },
 } satisfies Prisma.ProductInclude;
 
 export type ProductWithRelations = Prisma.ProductGetPayload<{ include: typeof PRODUCT_INCLUDE }>;
+
+function mapOptionValueDto(
+  value: ProductWithRelations['optionGroups'][number]['values'][number],
+): ProductOptionValueDto {
+  const pricingMode = value.addon?.pricingMode ?? 'FIXED';
+  const tiers =
+    pricingMode === 'TIERED'
+      ? (value.addon?.priceTiers ?? []).map((tier) => ({
+          id: tier.id,
+          maxBaseMinor: tier.maxBaseMinor?.toString() ?? null,
+          surchargeMinor: tier.surchargeMinor.toString(),
+          sortOrder: tier.sortOrder,
+        }))
+      : [];
+  return {
+    id: value.id,
+    groupId: value.groupId,
+    addonId: value.addonId ?? null,
+    name: value.name,
+    erpSku: value.erpSku ?? null,
+    surchargeMinor: value.surchargeMinor.toString(),
+    pricingMode,
+    tiers,
+    chargeMode: value.chargeMode,
+    sortOrder: value.sortOrder,
+    active: value.active,
+    variantSurcharges: Object.fromEntries(
+      value.variantPrices.map((row) => [row.variantId, row.surchargeMinor.toString()]),
+    ),
+  };
+}
 
 /** Shared shape of the SEO-bearing taxonomy tables (occasions, recipients, colors). */
 export type TaxonomyRecord = {
@@ -405,20 +442,7 @@ export function toProductAdminDto(
       selection: group.selection,
       required: group.required,
       sortOrder: group.sortOrder,
-      values: group.values.map((value) => ({
-        id: value.id,
-        groupId: value.groupId,
-        addonId: value.addonId ?? null,
-        name: value.name,
-        erpSku: value.erpSku ?? null,
-        surchargeMinor: value.surchargeMinor.toString(),
-        chargeMode: value.chargeMode,
-        sortOrder: value.sortOrder,
-        active: value.active,
-        variantSurcharges: Object.fromEntries(
-          value.variantPrices.map((row) => [row.variantId, row.surchargeMinor.toString()]),
-        ),
-      })),
+      values: group.values.map((value) => mapOptionValueDto(value)),
     })),
     media: product.media.map((media) => toProductMediaDto(media, urlFor)),
     occasions: product.occasions.map((link) => toTaxonomyRef(link.occasion)),
@@ -523,21 +547,14 @@ export function toProductPublicDto(
         sortOrder: group.sortOrder,
         values: group.values
           .filter((value) => value.active)
-          .map((value) => ({
-            id: value.id,
-            groupId: value.groupId,
-            addonId: value.addonId ?? null,
-            name: value.name,
-            // Storefront does not need ERP SKUs; checkout resolves from DB.
-            erpSku: null,
-            surchargeMinor: value.surchargeMinor.toString(),
-            chargeMode: value.chargeMode,
-            sortOrder: value.sortOrder,
-            active: value.active,
-            variantSurcharges: Object.fromEntries(
-              value.variantPrices.map((row) => [row.variantId, row.surchargeMinor.toString()]),
-            ),
-          })),
+          .map((value) => {
+            const mapped = mapOptionValueDto(value);
+            return {
+              ...mapped,
+              // Storefront does not need ERP SKUs; checkout resolves from DB.
+              erpSku: null,
+            };
+          }),
       }))
       .filter((group) => group.values.length > 0),
     media: product.media.map((media) => {

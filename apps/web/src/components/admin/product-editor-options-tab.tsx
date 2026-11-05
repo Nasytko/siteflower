@@ -167,11 +167,14 @@ export function optionGroupsToPayload(
 }
 
 function formatAddonLabel(addon: PackagingAddonDto): string {
+  const kind = PACKAGING_ADDON_KIND_LABELS[addon.kind];
+  if (addon.pricingMode === 'TIERED') {
+    return `${addon.name} — по шкале (${kind})`;
+  }
   const price = Number(addon.surchargeMinor);
   const money = Number.isFinite(price)
     ? `${(price / 100).toFixed(2).replace('.', ',')} BYN`
     : '';
-  const kind = PACKAGING_ADDON_KIND_LABELS[addon.kind];
   return money ? `${addon.name} — ${money} (${kind})` : `${addon.name} (${kind})`;
 }
 
@@ -364,7 +367,9 @@ export function ProductEditorOptionsTab(props: Props) {
 
                     {linked ? (
                       <p className="text-sm text-[var(--admin-muted)]">
-                        Доплата {value.surchargeMajor || '0'} BYN
+                        {addonById.get(value.addonId)?.pricingMode === 'TIERED'
+                          ? 'Цена по шкале от суммы цветов'
+                          : `Доплата ${value.surchargeMajor || '0'} BYN`}
                         {value.erpSku ? ` · ERP ${value.erpSku}` : ' · без артикула ERP'}
                       </p>
                     ) : (

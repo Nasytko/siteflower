@@ -19,8 +19,12 @@ const groups: ProductOptionGroupDto[] = [
       {
         id: 'wrap',
         groupId: 'g1',
+        addonId: null,
         name: 'Крафт',
+        erpSku: null,
         surchargeMinor: '300',
+        pricingMode: 'FIXED',
+        tiers: [],
         chargeMode: 'PER_LINE',
         sortOrder: 0,
         active: true,
@@ -39,8 +43,12 @@ const groups: ProductOptionGroupDto[] = [
       {
         id: 'ribbon',
         groupId: 'g2',
+        addonId: null,
         name: 'Атлас',
+        erpSku: null,
         surchargeMinor: '50',
+        pricingMode: 'FIXED',
+        tiers: [],
         chargeMode: 'PER_UNIT',
         sortOrder: 0,
         active: true,
@@ -53,6 +61,22 @@ const groups: ProductOptionGroupDto[] = [
 test('resolveOptionSurchargeMinor prefers variant override', () => {
   assert.equal(resolveOptionSurchargeMinor(groups[0]!.values[0]!, 'v2'), 500n);
   assert.equal(resolveOptionSurchargeMinor(groups[0]!.values[0]!, 'v1'), 300n);
+});
+
+test('resolveOptionSurchargeMinor TIERED uses flower/stem line total', () => {
+  const tiered = {
+    ...groups[0]!.values[0]!,
+    pricingMode: 'TIERED' as const,
+    surchargeMinor: '0',
+    tiers: [
+      { maxBaseMinor: '6000', surchargeMinor: '800', sortOrder: 0 },
+      { maxBaseMinor: '11000', surchargeMinor: '1000', sortOrder: 1 },
+      { maxBaseMinor: null, surchargeMinor: '1500', sortOrder: 2 },
+    ],
+  };
+  assert.equal(resolveOptionSurchargeMinor(tiered, 'v1', 5000n), 800n);
+  assert.equal(resolveOptionSurchargeMinor(tiered, 'v1', 7000n), 1000n);
+  assert.equal(resolveOptionSurchargeMinor(tiered, 'v1', 20000n), 1500n);
 });
 
 test('requiredOptionsMissing blocks incomplete required groups', () => {

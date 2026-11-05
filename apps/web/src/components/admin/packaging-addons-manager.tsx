@@ -6,6 +6,7 @@ import {
   PACKAGING_ADDON_KINDS,
   type PackagingAddonDto,
   type PackagingAddonKind,
+  type PackagingAddonPricingMode,
 } from '@bouquet-one/contracts';
 import {
   adminDelete,
@@ -22,19 +23,46 @@ type Props = {
   canUpdate: boolean;
 };
 
+type TierDraft = {
+  key: string;
+  maxBaseMajor: string;
+  /** Empty max = open-ended top tier. */
+  openEnded: boolean;
+  surchargeMajor: string;
+};
+
 type Draft = {
   name: string;
   kind: PackagingAddonKind;
+  pricingMode: PackagingAddonPricingMode;
   surchargeMajor: string;
+  tiers: TierDraft[];
   erpSku: string;
   active: boolean;
 };
+
+let tierKeySeq = 0;
+function nextTierKey() {
+  tierKeySeq += 1;
+  return `tier-${tierKeySeq}`;
+}
+
+function emptyTier(openEnded = false): TierDraft {
+  return {
+    key: nextTierKey(),
+    maxBaseMajor: openEnded ? '' : '60',
+    openEnded,
+    surchargeMajor: openEnded ? '15' : '8',
+  };
+}
 
 function emptyDraft(): Draft {
   return {
     name: '',
     kind: 'RIBBON',
+    pricingMode: 'FIXED',
     surchargeMajor: '0',
+    tiers: [emptyTier(false), emptyTier(true)],
     erpSku: '',
     active: true,
   };
@@ -44,6 +72,19 @@ function formatMoney(minor: string): string {
   const value = Number(minor);
   if (!Number.isFinite(value)) return minor;
   return `${(value / 100).toFixed(2).replace('.', ',')} BYN`;
+}
+
+function pricingLabel(item: PackagingAddonDto): string {
+  if (item.pricingMode !== 'TIERED' || item.tiers.length === 0) {
+    return formatMoney(item.surchargeMinor);
+  }
+  return item.tiers
+    .map((tier) => {
+      const fee = formatMoney(tier.surchargeMinor);
+      if (tier.maxBaseMinor == null) return `свыше → ${fee}`;
+      return `до ${formatMoney(tier.maxBaseMinor)} → ${fee}`;
+    })
+    .join('; ');
 }
 
 export function PackagingAddonsManager({ initialItems, canCreate, canUpdate }: Props) {
@@ -58,12 +99,25 @@ export function PackagingAddonsManager({ initialItems, canCreate, canUpdate }: P
     [items, editingId],
   );
 
+  const showTierEditor =
+    draft.kind !== 'RIBBON' && draft.pricingMode === 'TIERED';
+
   function startEdit(item: PackagingAddonDto) {
     setEditingId(item.id);
     setDraft({
       name: item.name,
       kind: item.kind,
+      pricingMode: item.kind === 'RIBBON' ? 'FIXED' : item.pricingMode,
       surchargeMajor: minorToMajorInput(item.surchargeMinor),
+      tiers:
+        item.tiers.length > 0
+          ? item.tiers.map((tier) => ({
+              key: nextTierKey(),
+              maxBaseMajor: tier.maxBaseMinor ? minorToMajorInput(tier.maxBaseMinor) : '',
+              openEnded: tier.maxBaseMinor == null,
+              surchargeMajor: minorToMajorInput(tier.surchargeMinor),
+            }))
+          : [emptyTier(false), emptyTier(true)],
       erpSku: item.erpSku ?? '',
       active: item.active,
     });
@@ -76,18 +130,69 @@ export function PackagingAddonsManager({ initialItems, canCreate, canUpdate }: P
     setError(null);
   }
 
-  async function save() {
+  function buildPayload() {
     const name = draft.name.trim();
     if (!name) {
       setError('Укажите название');
-      return;
+      return null;
     }
+    const erpSku = draft.erpSku.trim().toUpperCase().replace(/\s+/g, '');
+    const pricingMode: PackagingAddonPricingMode =
+      draft.kind === 'RIBBON' ? 'FIXED' : draft.pricingMode;
+
+    if (pricingMode === 'TIERED') {
+      const tiers = [];
+      for (const tier of draft.tiers) {
+        const surchargeMinor = majorInputToMinor(tier.surchargeMajor);
+        if (surchargeMinor == null) {
+          setError('Проверьте доплату в шкале');
+          return null;
+        }
+        if (tier.openEnded) {
+          tiers.push({ maxBaseMinor: null, surchargeMinor });
+          continue;
+        }
+        const maxBaseMinor = majorInputToMinor(tier.maxBaseMajor);
+        if (maxBaseMinor == null) {
+          setError('Проверьте порог «до … BYN» в шкале');
+          return null;
+        }
+        tiers.push({ maxBaseMinor, surchargeMinor });
+      }
+      if (tiers.length === 0) {
+        setError('Добавьте хотя бы одну ступень');
+        return null;
+      }
+      return {
+        name,
+        kind: draft.kind,
+        pricingMode,
+        surchargeMinor: tiers[0]!.surchargeMinor,
+        tiers,
+        erpSku: erpSku || null,
+        active: draft.active,
+      };
+    }
+
     const surchargeMinor = majorInputToMinor(draft.surchargeMajor);
     if (surchargeMinor == null) {
       setError('Проверьте доплату');
-      return;
+      return null;
     }
-    const erpSku = draft.erpSku.trim().toUpperCase().replace(/\s+/g, '');
+    return {
+      name,
+      kind: draft.kind,
+      pricingMode: 'FIXED' as const,
+      surchargeMinor,
+      tiers: [] as Array<{ maxBaseMinor: string | null; surchargeMinor: string }>,
+      erpSku: erpSku || null,
+      active: draft.active,
+    };
+  }
+
+  async function save() {
+    const payload = buildPayload();
+    if (!payload) return;
     setBusy(true);
     setError(null);
     try {
@@ -96,11 +201,7 @@ export function PackagingAddonsManager({ initialItems, canCreate, canUpdate }: P
           adminEndpoints.packagingAddon(editing.id),
           {
             expectedVersion: editing.version,
-            name,
-            kind: draft.kind,
-            surchargeMinor,
-            erpSku: erpSku || null,
-            active: draft.active,
+            ...payload,
           },
         );
         setItems((prev) =>
@@ -110,13 +211,7 @@ export function PackagingAddonsManager({ initialItems, canCreate, canUpdate }: P
         );
         cancelEdit();
       } else {
-        const created = await adminPost<PackagingAddonDto>(adminEndpoints.packagingAddons, {
-          name,
-          kind: draft.kind,
-          surchargeMinor,
-          erpSku: erpSku || null,
-          active: draft.active,
-        });
+        const created = await adminPost<PackagingAddonDto>(adminEndpoints.packagingAddons, payload);
         setItems((prev) =>
           [...prev, created].sort(
             (a, b) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name, 'ru'),
@@ -173,12 +268,14 @@ export function PackagingAddonsManager({ initialItems, canCreate, canUpdate }: P
                 className="admin-select"
                 value={draft.kind}
                 disabled={busy}
-                onChange={(event) =>
+                onChange={(event) => {
+                  const kind = event.target.value as PackagingAddonKind;
                   setDraft((prev) => ({
                     ...prev,
-                    kind: event.target.value as PackagingAddonKind,
-                  }))
-                }
+                    kind,
+                    pricingMode: kind === 'RIBBON' ? 'FIXED' : prev.pricingMode,
+                  }));
+                }}
               >
                 {PACKAGING_ADDON_KINDS.map((kind) => (
                   <option key={kind} value={kind}>
@@ -187,17 +284,128 @@ export function PackagingAddonsManager({ initialItems, canCreate, canUpdate }: P
                 ))}
               </select>
             </label>
-            <label className="sf-pe-field">
-              <span>Доплата, BYN</span>
-              <input
-                className="sf-pe-input sf-pe-input--num"
-                value={draft.surchargeMajor}
-                disabled={busy}
-                onChange={(event) =>
-                  setDraft((prev) => ({ ...prev, surchargeMajor: event.target.value }))
-                }
-              />
-            </label>
+
+            {draft.kind !== 'RIBBON' ? (
+              <label className="sf-pe-field sm:col-span-2">
+                <span>Как считать цену</span>
+                <select
+                  className="admin-select"
+                  value={draft.pricingMode}
+                  disabled={busy}
+                  onChange={(event) =>
+                    setDraft((prev) => ({
+                      ...prev,
+                      pricingMode: event.target.value as PackagingAddonPricingMode,
+                    }))
+                  }
+                >
+                  <option value="FIXED">Фиксированная доплата</option>
+                  <option value="TIERED">По шкале от цены цветов</option>
+                </select>
+                <span className="admin-help">
+                  Шкала считается от цены цветов/веток без ленты и упаковки.
+                </span>
+              </label>
+            ) : null}
+
+            {!showTierEditor ? (
+              <label className="sf-pe-field">
+                <span>Доплата, BYN</span>
+                <input
+                  className="sf-pe-input sf-pe-input--num"
+                  value={draft.surchargeMajor}
+                  disabled={busy}
+                  onChange={(event) =>
+                    setDraft((prev) => ({ ...prev, surchargeMajor: event.target.value }))
+                  }
+                />
+              </label>
+            ) : (
+              <div className="sm:col-span-2 space-y-3 rounded-md border border-[var(--admin-border)] p-3">
+                <p className="text-sm font-medium">Шкала доплаты</p>
+                <ul className="space-y-2">
+                  {draft.tiers.map((tier, index) => (
+                    <li key={tier.key} className="grid gap-2 sm:grid-cols-[1fr_1fr_auto]">
+                      <label className="sf-pe-field">
+                        <span>{tier.openEnded ? 'Порог' : 'До суммы цветов, BYN'}</span>
+                        {tier.openEnded ? (
+                          <input className="sf-pe-input" value="свыше предыдущей" disabled />
+                        ) : (
+                          <input
+                            className="sf-pe-input sf-pe-input--num"
+                            value={tier.maxBaseMajor}
+                            disabled={busy}
+                            onChange={(event) =>
+                              setDraft((prev) => ({
+                                ...prev,
+                                tiers: prev.tiers.map((row, i) =>
+                                  i === index
+                                    ? { ...row, maxBaseMajor: event.target.value }
+                                    : row,
+                                ),
+                              }))
+                            }
+                          />
+                        )}
+                      </label>
+                      <label className="sf-pe-field">
+                        <span>Доплата, BYN</span>
+                        <input
+                          className="sf-pe-input sf-pe-input--num"
+                          value={tier.surchargeMajor}
+                          disabled={busy}
+                          onChange={(event) =>
+                            setDraft((prev) => ({
+                              ...prev,
+                              tiers: prev.tiers.map((row, i) =>
+                                i === index
+                                  ? { ...row, surchargeMajor: event.target.value }
+                                  : row,
+                              ),
+                            }))
+                          }
+                        />
+                      </label>
+                      <div className="flex items-end">
+                        <button
+                          type="button"
+                          className="sf-pe-btn sf-pe-btn--quiet"
+                          disabled={busy || draft.tiers.length <= 1}
+                          onClick={() =>
+                            setDraft((prev) => ({
+                              ...prev,
+                              tiers: prev.tiers.filter((_, i) => i !== index),
+                            }))
+                          }
+                        >
+                          Удалить
+                        </button>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+                <div className="admin-row-actions">
+                  <button
+                    type="button"
+                    className="sf-pe-btn sf-pe-btn--quiet"
+                    disabled={busy}
+                    onClick={() =>
+                      setDraft((prev) => {
+                        const withoutOpen = prev.tiers.filter((t) => !t.openEnded);
+                        const open = prev.tiers.find((t) => t.openEnded) ?? emptyTier(true);
+                        return {
+                          ...prev,
+                          tiers: [...withoutOpen, emptyTier(false), open],
+                        };
+                      })
+                    }
+                  >
+                    Ещё ступень
+                  </button>
+                </div>
+              </div>
+            )}
+
             <label className="sf-pe-field">
               <span>Артикул в ERP</span>
               <input
@@ -268,7 +476,8 @@ export function PackagingAddonsManager({ initialItems, canCreate, canUpdate }: P
                       ) : null}
                     </p>
                     <p className="text-sm text-[var(--admin-muted)]">
-                      {PACKAGING_ADDON_KIND_LABELS[item.kind]} · {formatMoney(item.surchargeMinor)}
+                      {PACKAGING_ADDON_KIND_LABELS[item.kind]}
+                      {item.pricingMode === 'TIERED' ? ' · шкала' : ''} · {pricingLabel(item)}
                       {item.erpSku ? ` · ${item.erpSku}` : ''}
                     </p>
                   </div>

@@ -31,6 +31,7 @@ import {
   suggestProductNameFromComposition,
   deriveCompositionManagerSummary,
   computeLinePriceMinor,
+  resolvePackagingAddonSurchargeMinor,
   deriveCompositionKind,
   formatCompositionSummaryLine,
   adminProductCompositionSummary,
@@ -1048,4 +1049,31 @@ test('evaluateFlowerFormDeleteImpact and catalog page delete', () => {
     assignedProductsCount: 0,
   });
   assert.equal(draft.canDelete, true);
+});
+
+test('resolvePackagingAddonSurchargeMinor: FIXED uses surchargeMinor', () => {
+  assert.equal(
+    resolvePackagingAddonSurchargeMinor(
+      { pricingMode: 'FIXED', surchargeMinor: '800', tiers: [] },
+      10_000n,
+    ),
+    800n,
+  );
+});
+
+test('resolvePackagingAddonSurchargeMinor: TIERED matches inclusive bounds and open top', () => {
+  const addon = {
+    pricingMode: 'TIERED' as const,
+    surchargeMinor: '0',
+    tiers: [
+      { maxBaseMinor: '6000', surchargeMinor: '800' },
+      { maxBaseMinor: '11000', surchargeMinor: '1000' },
+      { maxBaseMinor: null, surchargeMinor: '1500' },
+    ],
+  };
+  assert.equal(resolvePackagingAddonSurchargeMinor(addon, 0n), 800n);
+  assert.equal(resolvePackagingAddonSurchargeMinor(addon, 6000n), 800n);
+  assert.equal(resolvePackagingAddonSurchargeMinor(addon, 6001n), 1000n);
+  assert.equal(resolvePackagingAddonSurchargeMinor(addon, 11000n), 1000n);
+  assert.equal(resolvePackagingAddonSurchargeMinor(addon, 11001n), 1500n);
 });

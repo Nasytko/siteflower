@@ -64,6 +64,8 @@ export function validateCartLines(input: {
     productId: string,
     variantId: string,
     optionValueIds: string[] | undefined,
+    /** Flower/stem line total after promo (unit × qty), before options. */
+    baseLineMinor: bigint,
   ) => { ok: true; selections: PricedOptionSelection[] } | { ok: false; message: string };
   priorUnitPrices?: Map<string, bigint>;
   now?: Date;
@@ -179,6 +181,9 @@ export function validateCartLines(input: {
       continue;
     }
 
+    // Promotional price is commercial truth at checkout time for the variant base.
+    const baseUnit = variant.effectivePriceMinor;
+    const baseLineMinor = baseUnit * BigInt(line.quantity);
     let optionSelections: PricedOptionSelection[] = [];
     if (line.optionValueIds && line.optionValueIds.length > 0 && !input.resolveOptions) {
       issues.push({
@@ -190,7 +195,12 @@ export function validateCartLines(input: {
       continue;
     }
     if (input.resolveOptions) {
-      const opt = input.resolveOptions(product.id, variant.id, line.optionValueIds);
+      const opt = input.resolveOptions(
+        product.id,
+        variant.id,
+        line.optionValueIds,
+        baseLineMinor,
+      );
       if (!opt.ok) {
         issues.push({
           code: 'OPTION_INVALID',
@@ -203,8 +213,6 @@ export function validateCartLines(input: {
       optionSelections = opt.selections;
     }
 
-    // Promotional price is commercial truth at checkout time for the variant base.
-    const baseUnit = variant.effectivePriceMinor;
     const promoted = baseUnit < variant.priceMinor;
     const priced = computeLinePriceMinor({
       quantity: line.quantity,

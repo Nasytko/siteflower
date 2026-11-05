@@ -390,10 +390,20 @@ export function ProductBuyCard({
                     .filter((value) => value.active)
                     .map((value) => {
                       const active = picked.includes(value.id);
-                      const surcharge = resolveOptionSurchargeMinor(value, selected?.id);
+                      const unitMinor = selected
+                        ? BigInt(selected.effectivePriceMinor)
+                        : 0n;
+                      const baseLineMinor = unitMinor * BigInt(qty);
+                      const surcharge = resolveOptionSurchargeMinor(
+                        value,
+                        selected?.id,
+                        baseLineMinor,
+                      );
                       const surchargeLabel =
                         surcharge === 0n
-                          ? 'без доплаты'
+                          ? value.pricingMode === 'TIERED'
+                            ? 'по шкале'
+                            : 'без доплаты'
                           : `+${formatPriceFromMinor(surcharge.toString(), product.currency)}`;
                       return (
                         <button

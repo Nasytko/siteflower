@@ -3,8 +3,17 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import type { PackagingAddonDto, PackagingAddonKind } from '@bouquet-one/contracts';
-import { normalizeErpSku, PACKAGING_ADDON_KINDS } from '@bouquet-one/contracts';
+import type {
+  PackagingAddonDto,
+  PackagingAddonKind,
+  PackagingAddonPricingMode,
+  PackagingAddonPriceTierDto,
+} from '@bouquet-one/contracts';
+import {
+  normalizeErpSku,
+  PACKAGING_ADDON_KINDS,
+  PACKAGING_ADDON_PRICING_MODES,
+} from '@bouquet-one/contracts';
 import type { Prisma } from '@bouquet-one/database';
 import { AuditService } from '../audit/audit.service';
 import { hashIp } from '../auth/crypto.util';
@@ -17,10 +26,22 @@ import {
   syncPackagingAddonErpSkuRegistry,
 } from './erp-sku-registry';
 
+const ADDON_INCLUDE = {
+  priceTiers: { orderBy: { sortOrder: 'asc' as const } },
+} satisfies Prisma.PackagingAddonInclude;
+
+export type PackagingAddonTierInput = {
+  maxBaseMinor?: string | null;
+  surchargeMinor: string;
+  sortOrder?: number;
+};
+
 export type PackagingAddonWriteInput = {
   name?: string;
   kind?: PackagingAddonKind;
+  pricingMode?: PackagingAddonPricingMode;
   surchargeMinor?: string;
+  tiers?: PackagingAddonTierInput[];
   erpSku?: string | null;
   active?: boolean;
   sortOrder?: number;
@@ -38,13 +59,17 @@ export class PackagingAddonsService {
   async list(options?: { includeInactive?: boolean }): Promise<PackagingAddonDto[]> {
     const rows = await this.prisma.client.packagingAddon.findMany({
       where: options?.includeInactive ? undefined : { active: true },
+      include: ADDON_INCLUDE,
       orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }],
     });
     return rows.map(toDto);
   }
 
   async get(id: string): Promise<PackagingAddonDto> {
-    const row = await this.prisma.client.packagingAddon.findUnique({ where: { id } });
+    const row = await this.prisma.client.packagingAddon.findUnique({
+      where: { id },
+      include: ADDON_INCLUDE,
+    });
     if (!row) throw new NotFoundException('Позиция ленты/упаковки не найдена');
     return toDto(row);
   }
@@ -53,7 +78,14 @@ export class PackagingAddonsService {
     const name = input.name?.trim() ?? '';
     if (!name) throw new ConflictException('Укажите название');
     const kind = normalizeKind(input.kind);
-    const surchargeMinor = parseNonNegativeMinor(input.surchargeMinor ?? '0');
+    const pricingMode = normalizePricingMode(input.pricingMode, kind);
+    const tiers = normalizeTiers(pricingMode, input.tiers);
+    const surchargeMinor =
+      pricingMode === 'TIERED'
+        ? tiers[0]
+          ? parseNonNegativeMinor(tiers[0].surchargeMinor)
+          : 0n
+        : parseNonNegativeMinor(input.surchargeMinor ?? '0');
     const erpSku =
       input.erpSku === undefined || input.erpSku === null
         ? null
@@ -65,16 +97,30 @@ export class PackagingAddonsService {
           data: {
             name,
             kind,
+            pricingMode,
             surchargeMinor,
             erpSku,
             active: input.active ?? true,
             sortOrder: input.sortOrder ?? 0,
+            priceTiers:
+              pricingMode === 'TIERED'
+                ? {
+                    create: tiers.map((tier, index) => ({
+                      maxBaseMinor:
+                        tier.maxBaseMinor == null ? null : parseNonNegativeMinor(tier.maxBaseMinor),
+                      surchargeMinor: parseNonNegativeMinor(tier.surchargeMinor),
+                      sortOrder: tier.sortOrder ?? index,
+                    })),
+                  }
+                : undefined,
           },
+          include: ADDON_INCLUDE,
         });
         await syncPackagingAddonErpSkuRegistry(tx, row.id, null, erpSku);
         await this.recordAudit(tx, actor, 'PACKAGING_ADDON_CREATED', row.id, {
           name,
           kind,
+          pricingMode,
           erpSku,
         });
         return row;
@@ -94,7 +140,10 @@ export class PackagingAddonsService {
   ): Promise<PackagingAddonDto> {
     const updated = await this.prisma.client
       .$transaction(async (tx) => {
-        const existing = await tx.packagingAddon.findUnique({ where: { id } });
+        const existing = await tx.packagingAddon.findUnique({
+          where: { id },
+          include: ADDON_INCLUDE,
+        });
         if (!existing) throw new NotFoundException('Позиция ленты/упаковки не найдена');
         if (
           input.expectedVersion != null &&
@@ -106,9 +155,26 @@ export class PackagingAddonsService {
         const name = (input.name ?? existing.name).trim();
         if (!name) throw new ConflictException('Укажите название');
         const kind = normalizeKind(input.kind ?? existing.kind);
-        const surchargeMinor = parseNonNegativeMinor(
-          input.surchargeMinor ?? existing.surchargeMinor.toString(),
+        const pricingMode = normalizePricingMode(
+          input.pricingMode ?? existing.pricingMode,
+          kind,
         );
+        const tiers =
+          input.tiers !== undefined
+            ? normalizeTiers(pricingMode, input.tiers)
+            : existing.priceTiers.map((tier) => ({
+                maxBaseMinor: tier.maxBaseMinor?.toString() ?? null,
+                surchargeMinor: tier.surchargeMinor.toString(),
+                sortOrder: tier.sortOrder,
+              }));
+        const surchargeMinor =
+          pricingMode === 'TIERED'
+            ? tiers[0]
+              ? parseNonNegativeMinor(tiers[0].surchargeMinor)
+              : 0n
+            : parseNonNegativeMinor(
+                input.surchargeMinor ?? existing.surchargeMinor.toString(),
+              );
         const nextErpSku =
           input.erpSku === undefined
             ? existing.erpSku
@@ -116,17 +182,31 @@ export class PackagingAddonsService {
               ? null
               : normalizeErpSku(input.erpSku);
 
+        await tx.packagingAddonPriceTier.deleteMany({ where: { addonId: id } });
         const row = await tx.packagingAddon.update({
           where: { id },
           data: {
             name,
             kind,
+            pricingMode,
             surchargeMinor,
             erpSku: nextErpSku,
             active: input.active ?? existing.active,
             sortOrder: input.sortOrder ?? existing.sortOrder,
             version: { increment: 1 },
+            priceTiers:
+              pricingMode === 'TIERED'
+                ? {
+                    create: tiers.map((tier, index) => ({
+                      maxBaseMinor:
+                        tier.maxBaseMinor == null ? null : parseNonNegativeMinor(tier.maxBaseMinor),
+                      surchargeMinor: parseNonNegativeMinor(tier.surchargeMinor),
+                      sortOrder: tier.sortOrder ?? index,
+                    })),
+                  }
+                : undefined,
           },
+          include: ADDON_INCLUDE,
         });
 
         await syncPackagingAddonErpSkuRegistry(
@@ -136,11 +216,12 @@ export class PackagingAddonsService {
           nextErpSku,
         );
 
+        // Keep linked option copies in sync: name always; FIXED price; TIERED stores 0 fallback.
         await tx.productOptionValue.updateMany({
           where: { addonId: id },
           data: {
             name: row.name,
-            surchargeMinor: row.surchargeMinor,
+            surchargeMinor: pricingMode === 'TIERED' ? 0n : row.surchargeMinor,
             erpSku: null,
           },
         });
@@ -148,6 +229,7 @@ export class PackagingAddonsService {
         await this.recordAudit(tx, actor, 'PACKAGING_ADDON_UPDATED', id, {
           name,
           kind,
+          pricingMode,
           erpSku: nextErpSku,
         });
         return row;
@@ -216,6 +298,7 @@ export class PackagingAddonsService {
         ? []
         : await tx.packagingAddon.findMany({
             where: { id: { in: addonIds } },
+            include: ADDON_INCLUDE,
           });
     const byId = new Map(addons.map((row) => [row.id, row]));
 
@@ -235,7 +318,12 @@ export class PackagingAddonsService {
         ...value,
         addonId: addon.id,
         name: addon.name,
-        surchargeMinor: addon.surchargeMinor < 0n ? 0n : addon.surchargeMinor,
+        surchargeMinor:
+          addon.pricingMode === 'TIERED'
+            ? 0n
+            : addon.surchargeMinor < 0n
+              ? 0n
+              : addon.surchargeMinor,
         erpSku: null,
       };
     });
@@ -268,6 +356,7 @@ function toDto(row: {
   id: string;
   name: string;
   kind: PackagingAddonKind;
+  pricingMode: PackagingAddonPricingMode;
   surchargeMinor: bigint;
   erpSku: string | null;
   active: boolean;
@@ -275,12 +364,26 @@ function toDto(row: {
   version: number;
   createdAt: Date;
   updatedAt: Date;
+  priceTiers?: Array<{
+    id: string;
+    maxBaseMinor: bigint | null;
+    surchargeMinor: bigint;
+    sortOrder: number;
+  }>;
 }): PackagingAddonDto {
+  const tiers: PackagingAddonPriceTierDto[] = (row.priceTiers ?? []).map((tier) => ({
+    id: tier.id,
+    maxBaseMinor: tier.maxBaseMinor?.toString() ?? null,
+    surchargeMinor: tier.surchargeMinor.toString(),
+    sortOrder: tier.sortOrder,
+  }));
   return {
     id: row.id,
     name: row.name,
     kind: row.kind,
+    pricingMode: row.pricingMode,
     surchargeMinor: row.surchargeMinor.toString(),
+    tiers,
     erpSku: row.erpSku ?? null,
     active: row.active,
     sortOrder: row.sortOrder,
@@ -295,6 +398,42 @@ function normalizeKind(kind: string | null | undefined): PackagingAddonKind {
     return kind as PackagingAddonKind;
   }
   return 'OTHER';
+}
+
+function normalizePricingMode(
+  mode: string | null | undefined,
+  kind: PackagingAddonKind,
+): PackagingAddonPricingMode {
+  if (kind === 'RIBBON') return 'FIXED';
+  if (mode && (PACKAGING_ADDON_PRICING_MODES as readonly string[]).includes(mode)) {
+    return mode as PackagingAddonPricingMode;
+  }
+  return 'FIXED';
+}
+
+function normalizeTiers(
+  pricingMode: PackagingAddonPricingMode,
+  tiers: PackagingAddonTierInput[] | undefined,
+): PackagingAddonTierInput[] {
+  if (pricingMode !== 'TIERED') return [];
+  const cleaned = (tiers ?? [])
+    .map((tier, index) => ({
+      maxBaseMinor:
+        tier.maxBaseMinor === undefined || tier.maxBaseMinor === null || tier.maxBaseMinor === ''
+          ? null
+          : tier.maxBaseMinor,
+      surchargeMinor: tier.surchargeMinor,
+      sortOrder: tier.sortOrder ?? index,
+    }))
+    .filter((tier) => /^\d{1,15}$/.test(tier.surchargeMinor));
+  if (cleaned.length === 0) {
+    throw new ConflictException('Для шкалы добавьте хотя бы одну ступень цены');
+  }
+  const openCount = cleaned.filter((tier) => tier.maxBaseMinor == null).length;
+  if (openCount > 1) {
+    throw new ConflictException('Только одна ступень может быть «свыше» без потолка');
+  }
+  return cleaned;
 }
 
 function parseNonNegativeMinor(raw: string): bigint {

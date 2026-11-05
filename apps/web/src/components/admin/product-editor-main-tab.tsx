@@ -208,7 +208,7 @@ export function ProductEditorMainTab(props: Props) {
           ) : null}
         </label>
 
-        <div className="sf-pe-form__row" data-section="price">
+        <div className="sf-pe-form__row sf-pe-form__row--price" data-section="price">
           <label className="sf-pe-field">
             <span>{productKind === 'STEM' ? 'Цена за ветку, BYN' : 'Цена, BYN'}</span>
             <input
@@ -226,26 +226,21 @@ export function ProductEditorMainTab(props: Props) {
               }}
             />
           </label>
-          <div className="sf-pe-field">
-            <span>Наличие</span>
-            <div className="sf-pe-seg sf-pe-seg--wrap" role="group" aria-label="Наличие">
-              {COMMERCIAL_AVAILABILITIES.map((value) => (
-                <button
-                  key={value}
-                  type="button"
-                  className={`sf-pe-seg__btn ${publication.availability === value ? 'sf-pe-seg__btn--on' : ''}`}
-                  disabled={!canUpdate}
-                  aria-pressed={publication.availability === value}
-                  onClick={() => {
-                    setPublication((prev) => ({ ...prev, availability: value }));
-                    touch();
-                  }}
-                >
-                  {availabilityLabel(value)}
-                </button>
-              ))}
-            </div>
-          </div>
+          <label className="sf-pe-field" data-section="erpSku">
+            <span>Артикул ERP</span>
+            <input
+              className="sf-pe-input"
+              value={basic.erpSku}
+              disabled={!canUpdate}
+              placeholder="BQ-1042"
+              autoComplete="off"
+              spellCheck={false}
+              onChange={(event) => {
+                setBasic((prev) => ({ ...prev, erpSku: event.target.value }));
+                touch();
+              }}
+            />
+          </label>
         </div>
 
         {multiSize ? (
@@ -254,21 +249,26 @@ export function ProductEditorMainTab(props: Props) {
           </p>
         ) : null}
 
-        <label className="sf-pe-field" data-section="erpSku">
-          <span>Артикул ERP</span>
-          <input
-            className="sf-pe-input"
-            value={basic.erpSku}
-            disabled={!canUpdate}
-            placeholder="BQ-1042"
-            autoComplete="off"
-            spellCheck={false}
-            onChange={(event) => {
-              setBasic((prev) => ({ ...prev, erpSku: event.target.value }));
-              touch();
-            }}
-          />
-        </label>
+        <div className="sf-pe-field">
+          <span>Наличие</span>
+          <div className="sf-pe-seg sf-pe-seg--wrap" role="group" aria-label="Наличие">
+            {COMMERCIAL_AVAILABILITIES.map((value) => (
+              <button
+                key={value}
+                type="button"
+                className={`sf-pe-seg__btn ${publication.availability === value ? 'sf-pe-seg__btn--on' : ''}`}
+                disabled={!canUpdate}
+                aria-pressed={publication.availability === value}
+                onClick={() => {
+                  setPublication((prev) => ({ ...prev, availability: value }));
+                  touch();
+                }}
+              >
+                {availabilityLabel(value)}
+              </button>
+            ))}
+          </div>
+        </div>
 
         {productKindNeedsGiftSubtype(productKind) ? (
           <label className="sf-pe-field" data-section="category">

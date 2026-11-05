@@ -1804,21 +1804,21 @@ select:focus-visible,
 /* ——— Admin shell ——— */
 
 [data-area='admin'] {
-  --admin-bg: #f3f1ec;
+  --admin-bg: #ebe7e0;
   --admin-surface: #ffffff;
-  --admin-surface-muted: #f7f5f1;
-  --admin-ink: #171614;
-  --admin-muted: #6a655c;
-  --admin-border: #e2ddd4;
-  --admin-border-strong: #cfc7bb;
+  --admin-surface-muted: #f4f1eb;
+  --admin-ink: #141311;
+  --admin-muted: #5a554c;
+  --admin-border: #d4cdc2;
+  --admin-border-strong: #b9b0a2;
   --admin-brand: var(--color-brand);
   --admin-brand-soft: var(--color-brand-soft);
   --admin-brand-hover: color-mix(in oklab, var(--admin-brand) 88%, #000);
   --admin-radius: 0.7rem;
   --admin-radius-sm: 0.5rem;
-  --admin-shadow: 0 1px 2px rgb(26 26 24 / 0.04), 0 8px 24px rgb(26 26 24 / 0.04);
-  --admin-shadow-sm: 0 1px 2px rgb(26 26 24 / 0.04);
-  --admin-focus-ring: 0 0 0 3px color-mix(in oklab, var(--admin-ink) 12%, transparent);
+  --admin-shadow: 0 1px 2px rgb(26 26 24 / 0.06), 0 10px 28px rgb(26 26 24 / 0.06);
+  --admin-shadow-sm: 0 1px 2px rgb(26 26 24 / 0.06);
+  --admin-focus-ring: 0 0 0 3px color-mix(in oklab, var(--admin-ink) 14%, transparent);
 }
 
 .admin-shell {
@@ -2256,21 +2256,24 @@ select:focus-visible,
   align-items: center;
   justify-content: space-between;
   gap: 0.75rem;
-  border: 1px solid var(--admin-border);
+  border: 1.5px solid var(--admin-border-strong);
   background: var(--admin-surface);
   border-radius: var(--admin-radius);
-  padding: 0.9rem 1.05rem;
+  padding: 0.95rem 1.1rem;
   text-decoration: none;
   color: var(--admin-ink);
+  box-shadow: var(--admin-shadow-sm);
   transition:
     border-color 0.15s ease,
-    background-color 0.15s ease;
+    background-color 0.15s ease,
+    box-shadow 0.15s ease;
 }
 
 .admin-quick-link:hover {
   border-color: var(--admin-ink);
   background: #fff;
   color: var(--admin-ink);
+  box-shadow: var(--admin-shadow);
 }
 
 .admin-login {
@@ -2623,7 +2626,7 @@ select:focus-visible,
   display: block;
   width: 100%;
   min-width: 10rem;
-  border: 1px solid var(--admin-border-strong);
+  border: 1.5px solid var(--admin-border-strong);
   background: #fff;
   border-radius: 0.55rem;
   padding: 0.55rem 0.75rem;
@@ -3746,9 +3749,9 @@ select:focus-visible,
 
 .admin-notice {
   border-radius: 0.65rem;
-  border: 1px solid var(--admin-border);
-  background: color-mix(in oklab, var(--admin-brand-soft) 55%, white);
-  padding: 0.65rem 0.85rem;
+  border: 1.5px solid color-mix(in oklab, var(--admin-brand) 28%, var(--admin-border-strong));
+  background: color-mix(in oklab, var(--admin-brand-soft) 70%, white);
+  padding: 0.75rem 0.95rem;
   font-size: 0.875rem;
   line-height: 1.45;
   color: var(--admin-ink);
@@ -3802,42 +3805,47 @@ select:focus-visible,
 }
 
 .sf-pe {
-  max-width: 56rem;
+  max-width: 58rem;
 }
 
 .sf-pe-stack {
   display: grid;
-  gap: 0.85rem;
+  gap: 1rem;
 }
 
 .sf-pe-hero {
   display: grid;
-  gap: 0.85rem;
+  gap: 1rem;
 }
 
 @media (min-width: 720px) {
   .sf-pe-hero {
-    grid-template-columns: minmax(9rem, 13rem) minmax(0, 1fr);
-    align-items: start;
+    grid-template-columns: minmax(10rem, 12.5rem) minmax(0, 1fr);
+    align-items: stretch;
   }
+}
+
+.sf-pe-hero > .sf-pe-card {
+  height: 100%;
 }
 
 .sf-pe-hero__photo {
   display: block;
   width: 100%;
   aspect-ratio: 1;
-  border-radius: 0.75rem;
+  border-radius: 0.55rem;
   object-fit: cover;
+  background: var(--admin-surface-muted);
 }
 
 .sf-pe-dropzone {
   display: grid;
   gap: 0.45rem;
   justify-items: start;
-  padding: 0.85rem;
-  border: 1px dashed var(--admin-border-strong);
-  border-radius: 0.75rem;
-  background: color-mix(in oklab, var(--admin-bg) 60%, #fff);
+  padding: 0.95rem 1rem;
+  border: 1.5px dashed var(--admin-border-strong);
+  border-radius: 0.65rem;
+  background: var(--admin-surface-muted);
 }
 
 .sf-pe-media-grid {
@@ -3920,14 +3928,14 @@ select:focus-visible,
   align-items: flex-start;
   justify-content: space-between;
   gap: 0.85rem;
-  padding: 0.75rem 0;
-  margin: 0;
+  padding: 0.85rem 0 0.95rem;
+  margin: 0 0 0.35rem;
   border: 0;
-  border-bottom: 1px solid var(--admin-border);
+  border-bottom: 1.5px solid var(--admin-border-strong);
   border-radius: 0;
-  background: color-mix(in oklab, var(--admin-bg) 88%, #fff);
-  box-shadow: none;
-  backdrop-filter: blur(10px);
+  background: color-mix(in oklab, var(--admin-bg) 82%, #fff);
+  box-shadow: 0 8px 18px color-mix(in oklab, var(--admin-bg) 70%, transparent);
+  backdrop-filter: blur(12px);
 }
 
 .sf-pe-bar__title {
@@ -4009,11 +4017,11 @@ select:focus-visible,
 }
 
 .sf-pe-card {
-  border: 1px solid var(--admin-border);
+  border: 1px solid var(--admin-border-strong);
   border-radius: 0.75rem;
   background: var(--admin-surface);
-  padding: 1rem 1.05rem;
-  box-shadow: none;
+  padding: 1.1rem 1.15rem;
+  box-shadow: var(--admin-shadow-sm);
 }
 
 /* Quiet fallbacks for leftover admin controls inside the product editor */
@@ -4036,7 +4044,20 @@ select:focus-visible,
 }
 
 .sf-pe-card--media-preview {
-  padding: 0.65rem;
+  padding: 0.55rem;
+  display: flex;
+  flex-direction: column;
+}
+
+.sf-pe-card--media-preview .sf-pe-card__body--flush {
+  flex: 1;
+  display: flex;
+}
+
+.sf-pe-card--media-preview .sf-pe-hero__photo,
+.sf-pe-card--media-preview .admin-thumb-empty {
+  flex: 1;
+  min-height: 10rem;
 }
 
 .sf-pe-card__body--flush {
@@ -4063,28 +4084,30 @@ select:focus-visible,
 .sf-pe-card h2,
 .sf-pe-card__toggle strong {
   margin: 0;
-  font-size: 1.02rem;
-  font-weight: 650;
+  font-size: 1rem;
+  font-weight: 700;
+  letter-spacing: -0.01em;
   color: var(--admin-ink);
 }
 
 .sf-pe-card__lead {
   display: block;
-  margin: 0.2rem 0 0;
-  font-size: 0.82rem;
-  line-height: 1.4;
+  margin: 0.25rem 0 0;
+  font-size: 0.8125rem;
+  line-height: 1.45;
   color: var(--admin-muted);
   font-weight: 400;
 }
 
 .sf-pe-card__body {
-  margin-top: 0.85rem;
+  margin-top: 0.95rem;
 }
 
 .sf-pe-card--quiet {
-  border-color: transparent;
-  background: transparent;
-  padding: 0.15rem 0;
+  border: 1px solid var(--admin-border);
+  background: var(--admin-surface);
+  padding: 0.85rem 1rem;
+  box-shadow: none;
 }
 
 .sf-pe-card--quiet .sf-pe-card__body {
@@ -4092,12 +4115,12 @@ select:focus-visible,
 }
 
 .sf-pe-label {
-  margin: 0 0 0.45rem;
-  font-size: 0.75rem;
-  font-weight: 600;
-  letter-spacing: 0.02em;
+  margin: 0 0 0.5rem;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
   text-transform: uppercase;
-  color: var(--admin-muted);
+  color: var(--admin-ink);
 }
 
 .sf-pe-block {
@@ -4107,8 +4130,9 @@ select:focus-visible,
 
 .sf-pe-form {
   display: grid;
-  gap: 1rem;
-  max-width: 40rem;
+  gap: 0.95rem;
+  max-width: none;
+  width: 100%;
 }
 
 .sf-pe-form--seo {
@@ -4128,13 +4152,21 @@ select:focus-visible,
 
 .sf-pe-form__row {
   display: grid;
-  gap: 1rem;
+  gap: 0.85rem;
 }
 
 @media (min-width: 560px) {
   .sf-pe-form__row {
-    grid-template-columns: minmax(0, 10rem) minmax(0, 1fr);
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.35fr);
     align-items: start;
+  }
+
+  .sf-pe-form__row--price {
+    grid-template-columns: minmax(7.5rem, 9.5rem) minmax(0, 1fr);
+  }
+
+  .sf-pe-form__row--pair {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 
@@ -4146,17 +4178,17 @@ select:focus-visible,
 }
 
 .sf-pe-field > span {
-  font-size: 0.8rem;
-  font-weight: 550;
-  color: var(--admin-muted);
+  font-size: 0.78rem;
+  font-weight: 650;
+  color: color-mix(in oklab, var(--admin-ink) 72%, var(--admin-muted));
 }
 
 .sf-pe-input {
   width: 100%;
-  border: 1px solid var(--admin-border);
+  border: 1.5px solid var(--admin-border-strong);
   border-radius: 0.5rem;
   background: #fff;
-  padding: 0.55rem 0.75rem;
+  padding: 0.58rem 0.75rem;
   font-size: 0.9rem;
   color: var(--admin-ink);
   transition:
@@ -4165,13 +4197,13 @@ select:focus-visible,
 }
 
 .sf-pe-input:hover:not(:disabled):not(:focus) {
-  border-color: var(--admin-border-strong);
+  border-color: color-mix(in oklab, var(--admin-ink) 35%, var(--admin-border-strong));
 }
 
 .sf-pe-input:focus {
   outline: none;
   border-color: var(--admin-ink);
-  box-shadow: 0 0 0 3px color-mix(in oklab, var(--admin-ink) 12%, transparent);
+  box-shadow: var(--admin-focus-ring);
 }
 
 .sf-pe-input:disabled {
@@ -4241,11 +4273,11 @@ textarea.sf-pe-input {
 .sf-pe-seg {
   display: inline-flex;
   flex-wrap: nowrap;
-  gap: 0;
-  padding: 0.2rem;
-  border: 1px solid var(--admin-border);
-  border-radius: 0.55rem;
-  background: var(--admin-surface-muted, #f4f3f0);
+  gap: 0.15rem;
+  padding: 0.22rem;
+  border: 1.5px solid var(--admin-border-strong);
+  border-radius: 0.6rem;
+  background: var(--admin-surface-muted);
 }
 
 .sf-pe-seg--wrap {
@@ -4257,24 +4289,25 @@ textarea.sf-pe-input {
 .sf-pe-seg__btn {
   appearance: none;
   border: 0;
-  border-radius: 0.4rem;
+  border-radius: 0.42rem;
   background: transparent;
   color: var(--admin-muted);
   font-size: 0.8125rem;
-  font-weight: 550;
-  padding: 0.4rem 0.75rem;
+  font-weight: 600;
+  padding: 0.45rem 0.8rem;
   cursor: pointer;
   white-space: nowrap;
 }
 
 .sf-pe-seg__btn:hover:not(:disabled) {
   color: var(--admin-ink);
+  background: color-mix(in oklab, #fff 70%, transparent);
 }
 
 .sf-pe-seg__btn--on {
-  background: #fff;
-  color: var(--admin-ink);
-  box-shadow: 0 1px 2px rgb(26 26 24 / 0.08);
+  background: var(--admin-ink);
+  color: #fff;
+  box-shadow: none;
 }
 
 .sf-pe-seg__btn:disabled {
@@ -4788,7 +4821,22 @@ textarea.sf-pe-input {
   width: 3rem;
   height: 3rem;
   border-radius: 0.55rem;
-  background: color-mix(in oklab, var(--admin-bg) 70%, var(--admin-border));
+  border: 1.5px dashed var(--admin-border-strong);
+  background: var(--admin-surface-muted);
+  color: var(--admin-muted);
+  font-size: 0.8rem;
+  font-weight: 600;
+  display: grid;
+  place-items: center;
+  text-align: center;
+  padding: 0.5rem;
+  cursor: pointer;
+}
+
+.sf-pe-hero__photo.admin-thumb-empty {
+  width: 100%;
+  height: auto;
+  min-height: 10rem;
 }
 
 .admin-chip--sale {

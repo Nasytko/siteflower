@@ -1,15 +1,27 @@
 import {
   computeLinePriceMinor,
+  resolvePackagingAddonSurchargeMinor,
   type ProductOptionGroupDto,
   type ProductOptionValueDto,
   type PricedOptionSelection,
 } from '@bouquet-one/contracts';
 
-/** Resolve surcharge for a value, preferring per-variant override. */
+/** Resolve surcharge for a value; TIERED uses flower/stem line total. */
 export function resolveOptionSurchargeMinor(
   value: ProductOptionValueDto,
   variantId: string | undefined,
+  baseLineMinor: bigint = 0n,
 ): bigint {
+  if (value.pricingMode === 'TIERED') {
+    return resolvePackagingAddonSurchargeMinor(
+      {
+        pricingMode: 'TIERED',
+        surchargeMinor: value.surchargeMinor,
+        tiers: value.tiers,
+      },
+      baseLineMinor,
+    );
+  }
   if (variantId) {
     const override = value.variantSurcharges[variantId];
     if (override != null && override !== '') {
@@ -34,7 +46,9 @@ export function buildPricedOptionSelections(input: {
   groups: ProductOptionGroupDto[];
   variantId: string | undefined;
   selectedByGroup: Record<string, string[]>;
+  baseLineMinor?: bigint;
 }): PricedOptionSelection[] {
+  const baseLineMinor = input.baseLineMinor ?? 0n;
   const selections: PricedOptionSelection[] = [];
   for (const group of input.groups) {
     const picked = input.selectedByGroup[group.id] ?? [];
@@ -46,7 +60,7 @@ export function buildPricedOptionSelections(input: {
         groupName: group.name,
         valueId: value.id,
         valueName: value.name,
-        surchargeMinor: resolveOptionSurchargeMinor(value, input.variantId),
+        surchargeMinor: resolveOptionSurchargeMinor(value, input.variantId, baseLineMinor),
         chargeMode: value.chargeMode,
       });
     }
@@ -62,10 +76,15 @@ export function estimateOptionsTotalMinor(input: {
   quantity: number;
   baseUnitPriceMinor: string;
 }): { optionValueIds: string[]; optionsTotalMinor: string; lineTotalMinor: string } {
-  const selections = buildPricedOptionSelections(input);
+  const unit = BigInt(input.baseUnitPriceMinor);
+  const baseLineMinor = unit * BigInt(input.quantity);
+  const selections = buildPricedOptionSelections({
+    ...input,
+    baseLineMinor,
+  });
   const priced = computeLinePriceMinor({
     quantity: input.quantity,
-    baseUnitPriceMinor: BigInt(input.baseUnitPriceMinor),
+    baseUnitPriceMinor: unit,
     options: selections,
   });
   return {

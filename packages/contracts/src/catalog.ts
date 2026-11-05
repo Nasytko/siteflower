@@ -1828,12 +1828,26 @@ export const PACKAGING_ADDON_KIND_LABELS: Record<PackagingAddonKind, string> = {
   OTHER: 'Другое',
 };
 
+export const PACKAGING_ADDON_PRICING_MODES = ['FIXED', 'TIERED'] as const;
+export type PackagingAddonPricingMode = (typeof PACKAGING_ADDON_PRICING_MODES)[number];
+
+export type PackagingAddonPriceTierDto = {
+  id?: string;
+  /** Inclusive upper bound of flower/stem line total in minor units; null = open-ended. */
+  maxBaseMinor: string | null;
+  surchargeMinor: string;
+  sortOrder: number;
+};
+
 /** Shared ribbon / packaging / vase row for product option pickers. */
 export type PackagingAddonDto = {
   id: string;
   name: string;
   kind: PackagingAddonKind;
+  pricingMode: PackagingAddonPricingMode;
+  /** Used when pricingMode is FIXED; ignored for live TIERED quotes. */
   surchargeMinor: string;
+  tiers: PackagingAddonPriceTierDto[];
   erpSku: string | null;
   active: boolean;
   sortOrder: number;
@@ -1841,6 +1855,54 @@ export type PackagingAddonDto = {
   createdAt: string;
   updatedAt: string;
 };
+
+/**
+ * Resolve packaging/ribbon surcharge from directory pricing.
+ * `baseLineMinor` = effective unit × qty of flowers/stems (no options).
+ * Tiers are matched ascending by maxBaseMinor; null max = open top tier.
+ */
+export function resolvePackagingAddonSurchargeMinor(
+  addon: {
+    pricingMode: PackagingAddonPricingMode;
+    surchargeMinor: string | bigint;
+    tiers?: ReadonlyArray<{ maxBaseMinor: string | null; surchargeMinor: string | bigint }>;
+  },
+  baseLineMinor: bigint,
+): bigint {
+  const base = baseLineMinor < 0n ? 0n : baseLineMinor;
+  if (addon.pricingMode !== 'TIERED') {
+    return parseNonNegativeMinor(addon.surchargeMinor);
+  }
+  const tiers = [...(addon.tiers ?? [])].sort((a, b) => {
+    const aOpen = a.maxBaseMinor == null;
+    const bOpen = b.maxBaseMinor == null;
+    if (aOpen && bOpen) return 0;
+    if (aOpen) return 1;
+    if (bOpen) return -1;
+    const aMax = BigInt(a.maxBaseMinor!);
+    const bMax = BigInt(b.maxBaseMinor!);
+    if (aMax === bMax) return 0;
+    return aMax < bMax ? -1 : 1;
+  });
+  for (const tier of tiers) {
+    if (tier.maxBaseMinor == null) {
+      return parseNonNegativeMinor(tier.surchargeMinor);
+    }
+    if (base <= BigInt(tier.maxBaseMinor)) {
+      return parseNonNegativeMinor(tier.surchargeMinor);
+    }
+  }
+  return 0n;
+}
+
+function parseNonNegativeMinor(raw: string | bigint): bigint {
+  try {
+    const value = typeof raw === 'bigint' ? raw : BigInt(raw);
+    return value < 0n ? 0n : value;
+  } catch {
+    return 0n;
+  }
+}
 
 export type BudgetRangePublicDto = {
   id: string;
@@ -2070,11 +2132,15 @@ export type ProductOptionValueDto = {
   name: string;
   /** ERP stock article for this option value (packaging/ribbon); null when unset or owned by addon. */
   erpSku: string | null;
+  /** Fallback / FIXED surcharge. For TIERED, live quote uses pricingMode + tiers. */
   surchargeMinor: string;
+  pricingMode: PackagingAddonPricingMode;
+  /** Present when linked to a TIERED packaging addon (storefront live quote). */
+  tiers: PackagingAddonPriceTierDto[];
   chargeMode: ProductOptionChargeMode;
   sortOrder: number;
   active: boolean;
-  /** variantId → surchargeMinor override */
+  /** variantId → surchargeMinor override (FIXED only; ignored for TIERED). */
   variantSurcharges: Record<string, string>;
 };
 
