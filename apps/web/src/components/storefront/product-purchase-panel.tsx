@@ -571,21 +571,6 @@ export function ProductPostcardCard() {
     postcards,
   } = usePurchase();
   const options = postcards.filter((p) => p.id !== product.id && p.defaultVariant);
-  const selectedIndex = Math.max(
-    0,
-    options.findIndex((option) => option.id === postcardId),
-  );
-  const selected = options[selectedIndex] ?? options[0] ?? null;
-  const selectedPriceLabel = selected?.defaultVariant
-    ? formatPriceFromMinor(selected.defaultVariant.priceMinor, product.currency)
-    : (selected?.price?.label ?? '');
-  const canBrowse = options.length > 1;
-
-  function stepPostcard(dir: 1 | -1) {
-    if (!canBrowse) return;
-    const next = (selectedIndex + dir + options.length) % options.length;
-    setPostcardId(options[next]!.id);
-  }
 
   return (
     <section className="sf-pdp-card sf-pdp-postcard" aria-labelledby="pdp-postcard-title">
@@ -612,51 +597,45 @@ export function ProductPostcardCard() {
 
       {cardEnabled ? (
         <div className="sf-pdp-postcard__body">
-          {selected ? (
-            <div className="sf-pdp-postcard__picker" role="group" aria-label="Дизайн открытки">
-              <div className="sf-pdp-postcard__preview">
-                {selected.primaryImageUrl ? (
-                  <Image
-                    src={selected.primaryImageUrl}
-                    alt={selected.name}
-                    fill
-                    sizes="104px"
-                    className="object-cover"
-                  />
-                ) : (
-                  <span className="sf-pdp-postcard__preview-fallback">{selected.name}</span>
-                )}
-              </div>
-
-              <div className="sf-pdp-postcard__meta">
-                <div className="sf-pdp-postcard__meta-text">
-                  <span className="sf-pdp-postcard__name">{selected.name}</span>
-                  {selectedPriceLabel ? (
-                    <span className="sf-pdp-postcard__price">{selectedPriceLabel}</span>
-                  ) : null}
-                </div>
-                {canBrowse ? (
-                  <div className="sf-pdp-postcard__nav">
+          {options.length > 0 ? (
+            <ul className="sf-pdp-postcard__list" role="radiogroup" aria-label="Дизайн открытки">
+              {options.map((option) => {
+                const priceLabel = option.defaultVariant
+                  ? formatPriceFromMinor(option.defaultVariant.priceMinor, product.currency)
+                  : (option.price?.label ?? '');
+                return (
+                  <li key={option.id}>
                     <button
                       type="button"
-                      className="sf-pdp-round-nav"
-                      aria-label="Предыдущая открытка"
-                      onClick={() => stepPostcard(-1)}
+                      role="radio"
+                      aria-checked={postcardId === option.id}
+                      className="sf-pdp-postcard__option"
+                      onClick={() => setPostcardId(option.id)}
                     >
-                      ‹
+                      <span className="sf-pdp-postcard__photo">
+                        {option.primaryImageUrl ? (
+                          <Image
+                            src={option.primaryImageUrl}
+                            alt=""
+                            fill
+                            sizes="(max-width: 1023px) 42vw, 180px"
+                            className="object-cover"
+                          />
+                        ) : (
+                          <span className="sf-pdp-postcard__photo-fallback">{option.name}</span>
+                        )}
+                      </span>
+                      <span className="sf-pdp-postcard__option-meta">
+                        <span className="sf-pdp-postcard__name">{option.name}</span>
+                        {priceLabel ? (
+                          <span className="sf-pdp-postcard__price">{priceLabel}</span>
+                        ) : null}
+                      </span>
                     </button>
-                    <button
-                      type="button"
-                      className="sf-pdp-round-nav"
-                      aria-label="Следующая открытка"
-                      onClick={() => stepPostcard(1)}
-                    >
-                      ›
-                    </button>
-                  </div>
-                ) : null}
-              </div>
-            </div>
+                  </li>
+                );
+              })}
+            </ul>
           ) : null}
 
           <label className="sf-pdp-postcard__text">

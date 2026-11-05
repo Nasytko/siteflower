@@ -7199,90 +7199,77 @@ a.sf-instagram__handle:hover {
   margin-top: 0.85rem;
 }
 
-.sf-pdp-postcard__picker {
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
+.sf-pdp-postcard__list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.65rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
 }
 
-.sf-pdp-postcard__preview {
-  position: relative;
-  flex-shrink: 0;
-  width: 6.5rem;
-  height: 6.5rem;
+.sf-pdp-postcard__option {
+  display: flex;
+  width: 100%;
+  min-width: 0;
+  flex-direction: column;
   overflow: hidden;
   border: 1px solid #cfc5b8;
-  border-radius: 0.65rem;
+  border-radius: 0.75rem;
+  background: #fff;
+  color: var(--pdp-ink);
+  text-align: left;
+}
+
+.sf-pdp-postcard__option[aria-checked='true'] {
+  border-color: var(--pdp-green);
+  box-shadow: 0 0 0 1px var(--pdp-green);
+}
+
+.sf-pdp-postcard__photo {
+  position: relative;
+  display: block;
+  width: 100%;
+  aspect-ratio: 1;
+  overflow: hidden;
   background: var(--pdp-tile);
 }
 
-.sf-pdp-postcard__preview-fallback {
+.sf-pdp-postcard__photo-fallback {
   display: flex;
   height: 100%;
   align-items: center;
   justify-content: center;
-  padding: 0.45rem;
+  padding: 0.5rem;
   text-align: center;
-  font-size: 0.6875rem;
+  font-size: 0.75rem;
   font-weight: 600;
-  line-height: 1.25;
   color: var(--pdp-muted);
 }
 
-.sf-pdp-postcard__meta {
-  display: flex;
-  min-width: 0;
-  flex: 1;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.5rem;
-}
-
-.sf-pdp-postcard__meta-text {
+.sf-pdp-postcard__option-meta {
   display: flex;
   min-width: 0;
   flex-direction: column;
-  gap: 0.2rem;
+  gap: 0.15rem;
+  padding: 0.5rem 0.65rem 0.6rem;
 }
 
 .sf-pdp-postcard__name {
-  font-size: 0.875rem;
+  overflow: hidden;
+  font-size: 0.8125rem;
   font-weight: 600;
   line-height: 1.3;
   color: var(--pdp-ink);
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .sf-pdp-postcard__price {
-  font-size: 0.8125rem;
+  font-size: 0.75rem;
   font-weight: 700;
   color: var(--pdp-ink);
   font-variant-numeric: tabular-nums;
-}
-
-.sf-pdp-postcard__nav {
-  display: flex;
-  flex-shrink: 0;
-  align-items: center;
-  gap: 0.35rem;
-}
-
-.sf-pdp-round-nav {
-  display: inline-flex;
-  flex-shrink: 0;
-  width: 2rem;
-  height: 2rem;
-  align-items: center;
-  justify-content: center;
-  border: 1px solid #cfc5b8;
-  border-radius: 999px;
-  background: #fff;
-  color: var(--pdp-ink);
-  font-size: 1.15rem;
-  line-height: 1;
-}
-
-.sf-pdp-round-nav:hover {
-  border-color: var(--pdp-ink);
 }
 
 .sf-pdp-postcard__text {
