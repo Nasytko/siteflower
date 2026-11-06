@@ -1,14 +1,17 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
+  applyTaxonomyLock,
   emptyKatalogSearchState,
   katalogCanonicalPath,
   katalogHasActiveFilters,
+  katalogHasFiltersBeyondLock,
   katalogHref,
   katalogIsFilteredOrSorted,
   katalogStateToListParams,
   katalogStateToQuery,
   parseKatalogSearchParams,
+  taxonomyKatalogHref,
 } from './katalog-search-params';
 
 test('parseKatalogSearchParams defaults', () => {
@@ -107,4 +110,22 @@ test('composition kind and component color URL state', () => {
   assert.equal(params.compositionKind, 'mono,mixed');
   assert.equal(params.componentColor, 'belyy');
   assert.equal(params.flowerTypeSlug, 'roza');
+});
+
+test('taxonomy lock stays in path, not query', () => {
+  const lock = { kind: 'recipient' as const, slug: 'devushke' };
+  const locked = applyTaxonomyLock(
+    parseKatalogSearchParams({ flower: 'roza', page: '2' }),
+    lock,
+  );
+  assert.deepEqual(locked.recipients, ['devushke']);
+  assert.equal(katalogHasFiltersBeyondLock(locked, lock), true);
+  assert.equal(
+    katalogHasFiltersBeyondLock(applyTaxonomyLock(emptyKatalogSearchState(), lock), lock),
+    false,
+  );
+  assert.equal(
+    taxonomyKatalogHref('/komu', 'devushke', lock, locked, { flowerTypes: ['roza'] }),
+    '/komu/devushke?flower=roza',
+  );
 });

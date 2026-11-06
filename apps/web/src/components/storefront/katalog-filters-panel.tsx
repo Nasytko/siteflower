@@ -29,6 +29,14 @@ type Props = {
   /** Price slider bounds in BYN (major). */
   priceBoundMin?: number;
   priceBoundMax?: number;
+  /** Override link builder (taxonomy landings stay on /komu|/povod). */
+  buildHref?: (state: KatalogSearchState, patch?: Partial<KatalogSearchState>) => string;
+  /** “Clear filters” target; defaults to clean category URL. */
+  clearHref?: string;
+  /** Facets locked by the page URL — hidden from the sidebar. */
+  hiddenFilterKeys?: readonly CatalogFilterKey[];
+  /** Treat these facets as non-user filters for the clear link. */
+  ignoreActiveKeys?: readonly CatalogFilterKey[];
 };
 
 function ChevronIcon({ open }: { open: boolean }) {
@@ -198,20 +206,45 @@ export function KatalogFiltersPanel({
   hideToolbar = false,
   priceBoundMin = 0,
   priceBoundMax = 500,
+  buildHref,
+  clearHref: clearHrefProp,
+  hiddenFilterKeys = [],
+  ignoreActiveKeys = [],
 }: Props) {
   const router = useRouter();
   const [, startTransition] = useTransition();
-  const hasFilters = katalogHasActiveFilters(state);
-  const clearHref = `/catalog/${encodeURIComponent(categorySlug)}`;
+  const hrefOf = (patch?: Partial<KatalogSearchState>) =>
+    buildHref ? buildHref(state, patch) : katalogHref(categorySlug, state, patch);
+  const hidden = new Set(hiddenFilterKeys);
+  const ignore = new Set(ignoreActiveKeys);
+  const clearProbe: KatalogSearchState = {
+    ...state,
+    flowerTypes: ignore.has('flower_type') ? [] : state.flowerTypes,
+    varieties: ignore.has('variety') ? [] : state.varieties,
+    colors: ignore.has('color') ? [] : state.colors,
+    componentColors: ignore.has('color') ? [] : state.componentColors,
+    compositionKinds: ignore.has('composition_kind') ? [] : state.compositionKinds,
+    height: ignore.has('stem_height') ? null : state.height,
+    origins: ignore.has('origin') ? [] : state.origins,
+    occasions: ignore.has('occasion') ? [] : state.occasions,
+    recipients: ignore.has('recipient') ? [] : state.recipients,
+    promo: ignore.has('promo') ? false : state.promo,
+    minPriceMinor: ignore.has('price') ? undefined : state.minPriceMinor,
+    maxPriceMinor: ignore.has('price') ? undefined : state.maxPriceMinor,
+  };
+  const hasFilters = katalogHasActiveFilters(clearProbe);
+  const clearHref = clearHrefProp ?? `/catalog/${encodeURIComponent(categorySlug)}`;
 
-  const promoFilter = filters.find((f) => f.key === 'promo');
-  const facetFilters = filters.filter((f) => f.key !== 'price' && f.key !== 'promo');
+  const promoFilter = hidden.has('promo') ? undefined : filters.find((f) => f.key === 'promo');
+  const facetFilters = filters.filter(
+    (f) => f.key !== 'price' && f.key !== 'promo' && !hidden.has(f.key),
+  );
   /** Price slider is always shown — not gated by Filter Pool. */
-  const showPrice = true;
+  const showPrice = !hidden.has('price');
 
   const applyPrice = (next: { minPriceMinor?: string; maxPriceMinor?: string }) => {
     startTransition(() => {
-      router.push(katalogHref(categorySlug, state, next), { scroll: false });
+      router.push(hrefOf(next), { scroll: false });
     });
   };
 
@@ -225,7 +258,7 @@ export function KatalogFiltersPanel({
             {SORT_OPTIONS.map((option) => (
               <Link
                 key={option.value}
-                href={katalogHref(categorySlug, state, { sort: option.value })}
+                href={hrefOf({ sort: option.value })}
                 className="sf-sort-link"
                 data-active={state.sort === option.value ? 'true' : 'false'}
                 scroll={false}
@@ -253,7 +286,7 @@ export function KatalogFiltersPanel({
 
       {promoFilter ? (
         <Link
-          href={katalogHref(categorySlug, state, { promo: !state.promo })}
+          href={hrefOf({ promo: !state.promo })}
           className="sf-option sf-option--promo"
           role="checkbox"
           aria-checked={state.promo}
@@ -281,7 +314,7 @@ export function KatalogFiltersPanel({
                     key={option.slug}
                     label={option.name}
                     active={state.height === option.slug}
-                    href={katalogHref(categorySlug, state, patchForKey(filter.key, state, option.slug))}
+                    href={hrefOf(patchForKey(filter.key, state, option.slug))}
                   />
                 ))}
               </div>
@@ -310,7 +343,7 @@ export function KatalogFiltersPanel({
                   key={option.slug}
                   label={option.name}
                   active={selected.includes(option.slug)}
-                  href={katalogHref(categorySlug, state, patchForKey(filter.key, state, option.slug))}
+                  href={hrefOf(patchForKey(filter.key, state, option.slug))}
                 />
               ))}
             </div>
@@ -333,12 +366,17 @@ export function KatalogToolbar({
   state,
   total,
   listingKind = null,
+  buildHref,
 }: {
   categorySlug: string;
   state: KatalogSearchState;
   total: number;
   listingKind?: CatalogListingKind | null;
+  buildHref?: (state: KatalogSearchState, patch?: Partial<KatalogSearchState>) => string;
 }) {
+  const hrefOf = (patch?: Partial<KatalogSearchState>) =>
+    buildHref ? buildHref(state, patch) : katalogHref(categorySlug, state, patch);
+
   return (
     <div className="sf-catalog-toolbar">
       <p className="sf-catalog-toolbar__count">{catalogCountLabel(total, listingKind)}</p>
@@ -347,7 +385,7 @@ export function KatalogToolbar({
         {SORT_OPTIONS.map((option) => (
           <Link
             key={option.value}
-            href={katalogHref(categorySlug, state, { sort: option.value })}
+            href={hrefOf({ sort: option.value })}
             className="sf-sort-link"
             data-active={state.sort === option.value ? 'true' : 'false'}
             scroll={false}

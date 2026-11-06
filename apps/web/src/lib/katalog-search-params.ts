@@ -292,3 +292,55 @@ export function katalogHref(
     page: patch.page ?? 1,
   })}`;
 }
+
+export type KatalogHrefBuilder = (
+  state: KatalogSearchState,
+  patch?: Partial<KatalogSearchState>,
+) => string;
+
+/** Dimension locked by a taxonomy SEO URL (`/komu/:slug`, `/povod/:slug`). */
+export type TaxonomyLock =
+  | { kind: 'recipient'; slug: string }
+  | { kind: 'occasion'; slug: string };
+
+/** Force the landing taxonomy into list/filter state. */
+export function applyTaxonomyLock(
+  state: KatalogSearchState,
+  lock: TaxonomyLock,
+): KatalogSearchState {
+  if (lock.kind === 'recipient') {
+    return { ...state, recipients: [lock.slug] };
+  }
+  return { ...state, occasions: [lock.slug] };
+}
+
+/** User-chosen filters beyond the locked taxonomy dimension. */
+export function katalogHasFiltersBeyondLock(
+  state: KatalogSearchState,
+  lock: TaxonomyLock,
+): boolean {
+  const unlocked: KatalogSearchState =
+    lock.kind === 'recipient'
+      ? { ...state, recipients: [] }
+      : { ...state, occasions: [] };
+  return katalogHasActiveFilters(unlocked);
+}
+
+/**
+ * PLP links that stay on a taxonomy URL. Locked facet lives in the path,
+ * not in the query string.
+ */
+export function taxonomyKatalogHref(
+  pathPrefix: '/komu' | '/povod',
+  taxonomySlug: string,
+  lock: TaxonomyLock,
+  state: KatalogSearchState,
+  patch: Partial<KatalogSearchState> = {},
+): string {
+  const next = applyTaxonomyLock({ ...state, ...patch, page: patch.page ?? 1 }, lock);
+  const forQuery: KatalogSearchState =
+    lock.kind === 'recipient'
+      ? { ...next, recipients: [] }
+      : { ...next, occasions: [] };
+  return `${pathPrefix}/${encodeURIComponent(taxonomySlug)}${katalogStateToQuery(forQuery)}`;
+}

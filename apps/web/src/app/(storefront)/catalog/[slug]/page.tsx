@@ -145,7 +145,10 @@ export default async function KatalogCategoryPage({
       </header>
 
       {childCategories.length > 0 ? (
-        <nav className="mb-6 flex flex-wrap gap-2" aria-label="Подкатегории">
+        <nav
+          className="mb-6 flex flex-wrap gap-2"
+          aria-label="Тематические подборки"
+        >
           {childCategories.map((child) => (
             <Link key={child.slug} href={categoryNavHref(child.slug)} className="sf-filter-pill text-sm">
               {child.name}
