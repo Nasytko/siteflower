@@ -168,14 +168,15 @@ export default async function ProductPage({ params }: { params: Params }) {
                 />
               </div>
 
-              <div className="sf-pdp-top__perks">
-                <ProductPerks
+              <div className="sf-pdp-top__info">
+                <ProductDetailInfo
+                  product={product}
                   fulfillment={fulfillment}
-                  city={city}
-                  pickupAddress={seller?.pickupAddress ?? settings?.address ?? null}
-                  workingHours={settings?.workingHours ?? null}
+                  deliverySummary={settings?.deliverySummary ?? null}
+                  substitutionNote={settings?.substitutionNote ?? null}
                   outOfCityDeliveryNote={outOfCityDeliveryNote}
-                  photoReportNote={settings?.photoReportNote ?? null}
+                  paymentDescription={seller?.actualOfflinePaymentDescription ?? null}
+                  city={city}
                 />
               </div>
             </div>
@@ -186,11 +187,23 @@ export default async function ProductPage({ params }: { params: Params }) {
                   whatsappUrl={settings?.whatsappUrl ?? null}
                   telegramUrl={settings?.telegramUrl ?? null}
                   phone={settings?.phone ?? null}
+                  showPostcardAnchor={showPostcardAddon}
                 >
                   {product.family ? (
                     <ProductFamilySwitcher family={product.family} currentSlug={product.slug} />
                   ) : null}
                 </ProductBuyCard>
+              </div>
+
+              <div className="sf-pdp-top__perks">
+                <ProductPerks
+                  fulfillment={fulfillment}
+                  city={city}
+                  pickupAddress={seller?.pickupAddress ?? settings?.address ?? null}
+                  workingHours={settings?.workingHours ?? null}
+                  outOfCityDeliveryNote={outOfCityDeliveryNote}
+                  photoReportNote={settings?.photoReportNote ?? null}
+                />
               </div>
 
               {showPostcardAddon ? (
@@ -200,16 +213,6 @@ export default async function ProductPage({ params }: { params: Params }) {
               ) : null}
             </div>
           </article>
-
-          <ProductDetailInfo
-            product={product}
-            fulfillment={fulfillment}
-            deliverySummary={settings?.deliverySummary ?? null}
-            substitutionNote={settings?.substitutionNote ?? null}
-            outOfCityDeliveryNote={outOfCityDeliveryNote}
-            paymentDescription={seller?.actualOfflinePaymentDescription ?? null}
-            city={city}
-          />
 
           <ProductStickyBar />
 

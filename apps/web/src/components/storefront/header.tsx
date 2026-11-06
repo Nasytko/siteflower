@@ -83,7 +83,7 @@ export function StorefrontHeader({
     <>
       <header
         className={`sf-site-header sticky top-0 z-40 ${
-          compact ? 'sf-site-header--compact border-b border-border' : ''
+          compact ? 'sf-site-header--compact' : ''
         }`}
       >
         <div className="hidden border-b border-border/70 bg-[color-mix(in_oklab,var(--color-surface-muted)_70%,var(--color-background))] lg:block">

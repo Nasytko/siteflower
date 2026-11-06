@@ -1,7 +1,7 @@
 'use client';
 
 import Image from 'next/image';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState, type TouchEvent } from 'react';
 import type { ProductPublicDto } from '@bouquet-one/contracts';
 import { pickDerivativeUrl, productImageAlt, sortProductMedia } from '@/lib/media';
 import { FavoriteButton } from './favorite-button';
@@ -19,8 +19,6 @@ type Props = {
   promotionPercent?: number | null;
 };
 
-const VISIBLE_THUMBS = 5;
-
 export function ProductGallery({
   media,
   productId,
@@ -31,32 +29,18 @@ export function ProductGallery({
 }: Props) {
   const sorted = sortProductMedia(media);
   const [activeIndex, setActiveIndex] = useState(0);
-  const [thumbStart, setThumbStart] = useState(0);
   const [lightbox, setLightbox] = useState(false);
-  const stripRef = useRef<HTMLDivElement>(null);
+  const touchStartX = useRef<number | null>(null);
   const showHeight = heightCm != null && heightCm > 0;
   const count = sorted.length;
 
   const select = useCallback(
-    (index: number, scrollStrip = true) => {
+    (index: number) => {
       const next = (index + count) % Math.max(count, 1);
       setActiveIndex(next);
-      if (next < thumbStart) setThumbStart(next);
-      if (next >= thumbStart + VISIBLE_THUMBS) setThumbStart(next - VISIBLE_THUMBS + 1);
-      const strip = stripRef.current;
-      if (scrollStrip && strip) {
-        strip.scrollTo({ left: next * strip.clientWidth, behavior: 'smooth' });
-      }
     },
-    [count, thumbStart],
+    [count],
   );
-
-  function onStripScroll() {
-    const strip = stripRef.current;
-    if (!strip || strip.clientWidth === 0) return;
-    const index = Math.round(strip.scrollLeft / strip.clientWidth);
-    if (index !== activeIndex) setActiveIndex(Math.min(count - 1, Math.max(0, index)));
-  }
 
   const overlay = (
     <>
@@ -83,68 +67,42 @@ export function ProductGallery({
     );
   }
 
-  const thumbsOverflow = count > VISIBLE_THUMBS;
-  const visibleThumbs = thumbsOverflow
-    ? sorted.slice(thumbStart, thumbStart + VISIBLE_THUMBS)
-    : sorted;
+  function onTouchStart(event: TouchEvent) {
+    touchStartX.current = event.changedTouches[0]?.clientX ?? null;
+  }
+
+  function onTouchEnd(event: TouchEvent) {
+    const start = touchStartX.current;
+    touchStartX.current = null;
+    if (start == null || count < 2) return;
+    const end = event.changedTouches[0]?.clientX;
+    if (end == null) return;
+    const delta = end - start;
+    if (Math.abs(delta) < 48) return;
+    select(delta < 0 ? activeIndex + 1 : activeIndex - 1);
+  }
 
   return (
     <div className="sf-pdp-gallery">
-      {count > 1 ? (
-        <div className="sf-pdp-gallery__rail" aria-label="Фотографии букета">
-          {thumbsOverflow && thumbStart > 0 ? (
-            <button
-              type="button"
-              className="sf-pdp-gallery__rail-nav"
-              aria-label="Предыдущие фото"
-              onClick={() => setThumbStart((n) => Math.max(0, n - 1))}
-            >
-              <Chevron dir="up" />
-            </button>
-          ) : null}
-          <ul className="sf-pdp-gallery__thumbs">
-            {visibleThumbs.map((item, offset) => {
-              const index = thumbsOverflow ? thumbStart + offset : offset;
-              return (
-                <li key={`thumb-${item.url}-${index}`}>
-                  <Thumb
-                    item={item}
-                    index={index}
-                    selected={index === activeIndex}
-                    onSelect={() => select(index)}
-                  />
-                </li>
-              );
-            })}
-          </ul>
-          {thumbsOverflow && thumbStart + VISIBLE_THUMBS < count ? (
-            <button
-              type="button"
-              className="sf-pdp-gallery__rail-nav"
-              aria-label="Следующие фото"
-              onClick={() => setThumbStart((n) => Math.min(count - VISIBLE_THUMBS, n + 1))}
-            >
-              <Chevron dir="down" />
-            </button>
-          ) : null}
-        </div>
-      ) : null}
-
       <div className="sf-pdp-gallery__main">
-        <div className="sf-pdp-gallery__frame">
-          <div
-            ref={stripRef}
-            className="sf-pdp-gallery__strip"
-            onScroll={onStripScroll}
-          >
+        <div
+          className="sf-pdp-gallery__frame"
+          onTouchStart={onTouchStart}
+          onTouchEnd={onTouchEnd}
+        >
+          <div className="sf-pdp-gallery__stage" aria-live="polite">
             {sorted.map((item, index) => (
-              <div key={`${item.url}-${index}`} className="sf-pdp-gallery__slide">
+              <div
+                key={`${item.url}-${index}`}
+                className="sf-pdp-gallery__slide"
+                data-active={index === activeIndex ? 'true' : 'false'}
+              >
                 <Image
                   src={pickDerivativeUrl(item, 1200) ?? item.url}
                   alt={productImageAlt(productName, item.alt)}
                   fill
                   sizes="(max-width: 1023px) 100vw, 36rem"
-                  className="object-cover"
+                  className="sf-pdp-gallery__image object-cover"
                   priority={index === 0}
                 />
               </div>
@@ -167,9 +125,9 @@ export function ProductGallery({
         </div>
 
         {count > 1 ? (
-          <ul className="sf-pdp-gallery__thumbs sf-pdp-gallery__thumbs--row">
+          <ul className="sf-pdp-gallery__thumbs" aria-label="Фотографии букета">
             {sorted.map((item, index) => (
-              <li key={`row-${item.url}-${index}`}>
+              <li key={`thumb-${item.url}-${index}`}>
                 <Thumb
                   item={item}
                   index={index}
@@ -320,8 +278,8 @@ function Lightbox({
   );
 }
 
-function Chevron({ dir }: { dir: 'up' | 'down' | 'left' | 'right' }) {
-  const rotate = { down: 0, up: 180, left: 90, right: -90 }[dir];
+function Chevron({ dir }: { dir: 'left' | 'right' }) {
+  const rotate = { left: 90, right: -90 }[dir];
   return (
     <svg
       viewBox="0 0 24 24"

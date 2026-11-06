@@ -292,11 +292,14 @@ export function ProductBuyCard({
   whatsappUrl,
   telegramUrl,
   phone,
+  showPostcardAnchor = false,
   children,
 }: {
   whatsappUrl: string | null;
   telegramUrl: string | null;
   phone: string | null;
+  /** Secondary CTA that scrolls to the postcard shelf. */
+  showPostcardAnchor?: boolean;
   /** Rendered under the variant picker (e.g. family switcher). */
   children?: ReactNode;
 }) {
@@ -318,6 +321,8 @@ export function ProductBuyCard({
     feedback,
     cartCount,
     onAdd,
+    cardEnabled,
+    setCardEnabled,
   } = usePurchase();
   const sorted = [...product.variants].sort((a, b) => a.sortOrder - b.sortOrder);
   const availability = availabilityBadge(product.availability);
@@ -478,18 +483,34 @@ export function ProductBuyCard({
         </div>
       ) : null}
 
-      <button
-        type="button"
-        disabled={blocked || !hydrated}
-        onClick={onAdd}
-        data-testid="add-to-cart"
-        className="sf-pdp-add"
-      >
-        <CartIcon />
-        {product.productKind === 'STEM'
-          ? `В корзину · 1 букет (${stemCountLabel(qty)})`
-          : 'Добавить в корзину'}
-      </button>
+      <div className="sf-pdp-buy__cta">
+        <button
+          type="button"
+          disabled={blocked || !hydrated}
+          onClick={onAdd}
+          data-testid="add-to-cart"
+          className="sf-pdp-add"
+        >
+          <CartIcon />
+          {product.productKind === 'STEM'
+            ? `В корзину · 1 букет (${stemCountLabel(qty)})`
+            : 'Добавить в корзину'}
+        </button>
+        {showPostcardAnchor ? (
+          <button
+            type="button"
+            className="sf-pdp-add-secondary"
+            onClick={() => {
+              if (!cardEnabled) setCardEnabled(true);
+              document
+                .getElementById('pdp-postcards')
+                ?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            }}
+          >
+            Добавить открытку
+          </button>
+        ) : null}
+      </div>
 
       {messengers.length > 0 ? (
         <div className="sf-pdp-messengers" data-count={messengers.length}>
@@ -734,14 +755,33 @@ export function ProductPostcardShelf() {
   );
 }
 
-/** Mobile sticky bar: photo, price, name, «В корзину». */
+/** Mobile sticky bar: photo, price, name, «В корзину» — slides up when main CTA leaves view. */
 export function ProductStickyBar() {
   const { product, priceLabel, originalLabel, blocked, hydrated, onAdd } = usePurchase();
+  const [visible, setVisible] = useState(false);
   const primary = sortProductMedia(product.media)[0];
   const thumb = primary ? (pickDerivativeUrl(primary, 200) ?? primary.url) : null;
 
+  useEffect(() => {
+    const cta = document.querySelector<HTMLElement>('[data-testid="add-to-cart"]');
+    if (!cta) return;
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        setVisible(!(entry?.isIntersecting ?? true));
+      },
+      { threshold: 0, rootMargin: '0px 0px -8% 0px' },
+    );
+    observer.observe(cta);
+    return () => observer.disconnect();
+  }, []);
+
   return (
-    <div className="sf-pdp-sticky" aria-label="Быстрая покупка">
+    <div
+      className="sf-pdp-sticky"
+      data-visible={visible ? 'true' : 'false'}
+      aria-hidden={visible ? undefined : true}
+      aria-label={visible ? 'Быстрая покупка' : undefined}
+    >
       <div className="sf-pdp-sticky__inner">
         {thumb ? (
           <span className="sf-pdp-sticky__thumb">
@@ -757,6 +797,7 @@ export function ProductStickyBar() {
         <button
           type="button"
           disabled={blocked || !hydrated}
+          tabIndex={visible ? 0 : -1}
           onClick={onAdd}
           className="sf-pdp-sticky__btn"
         >

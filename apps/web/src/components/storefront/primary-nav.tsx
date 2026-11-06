@@ -176,7 +176,7 @@ export function PrimaryNav({ items = PRIMARY_NAV, inline = false }: Props) {
                     aria-expanded={dropdown ? open : undefined}
                     aria-haspopup={dropdown ? 'true' : undefined}
                     aria-controls={dropdown && open ? panelId : undefined}
-                    className={`sf-nav-link relative ${inline ? 'min-h-10 px-2.5 text-[0.8125rem]' : ''} ${
+                    className={`sf-nav-link relative ${inline ? 'sf-nav-link--dense' : ''} ${
                       item.accent ? 'text-accent hover:text-accent' : 'hover:text-brand'
                     } ${current || open ? 'text-brand' : ''}`}
                     onFocus={() => {
