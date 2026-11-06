@@ -229,6 +229,10 @@ export function listOccasions() {
   return publicFetch<TaxonomyRefDto[]>('/catalog/occasions', { tags: ['catalog', 'taxonomies'] });
 }
 
+export function listHolidays() {
+  return publicFetch<TaxonomyRefDto[]>('/catalog/holidays', { tags: ['catalog', 'taxonomies'] });
+}
+
 export function listRecipients() {
   return publicFetch<TaxonomyRefDto[]>('/catalog/recipients', { tags: ['catalog', 'taxonomies'] });
 }

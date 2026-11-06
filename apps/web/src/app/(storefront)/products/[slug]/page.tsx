@@ -168,15 +168,14 @@ export default async function ProductPage({ params }: { params: Params }) {
                 />
               </div>
 
-              <div className="sf-pdp-top__info">
-                <ProductDetailInfo
-                  product={product}
+              <div className="sf-pdp-top__perks">
+                <ProductPerks
                   fulfillment={fulfillment}
-                  deliverySummary={settings?.deliverySummary ?? null}
-                  substitutionNote={settings?.substitutionNote ?? null}
-                  outOfCityDeliveryNote={outOfCityDeliveryNote}
-                  paymentDescription={seller?.actualOfflinePaymentDescription ?? null}
                   city={city}
+                  pickupAddress={seller?.pickupAddress ?? settings?.address ?? null}
+                  workingHours={settings?.workingHours ?? null}
+                  outOfCityDeliveryNote={outOfCityDeliveryNote}
+                  photoReportNote={settings?.photoReportNote ?? null}
                 />
               </div>
             </div>
@@ -195,22 +194,23 @@ export default async function ProductPage({ params }: { params: Params }) {
                 </ProductBuyCard>
               </div>
 
-              <div className="sf-pdp-top__perks">
-                <ProductPerks
-                  fulfillment={fulfillment}
-                  city={city}
-                  pickupAddress={seller?.pickupAddress ?? settings?.address ?? null}
-                  workingHours={settings?.workingHours ?? null}
-                  outOfCityDeliveryNote={outOfCityDeliveryNote}
-                  photoReportNote={settings?.photoReportNote ?? null}
-                />
-              </div>
-
               {showPostcardAddon ? (
                 <div className="sf-pdp-top__card">
                   <ProductPostcardCard />
                 </div>
               ) : null}
+
+              <div className="sf-pdp-top__info">
+                <ProductDetailInfo
+                  product={product}
+                  fulfillment={fulfillment}
+                  deliverySummary={settings?.deliverySummary ?? null}
+                  substitutionNote={settings?.substitutionNote ?? null}
+                  outOfCityDeliveryNote={outOfCityDeliveryNote}
+                  paymentDescription={seller?.actualOfflinePaymentDescription ?? null}
+                  city={city}
+                />
+              </div>
             </div>
           </article>
 

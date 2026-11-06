@@ -72,6 +72,11 @@ export function occasionDiscoveryHref(occasionSlug: string): string {
   return `/povod/${encodeURIComponent(occasionSlug)}`;
 }
 
+/** Calendar holiday discovery («К празднику»). */
+export function holidayDiscoveryHref(holidaySlug: string): string {
+  return `/k-prazdniku/${encodeURIComponent(holidaySlug)}`;
+}
+
 /** Recipient discovery. */
 export function recipientDiscoveryHref(recipientSlug: string): string {
   return `/komu/${encodeURIComponent(recipientSlug)}`;

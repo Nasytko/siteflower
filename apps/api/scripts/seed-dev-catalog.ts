@@ -103,8 +103,18 @@ const FLOWER_TYPES: TaxonomySeed[] = [
 
 const OCCASIONS: TaxonomySeed[] = [
   { slug: 'den-rozhdeniya', name: 'День рождения', sortOrder: 10 },
-  { slug: '8-marta', name: '8 марта', sortOrder: 20 },
-  { slug: 'bez-povoda', name: 'Без повода', sortOrder: 30 },
+  { slug: 'bez-povoda', name: 'Без повода', sortOrder: 20 },
+];
+
+/** Calendar holidays («К празднику») — same Occasion table, kind=HOLIDAY. */
+const HOLIDAYS: TaxonomySeed[] = [
+  { slug: '8-marta', name: '8 марта', sortOrder: 10 },
+  { slug: '14-fevralya', name: '14 февраля', sortOrder: 20 },
+  { slug: '23-fevralya', name: '23 февраля', sortOrder: 30 },
+  { slug: 'novyy-god', name: 'Новый год', sortOrder: 40 },
+  { slug: 'den-materi', name: 'День матери', sortOrder: 50 },
+  { slug: '1-sentyabrya', name: '1 сентября', sortOrder: 60 },
+  { slug: 'den-uchitelya', name: 'День учителя', sortOrder: 70 },
 ];
 
 const RECIPIENTS: TaxonomySeed[] = [
@@ -392,8 +402,14 @@ async function upsertFlowerItemForType(
 async function upsertOccasion(
   prisma: PrismaClient,
   item: TaxonomySeed,
+  kind: 'OCCASION' | 'HOLIDAY' = 'OCCASION',
 ): Promise<{ id: string; slug: string }> {
-  const data = { name: item.name, sortOrder: item.sortOrder, visibility: 'VISIBLE' as const };
+  const data = {
+    name: item.name,
+    sortOrder: item.sortOrder,
+    visibility: 'VISIBLE' as const,
+    kind,
+  };
   const row = await prisma.occasion.upsert({
     where: { slug: item.slug },
     create: { slug: item.slug, ...data },
@@ -922,7 +938,11 @@ async function main(): Promise<void> {
       flowerItemsByTypeSlug.set(type.slug, flowerItem.id);
     }
     for (const item of OCCASIONS) {
-      const row = await upsertOccasion(prisma, item);
+      const row = await upsertOccasion(prisma, item, 'OCCASION');
+      occasions.set(row.slug, row.id);
+    }
+    for (const item of HOLIDAYS) {
+      const row = await upsertOccasion(prisma, item, 'HOLIDAY');
       occasions.set(row.slug, row.id);
     }
     for (const item of RECIPIENTS) {

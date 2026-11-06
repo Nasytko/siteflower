@@ -137,6 +137,7 @@ export type TaxonomyRecord = {
   noIndex: boolean;
   createdAt: Date;
   updatedAt: Date;
+  kind?: 'OCCASION' | 'HOLIDAY';
 };
 
 export function toTaxonomyRef(row: { id: string; slug: string; name: string }): TaxonomyRefDto {

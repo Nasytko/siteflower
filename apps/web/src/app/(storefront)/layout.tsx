@@ -6,6 +6,7 @@ import { StorefrontHeader } from '@/components/storefront/header';
 import {
   listCatalogCategoryTree,
   listFlowerTypes,
+  listHolidays,
   listOccasions,
   listRecipients,
 } from '@/lib/public-api';
@@ -26,15 +27,17 @@ export const dynamic = 'force-dynamic';
 export default async function StorefrontLayout({ children }: { children: ReactNode }) {
   const settings = getFixedStorefrontSettings();
   const seller = getFixedLegalSeller(settings);
-  const [flowers, occasions, recipients, categoryTree] = await Promise.all([
+  const [flowers, occasions, holidays, recipients, categoryTree] = await Promise.all([
     listFlowerTypes().catch(() => []),
     listOccasions().catch(() => []),
+    listHolidays().catch(() => []),
     listRecipients().catch(() => []),
     listCatalogCategoryTree().catch(() => []),
   ]);
   const navItems = buildSmartPrimaryNav({
     flowers,
     occasions,
+    holidays,
     recipients,
     categoryTree,
   });

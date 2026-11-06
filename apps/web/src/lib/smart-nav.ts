@@ -6,6 +6,7 @@
 import {
   CATALOG_HUB_SLUG,
   catalogPublicHref,
+  holidayDiscoveryHref,
   isCanonicalListingHub,
   occasionDiscoveryHref,
   recipientDiscoveryHref,
@@ -21,6 +22,7 @@ const MAX_FLOWER_LINKS = 24;
 const MAX_BOUQUET_LINKS = 12;
 const MAX_GIFT_LINKS = 10;
 const MAX_OCCASION_LINKS = 12;
+const MAX_HOLIDAY_LINKS = 10;
 const MAX_RECIPIENT_LINKS = 10;
 
 type VisibleRef = { slug: string; name: string; sortOrder?: number };
@@ -105,6 +107,7 @@ export function yandexMapsHref(address: string): string {
 export type SmartNavSources = {
   flowers?: FlowerTypeDto[];
   occasions?: TaxonomyRefDto[];
+  holidays?: TaxonomyRefDto[];
   recipients?: TaxonomyRefDto[];
   categoryTree?: CatalogCategoryTreeNodeDto[];
 };
@@ -116,6 +119,10 @@ export function buildSmartPrimaryNav(sources: SmartNavSources = {}): PrimaryNavI
   const occasions = (sources.occasions ?? []).map((o) => ({
     slug: o.slug,
     name: o.name,
+  }));
+  const holidays = (sources.holidays ?? []).map((h) => ({
+    slug: h.slug,
+    name: h.name,
   }));
   const recipients = (sources.recipients ?? []).map((r) => ({
     slug: r.slug,
@@ -145,6 +152,11 @@ export function buildSmartPrimaryNav(sources: SmartNavSources = {}): PrimaryNavI
     id: `occ-${item.slug}`,
     label: item.name,
     href: occasionDiscoveryHref(item.slug),
+  }));
+  const holidayChildren = visibleSorted(holidays, MAX_HOLIDAY_LINKS).map((item) => ({
+    id: `hol-${item.slug}`,
+    label: item.name,
+    href: holidayDiscoveryHref(item.slug),
   }));
   const recipientChildren = visibleSorted(recipients, MAX_RECIPIENT_LINKS).map((item) => ({
     id: `rec-${item.slug}`,
@@ -225,8 +237,19 @@ export function buildSmartPrimaryNav(sources: SmartNavSources = {}): PrimaryNavI
       group('povod-main', 'По случаю', 'heart', [
         { id: 'birthday', label: 'День рождения', href: '/povod/den-rozhdeniya' },
         { id: 'love', label: 'Любимым', href: '/povod/lyubimym' },
-        { id: 'march8', label: '8 марта', href: '/povod/8-marta' },
         { id: 'wedding', label: 'Свадьба', href: '/povod/svadba' },
+      ]),
+    );
+  }
+  if (holidayChildren.length > 0) {
+    povodGroups.push(group('povod-holiday', 'К празднику', 'gift', holidayChildren));
+  } else {
+    povodGroups.push(
+      group('povod-holiday', 'К празднику', 'gift', [
+        { id: 'march8', label: '8 марта', href: '/k-prazdniku/8-marta' },
+        { id: 'valentine', label: '14 февраля', href: '/k-prazdniku/14-fevralya' },
+        { id: 'new-year', label: 'Новый год', href: '/k-prazdniku/novyy-god' },
+        { id: 'all-holidays', label: 'Все праздники', href: '/k-prazdniku' },
       ]),
     );
   }

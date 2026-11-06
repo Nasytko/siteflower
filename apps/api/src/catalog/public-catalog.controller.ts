@@ -85,6 +85,12 @@ export class PublicCatalogController {
   }
 
   @Public()
+  @Get('holidays')
+  listHolidays() {
+    return this.catalog.listHolidays();
+  }
+
+  @Public()
   @Get('recipients')
   listRecipients() {
     return this.catalog.listRecipients();

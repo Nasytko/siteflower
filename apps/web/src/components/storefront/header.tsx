@@ -79,6 +79,26 @@ export function StorefrontHeader({
 
   const telHref = phone ? `tel:${phone.replace(/\s+/g, '')}` : null;
 
+  const placeLabel = addressLabel || city;
+  const placeLink =
+    mapsHref && addressLabel ? (
+      <a
+        href={mapsHref}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="sf-utility-bar__item truncate hover:text-brand"
+        title="Открыть в Яндекс Картах"
+      >
+        <PinIcon />
+        <span className="truncate">{addressLabel}</span>
+      </a>
+    ) : (
+      <span className="sf-utility-bar__item truncate">
+        <PinIcon />
+        {placeLabel}
+      </span>
+    );
+
   return (
     <>
       <header
@@ -86,39 +106,29 @@ export function StorefrontHeader({
           compact ? 'sf-site-header--compact' : ''
         }`}
       >
-        <div className="hidden border-b border-border/70 bg-[color-mix(in_oklab,var(--color-surface-muted)_70%,var(--color-background))] lg:block">
-          <div className="sf-utility-bar sf-container-wide">
-            <div className="sf-utility-bar__place">
-              {mapsHref && addressLabel ? (
-                <a
-                  href={mapsHref}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="sf-utility-bar__item truncate hover:text-brand"
-                  title="Открыть в Яндекс Картах"
-                >
-                  <PinIcon />
-                  <span className="truncate">{addressLabel}</span>
-                </a>
-              ) : (
-                <span className="sf-utility-bar__item truncate">
-                  <PinIcon />
-                  {addressLabel || city}
-                </span>
-              )}
-              {workingHours ? <StoreHoursStatus workingHours={workingHours} /> : null}
+        <div
+          className="sf-utility-shell hidden lg:block"
+          data-collapsed={compact ? 'true' : 'false'}
+          aria-hidden={compact ? true : undefined}
+        >
+          <div className="border-b border-border/70 bg-[color-mix(in_oklab,var(--color-surface-muted)_70%,var(--color-background))]">
+            <div className="sf-utility-bar sf-container-wide">
+              <div className="sf-utility-bar__place">
+                {placeLink}
+                {workingHours ? <StoreHoursStatus workingHours={workingHours} /> : null}
+              </div>
+              <nav className="flex items-center gap-7" aria-label="Служебные ссылки">
+                <Link href="/dostavka" className="hover:text-brand">
+                  Доставка и оплата
+                </Link>
+                {telHref ? (
+                  <a href={telHref} className="sf-utility-bar__item hover:text-brand">
+                    <PhoneIcon />
+                    {phone}
+                  </a>
+                ) : null}
+              </nav>
             </div>
-            <nav className="flex items-center gap-7" aria-label="Служебные ссылки">
-              <Link href="/dostavka" className="hover:text-brand">
-                Доставка и оплата
-              </Link>
-              {telHref ? (
-                <a href={telHref} className="sf-utility-bar__item hover:text-brand">
-                  <PhoneIcon />
-                  {phone}
-                </a>
-              ) : null}
-            </nav>
           </div>
         </div>
 
@@ -159,7 +169,29 @@ export function StorefrontHeader({
             <PrimaryNav items={navItems} inline />
           </div>
 
-          <HeaderActions cartCount={cartCount} showLabels={!compact} />
+          <div className="sf-header-end">
+            {telHref && compact ? (
+              <a href={telHref} className="sf-header-phone-desktop">
+                <PhoneIcon />
+                <span>{phone}</span>
+              </a>
+            ) : null}
+            <HeaderActions cartCount={cartCount} showLabels={!compact} />
+          </div>
+        </div>
+
+        <div
+          className="sf-header-meta hidden lg:block"
+          data-visible={compact ? 'true' : 'false'}
+          aria-hidden={compact ? undefined : true}
+        >
+          <div className="sf-header-meta__inner sf-container-wide">
+            <div className="sf-header-meta__place">{placeLink}</div>
+            {workingHours ? <StoreHoursStatus workingHours={workingHours} /> : null}
+            <Link href="/dostavka" className="sf-header-meta__link hover:text-brand">
+              Доставка и оплата
+            </Link>
+          </div>
         </div>
       </header>
 

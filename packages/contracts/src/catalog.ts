@@ -28,6 +28,10 @@ export type VariantStatus = (typeof VARIANT_STATUSES)[number];
 export const TAXONOMY_VISIBILITIES = ['VISIBLE', 'HIDDEN'] as const;
 export type TaxonomyVisibility = (typeof TAXONOMY_VISIBILITIES)[number];
 
+/** Personal повод vs calendar holiday — shared Occasion rows / product M2M. */
+export const OCCASION_KINDS = ['OCCASION', 'HOLIDAY'] as const;
+export type OccasionKind = (typeof OCCASION_KINDS)[number];
+
 /** Max length for Product.erpSku / ProductOptionValue.erpSku / OrderItem.productErpSku. */
 export const ERP_SKU_MAX_LENGTH = 64;
 
@@ -1795,6 +1799,8 @@ export type TaxonomyAdminDto = {
   noIndex: boolean;
   createdAt: string;
   updatedAt: string;
+  /** Present on Occasion rows (personal vs holiday). */
+  occasionKind?: OccasionKind;
   /** Direct product links (occasion/recipient/color palette). */
   productsCount?: number;
   /** Color on FlowerItem rows. */

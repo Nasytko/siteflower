@@ -8,15 +8,14 @@ type Props = {
   href?: string;
 };
 
-const MARK_SRC = '/buket-mark.png';
-/** Intrinsic pixel size of `/buket-mark.png` (square). */
-const MARK_INTRINSIC = 256;
-const MARK_DISPLAY = 36;
-const MARK_DISPLAY_COMPACT = 28;
+const MARK_SRC = '/brand/icon.png';
+/** Intrinsic pixel size of the brand tile. */
+const MARK_INTRINSIC = 512;
+const MARK_DISPLAY = 40;
+const MARK_DISPLAY_COMPACT = 30;
 
 /**
- * Brand lockup: flower mark image + HTML wordmark «BUKET №1» (Latin).
- * Wordmark uses the project display serif (Literata).
+ * Brand lockup: green flower tile + «BUKET №1» with a short line under the name.
  */
 export function BrandLogo({ compact = false, className, href = '/' }: Props) {
   const markPx = compact ? MARK_DISPLAY_COMPACT : MARK_DISPLAY;
@@ -36,10 +35,12 @@ export function BrandLogo({ compact = false, className, href = '/' }: Props) {
         height={markPx}
         decoding="async"
         className="sf-brand-logo__mark"
-        // Hint the intrinsic asset size for browsers that use it with width/height.
         style={{ aspectRatio: `${MARK_INTRINSIC} / ${MARK_INTRINSIC}` }}
       />
-      <span className="sf-brand-logo__name">BUKET №1</span>
+      <span className="sf-brand-logo__text">
+        <span className="sf-brand-logo__name">BUKET №1</span>
+        {compact ? null : <span className="sf-brand-logo__tag">цветочный бутик</span>}
+      </span>
     </Link>
   );
 }

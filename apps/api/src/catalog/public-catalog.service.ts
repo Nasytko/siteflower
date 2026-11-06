@@ -46,13 +46,18 @@ import { PromotionsService } from './promotions.service';
 import { SlugRedirectsService } from './slug-redirects.service';
 
 /** Public landing-page taxonomies (flower types use /cvety via listFlowerTypes). */
-const PUBLIC_TAXONOMY_KINDS = ['occasion', 'recipient', 'color'] as const;
+const PUBLIC_TAXONOMY_KINDS = ['occasion', 'holiday', 'recipient', 'color'] as const;
 
 type PublicTaxonomyKind = (typeof PUBLIC_TAXONOMY_KINDS)[number];
 
 function isPublicTaxonomyKind(value: string): value is PublicTaxonomyKind {
   return (PUBLIC_TAXONOMY_KINDS as readonly string[]).includes(value);
 }
+
+const OCCASION_TABLE_KIND: Partial<Record<PublicTaxonomyKind, 'OCCASION' | 'HOLIDAY'>> = {
+  occasion: 'OCCASION',
+  holiday: 'HOLIDAY',
+};
 
 type ColorPublicDto = TaxonomyRefDto & { swatch: string | null };
 
@@ -421,6 +426,10 @@ export class PublicCatalogService {
     return this.listVisibleTaxonomyRefs('occasion');
   }
 
+  listHolidays(): Promise<TaxonomyRefDto[]> {
+    return this.listVisibleTaxonomyRefs('holiday');
+  }
+
   listRecipients(): Promise<TaxonomyRefDto[]> {
     return this.listVisibleTaxonomyRefs('recipient');
   }
@@ -455,7 +464,12 @@ export class PublicCatalogService {
     if (!isPublicTaxonomyKind(kind)) {
       throw new BadRequestException('Unknown taxonomy kind');
     }
-    const row = await this.taxonomyDelegate(kind).findUnique({ where: { slug } });
+    const occasionKind = OCCASION_TABLE_KIND[kind];
+    const row = occasionKind
+      ? await this.prisma.client.occasion.findFirst({
+          where: { slug, kind: occasionKind },
+        })
+      : await this.taxonomyDelegate(kind).findUnique({ where: { slug } });
     if (!row || row.visibility !== 'VISIBLE') {
       throw new NotFoundException('Taxonomy entry not found');
     }
@@ -466,14 +480,19 @@ export class PublicCatalogService {
     const now = new Date();
     // Single source: CatalogCategory (SYSTEM_HUB / LEGACY / published THEMATIC).
     // SeoLandingPage is not read for sitemap after Task 03 consolidation.
-    const [products, occasions, recipients, categories] = await Promise.all([
+    const [products, occasions, holidays, recipients, categories] = await Promise.all([
       this.prisma.client.product.findMany({
         where: { ...effectivelyPublishedWhere(now), noIndex: false },
         select: { slug: true, updatedAt: true },
         orderBy: { updatedAt: 'desc' },
       }),
       this.prisma.client.occasion.findMany({
-        where: { visibility: 'VISIBLE', noIndex: false },
+        where: { visibility: 'VISIBLE', noIndex: false, kind: 'OCCASION' },
+        select: { slug: true, updatedAt: true },
+        orderBy: { updatedAt: 'desc' },
+      }),
+      this.prisma.client.occasion.findMany({
+        where: { visibility: 'VISIBLE', noIndex: false, kind: 'HOLIDAY' },
         select: { slug: true, updatedAt: true },
         orderBy: { updatedAt: 'desc' },
       }),
@@ -517,6 +536,8 @@ export class PublicCatalogService {
       { path: '/catalog', updatedAt: newestProductUpdate },
       { path: '/catalog/bouquets', updatedAt: newestProductUpdate },
       { path: '/akcii', updatedAt: newestProductUpdate },
+      { path: '/povod', updatedAt: newestProductUpdate },
+      { path: '/k-prazdniku', updatedAt: newestProductUpdate },
       ...products.map((product) => ({
         path: `/products/${product.slug}`,
         updatedAt: product.updatedAt.toISOString(),
@@ -525,6 +546,10 @@ export class PublicCatalogService {
       ...occasions.map((occasion) => ({
         path: `/povod/${occasion.slug}`,
         updatedAt: occasion.updatedAt.toISOString(),
+      })),
+      ...holidays.map((holiday) => ({
+        path: `/k-prazdniku/${holiday.slug}`,
+        updatedAt: holiday.updatedAt.toISOString(),
       })),
       ...recipients.map((recipient) => ({
         path: `/komu/${recipient.slug}`,
@@ -540,6 +565,15 @@ export class PublicCatalogService {
   }
 
   private async listVisibleTaxonomyRefs(kind: PublicTaxonomyKind): Promise<TaxonomyRefDto[]> {
+    const occasionKind = OCCASION_TABLE_KIND[kind];
+    if (occasionKind) {
+      const rows = await this.prisma.client.occasion.findMany({
+        where: { visibility: 'VISIBLE', kind: occasionKind },
+        orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }],
+        select: { id: true, slug: true, name: true },
+      });
+      return rows.map(toTaxonomyRef);
+    }
     const rows = await this.taxonomyDelegate(kind).findMany({
       where: { visibility: 'VISIBLE' },
       orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }],
@@ -552,6 +586,7 @@ export class PublicCatalogService {
     const db = this.prisma.client;
     const delegates = {
       occasion: db.occasion,
+      holiday: db.occasion,
       recipient: db.recipient,
       color: db.color,
     };
@@ -565,7 +600,7 @@ type PublicTaxonomyRow = TaxonomyRecord;
 type PublicTaxonomyDelegate = {
   findUnique(args: { where: { slug: string } }): Promise<PublicTaxonomyRow | null>;
   findMany(args: {
-    where?: { visibility?: 'VISIBLE' | 'HIDDEN' };
+    where?: { visibility?: 'VISIBLE' | 'HIDDEN'; kind?: 'OCCASION' | 'HOLIDAY' };
     orderBy?: Array<{ sortOrder?: 'asc' | 'desc'; name?: 'asc' | 'desc' }>;
     select?: { id: true; slug: true; name: true };
   }): Promise<Array<{ id: string; slug: string; name: string }>>;

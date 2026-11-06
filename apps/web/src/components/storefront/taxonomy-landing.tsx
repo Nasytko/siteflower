@@ -33,7 +33,7 @@ const BOUQUETS_SLUG = 'bouquets';
 const KIND_META: Record<
   Exclude<TaxonomyLandingKind, 'flower' | 'color'>,
   {
-    pathPrefix: '/komu' | '/povod';
+    pathPrefix: '/komu' | '/povod' | '/k-prazdniku';
     hubLabel: string;
     hubHref: string;
     lockKey: TaxonomyLock['kind'];
@@ -43,6 +43,12 @@ const KIND_META: Record<
     pathPrefix: '/povod',
     hubLabel: 'Повод',
     hubHref: '/povod',
+    lockKey: 'occasion',
+  },
+  holiday: {
+    pathPrefix: '/k-prazdniku',
+    hubLabel: 'К празднику',
+    hubHref: '/k-prazdniku',
     lockKey: 'occasion',
   },
   recipient: {

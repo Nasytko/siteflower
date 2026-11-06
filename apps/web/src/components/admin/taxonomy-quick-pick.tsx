@@ -19,6 +19,7 @@ type Props = {
 
 const KIND_LABEL: Record<TaxonomyKind, string> = {
   occasions: 'повод',
+  holidays: 'праздник',
   recipients: 'получателя',
   colors: 'цвет',
 };

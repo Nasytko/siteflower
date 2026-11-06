@@ -35,12 +35,14 @@ describe('seed-dev-catalog integrity', () => {
 
   const flowerTypesBody = requireBlock(/const FLOWER_TYPES[\s\S]*?= \[([\s\S]*?)\];/, 'FLOWER_TYPES');
   const occasionsBody = requireBlock(/const OCCASIONS[\s\S]*?= \[([\s\S]*?)\];/, 'OCCASIONS');
+  const holidaysBody = requireBlock(/const HOLIDAYS[\s\S]*?= \[([\s\S]*?)\];/, 'HOLIDAYS');
   const recipientsBody = requireBlock(/const RECIPIENTS[\s\S]*?= \[([\s\S]*?)\];/, 'RECIPIENTS');
   const colorsBody = requireBlock(/const COLORS[\s\S]*?= \[([\s\S]*?)\];/, 'COLORS');
   const bouquetsBody = requireBlock(/const BOUQUETS[\s\S]*?= \[([\s\S]*?)\n\];/, 'BOUQUETS');
 
   const flowerTypeSet = new Set(slugsIn(flowerTypesBody));
-  const occasionSet = new Set(slugsIn(occasionsBody));
+  /** Product.occasionIds may point at personal occasions or calendar holidays. */
+  const occasionSet = new Set([...slugsIn(occasionsBody), ...slugsIn(holidaysBody)]);
   const recipientSet = new Set(slugsIn(recipientsBody));
   const colorSet = new Set(slugsIn(colorsBody));
 
@@ -126,6 +128,14 @@ describe('seed-dev-catalog integrity', () => {
     expect(source).toMatch(/Missing color slug/);
     expect(source).toMatch(/ensureProductMedia/);
     expect(source).toMatch(/existingPrimary/);
+  });
+
+  it('seeds calendar holidays as Occasion.kind HOLIDAY separately from personal occasions', () => {
+    expect(slugsIn(occasionsBody)).not.toContain('8-marta');
+    expect(slugsIn(holidaysBody)).toContain('8-marta');
+    expect(slugsIn(holidaysBody)).toContain('novyy-god');
+    expect(source).toMatch(/upsertOccasion\(prisma, item, 'OCCASION'\)/);
+    expect(source).toMatch(/upsertOccasion\(prisma, item, 'HOLIDAY'\)/);
   });
 
   it('sets compositionClass explicitly and recomputes Product.compositionKind', () => {

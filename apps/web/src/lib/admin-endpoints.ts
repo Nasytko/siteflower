@@ -5,7 +5,7 @@
 
 const ADMIN = '/api/v1/admin';
 
-export const TAXONOMY_KINDS = ['colors', 'occasions', 'recipients'] as const;
+export const TAXONOMY_KINDS = ['colors', 'occasions', 'holidays', 'recipients'] as const;
 export type TaxonomyKind = (typeof TAXONOMY_KINDS)[number];
 
 export type TaxonomyKindMeta = {
@@ -16,7 +16,7 @@ export type TaxonomyKindMeta = {
   itemLabel: string;
   hasSwatch: boolean;
   hasDescription: boolean;
-  /** Colors/occasions/recipients expose SEO overrides. */
+  /** Colors/occasions/holidays/recipients expose SEO overrides. */
   hasSeo: boolean;
 };
 
@@ -33,8 +33,17 @@ export const TAXONOMY_KIND_META: Record<TaxonomyKind, TaxonomyKindMeta> = {
   occasions: {
     kind: 'occasions',
     title: 'Поводы',
-    lead: 'Поводы в карточке товара (день рождения, свадьба). Помогают клиенту найти букет на витрине.',
+    lead: 'Личные поводы в карточке товара (день рождения, свадьба). Помогают клиенту найти букет на витрине.',
     itemLabel: 'повод',
+    hasSwatch: false,
+    hasDescription: true,
+    hasSeo: true,
+  },
+  holidays: {
+    kind: 'holidays',
+    title: 'К празднику',
+    lead: 'Календарные праздники (8 марта, Новый год, 14 февраля). Ставятся в карточке товара и открывают страницы /k-prazdniku/…',
+    itemLabel: 'праздник',
     hasSwatch: false,
     hasDescription: true,
     hasSeo: true,

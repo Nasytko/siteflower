@@ -298,7 +298,7 @@ export type KatalogHrefBuilder = (
   patch?: Partial<KatalogSearchState>,
 ) => string;
 
-/** Dimension locked by a taxonomy SEO URL (`/komu/:slug`, `/povod/:slug`). */
+/** Dimension locked by a taxonomy SEO URL (`/komu`, `/povod`, `/k-prazdniku`). */
 export type TaxonomyLock =
   | { kind: 'recipient'; slug: string }
   | { kind: 'occasion'; slug: string };
@@ -331,7 +331,7 @@ export function katalogHasFiltersBeyondLock(
  * not in the query string.
  */
 export function taxonomyKatalogHref(
-  pathPrefix: '/komu' | '/povod',
+  pathPrefix: '/komu' | '/povod' | '/k-prazdniku',
   taxonomySlug: string,
   lock: TaxonomyLock,
   state: KatalogSearchState,

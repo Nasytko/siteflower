@@ -88,6 +88,7 @@ type Props = {
   justCreated?: boolean;
   options: {
     occasions: PickerOption[];
+    holidays: PickerOption[];
     recipients: PickerOption[];
     colors: Array<PickerOption & { swatch?: string | null }>;
     categories: CategoryPickerOption[];
@@ -169,6 +170,7 @@ export function ProductEditor({
   const [catalogCategoryId, setCatalogCategoryId] = useState(product.catalogCategoryId ?? '');
   const [taxonomyOptions, setTaxonomyOptions] = useState({
     occasions: options.occasions,
+    holidays: options.holidays,
     recipients: options.recipients,
     colors: options.colors,
   });
@@ -180,10 +182,11 @@ export function ProductEditor({
   useEffect(() => {
     setTaxonomyOptions({
       occasions: options.occasions,
+      holidays: options.holidays,
       recipients: options.recipients,
       colors: options.colors,
     });
-  }, [options.occasions, options.recipients, options.colors]);
+  }, [options.occasions, options.holidays, options.recipients, options.colors]);
 
   useEffect(() => {
     let cancelled = false;
@@ -362,7 +365,7 @@ export function ProductEditor({
   }
 
   function onTaxonomyCreated(
-    kind: 'occasions' | 'recipients' | 'colors',
+    kind: 'occasions' | 'holidays' | 'recipients' | 'colors',
     item: PickerOption & { swatch?: string | null },
   ) {
     setTaxonomyOptions((prev) => {
@@ -1001,6 +1004,7 @@ export function ProductEditor({
     discovery,
     setDiscovery,
     occasions: taxonomyOptions.occasions,
+    holidays: taxonomyOptions.holidays,
     recipients: taxonomyOptions.recipients,
     colors: taxonomyOptions.colors,
     traitOptions,

@@ -63,6 +63,7 @@ export default async function AdminProductEditPage({ params, searchParams }: Pro
         justCreated={justCreated}
         options={{
           occasions: taxonomies.occasions.map((item) => ({ id: item.id, name: item.name })),
+          holidays: taxonomies.holidays.map((item) => ({ id: item.id, name: item.name })),
           recipients: taxonomies.recipients.map((item) => ({ id: item.id, name: item.name })),
           colors: taxonomies.colors.map((item) => ({
             id: item.id,

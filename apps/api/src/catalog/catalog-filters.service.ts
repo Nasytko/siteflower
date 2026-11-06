@@ -362,9 +362,11 @@ export class CatalogFiltersService {
         return rows.length > 0 ? rows : null;
       }
       case 'occasion': {
+        // Personal поводы only — calendar holidays live under /k-prazdniku.
         const rows = await this.prisma.client.occasion.findMany({
           where: {
             visibility: 'VISIBLE',
+            kind: 'OCCASION',
             products: { some: { product: productWhere } },
           },
           orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }],

@@ -11,7 +11,13 @@ export type { ProductSort };
 export type { CatalogSourceDto } from './catalog-source';
 export type { LinkDestinationDto } from './link-destination';
 
-export const TAXONOMY_LANDING_KINDS = ['flower', 'occasion', 'recipient', 'color'] as const;
+export const TAXONOMY_LANDING_KINDS = [
+  'flower',
+  'occasion',
+  'holiday',
+  'recipient',
+  'color',
+] as const;
 export type TaxonomyLandingKind = (typeof TAXONOMY_LANDING_KINDS)[number];
 
 export const HOMEPAGE_SECTION_KINDS = [

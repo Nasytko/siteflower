@@ -70,11 +70,12 @@ type Props = {
     }>
   >;
   occasions: PickerOption[];
+  holidays: PickerOption[];
   recipients: PickerOption[];
   colors: ColorOption[];
   traitOptions: Array<{ key: string; name: string; description: string | null }>;
   onTaxonomyCreated: (
-    kind: 'occasions' | 'recipients' | 'colors',
+    kind: 'occasions' | 'holidays' | 'recipients' | 'colors',
     item: ColorOption,
   ) => void;
   publication: {
@@ -114,6 +115,7 @@ export function ProductEditorMainTab(props: Props) {
     discovery,
     setDiscovery,
     occasions,
+    holidays,
     recipients,
     colors,
     traitOptions,
@@ -334,7 +336,7 @@ export function ProductEditorMainTab(props: Props) {
       <section className="sf-pe-card">
         <div className="sf-pe-card__head">
           <div>
-            <h2>Повод и кому</h2>
+            <h2>Повод, праздник и кому</h2>
           </div>
         </div>
         <div className="sf-pe-card__body grid gap-4 lg:grid-cols-2">
@@ -343,14 +345,45 @@ export function ProductEditorMainTab(props: Props) {
             kind="occasions"
             legend="Повод"
             options={occasions}
-            selectedIds={discovery.occasionIds}
+            selectedIds={discovery.occasionIds.filter((id) =>
+              occasions.some((item) => item.id === id),
+            )}
             canCreate={canCreate}
             canUpdate={canUpdate}
             onChange={(ids) => {
-              setDiscovery((prev) => ({ ...prev, occasionIds: ids }));
+              const holidayIds = new Set(holidays.map((item) => item.id));
+              setDiscovery((prev) => ({
+                ...prev,
+                occasionIds: [
+                  ...ids,
+                  ...prev.occasionIds.filter((id) => holidayIds.has(id)),
+                ],
+              }));
               touch();
             }}
             onCreated={(item) => onTaxonomyCreated('occasions', item)}
+          />
+          <TaxonomyQuickPick
+            kind="holidays"
+            legend="К празднику"
+            options={holidays}
+            selectedIds={discovery.occasionIds.filter((id) =>
+              holidays.some((item) => item.id === id),
+            )}
+            canCreate={canCreate}
+            canUpdate={canUpdate}
+            onChange={(ids) => {
+              const occasionOnlyIds = new Set(occasions.map((item) => item.id));
+              setDiscovery((prev) => ({
+                ...prev,
+                occasionIds: [
+                  ...prev.occasionIds.filter((id) => occasionOnlyIds.has(id)),
+                  ...ids,
+                ],
+              }));
+              touch();
+            }}
+            onCreated={(item) => onTaxonomyCreated('holidays', item)}
           />
           <TaxonomyQuickPick
             kind="recipients"

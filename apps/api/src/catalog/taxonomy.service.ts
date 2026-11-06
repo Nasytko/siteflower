@@ -31,8 +31,8 @@ import {
 } from './catalog.mapper';
 import { SlugRedirectsService } from './slug-redirects.service';
 
-/** Discovery facets only — flowers / bouquet sizes / product lines are gone. */
-export const TAXONOMY_KINDS = ['occasions', 'recipients', 'colors'] as const;
+/** Discovery facets — holidays share the Occasion table with kind=HOLIDAY. */
+export const TAXONOMY_KINDS = ['occasions', 'holidays', 'recipients', 'colors'] as const;
 
 export type TaxonomyKind = (typeof TAXONOMY_KINDS)[number];
 
@@ -40,18 +40,26 @@ export type TaxonomyEntryDto = TaxonomyAdminDto | ColorAdminDto;
 
 const SLUG_ENTITY_BY_KIND: Record<TaxonomyKind, SlugEntityType> = {
   occasions: 'OCCASION',
+  holidays: 'OCCASION',
   recipients: 'RECIPIENT',
   colors: 'COLOR',
 };
 
 const ENTITY_TYPE_BY_KIND: Record<TaxonomyKind, string> = {
   occasions: 'Occasion',
+  holidays: 'Occasion',
   recipients: 'Recipient',
   colors: 'Color',
 };
 
+const OCCASION_KIND_BY_TAXONOMY: Partial<Record<TaxonomyKind, 'OCCASION' | 'HOLIDAY'>> = {
+  occasions: 'OCCASION',
+  holidays: 'HOLIDAY',
+};
+
 type TaxonomyWhere = {
   visibility?: TaxonomyVisibility;
+  kind?: 'OCCASION' | 'HOLIDAY';
   OR?: Array<{
     name?: { contains: string; mode: 'insensitive' };
     slug?: { contains: string; mode: 'insensitive' };
@@ -60,12 +68,14 @@ type TaxonomyWhere = {
 
 type TaxonomyRow = TaxonomyRecord & {
   swatch?: string | null;
+  kind?: 'OCCASION' | 'HOLIDAY';
 };
 
 type TaxonomyWriteData = {
   slug?: string;
   name?: string;
   description?: string | null;
+  kind?: 'OCCASION' | 'HOLIDAY';
   sortOrder?: number;
   visibility?: TaxonomyVisibility;
   seoTitle?: string | null;
@@ -135,8 +145,10 @@ export class TaxonomyService {
   ): Promise<PaginatedResponse<TaxonomyEntryDto>> {
     const page = query.page ?? 1;
     const pageSize = query.pageSize ?? 50;
+    const occasionKind = OCCASION_KIND_BY_TAXONOMY[kind];
     const where: TaxonomyWhere = {
       ...(query.visibility ? { visibility: query.visibility } : {}),
+      ...(occasionKind ? { kind: occasionKind } : {}),
       ...(query.search
         ? {
             OR: [
@@ -168,19 +180,13 @@ export class TaxonomyService {
   }
 
   async getById(kind: TaxonomyKind, id: string): Promise<TaxonomyEntryDto> {
-    const row = await this.delegate(kind).findUnique({ where: { id } });
-    if (!row) {
-      throw new NotFoundException('Taxonomy entry not found');
-    }
+    const row = await this.requireKindRow(kind, id);
     const usage = await this.usageByIds(kind, [id]);
     return this.toDto(kind, row, usage.get(id));
   }
 
   async deleteImpact(kind: TaxonomyKind, id: string): Promise<TaxonomyDeleteImpactDto> {
-    const row = await this.delegate(kind).findUnique({ where: { id } });
-    if (!row) {
-      throw new NotFoundException('Taxonomy entry not found');
-    }
+    await this.requireKindRow(kind, id);
     const usage = await this.usageByIds(kind, [id]);
     const counts = usage.get(id) ?? { productsCount: 0, flowerItemsCount: 0, componentsCount: 0 };
     return evaluateTaxonomyDeleteImpact(counts);
@@ -192,10 +198,7 @@ export class TaxonomyService {
     expectedVersion: number,
     actor: ActorContext,
   ): Promise<{ deleted: true; id: string }> {
-    const current = await this.delegate(kind).findUnique({ where: { id } });
-    if (!current) {
-      throw new NotFoundException('Taxonomy entry not found');
-    }
+    const current = await this.requireKindRow(kind, id);
     if (current.version !== expectedVersion) {
       throw new ConflictException(OCC_CONFLICT_MESSAGE);
     }
@@ -246,11 +249,13 @@ export class TaxonomyService {
       if (taken) {
         throw new ConflictException('Slug already in use');
       }
+      const occasionKind = OCCASION_KIND_BY_TAXONOMY[kind];
       const row = await delegate.create({
         data: {
           slug,
           name,
           description: trimmedOrNull(input.description),
+          ...(occasionKind ? { kind: occasionKind } : {}),
           ...(input.sortOrder === undefined ? {} : { sortOrder: input.sortOrder }),
           ...(input.visibility ? { visibility: input.visibility } : {}),
           seoTitle: trimmedOrNull(input.seoTitle),
@@ -274,10 +279,7 @@ export class TaxonomyService {
     input: UpdateTaxonomyInput,
     actor: ActorContext,
   ): Promise<TaxonomyEntryDto> {
-    const current = await this.delegate(kind).findUnique({ where: { id } });
-    if (!current) {
-      throw new NotFoundException('Taxonomy entry not found');
-    }
+    const current = await this.requireKindRow(kind, id);
 
     const nextSlug = input.slug === undefined ? current.slug : normalizeSlug(input.slug);
     if (!nextSlug) {
@@ -346,7 +348,11 @@ export class TaxonomyService {
     if (kind === 'colors') {
       return { ...toColorAdminDto({ ...row, swatch: row.swatch ?? null }), ...counts };
     }
-    return { ...toTaxonomyAdminDto(row), ...counts };
+    const dto = toTaxonomyAdminDto(row);
+    if (row.kind) {
+      dto.occasionKind = row.kind;
+    }
+    return { ...dto, ...counts };
   }
 
   private async usageByIds(
@@ -361,7 +367,7 @@ export class TaxonomyService {
     const map = new Map(ids.map((id) => [id, { ...empty }]));
     if (ids.length === 0) return map;
 
-    if (kind === 'occasions') {
+    if (kind === 'occasions' || kind === 'holidays') {
       const rows = await this.prisma.client.productOccasion.groupBy({
         by: ['occasionId'],
         where: { occasionId: { in: ids } },
@@ -422,10 +428,24 @@ export class TaxonomyService {
     return map;
   }
 
+  /** Occasion rows are shared; ensure holidays/occasions endpoints stay kind-scoped. */
+  private async requireKindRow(kind: TaxonomyKind, id: string): Promise<TaxonomyRow> {
+    const row = await this.delegate(kind).findUnique({ where: { id } });
+    if (!row) {
+      throw new NotFoundException('Taxonomy entry not found');
+    }
+    const expectedKind = OCCASION_KIND_BY_TAXONOMY[kind];
+    if (expectedKind && row.kind !== expectedKind) {
+      throw new NotFoundException('Taxonomy entry not found');
+    }
+    return row;
+  }
+
   private delegate(kind: TaxonomyKind, tx?: Prisma.TransactionClient): TaxonomyDelegate {
     const db = tx ?? this.prisma.client;
     const delegates = {
       occasions: db.occasion,
+      holidays: db.occasion,
       recipients: db.recipient,
       colors: db.color,
     };

@@ -160,6 +160,12 @@ enum TaxonomyVisibility {
   HIDDEN
 }
 
+/// Personal occasion vs calendar holiday — same Occasion table / product M2M.
+enum OccasionKind {
+  OCCASION
+  HOLIDAY
+}
+
 /// Cached product classification for MONO / MIXED filters.
 /// Derived from FlowerType.compositionClass on composition lines (see contracts deriveCompositionKind).
 enum CompositionKind {
@@ -295,6 +301,8 @@ model Occasion {
   slug           String             @unique @db.VarChar(120)
   name           String             @db.VarChar(120)
   description    String?            @db.VarChar(2000)
+  /// OCCASION = everyday повод; HOLIDAY = календарный праздник («К празднику»).
+  kind           OccasionKind       @default(OCCASION)
   sortOrder      Int                @default(0) @map("sort_order")
   visibility     TaxonomyVisibility @default(VISIBLE)
   version        Int                @default(1)
@@ -307,6 +315,7 @@ model Occasion {
   products ProductOccasion[]
 
   @@index([visibility, sortOrder])
+  @@index([kind, visibility, sortOrder])
   @@map("occasions")
 }
 

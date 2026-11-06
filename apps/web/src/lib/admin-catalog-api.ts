@@ -71,17 +71,19 @@ export function fetchTaxonomy(kind: TaxonomyKind): Promise<unknown[]> {
 
 export type ProductPickerTaxonomies = {
   occasions: TaxonomyAdminDto[];
+  holidays: TaxonomyAdminDto[];
   recipients: TaxonomyAdminDto[];
   colors: ColorAdminDto[];
 };
 
 export async function fetchProductTaxonomies(): Promise<ProductPickerTaxonomies> {
-  const [occasions, recipients, colors] = await Promise.all([
+  const [occasions, holidays, recipients, colors] = await Promise.all([
     fetchTaxonomy('occasions'),
+    fetchTaxonomy('holidays'),
     fetchTaxonomy('recipients'),
     fetchTaxonomy('colors'),
   ]);
-  return { occasions, recipients, colors };
+  return { occasions, holidays, recipients, colors };
 }
 
 export type CatalogStructurePickers = {
