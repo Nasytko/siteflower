@@ -5154,48 +5154,6 @@ a.sf-instagram__handle:hover {
   padding-bottom: 2.75rem;
 }
 
-.sf-home-seo {
-  padding: 1.25rem 0 0.25rem;
-}
-
-.sf-home-seo__h1 {
-  margin: 0;
-  max-width: 22ch;
-  color: var(--home-ink, #23201c);
-  font-family: var(--font-display, Georgia, serif);
-  font-size: clamp(1.65rem, 3.2vw, 2.35rem);
-  font-weight: 500;
-  line-height: 1.15;
-  letter-spacing: -0.02em;
-}
-
-.sf-home-seo__delivery {
-  margin: 0.65rem 0 0;
-  max-width: 40rem;
-  color: var(--home-muted, #6f675e);
-  font-size: 0.95rem;
-  line-height: 1.45;
-}
-
-.sf-home-seo__links {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.55rem 1rem;
-  margin-top: 0.9rem;
-}
-
-.sf-home-seo__link {
-  color: var(--home-green, #18392b);
-  font-size: 0.9rem;
-  font-weight: 600;
-  text-decoration: underline;
-  text-underline-offset: 0.18em;
-}
-
-.sf-home-seo__link:hover {
-  color: var(--home-green-hover, #21493a);
-}
-
 .sf-home-btn {
   display: inline-flex;
   align-items: center;
@@ -7385,68 +7343,50 @@ a.sf-instagram__handle:hover {
   }
 }
 
+/* Same visual language as catalog ProductCard; button resets only. */
 .sf-pdp-postcards__card {
-  display: flex;
   width: 100%;
   min-width: 0;
-  flex-direction: column;
-  overflow: hidden;
-  border: 1px solid #cfc5b8;
-  border-radius: 0.85rem;
-  background: #fff;
-  color: var(--pdp-ink);
+  border: 0;
+  padding: 0;
   text-align: left;
+  cursor: pointer;
+  appearance: none;
+  -webkit-appearance: none;
 }
 
-.sf-pdp-postcards__card[aria-checked='true'] {
-  border-color: var(--pdp-green);
-  box-shadow: 0 0 0 1px var(--pdp-green);
+.sf-pdp-postcards__card:focus-visible {
+  outline: 2px solid var(--color-brand);
+  outline-offset: 3px;
 }
 
-.sf-pdp-postcards__photo {
-  position: relative;
-  display: block;
-  width: 100%;
-  aspect-ratio: 1;
+.sf-pdp-postcards__card--selected {
+  box-shadow:
+    var(--shadow-lift),
+    0 0 0 2px var(--color-brand);
+}
+
+.sf-pdp-postcards__card--selected .sf-product-card__cart,
+.sf-pdp-postcards__card .sf-product-card__cart[data-selected='true'] {
+  background: var(--color-brand);
+  color: var(--color-brand-foreground);
+}
+
+.sf-pdp-postcards__card .sf-product-card__title {
+  display: -webkit-box;
   overflow: hidden;
-  background: var(--pdp-tile);
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
 }
 
 .sf-pdp-postcards__photo-fallback {
   display: flex;
   height: 100%;
-  align-items: center;
-  justify-content: center;
-  padding: 0.5rem;
-  text-align: center;
-  font-size: 0.75rem;
-  font-weight: 600;
-  color: var(--pdp-muted);
-}
-
-.sf-pdp-postcards__meta {
-  display: flex;
-  min-width: 0;
-  flex-direction: column;
-  gap: 0.15rem;
-  padding: 0.55rem 0.7rem 0.7rem;
-}
-
-.sf-pdp-postcards__name {
-  overflow: hidden;
-  font-size: 0.8125rem;
-  font-weight: 600;
-  line-height: 1.3;
-  color: var(--pdp-ink);
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.sf-pdp-postcards__price {
-  font-size: 0.75rem;
-  font-weight: 700;
-  color: var(--pdp-ink);
-  font-variant-numeric: tabular-nums;
+  align-items: flex-end;
+  padding: 1rem;
+  font-size: 0.875rem;
+  color: var(--color-muted);
+  background: var(--color-surface-muted);
 }
 
 /* Product info accordion (Состав / Доставка / Оплата) */

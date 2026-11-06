@@ -23,6 +23,7 @@ test('SUPER_ADMIN sees primary admin sections including catalog and orders', () 
   assert.ok(labels.includes('Подборки'));
   assert.ok(labels.includes('Страницы каталога'));
   assert.ok(labels.includes('Заказы'));
+  assert.ok(labels.includes('Плитки на главной'));
   assert.ok(labels.includes('Instagram'));
   assert.ok(labels.includes('Пользователи'));
   assert.equal(labels.includes('Цветы'), false);
@@ -39,6 +40,7 @@ test('SUPER_ADMIN sees primary admin sections including catalog and orders', () 
   assert.ok(hrefs.includes('/admin/bestsellers'));
   assert.ok(hrefs.includes('/admin/catalog/pages'));
   assert.ok(hrefs.includes('/admin/orders'));
+  assert.ok(hrefs.includes('/admin/storefront/discovery'));
   assert.ok(hrefs.includes('/admin/storefront/instagram'));
   assert.equal(hrefs.some((href) => href.startsWith('/admin/legal')), false);
 });

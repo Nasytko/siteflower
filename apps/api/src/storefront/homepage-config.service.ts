@@ -497,13 +497,14 @@ export class HomepageConfigService {
   ) {}
 
   async getPublic(): Promise<HomepageConfigDto> {
-    // Visual homepage template is fixed in code; SEO overrides come from DB.
+    // Hero/sections stay fixed in code; SEO + discovery tiles come from DB.
     const fixed = defaultHomepageConfig();
     try {
       const row = await this.getOrCreate();
       const stored = await this.configFromRow(row);
       return {
         ...fixed,
+        discoveryTiles: stored.discoveryTiles,
         seoTitle: stored.seoTitle,
         seoDescription: stored.seoDescription,
         h1: stored.h1,
@@ -518,6 +519,7 @@ export class HomepageConfigService {
     const stored = await this.configFromRow(row);
     return {
       ...defaultHomepageConfig(),
+      discoveryTiles: stored.discoveryTiles,
       seoTitle: stored.seoTitle,
       seoDescription: stored.seoDescription,
       h1: stored.h1,
@@ -527,7 +529,7 @@ export class HomepageConfigService {
   }
 
   /**
-   * Patch only homepage SEO fields. Visual template remains the fixed code default.
+   * Patch only homepage SEO fields. Preserves discovery tiles.
    */
   async updateSeo(
     input: {
@@ -552,47 +554,73 @@ export class HomepageConfigService {
 
     const config: HomepageConfigDto = {
       ...defaultHomepageConfig(),
+      discoveryTiles: current.discoveryTiles,
       seoTitle: nextSeoTitle,
       seoDescription: nextSeoDescription,
       h1: nextH1,
     };
 
-    try {
-      await this.prisma.client.$transaction(async (tx) => {
-        const result = await tx.homepageConfig.updateMany({
-          where: { id: SINGLETON_ID, version: input.expectedVersion },
-          data: {
-            config: config as Prisma.InputJsonValue,
-            version: { increment: 1 },
-          },
-        });
-        if (result.count === 0) {
-          throw new ConflictException(OCC_CONFLICT_MESSAGE);
-        }
+    await this.persistConfig(config, input.expectedVersion, actor, {
+      seoOnly: true,
+      hasManualTitle: Boolean(nextSeoTitle),
+      hasManualDescription: Boolean(nextSeoDescription),
+      hasManualH1: Boolean(nextH1),
+    });
 
-        await this.audit.record(
-          {
-            actorAdminUserId: actor.actorId,
-            action: 'HOMEPAGE_CONFIG_UPDATED',
-            entityType: 'HomepageConfig',
-            entityId: String(SINGLETON_ID),
-            metadata: {
-              seoOnly: true,
-              hasManualTitle: Boolean(nextSeoTitle),
-              hasManualDescription: Boolean(nextSeoDescription),
-              hasManualH1: Boolean(nextH1),
-            },
-            requestId: actor.requestId,
-            ipHash: hashIp(actor.ip, this.appConfig.sessionHmacSecret),
-            userAgent: actor.userAgent,
-          },
-          tx,
-        );
-      });
+    const dto = await this.getAdmin();
+    await this.revalidate.ping({ tags: ['storefront', 'homepage'], paths: ['/'] });
+    return dto;
+  }
+
+  /**
+   * Patch discovery tiles only. Preserves SEO overrides; hero/sections stay code defaults.
+   */
+  async updateDiscoveryTiles(
+    input: {
+      expectedVersion: number;
+      discoveryTiles: HomepageDiscoveryTileDto[];
+    },
+    actor: ActorContext,
+  ): Promise<HomepageConfigAdminDto> {
+    const row = await this.getOrCreate();
+    const current = await this.configFromRow(row);
+    const resolveCtx = await this.loadResolveContext({
+      discoveryTiles: input.discoveryTiles,
+    });
+    let tiles: HomepageDiscoveryTileDto[];
+    try {
+      const parsed = parseHomepageConfig(
+        {
+          ...defaultHomepageConfig(),
+          discoveryTiles: input.discoveryTiles,
+          seoTitle: current.seoTitle,
+          seoDescription: current.seoDescription,
+          h1: current.h1,
+        },
+        'write',
+        resolveCtx,
+      );
+      tiles = parsed.discoveryTiles;
     } catch (err) {
-      if (err instanceof ConflictException || err instanceof BadRequestException) throw err;
-      throw err;
+      if (err instanceof BadRequestException) throw err;
+      throw new BadRequestException(
+        err instanceof Error ? err.message : 'Некорректные плитки главной',
+      );
     }
+
+    const config: HomepageConfigDto = {
+      ...defaultHomepageConfig(),
+      discoveryTiles: tiles,
+      seoTitle: current.seoTitle,
+      seoDescription: current.seoDescription,
+      h1: current.h1,
+    };
+
+    await this.persistConfig(config, input.expectedVersion, actor, {
+      discoveryTilesOnly: true,
+      tileCount: tiles.length,
+      enabledTileCount: tiles.filter((tile) => tile.enabled).length,
+    });
 
     const dto = await this.getAdmin();
     await this.revalidate.ping({ tags: ['storefront', 'homepage'], paths: ['/'] });
@@ -667,6 +695,45 @@ export class HomepageConfigService {
     const dto = await this.getAdmin();
     await this.revalidate.ping({ tags: ['storefront', 'homepage'], paths: ['/'] });
     return dto;
+  }
+
+  private async persistConfig(
+    config: HomepageConfigDto,
+    expectedVersion: number,
+    actor: ActorContext,
+    metadata: Record<string, unknown>,
+  ): Promise<void> {
+    try {
+      await this.prisma.client.$transaction(async (tx) => {
+        const result = await tx.homepageConfig.updateMany({
+          where: { id: SINGLETON_ID, version: expectedVersion },
+          data: {
+            config: config as Prisma.InputJsonValue,
+            version: { increment: 1 },
+          },
+        });
+        if (result.count === 0) {
+          throw new ConflictException(OCC_CONFLICT_MESSAGE);
+        }
+
+        await this.audit.record(
+          {
+            actorAdminUserId: actor.actorId,
+            action: 'HOMEPAGE_CONFIG_UPDATED',
+            entityType: 'HomepageConfig',
+            entityId: String(SINGLETON_ID),
+            metadata,
+            requestId: actor.requestId,
+            ipHash: hashIp(actor.ip, this.appConfig.sessionHmacSecret),
+            userAgent: actor.userAgent,
+          },
+          tx,
+        );
+      });
+    } catch (err) {
+      if (err instanceof ConflictException || err instanceof BadRequestException) throw err;
+      throw err;
+    }
   }
 
   private async getOrCreate(): Promise<HomepageConfigRow> {

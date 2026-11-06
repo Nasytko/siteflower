@@ -83,6 +83,14 @@ export const ADMIN_NAV_GROUPS: AdminNavGroup[] = [
           pathname.startsWith('/admin/seo/landings/'),
       },
       {
+        href: '/admin/storefront/discovery',
+        label: 'Плитки на главной',
+        permission: 'CONTENT_READ',
+        isActive: (pathname) =>
+          pathname === '/admin/storefront/discovery' ||
+          pathname.startsWith('/admin/storefront/discovery/'),
+      },
+      {
         href: '/admin/storefront/instagram',
         label: 'Instagram',
         permission: 'CONTENT_READ',

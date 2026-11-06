@@ -270,20 +270,6 @@ export default async function StorefrontHomePage() {
   ];
 
   const seo = resolveHomepageSeo(homepage);
-  const birthdayLive = occasions.some((item) => item.slug === 'den-rozhdeniya');
-  const catalogLinks: Array<{ href: string; label: string }> = [
-    catalogSlugs.has('bouquets')
-      ? { href: '/catalog/bouquets', label: 'Букеты' }
-      : null,
-    catalogSlugs.has('rose-bouquets')
-      ? { href: '/catalog/rose-bouquets', label: 'Букеты из роз' }
-      : null,
-    catalogSlugs.has('stems')
-      ? { href: '/catalog/stems', label: 'Цветы поштучно' }
-      : null,
-    birthdayLive ? { href: '/povod/den-rozhdeniya', label: 'Ко дню рождения' } : null,
-  ].filter((item): item is { href: string; label: string } => item != null);
-
   const websiteLd = buildWebSiteJsonLd({
     name: settings.brandName || 'BUKET №1',
     alternateName: [...HOMEPAGE_BRAND_ALTERNATE_NAMES],
@@ -298,30 +284,17 @@ export default async function StorefrontHomePage() {
         dangerouslySetInnerHTML={{ __html: serializeJsonLd(websiteLd) }}
       />
 
-      <ExpandingHero slides={heroSlides} deliveryNote={null} />
+      {/* Stable SEO H1 — not tied to promo slides; visually hidden so the hero stays clean. */}
+      <h1 className="sr-only">{seo.h1}</h1>
 
-      <section className="sf-home-seo" aria-labelledby="home-seo-heading">
-        <div className="sf-container-wide">
-          <h1 id="home-seo-heading" className="sf-home-seo__h1">
-            {seo.h1}
-          </h1>
-          <p className="sf-home-seo__delivery">
-            Бесплатная доставка в черте Гродно.{' '}
-            <Link href="/dostavka" className="sf-link">
-              Условия доставки
-            </Link>
-          </p>
-          {catalogLinks.length > 0 ? (
-            <nav className="sf-home-seo__links" aria-label="Основные разделы каталога">
-              {catalogLinks.map((link) => (
-                <Link key={link.href} href={link.href} className="sf-home-seo__link">
-                  {link.label}
-                </Link>
-              ))}
-            </nav>
-          ) : null}
-        </div>
-      </section>
+      <ExpandingHero
+        slides={heroSlides}
+        deliveryNote={
+          settings.deliverySummary?.trim()
+            ? `Бесплатная доставка в черте ${settings.city}`
+            : 'Бесплатная доставка в черте Гродно'
+        }
+      />
 
       <CategoryNav items={discoveryTiles} />
 

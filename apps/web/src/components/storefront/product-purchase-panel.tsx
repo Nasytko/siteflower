@@ -688,27 +688,42 @@ export function ProductPostcardShelf() {
                 type="button"
                 role="radio"
                 aria-checked={selected}
-                className="sf-pdp-postcards__card"
+                className={`sf-product-card sf-pdp-postcards__card group${
+                  selected ? ' sf-pdp-postcards__card--selected' : ''
+                }`}
                 onClick={() => selectPostcard(option.id)}
               >
-                <span className="sf-pdp-postcards__photo">
+                <span className="sf-product-card__media">
                   {option.primaryImageUrl ? (
                     <Image
                       src={option.primaryImageUrl}
                       alt=""
                       fill
-                      sizes="(max-width: 640px) 42vw, 180px"
-                      className="object-cover"
+                      sizes="(max-width: 640px) 42vw, (max-width: 1024px) 28vw, 200px"
+                      className="object-cover transition-transform duration-500 ease-out group-hover:scale-[1.03] motion-reduce:transition-none motion-reduce:group-hover:scale-100"
                     />
                   ) : (
-                    <span className="sf-pdp-postcards__photo-fallback">{option.name}</span>
+                    <span className="sf-pdp-postcards__photo-fallback">Фото скоро</span>
                   )}
                 </span>
-                <span className="sf-pdp-postcards__meta">
-                  <span className="sf-pdp-postcards__name">{option.name}</span>
-                  {priceLabel ? (
-                    <span className="sf-pdp-postcards__price">{priceLabel}</span>
-                  ) : null}
+                <span className="sf-product-card__body">
+                  <span className="sf-product-card__title">{option.name}</span>
+                  <span className="sf-product-card__buy">
+                    <span className="sf-product-card__price">
+                      {priceLabel ? (
+                        <span className="sf-price">{priceLabel}</span>
+                      ) : (
+                        <span className="sf-small text-muted">Цена уточняется</span>
+                      )}
+                    </span>
+                    <span
+                      className="sf-product-card__cart"
+                      aria-hidden
+                      data-selected={selected ? 'true' : 'false'}
+                    >
+                      {selected ? <CheckIcon /> : <PlusIcon />}
+                    </span>
+                  </span>
                 </span>
               </button>
             </li>
@@ -768,6 +783,39 @@ function CartIcon() {
       <path d="M3 4h2l2.2 10.2a1.5 1.5 0 0 0 1.5 1.2h8.6a1.5 1.5 0 0 0 1.5-1.1L20.5 8H6.2" />
       <circle cx="9.5" cy="19.5" r="1.2" />
       <circle cx="17" cy="19.5" r="1.2" />
+    </svg>
+  );
+}
+
+function PlusIcon() {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      className="size-4 shrink-0"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      strokeLinecap="round"
+      aria-hidden
+    >
+      <path d="M12 5v14M5 12h14" />
+    </svg>
+  );
+}
+
+function CheckIcon() {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      className="size-4 shrink-0"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden
+    >
+      <path d="m5.5 12.5 4.2 4.2 8.8-9.2" />
     </svg>
   );
 }

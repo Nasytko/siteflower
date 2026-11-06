@@ -1,6 +1,17 @@
 import { Body, Controller, Get, Patch, Req } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
-import { IsInt, IsOptional, IsString, MaxLength, Min, ValidateIf } from 'class-validator';
+import { Type } from 'class-transformer';
+import {
+  IsArray,
+  IsBoolean,
+  IsInt,
+  IsOptional,
+  IsString,
+  MaxLength,
+  Min,
+  ValidateIf,
+  ValidateNested,
+} from 'class-validator';
 import type { Request } from 'express';
 import { RequirePermissions } from '../auth/decorators';
 import { CurrentAdmin, type AuthenticatedAdmin } from '../auth/current-admin.decorator';
@@ -31,13 +42,60 @@ class UpdateHomepageSeoBodyDto {
   h1?: string | null;
 }
 
+class DiscoveryTileBodyDto {
+  @IsString()
+  @MaxLength(80)
+  id!: string;
+
+  @IsString()
+  @MaxLength(120)
+  label!: string;
+
+  @IsString()
+  @MaxLength(500)
+  href!: string;
+
+  @IsOptional()
+  destination?: {
+    kind?: string;
+    ref?: string | null;
+    href?: string | null;
+  } | null;
+
+  @IsString()
+  @MaxLength(500)
+  imageUrl!: string;
+
+  @IsString()
+  @MaxLength(200)
+  imageAlt!: string;
+
+  @IsBoolean()
+  enabled!: boolean;
+
+  @IsInt()
+  @Min(0)
+  sortOrder!: number;
+}
+
+class UpdateHomepageDiscoveryTilesBodyDto {
+  @IsInt()
+  @Min(1)
+  expectedVersion!: number;
+
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => DiscoveryTileBodyDto)
+  discoveryTiles!: DiscoveryTileBodyDto[];
+}
+
 @ApiTags('admin-storefront-homepage')
 @Controller('admin/storefront/homepage')
 export class AdminHomepageController {
   constructor(private readonly homepage: HomepageConfigService) {}
 
   @Get()
-  @RequirePermissions('SEO_READ')
+  @RequirePermissions('CONTENT_READ')
   get() {
     return this.homepage.getAdmin();
   }
@@ -55,6 +113,37 @@ export class AdminHomepageController {
         seoTitle: body.seoTitle,
         seoDescription: body.seoDescription,
         h1: body.h1,
+      },
+      actorFrom(admin, req),
+    );
+  }
+
+  @Patch('discovery-tiles')
+  @RequirePermissions('CONTENT_UPDATE')
+  updateDiscoveryTiles(
+    @Body() body: UpdateHomepageDiscoveryTilesBodyDto,
+    @CurrentAdmin() admin: AuthenticatedAdmin,
+    @Req() req: Request,
+  ) {
+    return this.homepage.updateDiscoveryTiles(
+      {
+        expectedVersion: body.expectedVersion,
+        discoveryTiles: body.discoveryTiles.map((tile) => ({
+          id: tile.id,
+          label: tile.label,
+          href: tile.href,
+          destination: tile.destination
+            ? {
+                kind: (tile.destination.kind as 'custom') ?? 'custom',
+                ref: tile.destination.ref ?? null,
+                href: tile.destination.href ?? tile.href,
+              }
+            : { kind: 'custom' as const, href: tile.href },
+          imageUrl: tile.imageUrl,
+          imageAlt: tile.imageAlt,
+          enabled: tile.enabled,
+          sortOrder: tile.sortOrder,
+        })),
       },
       actorFrom(admin, req),
     );
