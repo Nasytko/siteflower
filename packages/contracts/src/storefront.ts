@@ -122,7 +122,33 @@ export type HomepageConfigDto = {
   sections: HomepageSectionDto[];
   discoveryTiles: HomepageDiscoveryTileDto[];
   perks: HomepagePerkDto[];
+  /** Manual homepage SEO overrides — empty/null → automatic local SEO defaults. */
+  seoTitle: string | null;
+  seoDescription: string | null;
+  /** Stable H1 — independent from promo hero slides. */
+  h1: string | null;
 };
+
+/** Default local SEO for the homepage (Grodno flower delivery). */
+export const DEFAULT_HOMEPAGE_SEO_TITLE =
+  'Цветы в Гродно с бесплатной доставкой | BUKET №1';
+export const DEFAULT_HOMEPAGE_SEO_DESCRIPTION =
+  'Выберите букет или цветы поштучно в BUKET №1. Бесплатная доставка в черте Гродно. Условия доставки за город уточняйте отдельно';
+export const DEFAULT_HOMEPAGE_H1 = 'Цветы и букеты с доставкой в Гродно';
+
+export const HOMEPAGE_BRAND_ALTERNATE_NAMES = ['Букет №1', 'Букет номер один'] as const;
+
+export function resolveHomepageSeo(input: {
+  seoTitle?: string | null;
+  seoDescription?: string | null;
+  h1?: string | null;
+}): { title: string; description: string; h1: string } {
+  return {
+    title: input.seoTitle?.trim() || DEFAULT_HOMEPAGE_SEO_TITLE,
+    description: input.seoDescription?.trim() || DEFAULT_HOMEPAGE_SEO_DESCRIPTION,
+    h1: input.h1?.trim() || DEFAULT_HOMEPAGE_H1,
+  };
+}
 
 export type HomepageConfigAdminDto = HomepageConfigDto & {
   version: number;
@@ -167,6 +193,17 @@ export type UpdateHomepageConfigDto = {
   sections: HomepageSectionDto[];
   discoveryTiles: HomepageDiscoveryTileDto[];
   perks: HomepagePerkDto[];
+  seoTitle?: string | null;
+  seoDescription?: string | null;
+  h1?: string | null;
+};
+
+/** SEO-only homepage patch (visual template stays fixed in code). */
+export type UpdateHomepageSeoDto = {
+  expectedVersion: number;
+  seoTitle?: string | null;
+  seoDescription?: string | null;
+  h1?: string | null;
 };
 
 /** Curated Instagram post (admin + public share the same shape). */
@@ -466,6 +503,9 @@ export function defaultHomepageConfig(): HomepageConfigDto {
     ],
     discoveryTiles: defaultHomepageDiscoveryTiles(),
     perks: defaultHomepagePerks(),
+    seoTitle: null,
+    seoDescription: null,
+    h1: null,
   };
 }
 

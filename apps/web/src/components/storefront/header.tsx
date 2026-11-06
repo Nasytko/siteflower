@@ -8,6 +8,7 @@ import { cartCompositionCount } from '@/lib/cart-labels';
 import { nextCompactFromScroll } from '@/lib/scroll-chrome';
 import { BrandLogo } from './brand-logo';
 import { PRIMARY_NAV, PrimaryNav, type PrimaryNavItem } from './primary-nav';
+import { StoreHoursStatus } from './store-hours-status';
 
 type Props = {
   city: string;
@@ -87,25 +88,26 @@ export function StorefrontHeader({
       >
         <div className="hidden border-b border-border/70 bg-[color-mix(in_oklab,var(--color-surface-muted)_70%,var(--color-background))] lg:block">
           <div className="sf-utility-bar sf-container-wide">
-            {mapsHref && addressLabel ? (
-              <a
-                href={mapsHref}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="sf-utility-bar__item truncate hover:text-brand"
-                title="Открыть в Яндекс Картах"
-              >
-                <PinIcon />
-                <span className="truncate">{addressLabel}</span>
-                {workingHours ? <span className="shrink-0"> · {workingHours}</span> : null}
-              </a>
-            ) : (
-              <span className="sf-utility-bar__item truncate">
-                <PinIcon />
-                {addressLabel || city}
-                {workingHours ? ` · ${workingHours}` : ''}
-              </span>
-            )}
+            <div className="sf-utility-bar__place">
+              {mapsHref && addressLabel ? (
+                <a
+                  href={mapsHref}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="sf-utility-bar__item truncate hover:text-brand"
+                  title="Открыть в Яндекс Картах"
+                >
+                  <PinIcon />
+                  <span className="truncate">{addressLabel}</span>
+                </a>
+              ) : (
+                <span className="sf-utility-bar__item truncate">
+                  <PinIcon />
+                  {addressLabel || city}
+                </span>
+              )}
+              {workingHours ? <StoreHoursStatus workingHours={workingHours} /> : null}
+            </div>
             <nav className="flex items-center gap-7" aria-label="Служебные ссылки">
               <Link href="/dostavka" className="hover:text-brand">
                 Доставка и оплата
@@ -304,14 +306,13 @@ export function StorefrontHeader({
                   className="block hover:text-brand"
                 >
                   {addressLabel}
-                  {workingHours ? ` · ${workingHours}` : ''}
                 </a>
               ) : (
-                <p>
-                  {addressLabel || city}
-                  {workingHours ? ` · ${workingHours}` : ''}
-                </p>
+                <p>{addressLabel || city}</p>
               )}
+              {workingHours ? (
+                <StoreHoursStatus workingHours={workingHours} variant="stack" />
+              ) : null}
             </div>
           </nav>
         </div>

@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import type { LegalSellerPublicDto, StorefrontSettingsPublicDto } from '@bouquet-one/contracts';
 import { BrandLogo } from './brand-logo';
+import { StoreHoursStatus } from './store-hours-status';
 
 type Props = {
   settings: StorefrontSettingsPublicDto;
@@ -86,9 +87,12 @@ export function StorefrontFooter({ settings, seller = null }: Props) {
               <p className="sf-footer__col-title">Контакты</p>
             )}
             {settings.workingHours ? (
-              <p className="sf-footer__hours">
-                {settings.city} · {settings.workingHours}
-              </p>
+              <div className="sf-footer__hours-block">
+                {settings.city ? <p className="sf-footer__hours-city">{settings.city}</p> : null}
+                <StoreHoursStatus workingHours={settings.workingHours} variant="stack" />
+              </div>
+            ) : settings.city ? (
+              <p className="sf-footer__hours">{settings.city}</p>
             ) : null}
             {settings.email ? (
               <a href={`mailto:${settings.email}`} className="sf-footer__hours">

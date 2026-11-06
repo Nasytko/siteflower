@@ -42,17 +42,17 @@ export function CartView() {
   }
 
   if (!ready) {
-    return <p className="sf-body text-muted">Загрузка…</p>;
+    return <p className="sf-cart-loading">Загрузка…</p>;
   }
 
   if (cart.items.length === 0) {
     return (
-      <div className="sf-panel px-6 py-12 text-center sm:px-10 sm:py-14">
-        <p className="sf-h2">Корзина ждёт букет</p>
-        <p className="sf-body mx-auto mt-3 max-w-sm text-muted">
-          Выберите свежий букет — мы бережно соберём и доставим.
+      <div className="sf-cart-empty">
+        <p className="sf-cart-empty__title">Корзина пока пуста</p>
+        <p className="sf-cart-empty__text">
+          Выберите букет — мы бережно соберём и доставим в нужный момент.
         </p>
-        <Link href="/catalog/bouquets" className="sf-cta mt-8 inline-flex">
+        <Link href="/catalog/bouquets" className="sf-cta sf-cart-empty__cta">
           Смотреть каталог
         </Link>
       </div>
@@ -62,15 +62,13 @@ export function CartView() {
   const subtotal = cart.items.reduce((sum, line) => {
     const unit = BigInt(line.unitPriceMinor ?? '0');
     const options = BigInt(line.optionsTotalMinor ?? '0');
-    // Display estimate only: unit×qty + options (same formula as server lineTotal).
-    // Do not bake options into unitPriceMinor — avoids double-counting at checkout.
     return sum + unit * BigInt(line.quantity) + options;
   }, 0n);
   const count = cartCompositionCount(cart);
 
   return (
-    <div className="grid gap-8 lg:grid-cols-[1fr_20rem] lg:items-start lg:gap-10">
-      <ul className="space-y-4">
+    <div className="sf-cart">
+      <ul className="sf-cart__list">
         {cart.items.map((line) => {
           const key = cartLineKey(line);
           const unit = BigInt(line.unitPriceMinor ?? '0');
@@ -79,64 +77,57 @@ export function CartView() {
           const stemLine = isStemBouquetLine(line);
           const subtitle = cartLineSubtitle(line);
           return (
-            <li
-              key={key}
-              className="flex gap-4 rounded-[var(--radius-lg)] border border-border bg-surface p-3 transition-colors hover:border-border-strong sm:gap-5 sm:p-4"
-            >
+            <li key={key} className="sf-cart__item">
               <Link
                 href={`/products/${line.productSlug ?? ''}`}
-                className="relative h-28 w-24 shrink-0 overflow-hidden rounded-[var(--radius-md)] bg-surface-muted sm:h-32 sm:w-28"
+                className="sf-cart__thumb"
               >
                 {line.primaryImageUrl ? (
                   <Image
                     src={line.primaryImageUrl}
                     alt={line.productName ?? ''}
                     fill
-                    className="object-cover transition duration-500 hover:scale-105"
+                    className="object-cover"
                     sizes="112px"
                   />
                 ) : null}
               </Link>
 
-              <div className="flex min-w-0 flex-1 flex-col">
-                <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0">
+              <div className="sf-cart__body">
+                <div className="sf-cart__top">
+                  <div className="sf-cart__info">
                     <Link
                       href={`/products/${line.productSlug ?? ''}`}
-                      className="sf-h3 text-foreground transition hover:text-brand"
+                      className="sf-cart__name"
                     >
                       {line.productName ?? 'Букет'}
                     </Link>
-                    {subtitle ? (
-                      <p className="sf-small mt-1 text-muted">{subtitle}</p>
-                    ) : null}
+                    {subtitle ? <p className="sf-cart__meta">{subtitle}</p> : null}
                     {!stemLine && line.variantName && subtitle !== line.variantName ? (
-                      <p className="sf-small mt-1 text-muted">{line.variantName}</p>
+                      <p className="sf-cart__meta">{line.variantName}</p>
                     ) : null}
                     {line.optionValueIds && line.optionValueIds.length > 0 && options > 0n ? (
-                      <p className="sf-small mt-1 text-muted">
+                      <p className="sf-cart__meta">
                         +{formatPriceFromMinor(options.toString())} упаковка
                       </p>
                     ) : null}
+                    <p className="sf-cart__unit">
+                      {formatPriceFromMinor(unit.toString())} {unitPriceSuffix(line.productKind)}
+                    </p>
                   </div>
-                  <p className="sf-price shrink-0 text-brand">
+                  <p className="sf-cart__line-total">
                     {formatPriceFromMinor(lineTotal.toString())}
                   </p>
                 </div>
 
-                <p className="sf-small mt-2 tabular-nums text-muted">
-                  {formatPriceFromMinor(unit.toString())} {unitPriceSuffix(line.productKind)}
-                </p>
-
-                <div className="mt-auto flex flex-wrap items-center justify-between gap-3 pt-4">
+                <div className="sf-cart__actions">
                   <div
-                    className="inline-flex items-center rounded-full bg-surface ring-1 ring-border"
+                    className="sf-cart-qty"
                     role="group"
                     aria-label={stemLine ? 'Количество веток в букете' : 'Количество'}
                   >
                     <button
                       type="button"
-                      className="inline-flex h-10 w-10 items-center justify-center rounded-full text-lg text-foreground transition hover:bg-brand-soft"
                       aria-label="Меньше"
                       onClick={() =>
                         update(setCartQuantity(cart, key, Math.max(1, line.quantity - 1)))
@@ -144,12 +135,9 @@ export function CartView() {
                     >
                       −
                     </button>
-                    <span className="min-w-8 text-center text-sm font-semibold tabular-nums">
-                      {line.quantity}
-                    </span>
+                    <span>{line.quantity}</span>
                     <button
                       type="button"
-                      className="inline-flex h-10 w-10 items-center justify-center rounded-full text-lg text-foreground transition hover:bg-brand-soft"
                       aria-label="Больше"
                       disabled={line.quantity >= 20}
                       onClick={() =>
@@ -160,12 +148,11 @@ export function CartView() {
                     </button>
                   </div>
                   {stemLine ? (
-                    <span className="sf-small text-muted">{stemCountLabel(line.quantity)}</span>
+                    <span className="sf-cart__stem">{stemCountLabel(line.quantity)}</span>
                   ) : null}
-
                   <button
                     type="button"
-                    className="sf-small rounded-full px-3 py-2 text-muted transition hover:bg-accent-soft hover:text-accent"
+                    className="sf-cart__remove"
                     onClick={() => {
                       trackEvent('remove_from_cart', { variantId: line.variantId });
                       update(removeFromCart(cart, key));
@@ -180,35 +167,22 @@ export function CartView() {
         })}
       </ul>
 
-      <aside className="sf-panel-ink p-5 sm:p-6 lg:sticky lg:top-24">
-        <p className="sf-label text-brand-foreground/55">Ваш заказ</p>
-        <p className="sf-h2 mt-2 text-white">{compositionCountLabel(count)}</p>
-        <div className="mt-5 flex items-end justify-between gap-3 border-t border-white/15 pt-5">
-          <div>
-            <p className="sf-label text-brand-foreground/55">Итого</p>
-            <p className="sf-price mt-1 text-2xl text-white">
-              {formatPriceFromMinor(subtotal.toString())}
-            </p>
-          </div>
+      <aside className="sf-cart__summary">
+        <p className="sf-cart__summary-label">Ваш заказ</p>
+        <p className="sf-cart__summary-count">{compositionCountLabel(count)}</p>
+        <div className="sf-cart__summary-total">
+          <span>Итого</span>
+          <strong>{formatPriceFromMinor(subtotal.toString())}</strong>
         </div>
-        <p className="sf-small mt-3 text-brand-foreground/60">
-          Точная сумма подтверждается при оформлении
+        <p className="sf-cart__summary-note">
+          Точная сумма и доставка подтверждаются при оформлении
         </p>
-        <Link href="/checkout" className="sf-cta-light mt-6 w-full">
+        <Link href="/checkout" className="sf-cta sf-cart__checkout">
           Оформить заказ
         </Link>
-        <div className="mt-4 flex flex-wrap items-center justify-between gap-2">
-          <Link
-            href="/catalog/bouquets"
-            className="sf-small text-brand-foreground/70 underline-offset-2 hover:text-white hover:underline"
-          >
-            ← В каталог
-          </Link>
-          <button
-            type="button"
-            className="sf-small text-brand-foreground/55 underline-offset-2 hover:text-white hover:underline"
-            onClick={() => update(clearCart())}
-          >
+        <div className="sf-cart__summary-links">
+          <Link href="/catalog/bouquets">← В каталог</Link>
+          <button type="button" onClick={() => update(clearCart())}>
             Очистить
           </button>
         </div>

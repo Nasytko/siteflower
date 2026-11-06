@@ -1,6 +1,7 @@
 'use client';
 
 import Image from 'next/image';
+import Link from 'next/link';
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 import type {
   ProductListItemDto,
@@ -24,6 +25,8 @@ import {
   requiredOptionsMissing,
   resolveOptionSurchargeMinor,
 } from '@/lib/product-options';
+import { categoryNavHref } from '@/lib/storefront-nav';
+import { HomeSectionHead } from '@/components/storefront/home-section-head';
 
 type Variant = ProductPublicDto['variants'][number];
 
@@ -168,8 +171,14 @@ export function ProductPurchaseProvider({
     }
     setPostcardId((current) => {
       if (current) return current;
-      const first = postcards.find((p) => p.id !== product.id && p.defaultVariant);
-      return first?.id ?? null;
+      const available = postcards.filter((p) => p.id !== product.id && p.defaultVariant);
+      if (available.length === 0) return null;
+      const cheapest = available.reduce((best, item) => {
+        const price = BigInt(item.defaultVariant!.priceMinor);
+        const bestPrice = BigInt(best.defaultVariant!.priceMinor);
+        return price < bestPrice ? item : best;
+      });
+      return cheapest.id;
     });
   }
 
@@ -559,6 +568,21 @@ function QtyStepper({
   );
 }
 
+const POSTCARD_CATALOG_HREF = categoryNavHref('otkrytki');
+
+function postcardOptions(postcards: PostcardOption[], productId: string) {
+  return postcards.filter((p) => p.id !== productId && p.defaultVariant);
+}
+
+function minPostcardPriceLabel(options: PostcardOption[], currency: string): string | null {
+  if (options.length === 0) return null;
+  const minMinor = options.reduce((min, item) => {
+    const price = BigInt(item.defaultVariant!.priceMinor);
+    return price < min ? price : min;
+  }, BigInt(options[0]!.defaultVariant!.priceMinor));
+  return formatPriceFromMinor(minMinor.toString(), currency);
+}
+
 export function ProductPostcardCard() {
   const {
     product,
@@ -566,11 +590,10 @@ export function ProductPostcardCard() {
     setCardEnabled,
     cardMessage,
     setCardMessage,
-    postcardId,
-    setPostcardId,
     postcards,
   } = usePurchase();
-  const options = postcards.filter((p) => p.id !== product.id && p.defaultVariant);
+  const options = postcardOptions(postcards, product.id);
+  const fromPrice = minPostcardPriceLabel(options, product.currency);
 
   return (
     <section className="sf-pdp-card sf-pdp-postcard" aria-labelledby="pdp-postcard-title">
@@ -581,7 +604,18 @@ export function ProductPostcardCard() {
             <span className="sf-pdp-postcard__title-desktop">Добавить открытку</span>
             <span className="sf-pdp-postcard__title-mobile">Открытка к букету</span>
           </h2>
-          <p className="sf-pdp-postcard__hint">Мы напишем пожелание от вашего имени</p>
+          <p className="sf-pdp-postcard__hint">
+            {fromPrice ? (
+              <>
+                Открытка от {fromPrice}. Выберите дизайн{' '}
+                <a href="#pdp-postcards">ниже</a>
+                {' '}или в{' '}
+                <Link href={POSTCARD_CATALOG_HREF}>разделе открыток</Link>.
+              </>
+            ) : (
+              <>Мы напишем пожелание от вашего имени.</>
+            )}
+          </p>
         </div>
         <button
           type="button"
@@ -597,47 +631,6 @@ export function ProductPostcardCard() {
 
       {cardEnabled ? (
         <div className="sf-pdp-postcard__body">
-          {options.length > 0 ? (
-            <ul className="sf-pdp-postcard__list" role="radiogroup" aria-label="Дизайн открытки">
-              {options.map((option) => {
-                const priceLabel = option.defaultVariant
-                  ? formatPriceFromMinor(option.defaultVariant.priceMinor, product.currency)
-                  : (option.price?.label ?? '');
-                return (
-                  <li key={option.id}>
-                    <button
-                      type="button"
-                      role="radio"
-                      aria-checked={postcardId === option.id}
-                      className="sf-pdp-postcard__option"
-                      onClick={() => setPostcardId(option.id)}
-                    >
-                      <span className="sf-pdp-postcard__photo">
-                        {option.primaryImageUrl ? (
-                          <Image
-                            src={option.primaryImageUrl}
-                            alt=""
-                            fill
-                            sizes="(max-width: 1023px) 42vw, 180px"
-                            className="object-cover"
-                          />
-                        ) : (
-                          <span className="sf-pdp-postcard__photo-fallback">{option.name}</span>
-                        )}
-                      </span>
-                      <span className="sf-pdp-postcard__option-meta">
-                        <span className="sf-pdp-postcard__name">{option.name}</span>
-                        {priceLabel ? (
-                          <span className="sf-pdp-postcard__price">{priceLabel}</span>
-                        ) : null}
-                      </span>
-                    </button>
-                  </li>
-                );
-              })}
-            </ul>
-          ) : null}
-
           <label className="sf-pdp-postcard__text">
             <span className="sr-only">Текст для открытки</span>
             <textarea
@@ -654,6 +647,74 @@ export function ProductPostcardCard() {
           <p className="sf-pdp-postcard__note">Текст подставится в оформление заказа.</p>
         </div>
       ) : null}
+    </section>
+  );
+}
+
+/** Selectable postcard shelf under the product — before similar items. */
+export function ProductPostcardShelf() {
+  const {
+    product,
+    cardEnabled,
+    setCardEnabled,
+    postcardId,
+    setPostcardId,
+    postcards,
+  } = usePurchase();
+  const options = postcardOptions(postcards, product.id);
+  if (options.length === 0) return null;
+
+  function selectPostcard(id: string) {
+    setPostcardId(id);
+    if (!cardEnabled) setCardEnabled(true);
+  }
+
+  return (
+    <section id="pdp-postcards" className="sf-pdp-postcards" aria-label="Открытки к букету">
+      <HomeSectionHead
+        title="Открытки к букету"
+        href={POSTCARD_CATALOG_HREF}
+        linkLabel="Все открытки"
+      />
+      <ul className="sf-pdp-postcards__list" role="radiogroup" aria-label="Дизайн открытки">
+        {options.map((option) => {
+          const priceLabel = option.defaultVariant
+            ? formatPriceFromMinor(option.defaultVariant.priceMinor, product.currency)
+            : (option.price?.label ?? '');
+          const selected = postcardId === option.id;
+          return (
+            <li key={option.id}>
+              <button
+                type="button"
+                role="radio"
+                aria-checked={selected}
+                className="sf-pdp-postcards__card"
+                onClick={() => selectPostcard(option.id)}
+              >
+                <span className="sf-pdp-postcards__photo">
+                  {option.primaryImageUrl ? (
+                    <Image
+                      src={option.primaryImageUrl}
+                      alt=""
+                      fill
+                      sizes="(max-width: 640px) 42vw, 180px"
+                      className="object-cover"
+                    />
+                  ) : (
+                    <span className="sf-pdp-postcards__photo-fallback">{option.name}</span>
+                  )}
+                </span>
+                <span className="sf-pdp-postcards__meta">
+                  <span className="sf-pdp-postcards__name">{option.name}</span>
+                  {priceLabel ? (
+                    <span className="sf-pdp-postcards__price">{priceLabel}</span>
+                  ) : null}
+                </span>
+              </button>
+            </li>
+          );
+        })}
+      </ul>
     </section>
   );
 }

@@ -4,7 +4,7 @@
 
 Technical SEO is first-class. Public pages default to Server Components and support SSR/SSG. Avoid unnecessary `"use client"`.
 
-Catalog URL and filter policy: [catalog-simplification-and-merchandising.md](./catalog-simplification-and-merchandising.md), [storefront.md](./storefront.md).
+Catalog URL and filter policy: [catalog.md](./catalog.md), [storefront.md](./storefront.md).
 
 ## Implemented helpers
 
@@ -24,7 +24,19 @@ Centralized under `apps/web/src/lib/seo/`:
 - **Non-production:** `noindex` unless `ALLOW_INDEXING=true`
 - **Production:** indexing allowed unless `ALLOW_INDEXING=false`
 
-This keeps local/staging safe by default and prevents production from accidentally staying noindex just because `.env.example` ships with `ALLOW_INDEXING=false` — production should omit the flag or set it intentionally.
+This keeps local/staging safe by default. `deploy/env/production.env.example` ships `ALLOW_INDEXING=true` for buketnomer1.by — set `false` only for a deliberate holdback.
+
+## Homepage local SEO
+
+- Title / description / H1 are **not** taken from promo hero slides.
+- Defaults target Grodno delivery queries; empty admin fields restore defaults (`resolveHomepageSeo`).
+- Edit overrides in **Admin → SEO → SEO главной** (`PATCH /admin/storefront/homepage/seo`).
+- WebSite JSON-LD on `/` includes `alternateName`: «Букет №1», «Букет номер один».
+
+## Catalog pagination
+
+- Clean `?page=2+` gets its own canonical and stays indexable when the page has results.
+- Filters and non-default sort stay `noindex` with canonical on the clean category URL.
 
 ## Public entity routes
 

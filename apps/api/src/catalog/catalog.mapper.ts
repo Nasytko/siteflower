@@ -246,12 +246,14 @@ function toProductSeo(product: ProductWithRelations): SeoFieldsDto {
     seoTitle: product.seoTitle,
     seoDescription: product.seoDescription,
     noIndex: product.noIndex,
-    resolvedTitle: product.seoTitle ?? defaultProductSeoTitle(product.name),
+    resolvedTitle:
+      product.seoTitle ?? defaultProductSeoTitle(product.name, product.productKind),
     resolvedDescription: resolveProductMetaDescription({
       name: product.name,
       seoDescription: product.seoDescription,
       shortDescription: product.shortDescription,
       description: product.description,
+      productKind: product.productKind,
     }),
   };
 }

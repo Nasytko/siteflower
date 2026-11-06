@@ -7,6 +7,12 @@ import type {
   ProductListItemDto,
 } from '@bouquet-one/contracts';
 import {
+  DEFAULT_HOMEPAGE_SEO_DESCRIPTION,
+  DEFAULT_HOMEPAGE_SEO_TITLE,
+  HOMEPAGE_BRAND_ALTERNATE_NAMES,
+  resolveHomepageSeo,
+} from '@bouquet-one/contracts';
+import {
   getBestsellerGroup,
   getHomepageConfig,
   getStorefrontSettings,
@@ -18,7 +24,9 @@ import {
   listPromotionalProducts,
   listRecipients,
 } from '@/lib/public-api';
+import { buildWebSiteJsonLd, serializeJsonLd } from '@/lib/seo/json-ld';
 import { buildPageMetadata } from '@/lib/seo/metadata';
+import { getSiteUrl } from '@/lib/seo/site-url';
 import { CategoryNav, filterDiscoveryTiles } from '@/components/storefront/category-nav';
 import type { DiscoveryTile } from '@/components/storefront/category-nav-types';
 import { ExpandingHero, type HeroSlide } from '@/components/storefront/expanding-hero';
@@ -30,29 +38,22 @@ import { ProductRow } from '@/components/storefront/product-row';
 
 export async function generateMetadata(): Promise<Metadata> {
   try {
-    const [homepage, settings] = await Promise.all([getHomepageConfig(), getStorefrontSettings()]);
-    const slide =
-      homepage.heroSlides?.find((item) => item.enabled) ??
-      (homepage.hero
-        ? {
-            title: homepage.hero.title,
-            subtitle: homepage.hero.subtitle,
-            imageUrl: homepage.hero.imageUrl,
-          }
-        : null);
+    const homepage = await getHomepageConfig();
+    const seo = resolveHomepageSeo(homepage);
+    const imageUrl =
+      homepage.heroSlides?.find((item) => item.enabled)?.imageUrl ??
+      homepage.hero.imageUrl ??
+      undefined;
     return buildPageMetadata({
-      title: slide?.title || homepage.hero.title,
-      description:
-        slide?.subtitle ||
-        homepage.hero.subtitle ||
-        `${settings.brandName} — цветы и доставка в ${settings.city}.`,
+      title: seo.title,
+      description: seo.description,
       path: '/',
-      imageUrl: slide?.imageUrl ?? homepage.hero.imageUrl ?? undefined,
+      imageUrl: imageUrl || undefined,
     });
   } catch {
     return buildPageMetadata({
-      title: 'Главная',
-      description: 'BUKET №1 — цветы и доставка букетов в Гродно.',
+      title: DEFAULT_HOMEPAGE_SEO_TITLE,
+      description: DEFAULT_HOMEPAGE_SEO_DESCRIPTION,
       path: '/',
     });
   }
@@ -268,18 +269,59 @@ export default async function StorefrontHomePage() {
       : { id: 'chat', label: 'Быстрый ответ по телефону' },
   ];
 
+  const seo = resolveHomepageSeo(homepage);
+  const birthdayLive = occasions.some((item) => item.slug === 'den-rozhdeniya');
+  const catalogLinks: Array<{ href: string; label: string }> = [
+    catalogSlugs.has('bouquets')
+      ? { href: '/catalog/bouquets', label: 'Букеты' }
+      : null,
+    catalogSlugs.has('rose-bouquets')
+      ? { href: '/catalog/rose-bouquets', label: 'Букеты из роз' }
+      : null,
+    catalogSlugs.has('stems')
+      ? { href: '/catalog/stems', label: 'Цветы поштучно' }
+      : null,
+    birthdayLive ? { href: '/povod/den-rozhdeniya', label: 'Ко дню рождения' } : null,
+  ].filter((item): item is { href: string; label: string } => item != null);
+
+  const websiteLd = buildWebSiteJsonLd({
+    name: settings.brandName || 'BUKET №1',
+    alternateName: [...HOMEPAGE_BRAND_ALTERNATE_NAMES],
+    url: getSiteUrl(),
+  });
+
   return (
     <main id="main-content" className="sf-home">
       <HomeAnalytics />
-
-      <ExpandingHero
-        slides={heroSlides}
-        deliveryNote={
-          settings.deliverySummary?.trim()
-            ? `Доставка по ${settings.city} и области`
-            : null
-        }
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: serializeJsonLd(websiteLd) }}
       />
+
+      <ExpandingHero slides={heroSlides} deliveryNote={null} />
+
+      <section className="sf-home-seo" aria-labelledby="home-seo-heading">
+        <div className="sf-container-wide">
+          <h1 id="home-seo-heading" className="sf-home-seo__h1">
+            {seo.h1}
+          </h1>
+          <p className="sf-home-seo__delivery">
+            Бесплатная доставка в черте Гродно.{' '}
+            <Link href="/dostavka" className="sf-link">
+              Условия доставки
+            </Link>
+          </p>
+          {catalogLinks.length > 0 ? (
+            <nav className="sf-home-seo__links" aria-label="Основные разделы каталога">
+              {catalogLinks.map((link) => (
+                <Link key={link.href} href={link.href} className="sf-home-seo__link">
+                  {link.label}
+                </Link>
+              ))}
+            </nav>
+          ) : null}
+        </div>
+      </section>
 
       <CategoryNav items={discoveryTiles} />
 

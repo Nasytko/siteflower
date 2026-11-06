@@ -17,6 +17,18 @@ export type PageSeoInput = {
   noIndex?: boolean;
 };
 
+const BRAND = 'BUKET №1';
+
+/** Ensure the brand appears once in the document title. */
+export function withBrandTitle(title: string): string {
+  const trimmed = title.replace(/\s+/g, ' ').trim();
+  if (!trimmed) return BRAND;
+  if (/BUKET\s*№\s*1/i.test(trimmed) || /Букет\s*(№|номер)\s*(1|один)/i.test(trimmed)) {
+    return trimmed;
+  }
+  return `${trimmed} | ${BRAND}`;
+}
+
 export function buildRootMetadata(): Metadata {
   const siteUrl = getSiteUrl();
   const indexing = getIndexingPolicy();
@@ -24,27 +36,29 @@ export function buildRootMetadata(): Metadata {
   return {
     metadataBase: new URL(siteUrl),
     title: {
-      default: 'BUKET №1',
-      template: '%s · BUKET №1',
+      default: BRAND,
+      // Pages pass absolute titles via buildPageMetadata (brand once).
+      template: '%s',
     },
-    description: 'Цветочный магазин в Гродно. Современная платформа доставки букетов.',
-    applicationName: 'BUKET №1',
-    authors: [{ name: 'BUKET №1' }],
-    creator: 'BUKET №1',
-    publisher: 'BUKET №1',
+    description:
+      'Выберите букет или цветы поштучно в BUKET №1. Бесплатная доставка в черте Гродно.',
+    applicationName: BRAND,
+    authors: [{ name: BRAND }],
+    creator: BRAND,
+    publisher: BRAND,
     robots: indexing.robots,
     openGraph: {
       type: 'website',
       locale: 'ru_BY',
-      siteName: 'BUKET №1',
+      siteName: BRAND,
       url: siteUrl,
-      title: 'BUKET №1',
-      description: 'Цветочный магазин в Гродно.',
+      title: BRAND,
+      description: 'Цветочный магазин в Гродно с доставкой букетов и цветов поштучно.',
     },
     twitter: {
       card: 'summary_large_image',
-      title: 'BUKET №1',
-      description: 'Цветочный магазин в Гродно.',
+      title: BRAND,
+      description: 'Цветочный магазин в Гродно с доставкой букетов и цветов поштучно.',
     },
     alternates: {
       canonical: '/',
@@ -61,9 +75,10 @@ export function buildPageMetadata(input: PageSeoInput): Metadata {
   const canonicalPath = input.path ?? '/';
   const canonical = absoluteUrl(canonicalPath);
   const shouldIndex = indexing.allowIndexing && !input.noIndex;
+  const title = withBrandTitle(input.title);
 
   return {
-    title: input.title,
+    title: { absolute: title },
     description: input.description,
     robots: shouldIndex
       ? { index: true, follow: true }
@@ -74,9 +89,9 @@ export function buildPageMetadata(input: PageSeoInput): Metadata {
     openGraph: {
       type: input.type ?? 'website',
       locale: 'ru_BY',
-      siteName: 'BUKET №1',
+      siteName: BRAND,
       url: canonical,
-      title: input.title,
+      title,
       description: input.description,
       ...(input.imageUrl
         ? {
@@ -86,28 +101,9 @@ export function buildPageMetadata(input: PageSeoInput): Metadata {
     },
     twitter: {
       card: 'summary_large_image',
-      title: input.title,
+      title,
       description: input.description,
       ...(input.imageUrl ? { images: [input.imageUrl] } : {}),
     },
   };
 }
-
-/**
- * Storefront entity path map:
- *
- * Home           → `/`
- * Catalog        → `/catalog/bouquets` (filtered URLs: same canonical, noIndex true)
- * Product        → `/products/${slug}`
- * Promotions     → `/akcii`
- * Stem hub       → `/catalog/stems` (flower discovery via filters, not thin landings)
- * Occasion hub   → `/povod`, occasion landing → `/povod/${slug}`
- * Recipient      → `/komu/${slug}`
- * Delivery/About → `/dostavka`, `/o-nas`
- * Favorites      → `/favorites` (disallow in robots; client-only)
- *
- * Always:
- * - resolve canonical from the public SITE URL, never from the request Host header alone
- * - honor getIndexingPolicy() so non-production stays noindex
- * - keep commercial fields server-rendered for SEO
- */

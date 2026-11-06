@@ -498,12 +498,15 @@ export function ProductEditor({
   const seoHealth = useMemo(() => {
     const titleManual = seo.seoTitle.trim();
     const descriptionManual = seo.seoDescription.trim();
-    const resolvedTitle = titleManual || defaultProductSeoTitle(basic.name.trim() || server.name);
+    const resolvedTitle =
+      titleManual ||
+      defaultProductSeoTitle(basic.name.trim() || server.name, productKind);
     const resolvedDescription = resolveProductMetaDescription({
       name: basic.name.trim() || server.name,
       seoDescription: descriptionManual || null,
       shortDescription: basic.shortDescription.trim() || server.shortDescription,
       description: basic.description || server.description,
+      productKind,
     });
     const slug = basic.slug.trim() || server.slug;
     const now = Date.now();
@@ -537,15 +540,17 @@ export function ProductEditor({
       adminHref: `/admin/catalog/products/${server.id}`,
       inSitemap: effectivelyPublished && !seo.noIndex && Boolean(slug),
     });
-  }, [seo, basic, server, variants]);
+  }, [seo, basic, server, variants, productKind]);
 
   const previewTitle =
-    seo.seoTitle.trim() || defaultProductSeoTitle(basic.name.trim() || server.name);
+    seo.seoTitle.trim() ||
+    defaultProductSeoTitle(basic.name.trim() || server.name, productKind);
   const previewDescription = resolveProductMetaDescription({
     name: basic.name.trim() || server.name,
     seoDescription: seo.seoDescription.trim() || null,
     shortDescription: basic.shortDescription.trim() || server.shortDescription,
     description: basic.description || server.description,
+    productKind,
   });
   const titleIsAutomatic = !seo.seoTitle.trim();
   const descriptionIsAutomatic = !seo.seoDescription.trim();

@@ -2,7 +2,7 @@
 
 Admin UI lives in `apps/web` under `/admin` (route group `(admin)`). It calls the same Commerce API as the storefront. No separate admin deployable in v1.
 
-Merchandising model: [catalog-simplification-and-merchandising.md](./catalog-simplification-and-merchandising.md).
+Merchandising model: [catalog.md](./catalog.md).
 
 ## Implemented
 

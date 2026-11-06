@@ -16,6 +16,7 @@ import {
   shortShopAddress,
   yandexMapsHref,
 } from '@/lib/smart-nav';
+import { HOMEPAGE_BRAND_ALTERNATE_NAMES } from '@bouquet-one/contracts';
 import { buildOrganizationJsonLd, serializeJsonLd } from '@/lib/seo/json-ld';
 import { getSiteUrl } from '@/lib/seo/site-url';
 
@@ -43,11 +44,13 @@ export default async function StorefrontLayout({ children }: { children: ReactNo
 
   const orgLd = buildOrganizationJsonLd({
     name: settings.brandName,
+    alternateName: [...HOMEPAGE_BRAND_ALTERNATE_NAMES],
     url: getSiteUrl(),
     logoUrl: `${getSiteUrl()}/brand/logo.png`,
     phone: settings.phone,
     address: settings.address,
     city: settings.city,
+    workingHours: settings.workingHours,
   });
 
   return (

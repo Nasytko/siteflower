@@ -72,6 +72,7 @@ export class SeoHealthService {
           seoTitle: true,
           seoDescription: true,
           shortDescription: true,
+          productKind: true,
           media: {
             select: { isPrimary: true, alt: true },
             orderBy: { sortOrder: 'asc' },
@@ -203,10 +204,16 @@ export class SeoHealthService {
           noIndex: product.noIndex,
           seoTitle: product.seoTitle,
           seoDescription: product.seoDescription,
-          resolvedTitle: product.seoTitle?.trim() || defaultProductSeoTitle(product.name),
+          resolvedTitle:
+            product.seoTitle?.trim() ||
+            defaultProductSeoTitle(product.name, product.productKind),
           resolvedDescription:
             product.seoDescription?.trim() ||
-            defaultProductSeoDescription(product.name, product.shortDescription),
+            defaultProductSeoDescription(
+              product.name,
+              product.shortDescription,
+              product.productKind,
+            ),
           hasPrimaryMedia: product.media.some((m) => m.isPrimary),
           mediaCount: product.media.length,
           mediaMissingAlt: product.media.filter((m) => !m.alt?.trim()).length,
@@ -483,10 +490,35 @@ export class SeoHealthService {
 
 const STATIC_PAGES = [
   {
+    id: 'static-home',
+    name: 'Главная',
+    path: '/',
+    message:
+      'Title/H1/description задаются независимо от промослайдов. Ручные значения — в SEO главной; пустые поля → автоматика. Статус в Google/Яндексе здесь не проверяется.',
+  },
+  {
+    id: 'static-dostavka',
+    name: 'Доставка и оплата',
+    path: '/dostavka',
+    message: 'Бесплатная доставка в черте Гродно; за город — уточнять у магазина.',
+  },
+  {
+    id: 'static-kontakty',
+    name: 'Контакты',
+    path: '/kontakty',
+    message: 'Контакты и реквизиты продавца.',
+  },
+  {
     id: 'static-catalog-bouquets',
     name: 'Каталог букетов',
     path: '/catalog/bouquets',
     message: 'Каталог использует общую SEO-разметку витрины.',
+  },
+  {
+    id: 'static-catalog-rose-bouquets',
+    name: 'Букеты из роз',
+    path: '/catalog/rose-bouquets',
+    message: 'Категория букетов из роз (отдельно от смешанных букетов с розами).',
   },
   {
     id: 'static-catalog-stems',

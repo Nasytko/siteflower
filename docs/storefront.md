@@ -2,7 +2,7 @@
 
 Public catalog + constrained CMS for БУКЕТ №1 (Grodno).
 
-Catalog filters, promotions, and bestsellers: [catalog-simplification-and-merchandising.md](./catalog-simplification-and-merchandising.md).
+Catalog filters, promotions, and bestsellers: [catalog.md](./catalog.md).
 
 ## Public routes
 

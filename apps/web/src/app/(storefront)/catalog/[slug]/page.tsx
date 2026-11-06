@@ -10,8 +10,9 @@ import {
 import { ProductGrid } from '@/components/storefront/product-grid';
 import {
   gateKatalogSearchState,
-  katalogHasActiveFilters,
+  katalogCanonicalPath,
   katalogHref,
+  katalogIsFilteredOrSorted,
   katalogStateToListParams,
   parseKatalogSearchParams,
 } from '@/lib/katalog-search-params';
@@ -43,7 +44,8 @@ export async function generateMetadata({
     .then((rows) => rows.map((row) => row.key))
     .catch(() => [] as const);
   const state = gateKatalogSearchState(rawState, enabledKeys);
-  const filtered = katalogHasActiveFilters(state);
+  const filteredOrSorted = katalogIsFilteredOrSorted(state);
+  const canonicalPath = katalogCanonicalPath(slug, state);
 
   try {
     const category = await getCatalogCategory(slug);
@@ -51,11 +53,26 @@ export async function generateMetadata({
     const description =
       category.seoDescription?.trim() ||
       `${category.name} — доставка цветов по Гродно.`;
+    const pageSuffix =
+      !filteredOrSorted && state.page > 1 ? ` — страница ${state.page}` : '';
+    let noIndex = filteredOrSorted || category.noIndex;
+
+    // Out-of-range clean pagination should not stay indexable.
+    if (!noIndex && state.page > 1) {
+      const listParams = katalogStateToListParams(slug, state);
+      const products = await listProducts(listParams).catch(() => EMPTY_PRODUCT_PAGE);
+      const totalPages =
+        products.pageSize > 0 ? Math.max(1, Math.ceil(products.total / products.pageSize)) : 1;
+      if (state.page > totalPages || products.items.length === 0) {
+        noIndex = true;
+      }
+    }
+
     return buildPageMetadata({
-      title: filtered ? `${title} — подборка` : title,
+      title: filteredOrSorted ? `${title} — подборка` : `${title}${pageSuffix}`,
       description,
-      path: `/catalog/${slug}`,
-      noIndex: filtered || category.noIndex,
+      path: canonicalPath,
+      noIndex,
     });
   } catch {
     return buildPageMetadata({

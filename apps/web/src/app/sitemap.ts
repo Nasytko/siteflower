@@ -7,6 +7,7 @@ const STATIC_PATHS = [
   '/',
   '/catalog',
   '/catalog/bouquets',
+  '/catalog/rose-bouquets',
   '/catalog/stems',
   '/akcii',
   '/povod',
@@ -18,7 +19,6 @@ const STATIC_PATHS = [
   '/privacy',
 ] as const;
 
-
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const indexing = getIndexingPolicy();
   if (!indexing.allowIndexing) {
@@ -28,7 +28,6 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const siteUrl = getSiteUrl();
   const staticEntries: MetadataRoute.Sitemap = STATIC_PATHS.map((path) => ({
     url: path === '/' ? `${siteUrl}/` : `${siteUrl}${path}`,
-    lastModified: new Date(),
     changeFrequency:
       path === '/' || path === '/catalog' || path === '/catalog/bouquets' || path === '/akcii'
         ? 'daily'
@@ -36,7 +35,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     priority:
       path === '/'
         ? 1
-        : path === '/catalog' || path === '/catalog/bouquets'
+        : path === '/catalog' || path === '/catalog/bouquets' || path === '/catalog/rose-bouquets'
           ? 0.9
           : path === '/akcii'
             ? 0.8
@@ -50,15 +49,15 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       .filter((entry) => !entry.noIndex)
       .map((entry) => ({
         url: `${siteUrl}${entry.path.startsWith('/') ? entry.path : `/${entry.path}`}`,
-        lastModified: entry.updatedAt ? new Date(entry.updatedAt) : new Date(),
+        ...(entry.updatedAt ? { lastModified: new Date(entry.updatedAt) } : {}),
         changeFrequency: 'weekly' as const,
         priority: 0.7,
       }));
-  } catch {
-    dynamicEntries = [];
+  } catch (error) {
+    console.error('[sitemap] Failed to load dynamic catalog entries from API', error);
+    // Keep static hubs so robots still see core URLs; failure is visible in logs.
   }
 
-  // Prefer API updatedAt for static paths when present; avoid duplicates
   const byUrl = new Map<string, MetadataRoute.Sitemap[number]>();
   for (const entry of [...staticEntries, ...dynamicEntries]) {
     const existing = byUrl.get(entry.url);
@@ -66,11 +65,13 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       byUrl.set(entry.url, entry);
       continue;
     }
-    // Keep earlier (static) priority/changefreq but use newer lastModified when available
     const existingTime = existing.lastModified ? new Date(existing.lastModified).getTime() : 0;
     const nextTime = entry.lastModified ? new Date(entry.lastModified).getTime() : 0;
     if (nextTime > existingTime) {
-      byUrl.set(entry.url, { ...existing, lastModified: entry.lastModified });
+      byUrl.set(entry.url, {
+        ...existing,
+        lastModified: entry.lastModified,
+      });
     }
   }
 

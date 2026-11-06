@@ -11,14 +11,16 @@ export const metadata: Metadata = buildPageMetadata({
 
 export default function CheckoutPage() {
   return (
-    <main id="main-content" className="sf-container py-10 md:py-14">
-      <h1 className="sf-h1">Оформление заказа</h1>
-      <p className="sf-body mt-3 max-w-2xl text-muted">
-        Заполните данные. После отправки заказ будет получен нами в обработку — менеджер проверит
-        возможность выполнения и свяжется с вами для подтверждения деталей. Оплата на сайте не
-        производится.
-      </p>
-      <div className="mt-10">
+    <main id="main-content" className="sf-checkout-page">
+      <div className="sf-container sf-checkout-page__inner">
+        <header className="sf-checkout-page__head">
+          <p className="sf-checkout-page__eyebrow">Почти готово</p>
+          <h1 className="sf-checkout-page__title">Оформление заказа</h1>
+          <p className="sf-checkout-page__lead">
+            Укажите, кому доставить и когда. После отправки менеджер проверит заказ и свяжется с вами.
+            Оплата на сайте не производится.
+          </p>
+        </header>
         <CheckoutForm />
       </div>
     </main>

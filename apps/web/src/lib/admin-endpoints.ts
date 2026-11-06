@@ -166,6 +166,8 @@ export const adminEndpoints = {
   mediaLibrary: `${ADMIN}/media/library`,
   seoSummary: `${ADMIN}/seo/summary`,
   seoHealth: `${ADMIN}/seo/health`,
+  homepage: `${ADMIN}/storefront/homepage`,
+  homepageSeo: `${ADMIN}/storefront/homepage/seo`,
 } as const;
 
 export type QueryValue = string | number | boolean | null | undefined | ReadonlyArray<string | number>;

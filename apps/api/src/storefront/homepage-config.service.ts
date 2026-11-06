@@ -139,6 +139,15 @@ const perkSchema = z
   })
   .strict();
 
+const nullableSeoText = z
+  .union([z.string().max(320), z.null()])
+  .optional()
+  .transform((value) => {
+    if (value === undefined || value === null) return null;
+    const trimmed = value.trim();
+    return trimmed.length > 0 ? trimmed : null;
+  });
+
 const homepageConfigSchema = z
   .object({
     hero: heroSchema,
@@ -146,6 +155,9 @@ const homepageConfigSchema = z
     sections: z.array(sectionSchema).max(40),
     discoveryTiles: z.array(discoveryTileSchema).max(24),
     perks: z.array(perkSchema).max(12),
+    seoTitle: nullableSeoText,
+    seoDescription: nullableSeoText,
+    h1: nullableSeoText,
   })
   .strict();
 
@@ -177,8 +189,15 @@ export function migrateLegacyHomepageConfig(
     hero?: unknown;
     heroSlides?: unknown;
     perks?: unknown;
+    seoTitle?: unknown;
+    seoDescription?: unknown;
+    h1?: unknown;
   };
   const base = { ...(value as Record<string, unknown>) };
+
+  if (!('seoTitle' in raw)) base.seoTitle = null;
+  if (!('seoDescription' in raw)) base.seoDescription = null;
+  if (!('h1' in raw)) base.h1 = null;
 
   if (Array.isArray(raw.sections)) {
     const migratedKinds = new Set<HomepageSectionKind>();
@@ -462,6 +481,9 @@ export function parseHomepageConfig(
       (a, b) => a.sortOrder - b.sortOrder || a.id.localeCompare(b.id),
     ),
     perks: [...perks].sort((a, b) => a.sortOrder - b.sortOrder || a.id.localeCompare(b.id)),
+    seoTitle: result.data.seoTitle ?? null,
+    seoDescription: result.data.seoDescription ?? null,
+    h1: result.data.h1 ?? null,
   };
 }
 
@@ -475,31 +497,124 @@ export class HomepageConfigService {
   ) {}
 
   async getPublic(): Promise<HomepageConfigDto> {
-    // Fixed homepage template — shelves still resolve products dynamically by slug.
-    return defaultHomepageConfig();
+    // Visual homepage template is fixed in code; SEO overrides come from DB.
+    const fixed = defaultHomepageConfig();
+    try {
+      const row = await this.getOrCreate();
+      const stored = await this.configFromRow(row);
+      return {
+        ...fixed,
+        seoTitle: stored.seoTitle,
+        seoDescription: stored.seoDescription,
+        h1: stored.h1,
+      };
+    } catch {
+      return fixed;
+    }
   }
 
   async getAdmin(): Promise<HomepageConfigAdminDto> {
     const row = await this.getOrCreate();
-    const config = await this.configFromRow(row);
+    const stored = await this.configFromRow(row);
     return {
-      ...config,
+      ...defaultHomepageConfig(),
+      seoTitle: stored.seoTitle,
+      seoDescription: stored.seoDescription,
+      h1: stored.h1,
       version: row.version,
       updatedAt: row.updatedAt.toISOString(),
     };
+  }
+
+  /**
+   * Patch only homepage SEO fields. Visual template remains the fixed code default.
+   */
+  async updateSeo(
+    input: {
+      expectedVersion: number;
+      seoTitle?: string | null;
+      seoDescription?: string | null;
+      h1?: string | null;
+    },
+    actor: ActorContext,
+  ): Promise<HomepageConfigAdminDto> {
+    const row = await this.getOrCreate();
+    const current = await this.configFromRow(row);
+    const nextSeoTitle =
+      input.seoTitle === undefined
+        ? current.seoTitle
+        : trimOrNull(input.seoTitle);
+    const nextSeoDescription =
+      input.seoDescription === undefined
+        ? current.seoDescription
+        : trimOrNull(input.seoDescription);
+    const nextH1 = input.h1 === undefined ? current.h1 : trimOrNull(input.h1);
+
+    const config: HomepageConfigDto = {
+      ...defaultHomepageConfig(),
+      seoTitle: nextSeoTitle,
+      seoDescription: nextSeoDescription,
+      h1: nextH1,
+    };
+
+    try {
+      await this.prisma.client.$transaction(async (tx) => {
+        const result = await tx.homepageConfig.updateMany({
+          where: { id: SINGLETON_ID, version: input.expectedVersion },
+          data: {
+            config: config as Prisma.InputJsonValue,
+            version: { increment: 1 },
+          },
+        });
+        if (result.count === 0) {
+          throw new ConflictException(OCC_CONFLICT_MESSAGE);
+        }
+
+        await this.audit.record(
+          {
+            actorAdminUserId: actor.actorId,
+            action: 'HOMEPAGE_CONFIG_UPDATED',
+            entityType: 'HomepageConfig',
+            entityId: String(SINGLETON_ID),
+            metadata: {
+              seoOnly: true,
+              hasManualTitle: Boolean(nextSeoTitle),
+              hasManualDescription: Boolean(nextSeoDescription),
+              hasManualH1: Boolean(nextH1),
+            },
+            requestId: actor.requestId,
+            ipHash: hashIp(actor.ip, this.appConfig.sessionHmacSecret),
+            userAgent: actor.userAgent,
+          },
+          tx,
+        );
+      });
+    } catch (err) {
+      if (err instanceof ConflictException || err instanceof BadRequestException) throw err;
+      throw err;
+    }
+
+    const dto = await this.getAdmin();
+    await this.revalidate.ping({ tags: ['storefront', 'homepage'], paths: ['/'] });
+    return dto;
   }
 
   async update(
     input: UpdateHomepageConfigDto,
     actor: ActorContext,
   ): Promise<HomepageConfigAdminDto> {
-    await this.getOrCreate();
+    const existing = await this.getOrCreate();
+    const previous = await this.configFromRow(existing);
     const incoming = {
       hero: input.hero,
       heroSlides: input.heroSlides,
       sections: input.sections,
       discoveryTiles: input.discoveryTiles,
       perks: input.perks,
+      seoTitle: input.seoTitle === undefined ? previous.seoTitle : input.seoTitle,
+      seoDescription:
+        input.seoDescription === undefined ? previous.seoDescription : input.seoDescription,
+      h1: input.h1 === undefined ? previous.h1 : input.h1,
     };
     const resolveCtx = await this.loadResolveContext(incoming);
     let config: HomepageConfigDto;
@@ -637,4 +752,10 @@ export class HomepageConfigService {
     }
     return { catalogSlugById, productSlugById };
   }
+}
+
+function trimOrNull(value: string | null | undefined): string | null {
+  if (value == null) return null;
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : null;
 }

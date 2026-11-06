@@ -2420,8 +2420,22 @@ export function budgetRangeMatchesPrice(
   return true;
 }
 
-export function defaultProductSeoTitle(name: string): string {
-  return `Букет «${name}» с доставкой по Гродно | BUKET №1`;
+export function defaultProductSeoTitle(
+  name: string,
+  productKind?: ProductKind | null,
+): string {
+  const trimmed = name.trim() || 'товар';
+  switch (productKind) {
+    case 'STEM':
+      return `${trimmed} — цветы поштучно с доставкой по Гродно | BUKET №1`;
+    case 'COMPOSITION':
+      return `Композиция «${trimmed}» с доставкой по Гродно | BUKET №1`;
+    case 'GIFT':
+      return `${trimmed} с доставкой по Гродно | BUKET №1`;
+    case 'BOUQUET':
+    default:
+      return `Букет «${trimmed}» с доставкой по Гродно | BUKET №1`;
+  }
 }
 
 /**
@@ -2470,19 +2484,35 @@ export function resolveProductMetaDescription(input: {
   seoDescription?: string | null;
   shortDescription?: string | null;
   description?: string | null;
+  productKind?: ProductKind | null;
 }): string {
   const manual = input.seoDescription?.trim() ?? '';
   if (manual.length > 0) return normalizeProductMetaDescription(manual);
   const body = resolveProductDescription(input);
   if (body) return normalizeProductMetaDescription(body);
-  return defaultProductSeoDescription(input.name);
+  return defaultProductSeoDescription(input.name, null, input.productKind);
 }
 
-export function defaultProductSeoDescription(name: string, shortDescription?: string | null): string {
+export function defaultProductSeoDescription(
+  name: string,
+  shortDescription?: string | null,
+  productKind?: ProductKind | null,
+): string {
   if (shortDescription && shortDescription.trim().length > 0) {
     return normalizeProductMetaDescription(shortDescription);
   }
-  return `Закажите букет «${name}» в BUKET №1 — доставка цветов по Гродно.`;
+  const trimmed = name.trim() || 'товар';
+  switch (productKind) {
+    case 'STEM':
+      return `Закажите ${trimmed} поштучно в BUKET №1 — доставка цветов по Гродно.`;
+    case 'COMPOSITION':
+      return `Закажите композицию «${trimmed}» в BUKET №1 — доставка цветов по Гродно.`;
+    case 'GIFT':
+      return `Закажите «${trimmed}» в BUKET №1 — доставка по Гродно.`;
+    case 'BOUQUET':
+    default:
+      return `Закажите букет «${trimmed}» в BUKET №1 — доставка цветов по Гродно.`;
+  }
 }
 
 /** Russian → Latin for URL-safe slugs (GOST-ish, URL-friendly). */

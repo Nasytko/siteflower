@@ -214,6 +214,25 @@ export function katalogHasActiveFilters(state: KatalogSearchState): boolean {
   );
 }
 
+/** Non-default sort must not create indexable duplicates. */
+export function katalogHasNonDefaultSort(state: KatalogSearchState): boolean {
+  return state.sort !== DEFAULT_PRODUCT_SORT;
+}
+
+/** Filters or custom sort → noindex; clean pagination keeps its own canonical. */
+export function katalogIsFilteredOrSorted(state: KatalogSearchState): boolean {
+  return katalogHasActiveFilters(state) || katalogHasNonDefaultSort(state);
+}
+
+/** Canonical path for a category PLP (includes ?page=N only on clean pagination). */
+export function katalogCanonicalPath(categorySlug: string, state: KatalogSearchState): string {
+  const slug = canonicalCatalogSlug(categorySlug);
+  const base = `/catalog/${encodeURIComponent(slug)}`;
+  if (katalogIsFilteredOrSorted(state)) return base;
+  if (state.page > 1) return `${base}?page=${state.page}`;
+  return base;
+}
+
 export function katalogStateToQuery(state: Partial<KatalogSearchState>): string {
   const params = new URLSearchParams();
 

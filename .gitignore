@@ -39,6 +39,10 @@ artifacts/
 .DS_Store
 Thumbs.db
 
+# Auto-generated Next.js agent rule stubs (recreated by `next dev`)
+apps/web/AGENTS.md
+apps/web/CLAUDE.md
+
 # Logs
 *.log
 npm-debug.log*

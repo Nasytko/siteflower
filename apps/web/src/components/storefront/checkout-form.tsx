@@ -81,7 +81,8 @@ export function CheckoutForm() {
   const [desiredTimeNote, setDesiredTimeNote] = useState('');
   const [purchaserName, setPurchaserName] = useState('');
   const [purchaserPhone, setPurchaserPhone] = useState('');
-  const [recipientIsMe, setRecipientIsMe] = useState(true);
+  /** Flower checkout is gift-first — most orders go to someone else. */
+  const [recipientIsMe, setRecipientIsMe] = useState(false);
   const [recipientName, setRecipientName] = useState('');
   const [recipientPhone, setRecipientPhone] = useState('');
   const [surprise, setSurprise] = useState(false);
@@ -194,6 +195,36 @@ export function CheckoutForm() {
     setPending(true);
     setError(null);
 
+    if (!purchaserName.trim() || purchaserName.trim().length < 2) {
+      setError('Укажите ваше имя');
+      setPending(false);
+      return;
+    }
+    if (!purchaserPhone.trim() || purchaserPhone.trim().length < 7) {
+      setError('Укажите ваш телефон');
+      setPending(false);
+      return;
+    }
+
+    if (fulfillmentType === 'DELIVERY' && !recipientIsMe) {
+      if (!recipientName.trim() || recipientName.trim().length < 2) {
+        setError('Укажите имя получателя');
+        setPending(false);
+        return;
+      }
+      if (!recipientPhone.trim() || recipientPhone.trim().length < 7) {
+        setError('Укажите телефон получателя');
+        setPending(false);
+        return;
+      }
+    }
+
+    if (fulfillmentType === 'DELIVERY' && addressKnown && deliveryAddress.trim().length < 5) {
+      setError('Укажите адрес доставки');
+      setPending(false);
+      return;
+    }
+
     if (agreeWithManager) {
       if (!desiredTimeNote.trim()) {
         setError('Укажите желаемое время для согласования с менеджером');
@@ -293,11 +324,9 @@ export function CheckoutForm() {
 
   if (cart.items.length === 0) {
     return (
-      <div className="space-y-4">
-        <p className="sf-body text-muted">Корзина пуста</p>
-        <Link href="/catalog/bouquets" className="text-sm font-medium text-brand hover:underline">
-          В каталог
-        </Link>
+      <div className="sf-checkout-empty">
+        <p>Корзина пуста</p>
+        <Link href="/catalog/bouquets">В каталог</Link>
       </div>
     );
   }
@@ -309,20 +338,20 @@ export function CheckoutForm() {
   const subtotal = BigInt(validated?.subtotalMinor ?? '0');
   const total = subtotal + deliveryFee;
 
+  function chipClass(active: boolean) {
+    return `sf-checkout-chip${active ? ' sf-checkout-chip--active' : ''}`;
+  }
+
   return (
-    <form onSubmit={onSubmit} className="grid gap-10 lg:grid-cols-[1fr_320px]" noValidate>
-      <div className="space-y-10">
-        <section className="space-y-4">
-          <h2 className="sf-h3">Получение</h2>
-          <div className="flex flex-wrap gap-2">
+    <form onSubmit={onSubmit} className="sf-checkout" noValidate>
+      <div className="sf-checkout__main">
+        <section className="sf-checkout-card">
+          <h2 className="sf-checkout-card__title">Получение</h2>
+          <div className="sf-checkout-chips">
             {options?.deliveryEnabled !== false ? (
               <button
                 type="button"
-                className={`min-h-11 rounded-full border px-4 py-2 text-sm transition ${
-                  fulfillmentType === 'DELIVERY'
-                    ? 'border-brand bg-brand text-brand-foreground'
-                    : 'border-border-strong bg-surface hover:border-brand hover:text-brand'
-                }`}
+                className={chipClass(fulfillmentType === 'DELIVERY')}
                 onClick={() => {
                   setFulfillmentType('DELIVERY');
                   trackEvent('select_fulfillment', { type: 'DELIVERY' });
@@ -334,13 +363,10 @@ export function CheckoutForm() {
             {options?.pickupEnabled !== false ? (
               <button
                 type="button"
-                className={`min-h-11 rounded-full border px-4 py-2 text-sm transition ${
-                  fulfillmentType === 'PICKUP'
-                    ? 'border-brand bg-brand text-brand-foreground'
-                    : 'border-border-strong bg-surface hover:border-brand hover:text-brand'
-                }`}
+                className={chipClass(fulfillmentType === 'PICKUP')}
                 onClick={() => {
                   setFulfillmentType('PICKUP');
+                  setSurprise(false);
                   trackEvent('select_fulfillment', { type: 'PICKUP' });
                 }}
               >
@@ -350,9 +376,9 @@ export function CheckoutForm() {
           </div>
         </section>
 
-        <section className="space-y-4">
-          <h2 className="sf-h3">Дата и время</h2>
-          <div className="flex flex-wrap gap-2">
+        <section className="sf-checkout-card">
+          <h2 className="sf-checkout-card__title">Дата и время</h2>
+          <div className="sf-checkout-chips">
             {(
               [
                 ['today', 'Сегодня'],
@@ -363,11 +389,7 @@ export function CheckoutForm() {
               <button
                 key={mode}
                 type="button"
-                className={`min-h-11 rounded-full border px-4 py-2 text-sm transition ${
-                  dateMode === mode
-                    ? 'border-brand bg-brand text-brand-foreground'
-                    : 'border-border-strong bg-surface hover:border-brand hover:text-brand'
-                }`}
+                className={chipClass(dateMode === mode)}
                 onClick={() => setDateMode(mode)}
               >
                 {label}
@@ -380,31 +402,27 @@ export function CheckoutForm() {
               required
               value={fulfillmentDate}
               onChange={(e) => setFulfillmentDate(e.target.value)}
-              className="w-full max-w-xs rounded-[var(--radius-lg)] border border-border bg-white px-3 py-2"
+              className="sf-checkout-input sf-checkout-input--date"
             />
           ) : (
-            <p className="sf-small text-muted">{fulfillmentDate}</p>
+            <p className="sf-checkout-hint">{fulfillmentDate}</p>
           )}
 
           {!agreeWithManager ? (
-            <div className="space-y-2">
-              <p className="text-sm font-medium">Время (каждый час, ближайшее — через час)</p>
+            <div className="sf-checkout-field">
+              <p className="sf-checkout-label">Время доставки</p>
               {windows.length === 0 ? (
-                <p className="sf-small text-muted">
+                <p className="sf-checkout-hint">
                   На эту дату свободных слотов нет. Выберите другой день или согласуйте время с
                   менеджером.
                 </p>
               ) : (
-                <div className="flex flex-wrap gap-2">
+                <div className="sf-checkout-chips">
                   {windows.map((w) => (
                     <button
                       key={w.id}
                       type="button"
-                      className={`min-h-11 rounded-full border px-3.5 py-2 text-sm tabular-nums transition ${
-                        timeWindowId === w.id
-                          ? 'border-brand bg-brand text-brand-foreground'
-                          : 'border-border-strong bg-surface hover:border-brand hover:text-brand'
-                      }`}
+                      className={chipClass(timeWindowId === w.id)}
                       onClick={() => setTimeWindowId(w.id)}
                     >
                       {w.label}
@@ -414,157 +432,194 @@ export function CheckoutForm() {
               )}
             </div>
           ) : (
-            <label className="block text-sm">
-              Желаемое время
+            <label className="sf-checkout-field">
+              <span className="sf-checkout-label">Желаемое время</span>
               <input
                 required
                 value={desiredTimeNote}
                 onChange={(e) => setDesiredTimeNote(e.target.value)}
                 placeholder="Например: сегодня к 23:00 или к 8:30"
-                className="mt-1 w-full rounded-[var(--radius-lg)] border border-border bg-white px-3 py-2"
+                className="sf-checkout-input"
               />
-              <span className="mt-1 block sf-small text-muted">
+              <span className="sf-checkout-hint">
                 Менеджер подтвердит, получится ли доставить вне обычных часов 9:00–21:00.
               </span>
             </label>
           )}
 
-          <label className="flex cursor-pointer items-start gap-3 rounded-[var(--radius-lg)] border border-border bg-surface-muted/40 px-3 py-3 text-sm">
+          <label className="sf-checkout-check">
             <input
               type="checkbox"
-              className="mt-1"
               checked={agreeWithManager}
               onChange={(e) => setAgreeWithManager(e.target.checked)}
             />
             <span>
-              <span className="font-medium">Согласовать уникальное время с менеджером</span>
-              <span className="mt-0.5 block text-muted">
-                Для доставки вне 9:00–21:00 или если нужен точный час, которого нет в списке.
-              </span>
+              <strong>Согласовать время с менеджером</strong>
+              <em>Если нужен час вне списка или доставка вне 9:00–21:00.</em>
             </span>
           </label>
         </section>
 
-        <section className="space-y-4">
-          <h2 className="sf-h3">Заказчик</h2>
-          <label className="block text-sm">
-            Имя
-            <input
-              required
-              autoComplete="name"
-              value={purchaserName}
-              onChange={(e) => setPurchaserName(e.target.value)}
-              className="mt-1 w-full rounded-[var(--radius-lg)] border border-border bg-white px-3 py-2"
-            />
-          </label>
-          <label className="block text-sm">
-            Телефон
-            <input
-              required
-              type="tel"
-              inputMode="tel"
-              autoComplete="tel"
-              placeholder="+375 29 …"
-              value={purchaserPhone}
-              onChange={(e) => setPurchaserPhone(e.target.value)}
-              className="mt-1 w-full rounded-[var(--radius-lg)] border border-border bg-white px-3 py-2"
-            />
-          </label>
+        <section className="sf-checkout-card">
+          <h2 className="sf-checkout-card__title">Ваши контакты</h2>
+          <p className="sf-checkout-card__lead">
+            На этот номер мы позвоним, если понадобятся уточнения по заказу.
+          </p>
+          <div className="sf-checkout-grid">
+            <label className="sf-checkout-field">
+              <span className="sf-checkout-label">Ваше имя</span>
+              <input
+                required
+                autoComplete="name"
+                value={purchaserName}
+                onChange={(e) => setPurchaserName(e.target.value)}
+                className="sf-checkout-input"
+              />
+            </label>
+            <label className="sf-checkout-field">
+              <span className="sf-checkout-label">Ваш телефон</span>
+              <input
+                required
+                type="tel"
+                inputMode="tel"
+                autoComplete="tel"
+                placeholder="+375 29 …"
+                value={purchaserPhone}
+                onChange={(e) => setPurchaserPhone(e.target.value)}
+                className="sf-checkout-input"
+              />
+            </label>
+          </div>
         </section>
 
         {fulfillmentType === 'DELIVERY' ? (
-          <section className="space-y-4">
-            <h2 className="sf-h3">Получатель</h2>
-            <div className="sf-pdp-intent" role="group" aria-label="Тип заказа">
+          <section className="sf-checkout-card">
+            <h2 className="sf-checkout-card__title">Кому доставить</h2>
+            <div className="sf-checkout-intent" role="group" aria-label="Кому заказ">
               <button
                 type="button"
-                className={`sf-pdp-intent__btn ${recipientIsMe ? 'sf-pdp-intent__btn--active' : ''}`}
-                aria-pressed={recipientIsMe}
-                onClick={() => setRecipientIsMe(true)}
-              >
-                Себе
-              </button>
-              <button
-                type="button"
-                className={`sf-pdp-intent__btn ${!recipientIsMe ? 'sf-pdp-intent__btn--active' : ''}`}
+                className={`sf-checkout-intent__btn${!recipientIsMe ? ' sf-checkout-intent__btn--active' : ''}`}
                 aria-pressed={!recipientIsMe}
                 onClick={() => setRecipientIsMe(false)}
               >
-                Подарок
+                Другому человеку
+              </button>
+              <button
+                type="button"
+                className={`sf-checkout-intent__btn${recipientIsMe ? ' sf-checkout-intent__btn--active' : ''}`}
+                aria-pressed={recipientIsMe}
+                onClick={() => {
+                  setRecipientIsMe(true);
+                  setSurprise(false);
+                }}
+              >
+                Мне
               </button>
             </div>
+
             {!recipientIsMe ? (
-              <>
-                <label className="block text-sm">
-                  Имя получателя
+              <div className="sf-checkout-grid">
+                <label className="sf-checkout-field">
+                  <span className="sf-checkout-label">Имя получателя</span>
                   <input
                     required
                     value={recipientName}
                     onChange={(e) => setRecipientName(e.target.value)}
-                    className="mt-1 w-full rounded-[var(--radius-lg)] border border-border bg-white px-3 py-2"
+                    className="sf-checkout-input"
+                    placeholder="Как обратиться при вручении"
                   />
                 </label>
-                <label className="block text-sm">
-                  Телефон получателя
+                <label className="sf-checkout-field">
+                  <span className="sf-checkout-label">Телефон получателя</span>
                   <input
                     required
                     type="tel"
                     inputMode="tel"
                     value={recipientPhone}
                     onChange={(e) => setRecipientPhone(e.target.value)}
-                    className="mt-1 w-full rounded-[var(--radius-lg)] border border-border bg-white px-3 py-2"
+                    className="sf-checkout-input"
+                    placeholder="+375 …"
                   />
+                  <span className="sf-checkout-hint">
+                    Нужен, чтобы согласовать вручение. При сюрпризе курьер не назовёт отправителя.
+                  </span>
                 </label>
-              </>
+              </div>
+            ) : (
+              <p className="sf-checkout-hint">Доставим вам по указанному адресу.</p>
+            )}
+
+            {!recipientIsMe ? (
+              <label className="sf-checkout-check sf-checkout-check--accent">
+                <input
+                  type="checkbox"
+                  checked={surprise}
+                  onChange={(e) => {
+                    const on = e.target.checked;
+                    setSurprise(on);
+                    if (on) {
+                      setWantCard(true);
+                      setAnonymousCard(true);
+                    }
+                  }}
+                />
+                <span>
+                  <strong>Сюрприз — не говорить, от кого</strong>
+                  <em>
+                    Курьер не раскроет ваше имя. По вопросам доставки мы свяжемся только с вами.
+                  </em>
+                </span>
+              </label>
             ) : null}
-            <label className="flex items-center gap-2 text-sm">
-              <input
-                type="checkbox"
-                checked={surprise}
-                onChange={(e) => setSurprise(e.target.checked)}
-              />
-              Это сюрприз
-            </label>
-            <label className="flex items-center gap-2 text-sm">
+
+            <label className="sf-checkout-check">
               <input
                 type="checkbox"
                 checked={!addressKnown}
                 onChange={(e) => setAddressKnown(!e.target.checked)}
               />
-              Не знаю точный адрес
+              <span>
+                <strong>Точный адрес пока неизвестен</strong>
+                <em>Менеджер уточнит детали перед доставкой.</em>
+              </span>
             </label>
+
             {addressKnown ? (
-              <label className="block text-sm">
-                Адрес
+              <label className="sf-checkout-field">
+                <span className="sf-checkout-label">Адрес доставки</span>
                 <input
                   required
                   value={deliveryAddress}
                   onChange={(e) => setDeliveryAddress(e.target.value)}
-                  className="mt-1 w-full rounded-[var(--radius-lg)] border border-border bg-white px-3 py-2"
+                  className="sf-checkout-input"
+                  placeholder="Улица, дом, корпус"
                 />
               </label>
             ) : null}
-            <label className="block text-sm">
-              Уточнения к адресу
+
+            <label className="sf-checkout-field">
+              <span className="sf-checkout-label">Подъезд, этаж, домофон, ориентир</span>
               <input
                 value={addressDetails}
                 onChange={(e) => setAddressDetails(e.target.value)}
-                className="mt-1 w-full rounded-[var(--radius-lg)] border border-border bg-white px-3 py-2"
+                className="sf-checkout-input"
+                placeholder="По желанию"
               />
             </label>
           </section>
         ) : (
-          <section className="space-y-2">
-            <h2 className="sf-h3">Самовывоз</h2>
-            <p className="sf-body text-muted">
-              {options?.pickupInstructions ?? 'Адрес пункта самовывоза — в разделе «О нас» / контакты магазина.'}
+          <section className="sf-checkout-card">
+            <h2 className="sf-checkout-card__title">Самовывоз</h2>
+            <p className="sf-checkout-card__lead">
+              {options?.pickupInstructions ??
+                'Адрес пункта самовывоза — в разделе «О нас» / контакты магазина.'}
             </p>
           </section>
         )}
 
-        <section className="space-y-4">
-          <h2 className="sf-h3">Открытка и пожелания</h2>
-          <label className="flex items-center gap-2 text-sm">
+        <section className="sf-checkout-card">
+          <h2 className="sf-checkout-card__title">Открытка и пожелания</h2>
+          <label className="sf-checkout-check">
             <input
               type="checkbox"
               checked={wantCard}
@@ -576,91 +631,79 @@ export function CheckoutForm() {
                 }
               }}
             />
-            Добавить открытку
+            <span>
+              <strong>Добавить открытку</strong>
+              <em>Мы напишем текст от руки или напечатаем к букету.</em>
+            </span>
           </label>
           {wantCard ? (
             <>
-              <label className="block text-sm">
-                Текст открытки
+              <label className="sf-checkout-field">
+                <span className="sf-checkout-label">Текст открытки</span>
                 <textarea
                   maxLength={500}
                   rows={3}
                   value={cardMessage}
                   onChange={(e) => setCardMessage(e.target.value)}
-                  className="mt-1 w-full rounded-[var(--radius-lg)] border border-border bg-white px-3 py-2"
+                  className="sf-checkout-input sf-checkout-input--area"
+                  placeholder="Ваши тёплые слова…"
                 />
               </label>
-              <label className="flex items-center gap-2 text-sm">
+              <label className="sf-checkout-check">
                 <input
                   type="checkbox"
                   checked={anonymousCard}
                   onChange={(e) => setAnonymousCard(e.target.checked)}
                 />
-                Не указывать отправителя на открытке
+                <span>
+                  <strong>Без подписи отправителя</strong>
+                  <em>На открытке не будет вашего имени.</em>
+                </span>
               </label>
             </>
           ) : null}
-          <label className="block text-sm">
-            Комментарий к заказу
+          <label className="sf-checkout-field">
+            <span className="sf-checkout-label">Комментарий к заказу</span>
             <textarea
               maxLength={1000}
               rows={3}
               value={customerComment}
               onChange={(e) => setCustomerComment(e.target.value)}
-              className="mt-1 w-full rounded-[var(--radius-lg)] border border-border bg-white px-3 py-2"
+              className="sf-checkout-input sf-checkout-input--area"
+              placeholder="Пожелания курьеру или флористу"
             />
           </label>
         </section>
 
         {validated?.issues?.length ? (
-          <ul className="space-y-2 rounded-[var(--radius-lg)] border border-border bg-brand-soft/40 p-4">
+          <ul className="sf-checkout-issues">
             {validated.issues.map((issue, idx) => (
-              <li key={`${issue.code}-${idx}`} className="sf-small text-foreground">
-                {issue.message}
-              </li>
+              <li key={`${issue.code}-${idx}`}>{issue.message}</li>
             ))}
           </ul>
         ) : null}
 
         {error ? (
-          <p role="alert" className="text-sm text-red-700">
+          <p role="alert" className="sf-checkout-error">
             {error}
           </p>
         ) : null}
 
-        <p className="sf-small text-muted leading-relaxed">
+        <p className="sf-checkout-legal">
           Оформляя заказ, вы подтверждаете, что ознакомились с{' '}
-          <Link href="/oferta" className="underline underline-offset-2 hover:text-brand">
-            условиями заказа
-          </Link>
-          ,{' '}
-          <Link href="/dostavka" className="underline underline-offset-2 hover:text-brand">
-            доставкой и оплатой
-          </Link>
-          ,{' '}
-          <Link href="/vozvrat" className="underline underline-offset-2 hover:text-brand">
-            возвратом и претензиями
-          </Link>{' '}
-          и{' '}
-          <Link href="/privacy" className="underline underline-offset-2 hover:text-brand">
-            политикой обработки персональных данных
-          </Link>
-          . Оплата на сайте не производится — менеджер сообщит доступные способы после проверки
-          заказа.
+          <Link href="/oferta">условиями заказа</Link>, <Link href="/dostavka">доставкой и оплатой</Link>
+          , <Link href="/vozvrat">возвратом</Link> и <Link href="/privacy">политикой данных</Link>.
+          Оплата на сайте не производится — менеджер сообщит способы после проверки заказа.
         </p>
 
-        <button
-          type="submit"
-          disabled={pending}
-          className="sf-cta inline-flex min-h-12 w-full disabled:cursor-not-allowed disabled:opacity-50 lg:hidden"
-        >
+        <button type="submit" disabled={pending} className="sf-cta sf-checkout-submit sf-checkout-submit--mobile">
           {pending ? 'Отправка…' : 'Оформить заказ'}
         </button>
       </div>
 
-      <aside className="sf-panel h-fit space-y-4 p-5 lg:sticky lg:top-24">
-        <h2 className="sf-h3">Ваш заказ</h2>
-        <ul className="space-y-3">
+      <aside className="sf-checkout__summary">
+        <h2 className="sf-checkout-card__title">Ваш заказ</h2>
+        <ul className="sf-checkout-lines">
           {(validated?.items ?? []).length > 0
             ? validated!.items.map((line) => {
                 const cartMatch = cart.items.find(
@@ -676,18 +719,17 @@ export function CheckoutForm() {
                 return (
                   <li
                     key={`${line.variantId}:${(line.optionsSnapshot ?? []).map((o) => o.valueId).join(',')}`}
-                    className="sf-small"
                   >
-                    <span className="font-medium text-foreground">
+                    <span className="sf-checkout-lines__name">
                       {line.productName}
                       {line.variantName ? ` · ${line.variantName}` : ''}
                     </span>
                     {line.optionsSnapshot && line.optionsSnapshot.length > 0 ? (
-                      <span className="mt-0.5 block text-muted">
+                      <span className="sf-checkout-lines__meta">
                         {line.optionsSnapshot.map((o) => o.valueName).join(', ')}
                       </span>
                     ) : null}
-                    <span className="mt-0.5 block text-muted">
+                    <span className="sf-checkout-lines__meta">
                       {stem
                         ? `${stemCountLabel(line.quantity)} · ${formatPriceFromMinor(line.lineTotalMinor)}`
                         : `× ${line.quantity} · ${formatPriceFromMinor(line.lineTotalMinor)}`}
@@ -696,43 +738,36 @@ export function CheckoutForm() {
                 );
               })
             : cart.items.map((line) => (
-                <li key={`${line.variantId}:${(line.optionValueIds ?? []).join(',')}`} className="sf-small">
-                  <span className="font-medium text-foreground">
+                <li key={`${line.variantId}:${(line.optionValueIds ?? []).join(',')}`}>
+                  <span className="sf-checkout-lines__name">
                     {line.productName ?? 'Букет'}
                     {line.variantName ? ` · ${line.variantName}` : ''}
                   </span>
-                  <span className="mt-0.5 block text-muted">
-                    {isStemBouquetLine(line)
-                      ? stemCountLabel(line.quantity)
-                      : `× ${line.quantity}`}
+                  <span className="sf-checkout-lines__meta">
+                    {isStemBouquetLine(line) ? stemCountLabel(line.quantity) : `× ${line.quantity}`}
                   </span>
                 </li>
               ))}
         </ul>
-        <div className="border-t border-border pt-4">
-          <p className="sf-small flex justify-between text-muted">
+        <div className="sf-checkout-totals">
+          <p>
             <span>Товары</span>
-            <span className="tabular-nums">{formatPriceFromMinor(subtotal.toString())}</span>
+            <span>{formatPriceFromMinor(subtotal.toString())}</span>
           </p>
-          <p className="sf-small mt-1 flex justify-between text-muted">
+          <p>
             <span>Доставка</span>
-            <span className="tabular-nums">{formatPriceFromMinor(deliveryFee.toString())}</span>
+            <span>{formatPriceFromMinor(deliveryFee.toString())}</span>
           </p>
-          <p className="sf-price mt-3 flex justify-between text-lg">
+          <p className="sf-checkout-totals__grand">
             <span>Итого</span>
-            <span className="tabular-nums">{formatPriceFromMinor(total.toString())}</span>
+            <span>{formatPriceFromMinor(total.toString())}</span>
           </p>
         </div>
-        <button
-          type="submit"
-          disabled={pending}
-          className="sf-cta hidden w-full disabled:cursor-not-allowed disabled:opacity-50 lg:inline-flex"
-        >
+        <button type="submit" disabled={pending} className="sf-cta sf-checkout-submit sf-checkout-submit--desktop">
           {pending ? 'Отправка…' : 'Оформить заказ'}
         </button>
-        <p className="sf-small text-muted">
-          После оформления заказ будет получен в обработку. Менеджер свяжется для подтверждения
-          деталей. Это ещё не подтверждённый заказ.
+        <p className="sf-checkout-hint">
+          Заказ уйдёт в обработку. Менеджер подтвердит детали — это ещё не финальное подтверждение.
         </p>
       </aside>
     </form>

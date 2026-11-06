@@ -292,7 +292,10 @@ export function getStorefrontSettings(): Promise<StorefrontSettingsPublicDto> {
 }
 
 export function getHomepageConfig(): Promise<HomepageConfigDto> {
-  return Promise.resolve(getFixedHomepageConfig());
+  return publicFetch<HomepageConfigDto>('/storefront/homepage', {
+    tags: ['storefront', 'homepage'],
+    revalidate: 60,
+  }).catch(() => getFixedHomepageConfig());
 }
 
 export function getInstagramFeed() {

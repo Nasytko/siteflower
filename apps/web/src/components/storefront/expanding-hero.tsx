@@ -129,15 +129,10 @@ export function ExpandingHero({ slides, deliveryNote = null, intervalMs = 7000 }
                 </div>
                 <div className="sf-hero__overlay">
                   <p className="sf-hero__kicker">{kicker}</p>
-                  {i === 0 ? (
-                    <h1 className="sf-hero__headline">
-                      <HeadlineText title={slide.title} />
-                    </h1>
-                  ) : (
-                    <p className="sf-hero__headline">
-                      <HeadlineText title={slide.title} />
-                    </p>
-                  )}
+                  {/* Promo headlines stay <p> — stable SEO H1 lives near the assortment. */}
+                  <p className="sf-hero__headline">
+                    <HeadlineText title={slide.title} />
+                  </p>
                   {slide.subtitle ? (
                     <p className="sf-hero__subtitle">{slide.subtitle}</p>
                   ) : null}

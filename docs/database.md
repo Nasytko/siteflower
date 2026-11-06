@@ -33,7 +33,7 @@ Package: `packages/database`
 - `pnpm db:migrate:deploy` for CI/production-like applies
 - Never edit applied migrations on shared branches; add a new migration instead
 
-Catalog simplification migration: `20260926120000_catalog_simplification` — see [catalog-simplification-and-merchandising.md](./catalog-simplification-and-merchandising.md).
+Catalog simplification migration: `20260926120000_catalog_simplification` — see [catalog.md](./catalog.md).
 
 ## Transactions
 
@@ -60,7 +60,7 @@ Server calculates all commercial totals (see commerce invariants).
 
 ## Catalog tables
 
-See [docs/catalog.md](catalog.md), [catalog-simplification-and-merchandising.md](catalog-simplification-and-merchandising.md), [docs/media.md](media.md), [docs/publishing.md](publishing.md).
+See [catalog.md](catalog.md), [media.md](media.md), [publishing.md](publishing.md).
 
 **Products & composition**
 

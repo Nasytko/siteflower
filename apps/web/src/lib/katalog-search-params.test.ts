@@ -2,8 +2,10 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
   emptyKatalogSearchState,
+  katalogCanonicalPath,
   katalogHasActiveFilters,
   katalogHref,
+  katalogIsFilteredOrSorted,
   katalogStateToListParams,
   katalogStateToQuery,
   parseKatalogSearchParams,
@@ -69,6 +71,27 @@ test('katalogHref resets page on filter patch', () => {
     katalogHref('rozy', parseKatalogSearchParams({ page: '3' }), { colors: ['belyy'] }),
     '/catalog/roses?color=belyy',
   );
+});
+
+test('katalogCanonicalPath keeps clean pagination and noindexes filters/sort', () => {
+  assert.equal(katalogCanonicalPath('bouquets', emptyKatalogSearchState()), '/catalog/bouquets');
+  assert.equal(
+    katalogCanonicalPath('bouquets', parseKatalogSearchParams({ page: '2' })),
+    '/catalog/bouquets?page=2',
+  );
+  assert.equal(
+    katalogCanonicalPath('bouquets', parseKatalogSearchParams({ sort: 'price_desc', page: '2' })),
+    '/catalog/bouquets',
+  );
+  assert.equal(
+    katalogCanonicalPath('bouquets', parseKatalogSearchParams({ flower: 'roza' })),
+    '/catalog/bouquets',
+  );
+  assert.equal(
+    katalogIsFilteredOrSorted(parseKatalogSearchParams({ sort: 'price_asc' })),
+    true,
+  );
+  assert.equal(katalogIsFilteredOrSorted(parseKatalogSearchParams({ page: '2' })), false);
 });
 
 test('composition kind and component color URL state', () => {

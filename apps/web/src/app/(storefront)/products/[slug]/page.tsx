@@ -9,6 +9,7 @@ import { ProductPerks } from '@/components/storefront/product-perks';
 import {
   ProductBuyCard,
   ProductPostcardCard,
+  ProductPostcardShelf,
   ProductPurchaseProvider,
   ProductStickyBar,
   type PostcardOption,
@@ -98,6 +99,9 @@ export default async function ProductPage({ params }: { params: Params }) {
       availability: item.availability,
       price: item.price,
     }));
+  const showPostcardAddon =
+    product.catalogCategory?.slug !== POSTCARD_CATEGORY_SLUG &&
+    postcards.some((item) => item.id !== product.id);
 
   const productLd = buildProductJsonLd(product);
   const catalogCrumb = product.catalogCategory
@@ -189,9 +193,11 @@ export default async function ProductPage({ params }: { params: Params }) {
                 </ProductBuyCard>
               </div>
 
-              <div className="sf-pdp-top__card">
-                <ProductPostcardCard />
-              </div>
+              {showPostcardAddon ? (
+                <div className="sf-pdp-top__card">
+                  <ProductPostcardCard />
+                </div>
+              ) : null}
             </div>
           </article>
 
@@ -206,6 +212,8 @@ export default async function ProductPage({ params }: { params: Params }) {
           />
 
           <ProductStickyBar />
+
+          {showPostcardAddon ? <ProductPostcardShelf /> : null}
         </ProductPurchaseProvider>
 
         {related.length > 0 ? (

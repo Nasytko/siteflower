@@ -5,8 +5,9 @@ import { getStorefrontSettings } from '@/lib/public-api';
 import { buildPageMetadata } from '@/lib/seo/metadata';
 
 export const metadata: Metadata = buildPageMetadata({
-  title: 'Контакты и реквизиты',
-  description: 'Контакты интернет-магазина BUKET №1, реквизиты продавца и обращения покупателей.',
+  title: 'Контакты цветочного магазина в Гродно',
+  description:
+    'Адрес, телефон и реквизиты BUKET №1 в Гродно. Свяжитесь с магазином по доставке букетов и цветов.',
   path: '/kontakty',
 });
 

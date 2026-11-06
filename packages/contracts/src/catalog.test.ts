@@ -849,6 +849,9 @@ test('normalizeSlug', () => {
 test('defaultProductSeoTitle', () => {
   assert.match(defaultProductSeoTitle('Амели'), /Амели/);
   assert.match(defaultProductSeoTitle('Амели'), /BUKET №1/);
+  assert.match(defaultProductSeoTitle('Амели', 'BOUQUET'), /Букет/);
+  assert.doesNotMatch(defaultProductSeoTitle('Роза Freedom', 'STEM'), /Букет/);
+  assert.match(defaultProductSeoTitle('Роза Freedom', 'STEM'), /поштучно/);
 });
 
 test('formatPriceRangeLabel', () => {

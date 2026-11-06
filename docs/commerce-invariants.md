@@ -22,7 +22,7 @@ These rules are non-negotiable for later implementation phases.
 - `PERCENT` applies to all active variants; `FIXED` uses per-variant `sale_price_minor`. Schedule (`startsAt` / `endsAt`) is evaluated at read/checkout time.
 - Catalog list/detail expose informational `promotion` + `effectivePriceMinor`; checkout re-evaluates from current DB state at acceptance.
 
-See [catalog-simplification-and-merchandising.md](./catalog-simplification-and-merchandising.md).
+See [catalog.md](./catalog.md).
 
 ## Order line snapshots (promotions)
 
