@@ -192,6 +192,54 @@ export class TaxonomyService {
     return evaluateTaxonomyDeleteImpact(counts);
   }
 
+  /**
+   * Drop every product↔taxonomy join for this dictionary row.
+   * Products stay; only the discovery label is removed. Requires typing the
+   * exact current name (`confirmName`) so the action is hard to trigger by mistake.
+   */
+  async unlinkProducts(
+    kind: TaxonomyKind,
+    id: string,
+    input: { expectedVersion: number; confirmName: string },
+    actor: ActorContext,
+  ): Promise<{ id: string; kind: TaxonomyKind; unlinkedCount: number; name: string }> {
+    const current = await this.requireKindRow(kind, id);
+    if (current.version !== input.expectedVersion) {
+      throw new ConflictException(OCC_CONFLICT_MESSAGE);
+    }
+    const confirmName = input.confirmName.trim();
+    if (confirmName.length === 0 || confirmName !== current.name) {
+      throw new BadRequestException(
+        'Для подтверждения введите название записи точно как в справочнике',
+      );
+    }
+
+    const unlinkedCount = await this.prisma.client.$transaction(async (tx) => {
+      let count = 0;
+      if (kind === 'occasions' || kind === 'holidays') {
+        const result = await tx.productOccasion.deleteMany({ where: { occasionId: id } });
+        count = result.count;
+      } else if (kind === 'recipients') {
+        const result = await tx.productRecipient.deleteMany({ where: { recipientId: id } });
+        count = result.count;
+      } else {
+        const result = await tx.productColor.deleteMany({ where: { colorId: id } });
+        count = result.count;
+      }
+      await this.recordAudit(tx, kind, actor, 'TAXONOMY_UPDATED', id, {
+        action: 'unlink_products',
+        slug: current.slug,
+        name: current.name,
+        unlinkedCount: count,
+      });
+      return count;
+    });
+
+    this.catalogMatch.invalidateLookupCache();
+    await this.revalidate.ping({ tags: ['catalog'], paths: ['/', '/catalog/bouquets'] });
+    return { id, kind, unlinkedCount, name: current.name };
+  }
+
   async deleteEmpty(
     kind: TaxonomyKind,
     id: string,

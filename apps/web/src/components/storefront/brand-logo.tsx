@@ -11,8 +11,8 @@ type Props = {
 const MARK_SRC = '/brand/icon.png';
 /** Intrinsic pixel size of the brand tile. */
 const MARK_INTRINSIC = 512;
-const MARK_DISPLAY = 40;
-const MARK_DISPLAY_COMPACT = 30;
+const MARK_DISPLAY = 34;
+const MARK_DISPLAY_COMPACT = 28;
 
 /**
  * Brand lockup: green flower tile + «BUKET №1» with a short line under the name.

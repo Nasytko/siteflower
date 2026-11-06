@@ -660,13 +660,29 @@ export function buildProductWhere(
     }
   }
 
+  // «Цвет» matches product palette OR a composition FlowerItem color.
+  // Manual ProductColor is often empty; composition is the live SSoT for most bouquets.
   const colorIds = nonEmpty(filters.colorIds);
   if (colorIds) {
-    and.push({ colors: { some: { colorId: { in: colorIds } } } });
+    and.push({
+      OR: [
+        { colors: { some: { colorId: { in: colorIds } } } },
+        { components: { some: { flowerItem: { colorId: { in: colorIds } } } } },
+      ],
+    });
   } else {
     const colorSlugs = nonEmpty(filters.colorSlugs);
     if (colorSlugs) {
-      and.push({ colors: { some: { color: { slug: { in: colorSlugs } } } } });
+      and.push({
+        OR: [
+          { colors: { some: { color: { slug: { in: colorSlugs } } } } },
+          {
+            components: {
+              some: { flowerItem: { color: { slug: { in: colorSlugs } } } },
+            },
+          },
+        ],
+      });
     }
   }
 

@@ -84,7 +84,7 @@ describe('buildProductWhere composition facets', () => {
     );
   });
 
-  it('keeps product palette color separate from composition color', () => {
+  it('matches color via product palette OR composition FlowerItem color', () => {
     const where = buildProductWhere({
       colorSlugs: ['krasnyy'],
       flowerTypeSlugs: ['roza'],
@@ -92,7 +92,16 @@ describe('buildProductWhere composition facets', () => {
     const and = (where.AND ?? []) as Array<Record<string, unknown>>;
     expect(and).toEqual(
       expect.arrayContaining([
-        { colors: { some: { color: { slug: { in: ['krasnyy'] } } } } },
+        {
+          OR: [
+            { colors: { some: { color: { slug: { in: ['krasnyy'] } } } } },
+            {
+              components: {
+                some: { flowerItem: { color: { slug: { in: ['krasnyy'] } } } },
+              },
+            },
+          ],
+        },
         {
           components: {
             some: { flowerItem: { flowerType: { slug: { in: ['roza'] } } } },

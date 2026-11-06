@@ -351,15 +351,30 @@ export class CatalogFiltersService {
         return rows.length > 0 ? rows : null;
       }
       case 'color': {
+        // Product palette and/or composition FlowerItem.color — same as listing WHERE.
         const rows = await this.prisma.client.color.findMany({
           where: {
             visibility: 'VISIBLE',
-            products: { some: { product: productWhere } },
+            OR: [
+              { products: { some: { product: productWhere } } },
+              {
+                flowerItems: {
+                  some: { components: { some: { product: productWhere } } },
+                },
+              },
+            ],
           },
           orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }],
-          select: { id: true, slug: true, name: true },
+          select: { id: true, slug: true, name: true, swatch: true },
         });
-        return rows.length > 0 ? rows : null;
+        return rows.length > 0
+          ? rows.map((row) => ({
+              id: row.id,
+              slug: row.slug,
+              name: row.name,
+              swatch: row.swatch,
+            }))
+          : null;
       }
       case 'occasion': {
         // Personal поводы only — calendar holidays live under /k-prazdniku.

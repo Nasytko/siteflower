@@ -173,10 +173,12 @@ function OptionLink({
   href,
   active,
   label,
+  swatch,
 }: {
   href: string;
   active: boolean;
   label: string;
+  swatch?: string | null;
 }) {
   return (
     <Link
@@ -189,6 +191,9 @@ function OptionLink({
       <span className="sf-option__box" aria-hidden>
         <CheckIcon />
       </span>
+      {swatch ? (
+        <span className="sf-option__swatch" style={{ background: swatch }} aria-hidden />
+      ) : null}
       <span className="min-w-0 flex-1 truncate">{label}</span>
     </Link>
   );
@@ -342,6 +347,7 @@ export function KatalogFiltersPanel({
                 <OptionLink
                   key={option.slug}
                   label={option.name}
+                  swatch={filter.key === 'color' ? option.swatch : undefined}
                   active={selected.includes(option.slug)}
                   href={hrefOf(patchForKey(filter.key, state, option.slug))}
                 />

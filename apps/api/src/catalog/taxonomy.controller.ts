@@ -113,6 +113,14 @@ class CreateTaxonomyDto {
   swatch?: string | null;
 }
 
+class UnlinkTaxonomyProductsDto extends ExpectedVersionDto {
+  /** Must match the current taxonomy name exactly (trimmed). */
+  @IsString()
+  @MinLength(1)
+  @MaxLength(120)
+  confirmName!: string;
+}
+
 class UpdateTaxonomyDto extends ExpectedVersionDto {
   @IsOptional()
   @IsString()
@@ -224,6 +232,18 @@ export class TaxonomyController {
     @Param('id', ParseUUIDPipe) id: string,
   ) {
     return this.taxonomy.deleteImpact(kind, id);
+  }
+
+  @Post(':kind/:id/unlink-products')
+  @RequirePermissions('CATALOG_UPDATE')
+  unlinkProducts(
+    @Param('kind', new ParseEnumPipe(TAXONOMY_KINDS)) kind: TaxonomyKind,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() body: UnlinkTaxonomyProductsDto,
+    @CurrentAdmin() admin: AuthenticatedAdmin,
+    @Req() req: Request,
+  ) {
+    return this.taxonomy.unlinkProducts(kind, id, body, actorFrom(admin, req));
   }
 
   @Delete(':kind/:id')

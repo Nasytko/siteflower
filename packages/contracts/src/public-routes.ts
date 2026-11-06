@@ -67,6 +67,12 @@ export function flowerTypeDiscoveryHref(flowerTypeSlug: string): string {
   return `${catalogPublicHref(CATALOG_HUB_SLUG.BOUQUETS)}?${q.toString()}`;
 }
 
+/** Visual palette / color filter on the bouquets hub. */
+export function colorDiscoveryHref(colorSlug: string): string {
+  const q = new URLSearchParams({ color: colorSlug });
+  return `${catalogPublicHref(CATALOG_HUB_SLUG.BOUQUETS)}?${q.toString()}`;
+}
+
 /** Occasion discovery → bouquets filtered by occasion. */
 export function occasionDiscoveryHref(occasionSlug: string): string {
   return `/povod/${encodeURIComponent(occasionSlug)}`;

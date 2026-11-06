@@ -804,6 +804,8 @@ export type CatalogFilterOptionDto = {
   id: string;
   slug: string;
   name: string;
+  /** Color facet only — CSS swatch when set in the dictionary. */
+  swatch?: string | null;
 };
 
 export type CatalogCategoryFilterPublicDto = {
@@ -1067,6 +1069,14 @@ export type TaxonomyDeleteImpactDto = {
   productsCount: number;
   flowerItemsCount: number;
   componentsCount: number;
+};
+
+/** Result of bulk-removing product↔taxonomy join rows (products themselves stay). */
+export type TaxonomyUnlinkProductsResultDto = {
+  id: string;
+  kind: 'occasions' | 'holidays' | 'recipients' | 'colors';
+  unlinkedCount: number;
+  name: string;
 };
 
 /** Safe hard-delete only when nothing still points at the dictionary row. */

@@ -92,6 +92,8 @@ export const adminEndpoints = {
   taxonomyItem: (kind: TaxonomyKind, id: string) => `${ADMIN}/catalog/${kind}/${id}`,
   taxonomyDeleteImpact: (kind: TaxonomyKind, id: string) =>
     `${ADMIN}/catalog/${kind}/${id}/delete-impact`,
+  taxonomyUnlinkProducts: (kind: TaxonomyKind, id: string) =>
+    `${ADMIN}/catalog/${kind}/${id}/unlink-products`,
 
   budgetRanges: `${ADMIN}/catalog/budget-ranges`,
   budgetRange: (id: string) => `${ADMIN}/catalog/budget-ranges/${id}`,

@@ -18,6 +18,7 @@ import {
   getStorefrontSettings,
   listBestsellerGroups,
   listCatalogCategoryTree,
+  listColors,
   listFlowerTypes,
   listOccasions,
   listProducts,
@@ -31,6 +32,7 @@ import { CategoryNav, filterDiscoveryTiles } from '@/components/storefront/categ
 import type { DiscoveryTile } from '@/components/storefront/category-nav-types';
 import { ExpandingHero, type HeroSlide } from '@/components/storefront/expanding-hero';
 import { HomeAnalytics } from '@/components/storefront/home-analytics';
+import { HomePalette } from '@/components/storefront/home-palette';
 import { HomePerks } from '@/components/storefront/home-perks';
 import { HomeSectionHead } from '@/components/storefront/home-section-head';
 import { PopularShelf } from '@/components/storefront/popular-shelf';
@@ -121,14 +123,16 @@ async function loadShelfProducts(opts: {
 }
 
 export default async function StorefrontHomePage() {
-  const [homepage, settings, flowers, recipients, occasions, categoryTree] = await Promise.all([
-    getHomepageConfig(),
-    getStorefrontSettings(),
-    listFlowerTypes().catch(() => []),
-    listRecipients().catch(() => []),
-    listOccasions().catch(() => []),
-    listCatalogCategoryTree().catch(() => []),
-  ]);
+  const [homepage, settings, flowers, recipients, occasions, colors, categoryTree] =
+    await Promise.all([
+      getHomepageConfig(),
+      getStorefrontSettings(),
+      listFlowerTypes().catch(() => []),
+      listRecipients().catch(() => []),
+      listOccasions().catch(() => []),
+      listColors().catch(() => []),
+      listCatalogCategoryTree().catch(() => []),
+    ]);
 
   const now = new Date();
   const telHref = settings.phone ? `tel:${settings.phone.replace(/\s+/g, '')}` : null;
@@ -299,6 +303,8 @@ export default async function StorefrontHomePage() {
       <CategoryNav items={discoveryTiles} />
 
       <HomePerks items={homepage.perks ?? []} />
+
+      <HomePalette colors={colors} />
 
       {promoSection?.enabled ? (
         <section className="sf-home-shelf">

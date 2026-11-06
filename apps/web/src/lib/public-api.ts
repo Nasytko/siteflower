@@ -3,6 +3,7 @@ import type {
   BudgetRangePublicDto,
   CatalogCategoryDto,
   CatalogCategoryTreeNodeDto,
+  ColorRefDto,
   FlowerOriginDto,
   FlowerTypeDto,
   FlowerVarietyDto,
@@ -238,7 +239,7 @@ export function listRecipients() {
 }
 
 export function listColors() {
-  return publicFetch<TaxonomyRefDto[]>('/catalog/colors', { tags: ['catalog', 'taxonomies'] });
+  return publicFetch<ColorRefDto[]>('/catalog/colors', { tags: ['catalog', 'taxonomies'] });
 }
 
 /** Resolve a visible FlowerType by slug for /cvety/[slug] landings. */
