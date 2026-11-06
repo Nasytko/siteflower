@@ -6268,7 +6268,7 @@ a.sf-instagram__handle:hover {
 
 @media (min-width: 1024px) {
   .sf-pdp {
-    padding: 0.9rem 0 3.5rem;
+    padding: 0.9rem 0 5.5rem;
   }
 }
 
@@ -6342,9 +6342,9 @@ a.sf-instagram__handle:hover {
 
 @media (min-width: 768px) {
   .sf-pdp-top {
-    grid-template-columns: minmax(0, 1.05fr) minmax(17.5rem, 0.95fr);
+    grid-template-columns: minmax(12rem, 0.38fr) minmax(0, 0.62fr);
     align-items: start;
-    gap: 1rem 1.25rem;
+    gap: 1rem 1.15rem;
   }
 
   .sf-pdp-top__col {
@@ -6365,8 +6365,9 @@ a.sf-instagram__handle:hover {
 
 @media (min-width: 1024px) {
   .sf-pdp-top {
-    grid-template-columns: minmax(0, 1.12fr) minmax(20rem, 0.88fr);
-    gap: 1.15rem 1.75rem;
+    /* Gallery ~1/3 (+a touch), buy column ~2/3 */
+    grid-template-columns: minmax(14rem, 0.36fr) minmax(0, 0.64fr);
+    gap: 1.15rem 1.5rem;
   }
 }
 
@@ -6390,7 +6391,7 @@ a.sf-instagram__handle:hover {
 
 @media (min-width: 1024px) {
   .sf-pdp-gallery__frame {
-    aspect-ratio: 1 / 0.94;
+    aspect-ratio: 1 / 1.05;
   }
 }
 
@@ -6626,9 +6627,52 @@ a.sf-instagram__handle:hover {
 
 @media (min-width: 1024px) {
   .sf-pdp-buy {
-    gap: 1.15rem;
-    padding: 1.6rem 1.75rem 1.6rem;
+    gap: 0.95rem;
+    padding: 1.35rem 1.5rem 1.4rem;
   }
+}
+
+.sf-pdp-buy__configure {
+  display: grid;
+  gap: 0.7rem;
+  padding: 0.7rem 0.8rem;
+  border: 1px solid var(--pdp-line);
+  border-radius: 0.9rem;
+  background: color-mix(in oklab, var(--pdp-tile) 55%, #fff);
+}
+
+@media (min-width: 1024px) {
+  .sf-pdp-buy__configure {
+    gap: 0.75rem;
+    padding: 0.8rem 0.9rem;
+  }
+}
+
+.sf-pdp-options {
+  display: grid;
+  gap: 0.65rem;
+}
+
+@media (min-width: 640px) {
+  .sf-pdp-options {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.65rem 0.85rem;
+  }
+
+  .sf-pdp-options > .sf-small {
+    grid-column: 1 / -1;
+  }
+}
+
+.sf-pdp-options__group {
+  min-width: 0;
+}
+
+.sf-pdp-buy__stem-hint {
+  margin: -0.25rem 0 0;
+  font-size: 0.75rem;
+  line-height: 1.45;
+  color: var(--pdp-muted);
 }
 
 .sf-pdp-buy__badges {
@@ -6695,9 +6739,11 @@ a.sf-instagram__handle:hover {
 }
 
 .sf-pdp-buy__label {
-  margin: 0 0 0.5rem;
-  font-size: 0.75rem;
-  font-weight: 600;
+  margin: 0 0 0.35rem;
+  font-size: 0.6875rem;
+  font-weight: 650;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
   color: var(--pdp-muted);
 }
 
@@ -6709,21 +6755,21 @@ a.sf-instagram__handle:hover {
 .sf-pdp-family {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.5rem;
+  gap: 0.35rem;
 }
 
 .sf-pdp-family__chip {
   position: relative;
   display: inline-flex;
   align-items: center;
-  gap: 0.45rem;
-  min-height: 2.5rem;
-  padding: 0.4rem 1rem;
+  gap: 0.35rem;
+  min-height: 2.1rem;
+  padding: 0.25rem 0.7rem;
   border: 1px solid var(--pdp-line);
   border-radius: 999px;
   background: #fff;
   color: var(--pdp-ink);
-  font-size: 0.8125rem;
+  font-size: 0.75rem;
   font-weight: 600;
   line-height: 1.2;
   text-decoration: none;
@@ -6768,22 +6814,22 @@ a.sf-instagram__handle:hover {
 .sf-pdp-variants {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.45rem;
+  gap: 0.35rem;
 }
 
 .sf-pdp-variant {
   display: inline-flex;
-  flex-direction: column;
+  flex-direction: row;
   align-items: center;
   justify-content: center;
-  gap: 0.1rem;
-  min-height: 2.75rem;
-  padding: 0.4rem 0.95rem;
+  gap: 0.35rem;
+  min-height: 2.1rem;
+  padding: 0.28rem 0.7rem;
   border: 1px solid var(--pdp-line);
-  border-radius: 0.75rem;
+  border-radius: 999px;
   background: #fff;
   color: var(--pdp-ink);
-  font-size: 0.8125rem;
+  font-size: 0.75rem;
   font-weight: 600;
   transition: border-color 0.15s ease, background-color 0.15s ease;
 }
@@ -6794,6 +6840,7 @@ a.sf-instagram__handle:hover {
 
 .sf-pdp-variant--active {
   border-color: var(--pdp-green);
+  background: color-mix(in srgb, var(--pdp-green) 8%, #fff);
   box-shadow: inset 0 0 0 1px var(--pdp-green);
 }
 
@@ -6844,29 +6891,6 @@ a.sf-instagram__handle:hover {
   margin: 0.3rem 0 0;
   font-size: 0.6875rem;
   color: var(--pdp-muted);
-}
-
-.sf-pdp-buy__stem-note {
-  display: grid;
-  gap: 0.35rem;
-  margin: 0;
-  max-width: 28rem;
-  padding: 0.75rem 0.9rem;
-  border: 1px solid color-mix(in oklab, var(--color-brand) 14%, var(--pdp-line, #e8e0d6));
-  border-radius: 0.85rem;
-  background: color-mix(in oklab, var(--color-brand-soft) 35%, #fff);
-  font-size: 0.8125rem;
-  line-height: 1.5;
-  color: var(--pdp-muted, #7a7168);
-}
-
-.sf-pdp-buy__stem-note p {
-  margin: 0;
-}
-
-.sf-pdp-buy__stem-note strong {
-  font-weight: 650;
-  color: var(--pdp-ink, #2a2420);
 }
 
 @media (max-width: 1023px) {
@@ -6956,11 +6980,11 @@ a.sf-instagram__handle:hover {
   min-height: 2.65rem;
   align-items: center;
   justify-content: center;
-  gap: 0.45rem;
-  border: 1.5px solid color-mix(in oklab, var(--pdp-green) 55%, var(--pdp-line));
+  gap: 0.5rem;
+  border: 1.5px solid color-mix(in oklab, var(--pdp-pink) 45%, var(--pdp-line));
   border-radius: 999px;
-  background: transparent;
-  color: var(--pdp-green);
+  background: color-mix(in oklab, var(--pdp-pink-soft) 70%, #fff);
+  color: color-mix(in oklab, var(--pdp-pink) 72%, var(--pdp-ink));
   font-size: 0.875rem;
   font-weight: 600;
   transition:
@@ -6969,9 +6993,11 @@ a.sf-instagram__handle:hover {
     color 0.2s ease;
 }
 
-.sf-pdp-add-secondary:hover {
-  background: color-mix(in oklab, var(--pdp-green) 8%, #fff);
-  border-color: var(--pdp-green);
+.sf-pdp-add-secondary:hover,
+.sf-pdp-add-secondary[data-active='true'] {
+  background: var(--pdp-pink-soft);
+  border-color: var(--pdp-pink);
+  color: var(--pdp-pink);
 }
 
 .sf-pdp-messengers {
@@ -7196,12 +7222,24 @@ a.sf-instagram__handle:hover {
 
 /* Postcard */
 .sf-pdp-postcard {
-  padding: 1rem;
+  padding: 1rem 1.05rem 1.1rem;
+  border-color: color-mix(in oklab, var(--pdp-pink) 28%, var(--pdp-line));
+  background:
+    linear-gradient(
+      160deg,
+      color-mix(in oklab, var(--pdp-pink-soft) 78%, #fff) 0%,
+      #fff 58%
+    );
+  box-shadow: 0 10px 28px -24px rgb(233 73 107 / 0.55);
+}
+
+.sf-pdp-postcard[data-on='true'] {
+  border-color: color-mix(in oklab, var(--pdp-pink) 48%, var(--pdp-line));
 }
 
 @media (min-width: 1024px) {
   .sf-pdp-postcard {
-    padding: 1.15rem 1.4rem 1.25rem;
+    padding: 1.15rem 1.3rem 1.25rem;
   }
 }
 
@@ -7212,11 +7250,16 @@ a.sf-instagram__handle:hover {
 }
 
 .sf-pdp-postcard__icon {
-  width: 1.35rem;
-  height: 1.35rem;
+  display: inline-flex;
+  width: 2.25rem;
+  height: 2.25rem;
   flex-shrink: 0;
-  margin-top: 0.05rem;
+  align-items: center;
+  justify-content: center;
+  border-radius: 0.7rem;
+  background: #fff;
   color: var(--pdp-pink);
+  box-shadow: 0 4px 12px -8px rgb(233 73 107 / 0.65);
 }
 
 .sf-pdp-postcard__heading {
@@ -7226,31 +7269,76 @@ a.sf-instagram__handle:hover {
 
 .sf-pdp-postcard__title {
   margin: 0;
-  font-size: 0.9375rem;
+  font-size: 1rem;
   font-weight: 700;
-  line-height: 1.35;
-}
-
-.sf-pdp-postcard__title-mobile {
-  display: none;
-}
-
-@media (max-width: 767px) {
-  .sf-pdp-postcard__title-desktop {
-    display: none;
-  }
-
-  .sf-pdp-postcard__title-mobile {
-    display: inline;
-  }
+  line-height: 1.3;
 }
 
 .sf-pdp-postcard__hint {
-  margin: 0.2rem 0 0;
-  max-width: 24rem;
-  font-size: 0.75rem;
+  margin: 0.25rem 0 0;
+  max-width: 26rem;
+  font-size: 0.78rem;
   line-height: 1.45;
   color: var(--pdp-muted);
+}
+
+.sf-pdp-postcard__pick {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  gap: 0.7rem;
+  min-height: 3.1rem;
+  padding: 0.45rem 0.7rem;
+  border: 1px dashed color-mix(in oklab, var(--pdp-pink) 40%, var(--pdp-line));
+  border-radius: 0.75rem;
+  background: #fff;
+  color: var(--pdp-ink);
+  text-align: left;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.sf-pdp-postcard__pick:hover {
+  border-color: var(--pdp-pink);
+  box-shadow: 0 6px 16px -14px rgb(233 73 107 / 0.7);
+}
+
+.sf-pdp-postcard__pick--empty {
+  justify-content: center;
+  font-size: 0.875rem;
+  font-weight: 650;
+  color: var(--pdp-pink);
+}
+
+.sf-pdp-postcard__pick-thumb {
+  position: relative;
+  width: 2.4rem;
+  height: 2.4rem;
+  flex-shrink: 0;
+  overflow: hidden;
+  border-radius: 0.5rem;
+  background: var(--pdp-tile);
+}
+
+.sf-pdp-postcard__pick-text {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  flex-direction: column;
+  gap: 0.1rem;
+}
+
+.sf-pdp-postcard__pick-name {
+  overflow: hidden;
+  font-size: 0.875rem;
+  font-weight: 650;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sf-pdp-postcard__pick-meta {
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--pdp-pink);
 }
 
 .sf-pdp-postcard__hint a {
@@ -7425,21 +7513,26 @@ a.sf-instagram__handle:hover {
 /* Product info accordion (Состав / Доставка / Оплата) */
 .sf-pdp-acc {
   margin-top: 0.75rem;
-  padding: 0.15rem 1rem 0.35rem;
+  padding: 0.35rem;
+  overflow: hidden;
 }
 
 @media (min-width: 1024px) {
   .sf-pdp-acc {
-    padding: 0.35rem 1.4rem 0.85rem;
+    padding: 0.4rem;
   }
 }
 
 .sf-pdp-acc__item {
-  border-top: 1px solid var(--pdp-line);
+  border-radius: 0.75rem;
 }
 
-.sf-pdp-acc__item:last-child {
-  border-bottom: 1px solid var(--pdp-line);
+.sf-pdp-acc__item + .sf-pdp-acc__item {
+  margin-top: 0.2rem;
+}
+
+.sf-pdp-acc__item[data-open='true'] {
+  background: color-mix(in oklab, var(--pdp-tile) 70%, #fff);
 }
 
 .sf-pdp-acc__trigger {
@@ -7448,8 +7541,9 @@ a.sf-instagram__handle:hover {
   align-items: center;
   justify-content: space-between;
   gap: 1rem;
-  padding: 0.95rem 0;
+  padding: 0.75rem 0.85rem;
   border: 0;
+  border-radius: 0.75rem;
   background: transparent;
   color: var(--pdp-ink);
   cursor: pointer;
@@ -7461,8 +7555,8 @@ a.sf-instagram__handle:hover {
 }
 
 .sf-pdp-acc__label {
-  font-size: 0.9375rem;
-  font-weight: 600;
+  font-size: 0.9rem;
+  font-weight: 650;
   letter-spacing: 0.01em;
   line-height: 1.3;
   transition: color 0.15s ease;
@@ -7473,17 +7567,19 @@ a.sf-instagram__handle:hover {
   flex-shrink: 0;
   align-items: center;
   justify-content: center;
-  width: 1.35rem;
-  height: 1.35rem;
-  color: var(--pdp-ink);
-  font-size: 1.35rem;
-  font-weight: 400;
+  width: 1.5rem;
+  height: 1.5rem;
+  border-radius: 999px;
+  background: #fff;
+  color: var(--pdp-muted);
   line-height: 1;
-  transition: transform 0.2s ease, color 0.15s ease;
+  transition: transform 0.2s ease, color 0.15s ease, background-color 0.15s ease;
 }
 
 .sf-pdp-acc__mark[data-open='true'] {
-  color: var(--pdp-muted);
+  transform: rotate(180deg);
+  color: var(--pdp-green);
+  background: color-mix(in srgb, var(--pdp-green) 10%, #fff);
 }
 
 .sf-pdp-acc__panel {
@@ -7495,7 +7591,7 @@ a.sf-instagram__handle:hover {
 }
 
 .sf-pdp-acc__panel-inner {
-  padding: 0 0 1.05rem;
+  padding: 0 0.85rem 0.9rem;
   animation: sf-pdp-acc-in 0.22s ease;
 }
 
@@ -7889,14 +7985,14 @@ a.sf-instagram__handle:hover {
   }
 }
 
-/* Mobile sticky buy bar — slides up when main CTA leaves the viewport */
+/* Sticky buy bar — slides up when main CTA leaves the viewport */
 .sf-pdp-sticky {
   position: fixed;
   right: 0;
   bottom: 0;
   left: 0;
   z-index: 40;
-  padding: 0.6rem 0.75rem max(0.6rem, env(safe-area-inset-bottom));
+  padding: 0.65rem 0.85rem max(0.65rem, env(safe-area-inset-bottom));
   border-top: 1px solid var(--pdp-line);
   background: rgb(255 255 255 / 0.97);
   box-shadow: 0 -10px 30px -22px rgb(35 32 28 / 0.4);
@@ -7914,12 +8010,6 @@ a.sf-instagram__handle:hover {
   pointer-events: auto;
 }
 
-@media (min-width: 1024px) {
-  .sf-pdp-sticky {
-    display: none;
-  }
-}
-
 @media (prefers-reduced-motion: reduce) {
   .sf-pdp-sticky {
     transition: opacity 0.15s ease;
@@ -7928,7 +8018,7 @@ a.sf-instagram__handle:hover {
 
 .sf-pdp-sticky__inner {
   display: flex;
-  max-width: 40rem;
+  max-width: 56rem;
   align-items: center;
   gap: 0.7rem;
   margin-inline: auto;
@@ -7972,13 +8062,23 @@ a.sf-instagram__handle:hover {
 .sf-pdp-sticky__btn {
   flex-shrink: 0;
   min-height: 2.6rem;
-  padding: 0 1.5rem;
+  max-width: min(100%, 18rem);
+  padding: 0 1.15rem;
   border: 0;
   border-radius: 999px;
   background: var(--pdp-green);
   color: #fff;
   font-size: 0.8125rem;
   font-weight: 600;
+  white-space: nowrap;
+}
+
+@media (min-width: 768px) {
+  .sf-pdp-sticky__btn {
+    min-height: 2.85rem;
+    padding: 0 1.4rem;
+    font-size: 0.875rem;
+  }
 }
 
 .sf-pdp-sticky__btn:disabled {

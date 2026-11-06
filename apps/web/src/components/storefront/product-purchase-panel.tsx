@@ -62,6 +62,11 @@ type PurchaseState = {
   selectedByGroup: Record<string, string[]>;
   toggleOptionValue: (groupId: string, valueId: string, multi: boolean) => void;
   optionsTotalMinor: string;
+  /** Bouquet line total (qty × unit + options). */
+  lineTotalMinor: string;
+  lineTotalLabel: string;
+  /** Line total + selected postcard when the addon is on. */
+  cartAddTotalLabel: string;
   optionsMissing: boolean;
   hydrated: boolean;
   blocked: boolean;
@@ -130,6 +135,16 @@ export function ProductPurchaseProvider({
         baseUnitPriceMinor: selected.effectivePriceMinor,
       })
     : { optionValueIds: [] as string[], optionsTotalMinor: '0', lineTotalMinor: '0' };
+  const lineTotalMinor = optionsEstimate.lineTotalMinor;
+  const lineTotalLabel = formatPriceFromMinor(lineTotalMinor, product.currency);
+  const selectedPostcard =
+    cardEnabled && postcardId
+      ? postcards.find((p) => p.id === postcardId && p.defaultVariant)
+      : undefined;
+  const cartAddTotalMinor = selectedPostcard?.defaultVariant
+    ? (BigInt(lineTotalMinor) + BigInt(selectedPostcard.defaultVariant.priceMinor)).toString()
+    : lineTotalMinor;
+  const cartAddTotalLabel = formatPriceFromMinor(cartAddTotalMinor, product.currency);
   const optionsMissing = requiredOptionsMissing(optionGroups, selectedByGroup);
   const blocked =
     product.availability === 'TEMPORARILY_UNAVAILABLE' || !selected || optionsMissing;
@@ -251,6 +266,9 @@ export function ProductPurchaseProvider({
     selectedByGroup,
     toggleOptionValue,
     optionsTotalMinor: optionsEstimate.optionsTotalMinor,
+    lineTotalMinor,
+    lineTotalLabel,
+    cartAddTotalLabel,
     optionsMissing,
     hydrated,
     blocked,
@@ -313,6 +331,8 @@ export function ProductBuyCard({
     selectedByGroup,
     toggleOptionValue,
     optionsTotalMinor,
+    lineTotalLabel,
+    cartAddTotalLabel,
     optionsMissing,
     hydrated,
     blocked,
@@ -331,6 +351,10 @@ export function ProductBuyCard({
     optionsTotalMinor !== '0'
       ? formatPriceFromMinor(optionsTotalMinor, product.currency)
       : null;
+  const addButtonLabel =
+    product.productKind === 'STEM'
+      ? `В корзину · ${cartAddTotalLabel}`
+      : `В корзину · ${cartAddTotalLabel}`;
   const messengers = [
     whatsappUrl
       ? { key: 'wa', href: whatsappUrl, label: 'WhatsApp', icon: <WhatsAppIcon /> }
@@ -356,90 +380,94 @@ export function ProductBuyCard({
         <p className="sf-pdp-buy__lead">{product.shortDescription}</p>
       ) : null}
 
-      {sorted.length > 1 ? (
-        <div className="sf-pdp-buy__block">
-          <p className="sf-pdp-buy__label">Размер</p>
-          <div className="sf-pdp-variants" role="listbox" aria-label="Размер букета">
-            {sorted.map((variant) => {
-              const active = variant.id === selected?.id;
-              return (
-                <button
-                  key={variant.id}
-                  type="button"
-                  role="option"
-                  aria-selected={active}
-                  className={`sf-pdp-variant ${active ? 'sf-pdp-variant--active' : ''}`}
-                  onClick={() => setSelectedId(variant.id)}
-                >
-                  <span className="sf-pdp-variant__name">{variant.name}</span>
-                  <span className="sf-pdp-variant__price">
-                    {formatPriceFromMinor(variant.effectivePriceMinor, product.currency)}
-                  </span>
-                </button>
-              );
-            })}
-          </div>
-        </div>
-      ) : null}
-
-      {children}
-
-      {optionGroups.length > 0 ? (
-        <div className="sf-pdp-buy__block space-y-4" data-testid="product-options">
-          {optionGroups.map((group) => {
-            const multi = group.selection === 'MULTI';
-            const picked = selectedByGroup[group.id] ?? [];
-            return (
-              <div key={group.id}>
-                <p className="sf-pdp-buy__label">
-                  {group.name}
-                  {group.required ? ' *' : ''}
-                </p>
-                <div
-                  className="sf-pdp-variants"
-                  role={multi ? 'group' : 'listbox'}
-                  aria-label={group.name}
-                >
-                  {group.values
-                    .filter((value) => value.active)
-                    .map((value) => {
-                      const active = picked.includes(value.id);
-                      const unitMinor = selected
-                        ? BigInt(selected.effectivePriceMinor)
-                        : 0n;
-                      const baseLineMinor = unitMinor * BigInt(qty);
-                      const surcharge = resolveOptionSurchargeMinor(
-                        value,
-                        selected?.id,
-                        baseLineMinor,
-                      );
-                      const surchargeLabel =
-                        surcharge === 0n
-                          ? value.pricingMode === 'TIERED'
-                            ? 'по шкале'
-                            : 'без доплаты'
-                          : `+${formatPriceFromMinor(surcharge.toString(), product.currency)}`;
-                      return (
-                        <button
-                          key={value.id}
-                          type="button"
-                          role={multi ? 'checkbox' : 'option'}
-                          aria-checked={multi ? active : undefined}
-                          aria-selected={!multi ? active : undefined}
-                          className={`sf-pdp-variant ${active ? 'sf-pdp-variant--active' : ''}`}
-                          onClick={() => toggleOptionValue(group.id, value.id, multi)}
-                        >
-                          <span className="sf-pdp-variant__name">{value.name}</span>
-                          <span className="sf-pdp-variant__price">{surchargeLabel}</span>
-                        </button>
-                      );
-                    })}
-                </div>
+      {(sorted.length > 1 || children || optionGroups.length > 0) ? (
+        <div className="sf-pdp-buy__configure">
+          {sorted.length > 1 ? (
+            <div className="sf-pdp-buy__block">
+              <p className="sf-pdp-buy__label">Размер</p>
+              <div className="sf-pdp-variants" role="listbox" aria-label="Размер букета">
+                {sorted.map((variant) => {
+                  const active = variant.id === selected?.id;
+                  return (
+                    <button
+                      key={variant.id}
+                      type="button"
+                      role="option"
+                      aria-selected={active}
+                      className={`sf-pdp-variant ${active ? 'sf-pdp-variant--active' : ''}`}
+                      onClick={() => setSelectedId(variant.id)}
+                    >
+                      <span className="sf-pdp-variant__name">{variant.name}</span>
+                      <span className="sf-pdp-variant__price">
+                        {formatPriceFromMinor(variant.effectivePriceMinor, product.currency)}
+                      </span>
+                    </button>
+                  );
+                })}
               </div>
-            );
-          })}
-          {optionsMissing ? (
-            <p className="sf-small text-muted">Выберите обязательные опции</p>
+            </div>
+          ) : null}
+
+          {children}
+
+          {optionGroups.length > 0 ? (
+            <div className="sf-pdp-options" data-testid="product-options">
+              {optionGroups.map((group) => {
+                const multi = group.selection === 'MULTI';
+                const picked = selectedByGroup[group.id] ?? [];
+                return (
+                  <div key={group.id} className="sf-pdp-options__group">
+                    <p className="sf-pdp-buy__label">
+                      {group.name}
+                      {group.required ? ' *' : ''}
+                    </p>
+                    <div
+                      className="sf-pdp-variants"
+                      role={multi ? 'group' : 'listbox'}
+                      aria-label={group.name}
+                    >
+                      {group.values
+                        .filter((value) => value.active)
+                        .map((value) => {
+                          const active = picked.includes(value.id);
+                          const unitMinor = selected
+                            ? BigInt(selected.effectivePriceMinor)
+                            : 0n;
+                          const baseLineMinor = unitMinor * BigInt(qty);
+                          const surcharge = resolveOptionSurchargeMinor(
+                            value,
+                            selected?.id,
+                            baseLineMinor,
+                          );
+                          const surchargeLabel =
+                            surcharge === 0n
+                              ? value.pricingMode === 'TIERED'
+                                ? 'по шкале'
+                                : 'вкл.'
+                              : `+${formatPriceFromMinor(surcharge.toString(), product.currency)}`;
+                          return (
+                            <button
+                              key={value.id}
+                              type="button"
+                              role={multi ? 'checkbox' : 'option'}
+                              aria-checked={multi ? active : undefined}
+                              aria-selected={!multi ? active : undefined}
+                              className={`sf-pdp-variant ${active ? 'sf-pdp-variant--active' : ''}`}
+                              onClick={() => toggleOptionValue(group.id, value.id, multi)}
+                            >
+                              <span className="sf-pdp-variant__name">{value.name}</span>
+                              <span className="sf-pdp-variant__price">{surchargeLabel}</span>
+                            </button>
+                          );
+                        })}
+                    </div>
+                  </div>
+                );
+              })}
+              {optionsMissing ? (
+                <p className="sf-small text-muted">Выберите обязательные опции</p>
+              ) : null}
+            </div>
           ) : null}
         </div>
       ) : null}
@@ -447,8 +475,8 @@ export function ProductBuyCard({
       <div className="sf-pdp-buy__row">
         <div className="sf-pdp-buy__price" aria-live="polite">
           <p className="sf-pdp-buy__amount" data-sale={originalLabel ? 'true' : 'false'}>
-            {priceLabel}
-            {originalLabel ? (
+            {lineTotalLabel}
+            {originalLabel && qty === 1 && optionsTotalMinor === '0' ? (
               <s className="sf-pdp-buy__was">
                 <span className="sr-only">Обычная цена </span>
                 {originalLabel}
@@ -456,11 +484,13 @@ export function ProductBuyCard({
             ) : null}
           </p>
           <p className="sf-pdp-buy__unit">
-            {product.productKind === 'STEM' ? 'Цена за одну ветку' : 'Цена за 1 шт.'}
+            {product.productKind === 'STEM'
+              ? `${priceLabel} за ветку · ${stemCountLabel(qty)}`
+              : qty > 1
+                ? `${priceLabel} × ${qty}`
+                : 'Цена за 1 шт.'}
+            {optionsTotalLabel ? ` · опции ${optionsTotalLabel}` : ''}
           </p>
-          {optionsTotalLabel ? (
-            <p className="sf-pdp-buy__unit">Опции: {optionsTotalLabel}</p>
-          ) : null}
         </div>
         <QtyStepper
           qty={qty}
@@ -471,16 +501,10 @@ export function ProductBuyCard({
       </div>
 
       {product.productKind === 'STEM' ? (
-        <div className="sf-pdp-buy__stem-note" role="note">
-          <p>
-            <strong>Как собираем букет:</strong> вы выбираете число веток — мы собираем их в{' '}
-            <strong>один букет</strong>. Сейчас: {stemCountLabel(qty)} = 1 букет в корзине.
-          </p>
-          <p>
-            Цена считается за каждую ветку
-            {optionGroups.length > 0 ? ', а лента и упаковка — один раз на весь букет' : ''}.
-          </p>
-        </div>
+        <p className="sf-pdp-buy__stem-hint" role="note">
+          {stemCountLabel(qty)} собираем в один букет
+          {optionGroups.length > 0 ? '; лента и упаковка — один раз' : ''}.
+        </p>
       ) : null}
 
       <div className="sf-pdp-buy__cta">
@@ -492,14 +516,13 @@ export function ProductBuyCard({
           className="sf-pdp-add"
         >
           <CartIcon />
-          {product.productKind === 'STEM'
-            ? `В корзину · 1 букет (${stemCountLabel(qty)})`
-            : 'Добавить в корзину'}
+          <span className="sf-pdp-add__label">{addButtonLabel}</span>
         </button>
         {showPostcardAnchor ? (
           <button
             type="button"
             className="sf-pdp-add-secondary"
+            data-active={cardEnabled ? 'true' : 'false'}
             onClick={() => {
               if (!cardEnabled) setCardEnabled(true);
               document
@@ -507,7 +530,8 @@ export function ProductBuyCard({
                 ?.scrollIntoView({ behavior: 'smooth', block: 'start' });
             }}
           >
-            Добавить открытку
+            <GiftIcon />
+            {cardEnabled ? 'Выбрать дизайн открытки' : 'Добавить открытку'}
           </button>
         ) : null}
       </div>
@@ -611,27 +635,36 @@ export function ProductPostcardCard() {
     setCardEnabled,
     cardMessage,
     setCardMessage,
+    postcardId,
     postcards,
   } = usePurchase();
   const options = postcardOptions(postcards, product.id);
   const fromPrice = minPostcardPriceLabel(options, product.currency);
+  const selected = postcardId
+    ? options.find((item) => item.id === postcardId)
+    : undefined;
 
   return (
-    <section className="sf-pdp-card sf-pdp-postcard" aria-labelledby="pdp-postcard-title">
+    <section
+      className="sf-pdp-card sf-pdp-postcard"
+      data-on={cardEnabled ? 'true' : 'false'}
+      aria-labelledby="pdp-postcard-title"
+    >
       <div className="sf-pdp-postcard__head">
-        <GiftIcon />
+        <span className="sf-pdp-postcard__icon" aria-hidden>
+          <GiftIcon />
+        </span>
         <div className="sf-pdp-postcard__heading">
           <h2 id="pdp-postcard-title" className="sf-pdp-postcard__title">
-            <span className="sf-pdp-postcard__title-desktop">Добавить открытку</span>
-            <span className="sf-pdp-postcard__title-mobile">Открытка к букету</span>
+            Открытка к букету
           </h2>
           <p className="sf-pdp-postcard__hint">
             {fromPrice ? (
               <>
-                Открытка от {fromPrice}. Выберите дизайн{' '}
-                <a href="#pdp-postcards">ниже</a>
-                {' '}или в{' '}
-                <Link href={POSTCARD_CATALOG_HREF}>разделе открыток</Link>.
+                От {fromPrice}. Текст напишем от вашего имени —{' '}
+                <a href="#pdp-postcards">выберите дизайн</a>
+                {' '}или смотрите{' '}
+                <Link href={POSTCARD_CATALOG_HREF}>все открытки</Link>.
               </>
             ) : (
               <>Мы напишем пожелание от вашего имени.</>
@@ -652,6 +685,45 @@ export function ProductPostcardCard() {
 
       {cardEnabled ? (
         <div className="sf-pdp-postcard__body">
+          {selected ? (
+            <button
+              type="button"
+              className="sf-pdp-postcard__pick"
+              onClick={() =>
+                document
+                  .getElementById('pdp-postcards')
+                  ?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+              }
+            >
+              {selected.primaryImageUrl ? (
+                <span className="sf-pdp-postcard__pick-thumb">
+                  <Image
+                    src={selected.primaryImageUrl}
+                    alt=""
+                    fill
+                    sizes="56px"
+                    className="object-cover"
+                  />
+                </span>
+              ) : null}
+              <span className="sf-pdp-postcard__pick-text">
+                <span className="sf-pdp-postcard__pick-name">{selected.name}</span>
+                <span className="sf-pdp-postcard__pick-meta">Сменить дизайн</span>
+              </span>
+            </button>
+          ) : (
+            <button
+              type="button"
+              className="sf-pdp-postcard__pick sf-pdp-postcard__pick--empty"
+              onClick={() =>
+                document
+                  .getElementById('pdp-postcards')
+                  ?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+              }
+            >
+              Выбрать дизайн открытки
+            </button>
+          )}
           <label className="sf-pdp-postcard__text">
             <span className="sr-only">Текст для открытки</span>
             <textarea
@@ -755,9 +827,16 @@ export function ProductPostcardShelf() {
   );
 }
 
-/** Mobile sticky bar: photo, price, name, «В корзину» — slides up when main CTA leaves view. */
+/** Sticky buy bar — slides up when main CTA leaves the viewport (mobile + desktop). */
 export function ProductStickyBar() {
-  const { product, priceLabel, originalLabel, blocked, hydrated, onAdd } = usePurchase();
+  const {
+    product,
+    cartAddTotalLabel,
+    originalLabel,
+    blocked,
+    hydrated,
+    onAdd,
+  } = usePurchase();
   const [visible, setVisible] = useState(false);
   const primary = sortProductMedia(product.media)[0];
   const thumb = primary ? (pickDerivativeUrl(primary, 200) ?? primary.url) : null;
@@ -790,7 +869,7 @@ export function ProductStickyBar() {
         ) : null}
         <span className="sf-pdp-sticky__text">
           <span className="sf-pdp-sticky__price" data-sale={originalLabel ? 'true' : 'false'}>
-            {priceLabel}
+            {cartAddTotalLabel}
           </span>
           <span className="sf-pdp-sticky__name">{product.name}</span>
         </span>
@@ -801,7 +880,7 @@ export function ProductStickyBar() {
           onClick={onAdd}
           className="sf-pdp-sticky__btn"
         >
-          В корзину
+          В корзину · {cartAddTotalLabel}
         </button>
       </div>
     </div>
@@ -865,7 +944,8 @@ function GiftIcon() {
   return (
     <svg
       viewBox="0 0 24 24"
-      className="sf-pdp-postcard__icon"
+      width="18"
+      height="18"
       fill="none"
       stroke="currentColor"
       strokeWidth="1.6"

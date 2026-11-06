@@ -10,29 +10,28 @@ export type ProductInfoSection = {
   content: ReactNode;
 };
 
-/** Expandable info rows (состав / доставка / оплата) — same on mobile and desktop. */
+/** Exclusive accordion: one section open (composition open by default). */
 export function ProductInfoTabs({ sections }: { sections: ProductInfoSection[] }) {
-  const [open, setOpen] = useState<Set<string>>(() => new Set());
+  const [openId, setOpenId] = useState<string | null>(() => sections[0]?.id ?? null);
 
   if (sections.length === 0) return null;
 
   function toggle(id: string) {
-    setOpen((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
+    setOpenId((prev) => (prev === id ? null : id));
   }
 
   return (
     <section className="sf-pdp-card sf-pdp-acc" aria-label="О букете">
       {sections.map((section) => {
-        const isOpen = open.has(section.id);
+        const isOpen = openId === section.id;
         const panelId = `pdp-acc-panel-${section.id}`;
         const buttonId = `pdp-acc-btn-${section.id}`;
         return (
-          <div key={section.id} className="sf-pdp-acc__item">
+          <div
+            key={section.id}
+            className="sf-pdp-acc__item"
+            data-open={isOpen ? 'true' : 'false'}
+          >
             <button
               type="button"
               id={buttonId}
@@ -43,7 +42,15 @@ export function ProductInfoTabs({ sections }: { sections: ProductInfoSection[] }
             >
               <span className="sf-pdp-acc__label">{section.label}</span>
               <span className="sf-pdp-acc__mark" aria-hidden data-open={isOpen ? 'true' : 'false'}>
-                {isOpen ? '−' : '+'}
+                <svg viewBox="0 0 16 16" width="14" height="14" fill="none" aria-hidden>
+                  <path
+                    d="M4 6.2 8 10.2 12 6.2"
+                    stroke="currentColor"
+                    strokeWidth="1.7"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                </svg>
               </span>
             </button>
             <div

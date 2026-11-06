@@ -19,8 +19,8 @@ export function ProductFamilySwitcher({ family, currentSlug }: Props) {
   if (members.length < 2) return null;
 
   return (
-    <section className="mt-4" aria-label="Другие варианты">
-      <p className="sf-label mb-2">Другие варианты</p>
+    <div className="sf-pdp-buy__block" aria-label="Другие варианты">
+      <p className="sf-pdp-buy__label">Другие варианты</p>
       <div className="sf-pdp-family">
         {members.map((member) => {
           const isCurrent = member.isCurrent ?? member.slug === currentSlug;
@@ -54,6 +54,6 @@ export function ProductFamilySwitcher({ family, currentSlug }: Props) {
           );
         })}
       </div>
-    </section>
+    </div>
   );
 }
