@@ -1,4 +1,5 @@
 import {
+  confirmedQuoteMatches,
   validateCartLines,
   type VariantPriceSource,
 } from './cart-validation';
@@ -365,5 +366,107 @@ describe('validateCartLines', () => {
     expect(result.ok).toBe(true);
     expect(result.items[0]?.productErpSku).toBe('BQ-100');
     expect(result.items[0]?.optionsSnapshot[0]?.erpSku).toBe('WRAP-01');
+  });
+});
+
+describe('confirmedQuoteMatches', () => {
+  const lines = [{ productId: 'p1', variantId: 'v1', quantity: 2 }];
+  const pricedItems = [
+    {
+      productId: 'p1',
+      variantId: 'v1',
+      quantity: 2,
+      unitPriceMinor: '15900',
+      optionsTotalMinor: '0',
+      lineTotalMinor: '31800',
+      optionsSnapshot: [] as Array<{ valueId: string }>,
+    },
+  ];
+
+  it('accepts matching buyer confirmation', () => {
+    expect(
+      confirmedQuoteMatches({
+        confirmed: {
+          fulfillmentType: 'DELIVERY',
+          items: [
+            {
+              productId: 'p1',
+              variantId: 'v1',
+              quantity: 2,
+              unitPriceMinor: '15900',
+              optionsTotalMinor: '0',
+              lineTotalMinor: '31800',
+            },
+          ],
+          subtotalMinor: '31800',
+          deliveryFeeMinor: '500',
+          totalMinor: '32300',
+        },
+        lines,
+        fulfillmentType: 'DELIVERY',
+        pricedItems,
+        subtotalMinor: 31800n,
+        deliveryFeeMinor: 500n,
+        totalMinor: 32300n,
+      }),
+    ).toBe(true);
+  });
+
+  it('rejects drifted unit price', () => {
+    expect(
+      confirmedQuoteMatches({
+        confirmed: {
+          fulfillmentType: 'DELIVERY',
+          items: [
+            {
+              productId: 'p1',
+              variantId: 'v1',
+              quantity: 2,
+              unitPriceMinor: '14900',
+              optionsTotalMinor: '0',
+              lineTotalMinor: '29800',
+            },
+          ],
+          subtotalMinor: '29800',
+          deliveryFeeMinor: '500',
+          totalMinor: '30300',
+        },
+        lines,
+        fulfillmentType: 'DELIVERY',
+        pricedItems,
+        subtotalMinor: 31800n,
+        deliveryFeeMinor: 500n,
+        totalMinor: 32300n,
+      }),
+    ).toBe(false);
+  });
+
+  it('rejects delivery fee change on pickup switch', () => {
+    expect(
+      confirmedQuoteMatches({
+        confirmed: {
+          fulfillmentType: 'DELIVERY',
+          items: [
+            {
+              productId: 'p1',
+              variantId: 'v1',
+              quantity: 2,
+              unitPriceMinor: '15900',
+              optionsTotalMinor: '0',
+              lineTotalMinor: '31800',
+            },
+          ],
+          subtotalMinor: '31800',
+          deliveryFeeMinor: '500',
+          totalMinor: '32300',
+        },
+        lines,
+        fulfillmentType: 'PICKUP',
+        pricedItems,
+        subtotalMinor: 31800n,
+        deliveryFeeMinor: 0n,
+        totalMinor: 31800n,
+      }),
+    ).toBe(false);
   });
 });

@@ -8,10 +8,15 @@ import type {
 import type { OutboxEvent, Prisma } from '@bouquet-one/database';
 import { PrismaService } from '../database/prisma.service';
 import { maskPhoneE164 } from '../orders/phone.util';
-import { shouldMarkFailed } from './backoff';
+import { computeNextAttemptAt, shouldMarkFailed } from './backoff';
 import { IntegrationAttemptRepository } from './attempt.repository';
 import { IntegrationConfigService } from './config';
 import { DeliveryClient } from './delivery.client';
+import {
+  markDeliveredOwned,
+  markFailedOwned,
+  markRetryOwned,
+} from './erp-finalize';
 import { OutboxRepository } from './outbox.repository';
 import { formatTelegramNotifyText } from './telegram-format';
 import { TelegramClient } from './telegram.client';
@@ -78,30 +83,40 @@ export class IntegrationWorkerService {
     const workerId = this.config.workerId;
     const orderId = event.aggregateId;
 
+    // SF-03: event may have waited behind siblings in the batch — renew or bail before I/O.
+    if (!(await this.outbox.renewLease(event.id, workerId, this.config.leaseSeconds))) {
+      this.logger.warn(`Lost lease before ERP work for outbox ${event.id}`);
+      return 'retry';
+    }
+
     // Integration hard-off: acknowledge without remote call, still notify Telegram.
     if (!this.config.isDeliveryActive()) {
-      await this.attempts.record({
-        channel: 'ERP',
+      const applied = await this.finalizeErpAndTelegram({
+        eventId: event.id,
+        workerId,
         orderId,
-        outboxEventId: event.id,
-        attemptNumber: event.attemptCount,
-        outcome: 'SKIPPED',
+        terminal: 'delivered',
         remoteReference: 'integration-disabled',
-        errorCode: 'DISABLED',
-        errorSanitized: 'Integration delivery disabled',
-        meta: { eventType: event.eventType },
-      });
-      await this.prisma.client.order.update({
-        where: { id: orderId },
-        data: { erpSyncStatus: 'DISABLED', erpRemoteReference: null },
-      });
-      const applied = await this.outbox.markDelivered(event.id, workerId, 'integration-disabled');
-      if (applied) {
-        await this.enqueueTelegramAfterErp(orderId, 'AFTER_ERP_FAILURE', {
+        orderPatch: { erpSyncStatus: 'DISABLED', erpRemoteReference: null },
+        telegramKind: 'AFTER_ERP_FAILURE',
+        telegramErp: {
           erpSyncStatus: 'DISABLED',
           erpRemoteReference: null,
           erpErrorSanitized: 'Интеграция ERP отключена',
           hadPriorErpFailure: false,
+        },
+      });
+      if (applied) {
+        await this.attempts.record({
+          channel: 'ERP',
+          orderId,
+          outboxEventId: event.id,
+          attemptNumber: event.attemptCount,
+          outcome: 'SKIPPED',
+          remoteReference: 'integration-disabled',
+          errorCode: 'DISABLED',
+          errorSanitized: 'Integration delivery disabled',
+          meta: { eventType: event.eventType },
         });
       }
       return applied ? 'delivered' : 'retry';
@@ -111,8 +126,39 @@ export class IntegrationWorkerService {
       where: { orderId, channel: 'ERP', outcome: 'FAILURE' },
     });
 
+    // HTTP outside DB transaction.
     const result = await this.delivery.deliver(event);
+
+    if (!(await this.outbox.renewLease(event.id, workerId, this.config.leaseSeconds))) {
+      this.logger.warn(`Lost lease after ERP HTTP for outbox ${event.id}`);
+      return 'retry';
+    }
+
     if (result.ok) {
+      const kind: TelegramNotifyKind =
+        priorFailures > 0 ? 'ERP_RECOVERED' : 'AFTER_ERP_SUCCESS';
+      const applied = await this.finalizeErpAndTelegram({
+        eventId: event.id,
+        workerId,
+        orderId,
+        terminal: 'delivered',
+        remoteReference: result.remoteReference,
+        orderPatch: {
+          erpSyncStatus: 'SYNCED',
+          erpRemoteReference: result.remoteReference.slice(0, 200),
+        },
+        telegramKind: kind,
+        telegramErp: {
+          erpSyncStatus: 'SYNCED',
+          erpRemoteReference: result.remoteReference,
+          erpErrorSanitized: null,
+          hadPriorErpFailure: priorFailures > 0,
+        },
+      });
+      if (!applied) {
+        this.logger.warn(`Stale lease — skipped ERP finalize for outbox ${event.id}`);
+        return 'retry';
+      }
       await this.attempts.record({
         channel: 'ERP',
         orderId,
@@ -122,31 +168,31 @@ export class IntegrationWorkerService {
         remoteReference: result.remoteReference,
         meta: { eventType: event.eventType },
       });
-      await this.prisma.client.order.update({
-        where: { id: orderId },
-        data: {
-          erpSyncStatus: 'SYNCED',
-          erpRemoteReference: result.remoteReference.slice(0, 200),
-        },
-      });
-      const applied = await this.outbox.markDelivered(event.id, workerId, result.remoteReference);
-      if (!applied) {
-        this.logger.warn(`Stale lease — skipped markDelivered for outbox ${event.id}`);
-        return 'retry';
-      }
-      const kind: TelegramNotifyKind =
-        priorFailures > 0 ? 'ERP_RECOVERED' : 'AFTER_ERP_SUCCESS';
-      await this.enqueueTelegramAfterErp(orderId, kind, {
-        erpSyncStatus: 'SYNCED',
-        erpRemoteReference: result.remoteReference,
-        erpErrorSanitized: null,
-        hadPriorErpFailure: priorFailures > 0,
-      });
       this.logger.log(`Delivered outbox ${event.id} → ${result.remoteReference}`);
       return 'delivered';
     }
 
     if (shouldMarkFailed(result.category, event.attemptCount, this.config.maxAttempts)) {
+      const applied = await this.finalizeErpAndTelegram({
+        eventId: event.id,
+        workerId,
+        orderId,
+        terminal: 'failed',
+        failureCategory: result.category,
+        failureMessage: result.message,
+        orderPatch: { erpSyncStatus: 'FAILED' },
+        telegramKind: 'AFTER_ERP_FAILURE',
+        telegramErp: {
+          erpSyncStatus: 'FAILED',
+          erpRemoteReference: null,
+          erpErrorSanitized: result.message,
+          hadPriorErpFailure: true,
+        },
+      });
+      if (!applied) {
+        this.logger.warn(`Stale lease — skipped markFailed for outbox ${event.id}`);
+        return 'retry';
+      }
       await this.attempts.record({
         channel: 'ERP',
         orderId,
@@ -157,39 +203,29 @@ export class IntegrationWorkerService {
         errorSanitized: result.message,
         meta: { eventType: event.eventType },
       });
-      await this.prisma.client.order.update({
-        where: { id: orderId },
-        data: { erpSyncStatus: 'FAILED' },
-      });
-      const applied = await this.outbox.markFailed(
-        event.id,
-        workerId,
-        result.category,
-        result.message,
-      );
-      if (!applied) {
-        this.logger.warn(`Stale lease — skipped markFailed for outbox ${event.id}`);
-        return 'retry';
-      }
-      await this.enqueueTelegramAfterErp(orderId, 'AFTER_ERP_FAILURE', {
-        erpSyncStatus: 'FAILED',
-        erpRemoteReference: null,
-        erpErrorSanitized: result.message,
-        hadPriorErpFailure: true,
-      });
       this.logger.warn(
         `Failed outbox ${event.id} [${result.category}] after ${event.attemptCount} attempts`,
       );
       return 'failed';
     }
 
-    const next = await this.outbox.scheduleRetryFromAttempt(
-      event.id,
-      workerId,
-      result.category,
-      result.message,
-      event.attemptCount,
-    );
+    const nextAttemptAt = computeNextAttemptAt(event.attemptCount);
+    const applied = await this.prisma.client.$transaction(async (tx) => {
+      const marked = await markRetryOwned(
+        tx,
+        event.id,
+        workerId,
+        result.category,
+        result.message,
+        nextAttemptAt,
+      );
+      if (!marked) return false;
+      await tx.order.update({
+        where: { id: orderId },
+        data: { erpSyncStatus: 'RETRYING' },
+      });
+      return true;
+    });
     await this.attempts.record({
       channel: 'ERP',
       orderId,
@@ -198,26 +234,69 @@ export class IntegrationWorkerService {
       outcome: 'FAILURE',
       errorCode: result.category,
       errorSanitized: result.message,
-      nextAttemptAt: next
-        ? (
-            await this.prisma.client.outboxEvent.findUnique({
-              where: { id: event.id },
-              select: { nextAttemptAt: true },
-            })
-          )?.nextAttemptAt
-        : null,
+      nextAttemptAt: applied ? nextAttemptAt : null,
       meta: { eventType: event.eventType },
     });
-    await this.prisma.client.order.update({
-      where: { id: orderId },
-      data: { erpSyncStatus: 'RETRYING' },
-    });
-    if (!next) {
+    if (!applied) {
       this.logger.warn(`Stale lease — skipped markRetry for outbox ${event.id}`);
       return 'retry';
     }
     this.logger.warn(`Retry outbox ${event.id} [${result.category}] attempt=${event.attemptCount}`);
     return 'retry';
+  }
+
+  /**
+   * SF-02: lease-gated ERP terminal + order mirror + Telegram enqueue in one TX.
+   * Returns false when lease was stolen (no order/outbox mutation).
+   */
+  private async finalizeErpAndTelegram(input: {
+    eventId: string;
+    workerId: string;
+    orderId: string;
+    terminal: 'delivered' | 'failed';
+    remoteReference?: string;
+    failureCategory?: Parameters<typeof markFailedOwned>[3];
+    failureMessage?: string;
+    orderPatch: { erpSyncStatus: string; erpRemoteReference?: string | null };
+    telegramKind: TelegramNotifyKind;
+    telegramErp: {
+      erpSyncStatus: string;
+      erpRemoteReference: string | null;
+      erpErrorSanitized: string | null;
+      hadPriorErpFailure: boolean;
+    };
+  }): Promise<boolean> {
+    return this.prisma.client.$transaction(async (tx) => {
+      const marked =
+        input.terminal === 'delivered'
+          ? await markDeliveredOwned(
+              tx,
+              input.eventId,
+              input.workerId,
+              input.remoteReference ?? 'ok',
+            )
+          : await markFailedOwned(
+              tx,
+              input.eventId,
+              input.workerId,
+              input.failureCategory!,
+              input.failureMessage ?? 'failed',
+            );
+      if (!marked) return false;
+
+      await tx.order.update({
+        where: { id: input.orderId },
+        data: {
+          erpSyncStatus: input.orderPatch.erpSyncStatus as 'SYNCED' | 'FAILED' | 'DISABLED',
+          ...(input.orderPatch.erpRemoteReference !== undefined
+            ? { erpRemoteReference: input.orderPatch.erpRemoteReference }
+            : {}),
+        },
+      });
+
+      await this.enqueueTelegramAfterErpTx(tx, input.orderId, input.telegramKind, input.telegramErp);
+      return true;
+    });
   }
 
   private async processTelegram(
@@ -228,79 +307,119 @@ export class IntegrationWorkerService {
     const payload = event.payload as unknown as TelegramNotifyPayloadV1;
     const text = formatTelegramNotifyText(payload);
 
+    if (!(await this.outbox.renewLease(event.id, workerId, this.config.leaseSeconds))) {
+      this.logger.warn(`Lost lease before Telegram work for outbox ${event.id}`);
+      return 'retry';
+    }
+
+    // Ambiguous outcome: if HTTP succeeds and process dies before markDelivered,
+    // manual retry / reclaim may send a duplicate Telegram message (at-least-once).
     const result = await this.telegram.sendMessage(text);
+
+    if (!(await this.outbox.renewLease(event.id, workerId, this.config.leaseSeconds))) {
+      this.logger.warn(`Lost lease after Telegram HTTP for outbox ${event.id}`);
+      return 'retry';
+    }
+
     if (result.ok) {
-      await this.attempts.record({
-        channel: 'TELEGRAM',
-        orderId,
-        outboxEventId: event.id,
-        attemptNumber: event.attemptCount,
-        outcome: 'SUCCESS',
-        remoteReference: result.messageId,
-        meta: { kind: payload.kind },
+      const applied = await this.prisma.client.$transaction(async (tx) => {
+        const marked = await markDeliveredOwned(tx, event.id, workerId, result.messageId);
+        if (!marked) return false;
+        await tx.order.update({
+          where: { id: orderId },
+          data: { telegramNotifyStatus: 'SENT' },
+        });
+        return true;
       });
-      await this.prisma.client.order.update({
-        where: { id: orderId },
-        data: { telegramNotifyStatus: 'SENT' },
-      });
-      const applied = await this.outbox.markDelivered(event.id, workerId, result.messageId);
+      if (applied) {
+        await this.attempts.record({
+          channel: 'TELEGRAM',
+          orderId,
+          outboxEventId: event.id,
+          attemptNumber: event.attemptCount,
+          outcome: 'SUCCESS',
+          remoteReference: result.messageId,
+          meta: { kind: payload.kind },
+        });
+      }
       return applied ? 'delivered' : 'retry';
     }
 
     if (result.skipped) {
-      await this.attempts.record({
-        channel: 'TELEGRAM',
-        orderId,
-        outboxEventId: event.id,
-        attemptNumber: event.attemptCount,
-        outcome: 'SKIPPED',
-        errorCode: result.category,
-        errorSanitized: result.message,
-        meta: { kind: payload.kind },
+      const applied = await this.prisma.client.$transaction(async (tx) => {
+        const marked = await markDeliveredOwned(tx, event.id, workerId, 'telegram-skipped');
+        if (!marked) return false;
+        await tx.order.update({
+          where: { id: orderId },
+          data: {
+            telegramNotifyStatus: this.telegram.configured ? 'SKIPPED' : 'DISABLED',
+          },
+        });
+        return true;
       });
-      await this.prisma.client.order.update({
-        where: { id: orderId },
-        data: { telegramNotifyStatus: this.telegram.configured ? 'SKIPPED' : 'DISABLED' },
-      });
-      const applied = await this.outbox.markDelivered(
-        event.id,
-        workerId,
-        'telegram-skipped',
-      );
+      if (applied) {
+        await this.attempts.record({
+          channel: 'TELEGRAM',
+          orderId,
+          outboxEventId: event.id,
+          attemptNumber: event.attemptCount,
+          outcome: 'SKIPPED',
+          errorCode: result.category,
+          errorSanitized: result.message,
+          meta: { kind: payload.kind },
+        });
+      }
       return applied ? 'delivered' : 'retry';
     }
 
     if (shouldMarkFailed(result.category, event.attemptCount, this.config.maxAttempts)) {
-      await this.attempts.record({
-        channel: 'TELEGRAM',
-        orderId,
-        outboxEventId: event.id,
-        attemptNumber: event.attemptCount,
-        outcome: 'FAILURE',
-        errorCode: result.category,
-        errorSanitized: result.message,
-        meta: { kind: payload.kind },
+      const applied = await this.prisma.client.$transaction(async (tx) => {
+        const marked = await markFailedOwned(
+          tx,
+          event.id,
+          workerId,
+          result.category,
+          result.message,
+        );
+        if (!marked) return false;
+        await tx.order.update({
+          where: { id: orderId },
+          data: { telegramNotifyStatus: 'FAILED' },
+        });
+        return true;
       });
-      await this.prisma.client.order.update({
-        where: { id: orderId },
-        data: { telegramNotifyStatus: 'FAILED' },
-      });
-      const applied = await this.outbox.markFailed(
+      if (applied) {
+        await this.attempts.record({
+          channel: 'TELEGRAM',
+          orderId,
+          outboxEventId: event.id,
+          attemptNumber: event.attemptCount,
+          outcome: 'FAILURE',
+          errorCode: result.category,
+          errorSanitized: result.message,
+          meta: { kind: payload.kind },
+        });
+      }
+      return applied ? 'failed' : 'retry';
+    }
+
+    const nextAttemptAt = computeNextAttemptAt(event.attemptCount);
+    const applied = await this.prisma.client.$transaction(async (tx) => {
+      const marked = await markRetryOwned(
+        tx,
         event.id,
         workerId,
         result.category,
         result.message,
+        nextAttemptAt,
       );
-      return applied ? 'failed' : 'retry';
-    }
-
-    const applied = await this.outbox.scheduleRetryFromAttempt(
-      event.id,
-      workerId,
-      result.category,
-      result.message,
-      event.attemptCount,
-    );
+      if (!marked) return false;
+      await tx.order.update({
+        where: { id: orderId },
+        data: { telegramNotifyStatus: 'RETRYING' },
+      });
+      return true;
+    });
     await this.attempts.record({
       channel: 'TELEGRAM',
       orderId,
@@ -311,18 +430,16 @@ export class IntegrationWorkerService {
       errorSanitized: result.message,
       meta: { kind: payload.kind },
     });
-    await this.prisma.client.order.update({
-      where: { id: orderId },
-      data: { telegramNotifyStatus: 'RETRYING' },
-    });
     return applied ? 'retry' : 'retry';
   }
 
   /**
    * Enqueue at most one pending/retry telegram for the same order+kind.
    * Successful history is preserved; new kinds (e.g. ERP_RECOVERED) create a new event.
+   * Must run in the same TX as ERP terminalization (SF-02).
    */
-  private async enqueueTelegramAfterErp(
+  private async enqueueTelegramAfterErpTx(
+    tx: Prisma.TransactionClient,
     orderId: string,
     kind: TelegramNotifyKind,
     erp: {
@@ -332,13 +449,12 @@ export class IntegrationWorkerService {
       hadPriorErpFailure: boolean;
     },
   ): Promise<void> {
-    const order = await this.prisma.client.order.findUnique({
+    const order = await tx.order.findUnique({
       where: { id: orderId },
       include: { items: { orderBy: { sortOrder: 'asc' } } },
     });
     if (!order) return;
 
-    // Prefer cash-specific kind when first success and cash.
     let notifyKind = kind;
     if (
       kind === 'AFTER_ERP_SUCCESS' &&
@@ -348,21 +464,17 @@ export class IntegrationWorkerService {
       notifyKind = 'CASH_ON_DELIVERY';
     }
 
-    const existing = await this.prisma.client.outboxEvent.findFirst({
+    const existing = await tx.outboxEvent.findFirst({
       where: {
         aggregateId: orderId,
         eventType: TG_EVENT,
         status: { in: ['PENDING', 'PROCESSING', 'RETRY'] },
       },
     });
-    if (existing) {
-      // Avoid duplicate in-flight notifies; recovered after fail still allowed if previous delivered.
-      return;
-    }
+    if (existing) return;
 
-    // Dedupe identical already-delivered kind (except ERP_RECOVERED which is intentional re-notify).
     if (notifyKind !== 'ERP_RECOVERED') {
-      const deliveredSame = await this.prisma.client.outboxEvent.findFirst({
+      const deliveredSame = await tx.outboxEvent.findFirst({
         where: {
           aggregateId: orderId,
           eventType: TG_EVENT,
@@ -417,7 +529,7 @@ export class IntegrationWorkerService {
       },
     };
 
-    await this.prisma.client.outboxEvent.create({
+    await tx.outboxEvent.create({
       data: {
         id: eventId,
         eventType: TG_EVENT,
@@ -431,7 +543,7 @@ export class IntegrationWorkerService {
     });
 
     if (order.telegramNotifyStatus === 'PENDING' || order.telegramNotifyStatus === 'FAILED') {
-      await this.prisma.client.order.update({
+      await tx.order.update({
         where: { id: orderId },
         data: { telegramNotifyStatus: 'PENDING' },
       });

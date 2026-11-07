@@ -2,6 +2,8 @@
 
 Receivers **must** be idempotent on `eventId` (UUID). Delivery is **at-least-once**.
 
+SiteFlower keeps a stable outbox row id (= `payload.eventId`) across automatic and manual ERP retries — the payload is not rewritten on re-queue. Telegram notify is also at-least-once: if the HTTP send succeeds and the worker dies before marking the outbox `DELIVERED`, a later retry may post a duplicate chat message (local leases cannot prove single delivery after an ambiguous HTTP outcome).
+
 ## Endpoint
 
 - Method: `POST`

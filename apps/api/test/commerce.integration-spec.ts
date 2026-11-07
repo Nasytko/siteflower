@@ -230,10 +230,11 @@ describe('Commerce orders (integration)', () => {
   });
 
   function orderPayload(overrides: Record<string, unknown> = {}) {
-    return {
+    const baseItems = [{ productId, variantId, quantity: 1 }];
+    const merged = {
       idempotencyKey: `idemp-${randomBytes(8).toString('hex')}`,
-      items: [{ productId, variantId, quantity: 1 }],
-      fulfillmentType: 'DELIVERY',
+      items: baseItems,
+      fulfillmentType: 'DELIVERY' as const,
       purchaserName: 'Павел Тест',
       purchaserPhone: '+375291111111',
       recipientName: 'Анна Получатель',
@@ -248,6 +249,33 @@ describe('Commerce orders (integration)', () => {
       customerComment: 'Позвонить за 10 минут',
       ...overrides,
     };
+    const items =
+      (merged.items as Array<{ productId: string; variantId: string; quantity: number }>) ??
+      baseItems;
+    const fulfillmentType = (merged.fulfillmentType as 'DELIVERY' | 'PICKUP') ?? 'DELIVERY';
+    // Test catalog variant is 14900; fulfillment_settings.delivery_fee_minor = 0.
+    if (!('confirmedQuote' in overrides)) {
+      const unitPriceMinor = '14900';
+      const quoteItems = items.map((line) => ({
+        productId: line.productId,
+        variantId: line.variantId,
+        quantity: line.quantity,
+        unitPriceMinor,
+        optionsTotalMinor: '0',
+        lineTotalMinor: (BigInt(unitPriceMinor) * BigInt(line.quantity)).toString(),
+      }));
+      const subtotalMinor = quoteItems
+        .reduce((sum, line) => sum + BigInt(line.lineTotalMinor), 0n)
+        .toString();
+      merged.confirmedQuote = {
+        fulfillmentType,
+        items: quoteItems,
+        subtotalMinor,
+        deliveryFeeMinor: '0',
+        totalMinor: subtotalMinor,
+      };
+    }
+    return merged;
   }
 
   it('validates cart with server prices and price-change notice', async () => {
@@ -256,6 +284,7 @@ describe('Commerce orders (integration)', () => {
       .send({
         items: [{ productId, variantId, quantity: 2 }],
         priorUnitPrices: [{ variantId, unitPriceMinor: '10000' }],
+        fulfillmentType: 'DELIVERY',
       })
       .expect(201);
 
@@ -263,6 +292,95 @@ describe('Commerce orders (integration)', () => {
     expect(res.body.items[0].unitPriceMinor).toBe('14900');
     expect(res.body.subtotalMinor).toBe('29800');
     expect(res.body.issues.some((i: { code: string }) => i.code === 'PRICE_CHANGED')).toBe(true);
+  });
+
+  it('rejects create when confirmed quote drifts and leaves no order/outbox', async () => {
+    const key = `idemp-quote-${randomBytes(6).toString('hex')}`;
+    const body = orderPayload({
+      idempotencyKey: key,
+      confirmedQuote: {
+        fulfillmentType: 'DELIVERY',
+        items: [
+          {
+            productId,
+            variantId,
+            quantity: 1,
+            unitPriceMinor: '10000',
+            optionsTotalMinor: '0',
+            lineTotalMinor: '10000',
+          },
+        ],
+        subtotalMinor: '10000',
+        deliveryFeeMinor: '0',
+        totalMinor: '10000',
+      },
+    });
+    const res = await request(base).post('/api/v1/orders').send(body).expect(409);
+    expect(res.body.error).toBe('QuoteMismatch');
+    expect(res.body.current.totalMinor).toBe('14900');
+    expect(res.body.current.items[0].unitPriceMinor).toBe('14900');
+
+    const orders = await pool.query(`SELECT COUNT(*)::int AS c FROM orders WHERE idempotency_key = $1`, [
+      key,
+    ]);
+    expect(orders.rows[0].c).toBe(0);
+    const outbox = await pool.query(
+      `SELECT COUNT(*)::int AS c FROM outbox_events WHERE payload::text LIKE $1`,
+      [`%${key}%`],
+    );
+    expect(outbox.rows[0].c).toBe(0);
+
+    // Reconfirm with fresh quote — same idempotency key succeeds.
+    const ok = await request(base)
+      .post('/api/v1/orders')
+      .send(
+        orderPayload({
+          idempotencyKey: key,
+          confirmedQuote: {
+            fulfillmentType: 'DELIVERY',
+            items: [
+              {
+                productId,
+                variantId,
+                quantity: 1,
+                unitPriceMinor: '14900',
+                optionsTotalMinor: '0',
+                lineTotalMinor: '14900',
+              },
+            ],
+            subtotalMinor: '14900',
+            deliveryFeeMinor: '0',
+            totalMinor: '14900',
+          },
+        }),
+      )
+      .expect(201);
+    expect(ok.body.totalMinor).toBe('14900');
+  });
+
+  it('zeros delivery fee on validate for pickup', async () => {
+    await pool.query(`UPDATE fulfillment_settings SET delivery_fee_minor = 700 WHERE id = 1`);
+    const delivery = await request(base)
+      .post('/api/v1/checkout/validate')
+      .send({
+        items: [{ productId, variantId, quantity: 1 }],
+        fulfillmentType: 'DELIVERY',
+      })
+      .expect(201);
+    expect(delivery.body.deliveryFeeMinor).toBe('700');
+    expect(delivery.body.totalMinor).toBe('15600');
+
+    const pickup = await request(base)
+      .post('/api/v1/checkout/validate')
+      .send({
+        items: [{ productId, variantId, quantity: 1 }],
+        fulfillmentType: 'PICKUP',
+      })
+      .expect(201);
+    expect(pickup.body.deliveryFeeMinor).toBe('0');
+    expect(pickup.body.totalMinor).toBe('14900');
+
+    await pool.query(`UPDATE fulfillment_settings SET delivery_fee_minor = 0 WHERE id = 1`);
   });
 
   it('creates order with snapshots, tracking token, outbox, and history', async () => {

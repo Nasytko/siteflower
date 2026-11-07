@@ -115,13 +115,16 @@ export class AdminIntegrationController {
     @CurrentAdmin() admin: AuthenticatedAdmin,
     @Req() req: Request,
   ) {
-    const event = await this.outbox.manualRetry(id);
-    if (!event) throw new NotFoundException('Outbox event not found');
-    if (event.status === 'DELIVERED') {
-      throw new BadRequestException('Already delivered');
-    }
-    if (event.status === 'PROCESSING') {
-      throw new BadRequestException('Event is currently processing');
+    const result = await this.outbox.manualRetry(id);
+    if (!result.event) throw new NotFoundException('Outbox event not found');
+    if (!result.applied) {
+      if (result.event.status === 'DELIVERED') {
+        throw new BadRequestException('Already delivered');
+      }
+      if (result.event.status === 'PROCESSING') {
+        throw new BadRequestException('Event is currently processing');
+      }
+      throw new BadRequestException('Retry was not applied');
     }
     await this.audit.record({
       actorAdminUserId: admin.id,
@@ -130,7 +133,7 @@ export class AdminIntegrationController {
       entityId: id,
       requestId: getRequestId(req),
     });
-    return { ok: true, id, status: event.status };
+    return { ok: true, id, status: result.event.status };
   }
 
   @RequirePermissions('INTEGRATION_OPERATE')

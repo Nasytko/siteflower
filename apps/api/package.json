@@ -23,6 +23,7 @@
     "media:check": "tsx src/cli/media-check.ts",
     "media:cleanup": "tsx src/cli/media-cleanup.ts",
     "media:repair": "tsx src/cli/media-repair.ts",
+    "integration:recover-telegram": "tsx src/cli/integration-recover-telegram.ts",
     "media:migrate-local-to-s3": "tsx src/cli/media-migrate-local-to-s3.ts",
     "worker": "node dist/worker-main.js",
     "worker:dev": "tsx src/worker-main.ts",

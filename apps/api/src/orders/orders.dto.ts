@@ -37,6 +37,12 @@ export class CartLineDto {
   @Min(1)
   @Max(20)
   quantity!: number;
+
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(20)
+  @IsUUID('4', { each: true })
+  optionValueIds?: string[];
 }
 
 export class PriorUnitPriceDto {
@@ -46,6 +52,62 @@ export class PriorUnitPriceDto {
   @IsString()
   @Matches(/^\d+$/)
   unitPriceMinor!: string;
+}
+
+export class ConfirmedQuoteLineDto {
+  @IsUUID()
+  productId!: string;
+
+  @IsUUID()
+  variantId!: string;
+
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(20)
+  quantity!: number;
+
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(20)
+  @IsUUID('4', { each: true })
+  optionValueIds?: string[];
+
+  @IsString()
+  @Matches(/^\d+$/)
+  unitPriceMinor!: string;
+
+  @IsString()
+  @Matches(/^\d+$/)
+  optionsTotalMinor!: string;
+
+  @IsString()
+  @Matches(/^\d+$/)
+  lineTotalMinor!: string;
+}
+
+export class ConfirmedQuoteDto {
+  @IsIn(FULFILLMENT_TYPES as unknown as string[])
+  fulfillmentType!: (typeof FULFILLMENT_TYPES)[number];
+
+  @IsArray()
+  @ArrayMinSize(1)
+  @ArrayMaxSize(30)
+  @ValidateNested({ each: true })
+  @Type(() => ConfirmedQuoteLineDto)
+  items!: ConfirmedQuoteLineDto[];
+
+  @IsString()
+  @Matches(/^\d+$/)
+  subtotalMinor!: string;
+
+  @IsString()
+  @Matches(/^\d+$/)
+  deliveryFeeMinor!: string;
+
+  @IsString()
+  @Matches(/^\d+$/)
+  totalMinor!: string;
 }
 
 export class CheckoutValidateBodyDto {
@@ -61,6 +123,10 @@ export class CheckoutValidateBodyDto {
   @ValidateNested({ each: true })
   @Type(() => PriorUnitPriceDto)
   priorUnitPrices?: PriorUnitPriceDto[];
+
+  @IsOptional()
+  @IsIn(FULFILLMENT_TYPES as unknown as string[])
+  fulfillmentType?: (typeof FULFILLMENT_TYPES)[number];
 }
 
 export class CreateOrderBodyDto {
@@ -144,6 +210,11 @@ export class CreateOrderBodyDto {
   @IsOptional()
   @IsIn(PAYMENT_METHODS as unknown as string[])
   paymentMethod?: (typeof PAYMENT_METHODS)[number];
+
+  /** Buyer-confirmed commercial terms; compared to fresh server pricing inside the create TX. */
+  @ValidateNested()
+  @Type(() => ConfirmedQuoteDto)
+  confirmedQuote!: ConfirmedQuoteDto;
 }
 
 export class TransitionOrderBodyDto {

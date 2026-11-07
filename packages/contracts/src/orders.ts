@@ -271,6 +271,11 @@ export type CheckoutValidateRequest = {
   items: CheckoutCartLineInput[];
   /** Optional prior display prices for PRICE_CHANGED messaging. */
   priorUnitPrices?: Array<{ variantId: string; unitPriceMinor: string }>;
+  /**
+   * When set, deliveryFeeMinor/totalMinor reflect this fulfillment mode
+   * (PICKUP → fee 0). Omit only for legacy clients.
+   */
+  fulfillmentType?: FulfillmentType;
 };
 
 export type CheckoutValidateResponse = {
@@ -281,6 +286,37 @@ export type CheckoutValidateResponse = {
   subtotalMinor: string;
   deliveryFeeMinor: string;
   totalMinor: string;
+};
+
+/**
+ * Commercial terms the customer confirmed in the UI before submit.
+ * Server re-prices authoritatively and rejects create on mismatch (409 QuoteMismatch).
+ */
+export type OrderConfirmedQuoteLine = {
+  productId: string;
+  variantId: string;
+  quantity: number;
+  optionValueIds?: string[];
+  /** Variant unit after promo, excluding options. */
+  unitPriceMinor: string;
+  optionsTotalMinor: string;
+  lineTotalMinor: string;
+};
+
+export type OrderConfirmedQuote = {
+  fulfillmentType: FulfillmentType;
+  items: OrderConfirmedQuoteLine[];
+  subtotalMinor: string;
+  deliveryFeeMinor: string;
+  totalMinor: string;
+};
+
+/** Structured 409 body when confirmed quote ≠ fresh server pricing. */
+export type OrderQuoteMismatchError = {
+  statusCode: 409;
+  error: 'QuoteMismatch';
+  message: string;
+  current: CheckoutValidateResponse;
 };
 
 export type CreateOrderRequest = {
@@ -305,6 +341,8 @@ export type CreateOrderRequest = {
    * CARD_ONLINE reserved — rejecting until a provider is configured.
    */
   paymentMethod?: PaymentMethod;
+  /** Required: totals/lines the buyer confirmed; must match fresh server quote. */
+  confirmedQuote: OrderConfirmedQuote;
 };
 
 export type OrderItemPublicDto = {

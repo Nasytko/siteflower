@@ -7,6 +7,8 @@ import type {
   CheckoutValidateIssueDto,
   CheckoutValidatedLineDto,
   CommercialAvailability,
+  FulfillmentType,
+  OrderConfirmedQuote,
   PricedOptionSelection,
   PromotionType,
 } from '@bouquet-one/contracts';
@@ -260,4 +262,84 @@ export function validateCartLines(input: {
     issues,
     subtotalMinor: subtotal,
   };
+}
+
+function quoteLineKey(line: {
+  productId: string;
+  variantId: string;
+  optionValueIds?: string[];
+}): string {
+  const opts = [...(line.optionValueIds ?? [])].sort().join(',');
+  return `${line.productId}:${line.variantId}:${opts}`;
+}
+
+/**
+ * True when the buyer-confirmed quote matches the freshly priced cart + delivery fee.
+ * Composition (product/variant/qty/options) must also match `lines`.
+ */
+export function confirmedQuoteMatches(input: {
+  confirmed: OrderConfirmedQuote;
+  lines: CheckoutCartLineInput[];
+  fulfillmentType: FulfillmentType;
+  pricedItems: Array<{
+    productId: string;
+    variantId: string;
+    quantity: number;
+    unitPriceMinor: string;
+    optionsTotalMinor: string;
+    lineTotalMinor: string;
+    optionsSnapshot: Array<{ valueId: string }>;
+  }>;
+  subtotalMinor: bigint;
+  deliveryFeeMinor: bigint;
+  totalMinor: bigint;
+}): boolean {
+  const { confirmed } = input;
+  if (confirmed.fulfillmentType !== input.fulfillmentType) return false;
+  if (confirmed.subtotalMinor !== input.subtotalMinor.toString()) return false;
+  if (confirmed.deliveryFeeMinor !== input.deliveryFeeMinor.toString()) return false;
+  if (confirmed.totalMinor !== input.totalMinor.toString()) return false;
+
+  const requestKeys = new Map<string, number>();
+  for (const line of input.lines) {
+    const key = quoteLineKey(line);
+    requestKeys.set(key, (requestKeys.get(key) ?? 0) + line.quantity);
+  }
+
+  const confirmedKeys = new Map<string, OrderConfirmedQuote['items'][number]>();
+  for (const line of confirmed.items) {
+    const key = quoteLineKey(line);
+    if (confirmedKeys.has(key)) return false;
+    confirmedKeys.set(key, line);
+  }
+
+  if (requestKeys.size !== confirmedKeys.size) return false;
+  for (const [key, qty] of requestKeys) {
+    const c = confirmedKeys.get(key);
+    if (!c || c.quantity !== qty) return false;
+  }
+
+  if (input.pricedItems.length !== confirmed.items.length) return false;
+
+  const pricedByKey = new Map(
+    input.pricedItems.map((item) => [
+      quoteLineKey({
+        productId: item.productId,
+        variantId: item.variantId,
+        optionValueIds: item.optionsSnapshot.map((o) => o.valueId),
+      }),
+      item,
+    ]),
+  );
+
+  for (const [key, cLine] of confirmedKeys) {
+    const priced = pricedByKey.get(key);
+    if (!priced) return false;
+    if (priced.quantity !== cLine.quantity) return false;
+    if (priced.unitPriceMinor !== cLine.unitPriceMinor) return false;
+    if (priced.optionsTotalMinor !== cLine.optionsTotalMinor) return false;
+    if (priced.lineTotalMinor !== cLine.lineTotalMinor) return false;
+  }
+
+  return true;
 }

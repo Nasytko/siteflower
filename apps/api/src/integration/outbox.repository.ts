@@ -311,6 +311,47 @@ export class OutboxRepository {
     return this.markRetry(id, workerId, category, error, next, now);
   }
 
+  /**
+   * Extends lease only while this worker still owns PROCESSING.
+   * Call before long external I/O when the event waited in a batch.
+   */
+  async renewLease(
+    id: string,
+    workerId: string,
+    leaseSeconds: number,
+    now: Date = new Date(),
+  ): Promise<boolean> {
+    const leaseExpiresAt = new Date(now.getTime() + leaseSeconds * 1000);
+    const result = await this.prisma.client.outboxEvent.updateMany({
+      where: {
+        id,
+        status: 'PROCESSING',
+        leaseOwner: workerId,
+        leaseExpiresAt: { gt: now },
+      },
+      data: { leaseExpiresAt },
+    });
+    return result.count === 1;
+  }
+
+  /** True when worker still owns a non-expired PROCESSING lease. */
+  async hasActiveLease(
+    id: string,
+    workerId: string,
+    now: Date = new Date(),
+  ): Promise<boolean> {
+    const row = await this.prisma.client.outboxEvent.findFirst({
+      where: {
+        id,
+        status: 'PROCESSING',
+        leaseOwner: workerId,
+        leaseExpiresAt: { gt: now },
+      },
+      select: { id: true },
+    });
+    return Boolean(row);
+  }
+
   async listAdmin(filters: OutboxListFilters): Promise<{
     items: OutboxEventAdminListItem[];
     total: number;
@@ -350,14 +391,39 @@ export class OutboxRepository {
     };
   }
 
-  async manualRetry(id: string, now: Date = new Date()): Promise<OutboxEvent | null> {
-    const event = await this.prisma.client.outboxEvent.findUnique({ where: { id } });
-    if (!event) return null;
-    if (event.status === 'DELIVERED' || event.status === 'PROCESSING') {
-      return event;
+  /**
+   * Conditional re-queue. Returns whether the status transition was applied.
+   * - Default: FAILED | RETRY | PENDING → PENDING (no-op identity for PENDING).
+   * - allowDelivered: also DELIVERED → PENDING (Telegram re-notify).
+   * PROCESSING is never stolen.
+   */
+  async manualRetry(
+    id: string,
+    options?: { allowDelivered?: boolean; now?: Date },
+  ): Promise<{ applied: boolean; event: OutboxEvent | null }> {
+    const now = options?.now ?? new Date();
+    const existing = await this.prisma.client.outboxEvent.findUnique({ where: { id } });
+    if (!existing) return { applied: false, event: null };
+    if (existing.status === 'PROCESSING') {
+      return { applied: false, event: existing };
     }
-    return this.prisma.client.outboxEvent.update({
-      where: { id },
+    if (existing.status === 'DELIVERED' && !options?.allowDelivered) {
+      return { applied: false, event: existing };
+    }
+    if (existing.status === 'PENDING' && !options?.allowDelivered) {
+      // Already queued — treat as successful no-op transition for callers.
+      return { applied: true, event: existing };
+    }
+
+    const fromStatuses: OutboxDeliveryStatus[] = options?.allowDelivered
+      ? ['FAILED', 'RETRY', 'PENDING', 'DELIVERED']
+      : ['FAILED', 'RETRY', 'PENDING'];
+
+    const result = await this.prisma.client.outboxEvent.updateMany({
+      where: {
+        id,
+        status: { in: fromStatuses },
+      },
       data: {
         status: 'PENDING',
         availableAt: now,
@@ -366,8 +432,13 @@ export class OutboxRepository {
         leaseExpiresAt: null,
         failureCategory: null,
         lastErrorSanitized: null,
+        deliveredAt: null,
+        processedAt: null,
+        ...(options?.allowDelivered ? { remoteReference: null } : {}),
       },
     });
+    const event = await this.prisma.client.outboxEvent.findUnique({ where: { id } });
+    return { applied: result.count === 1, event };
   }
 
   async stats(now: Date = new Date()): Promise<{

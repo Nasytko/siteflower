@@ -2,13 +2,15 @@
 
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { FormEvent, useEffect, useMemo, useState } from 'react';
+import { FormEvent, useEffect, useMemo, useRef, useState } from 'react';
 import type {
   CheckoutValidateResponse,
   CreateOrderRequest,
   FulfillmentSettingsPublicDto,
   FulfillmentType,
+  OrderConfirmedQuote,
   OrderCreatedResponse,
+  OrderQuoteMismatchError,
 } from '@bouquet-one/contracts';
 import { MANAGER_TIME_WINDOW_ID } from '@bouquet-one/contracts';
 import { formatPriceFromMinor } from '@/lib/media';
@@ -23,6 +25,33 @@ import {
 } from '@/lib/cart';
 import { isStemBouquetLine, stemCountLabel } from '@/lib/cart-labels';
 import { selectableHourlyWindows } from '@/lib/fulfillment-slots';
+
+type QuoteStatus = 'loading' | 'ready' | 'stale' | 'error';
+
+function buildConfirmedQuote(
+  validated: CheckoutValidateResponse,
+  fulfillmentType: FulfillmentType,
+): OrderConfirmedQuote {
+  const deliveryFeeMinor =
+    fulfillmentType === 'DELIVERY' ? validated.deliveryFeeMinor : '0';
+  const subtotalMinor = validated.subtotalMinor;
+  const totalMinor = (BigInt(subtotalMinor) + BigInt(deliveryFeeMinor)).toString();
+  return {
+    fulfillmentType,
+    items: validated.items.map((line) => ({
+      productId: line.productId,
+      variantId: line.variantId,
+      quantity: line.quantity,
+      optionValueIds: line.optionsSnapshot?.map((o) => o.valueId),
+      unitPriceMinor: line.unitPriceMinor,
+      optionsTotalMinor: line.optionsTotalMinor,
+      lineTotalMinor: line.lineTotalMinor,
+    })),
+    subtotalMinor,
+    deliveryFeeMinor,
+    totalMinor,
+  };
+}
 
 const IDEMPOTENCY_STORAGE_KEY = 'bouquet-one:checkout-idempotency';
 
@@ -65,6 +94,8 @@ export function CheckoutForm() {
   const [cart, setCart] = useState<CartState>({ version: 1, items: [] });
   const [options, setOptions] = useState<FulfillmentSettingsPublicDto | null>(null);
   const [validated, setValidated] = useState<CheckoutValidateResponse | null>(null);
+  const [quoteStatus, setQuoteStatus] = useState<QuoteStatus>('loading');
+  const [needsReconfirm, setNeedsReconfirm] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
   const [idempotencyKey, setIdempotencyKey] = useState(newIdempotencyKey);
@@ -102,6 +133,56 @@ export function CheckoutForm() {
     }
   }, []);
 
+  async function refreshQuote(
+    nextCart: CartState,
+    nextFulfillment: FulfillmentType,
+    opts?: { silent?: boolean },
+  ): Promise<CheckoutValidateResponse | null> {
+    if (nextCart.items.length === 0) return null;
+    setQuoteStatus('loading');
+    if (!opts?.silent) setError(null);
+    try {
+      const valRes = await fetch('/api/v1/checkout/validate', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          fulfillmentType: nextFulfillment,
+          items: nextCart.items.map((i) => ({
+            productId: i.productId,
+            variantId: i.variantId,
+            quantity: i.quantity,
+            ...(i.optionValueIds?.length ? { optionValueIds: i.optionValueIds } : {}),
+          })),
+          priorUnitPrices: nextCart.items
+            .filter((i) => i.unitPriceMinor)
+            .map((i) => ({
+              variantId: i.variantId,
+              unitPriceMinor: i.unitPriceMinor!,
+            })),
+        }),
+      });
+      if (!valRes.ok) {
+        setValidated(null);
+        setQuoteStatus('error');
+        setError('Не удалось рассчитать сумму. Нажмите «Пересчитать» и попробуйте снова.');
+        return null;
+      }
+      const quote = (await valRes.json()) as CheckoutValidateResponse;
+      setValidated(quote);
+      setQuoteStatus(quote.ok ? 'ready' : 'stale');
+      setNeedsReconfirm(false);
+      if (!quote.ok) {
+        setError('В корзине есть недоступные позиции. Исправьте заказ перед оформлением.');
+      }
+      return quote;
+    } catch {
+      setValidated(null);
+      setQuoteStatus('error');
+      setError('Не удалось рассчитать сумму. Проверьте сеть и нажмите «Пересчитать».');
+      return null;
+    }
+  }
+
   useEffect(() => {
     const c = readCart();
     setCart(c);
@@ -112,27 +193,8 @@ export function CheckoutForm() {
 
     void (async () => {
       try {
-        const [optRes, valRes] = await Promise.all([
-          fetch('/api/v1/checkout/fulfillment-options', { cache: 'no-store' }),
-          fetch('/api/v1/checkout/validate', {
-            method: 'POST',
-            headers: { 'content-type': 'application/json' },
-            body: JSON.stringify({
-              items: c.items.map((i) => ({
-                productId: i.productId,
-                variantId: i.variantId,
-                quantity: i.quantity,
-                ...(i.optionValueIds?.length ? { optionValueIds: i.optionValueIds } : {}),
-              })),
-              priorUnitPrices: c.items
-                .filter((i) => i.unitPriceMinor)
-                .map((i) => ({
-                  variantId: i.variantId,
-                  unitPriceMinor: i.unitPriceMinor!,
-                })),
-            }),
-          }),
-        ]);
+        const optRes = await fetch('/api/v1/checkout/fulfillment-options', { cache: 'no-store' });
+        let nextType: FulfillmentType = 'DELIVERY';
         if (optRes.ok) {
           const opt = (await optRes.json()) as FulfillmentSettingsPublicDto;
           setOptions(opt);
@@ -142,16 +204,35 @@ export function CheckoutForm() {
           const tomorrow = `${t.getUTCFullYear()}-${String(t.getUTCMonth() + 1).padStart(2, '0')}-${String(t.getUTCDate()).padStart(2, '0')}`;
           setFulfillmentDate(tomorrow);
           setDateMode('tomorrow');
-          if (!opt.deliveryEnabled && opt.pickupEnabled) setFulfillmentType('PICKUP');
+          if (!opt.deliveryEnabled && opt.pickupEnabled) {
+            nextType = 'PICKUP';
+            setFulfillmentType('PICKUP');
+          }
         }
-        if (valRes.ok) {
-          setValidated((await valRes.json()) as CheckoutValidateResponse);
-        }
+        await refreshQuote(c, nextType);
       } catch {
+        setQuoteStatus('error');
         setError('Не удалось загрузить оформление. Обновите страницу.');
       }
     })();
   }, []);
+
+  const cartRef = useRef(cart);
+  const optionsRef = useRef(options);
+  cartRef.current = cart;
+  optionsRef.current = options;
+  const fulfillmentBootstrapped = useRef(false);
+
+  useEffect(() => {
+    // Skip the first fulfillment paint — initial mount effect already quoted.
+    if (!fulfillmentBootstrapped.current) {
+      fulfillmentBootstrapped.current = true;
+      return;
+    }
+    const currentCart = cartRef.current;
+    if (!optionsRef.current || currentCart.items.length === 0) return;
+    void refreshQuote(currentCart, fulfillmentType, { silent: true });
+  }, [fulfillmentType]);
 
   useEffect(() => {
     if (!options) return;
@@ -194,6 +275,16 @@ export function CheckoutForm() {
     if (pending) return;
     setPending(true);
     setError(null);
+
+    if (quoteStatus === 'loading' || quoteStatus === 'error' || !validated?.ok) {
+      setError(
+        quoteStatus === 'error'
+          ? 'Сначала пересчитайте сумму заказа.'
+          : 'Дождитесь расчёта суммы или исправьте корзину.',
+      );
+      setPending(false);
+      return;
+    }
 
     if (!purchaserName.trim() || purchaserName.trim().length < 2) {
       setError('Укажите ваше имя');
@@ -242,6 +333,8 @@ export function CheckoutForm() {
       : null;
     const mergedComment = [managerNote, customerComment.trim() || null].filter(Boolean).join('\n');
 
+    const confirmedQuote = buildConfirmedQuote(validated, fulfillmentType);
+
     const body: CreateOrderRequest = {
       idempotencyKey,
       items: cart.items.map((i) => ({
@@ -260,6 +353,7 @@ export function CheckoutForm() {
       anonymousCard: wantCard ? anonymousCard : false,
       customerComment: mergedComment || null,
       paymentMethod: 'CASH_ON_DELIVERY',
+      confirmedQuote,
     };
 
     if (fulfillmentType === 'DELIVERY') {
@@ -278,10 +372,30 @@ export function CheckoutForm() {
       });
       const data = (await res.json().catch(() => null)) as
         | OrderCreatedResponse
-        | { message?: string | string[] }
+        | OrderQuoteMismatchError
+        | { message?: string | string[]; error?: string }
         | null;
 
       if (!res.ok) {
+        if (
+          res.status === 409 &&
+          data &&
+          typeof data === 'object' &&
+          'error' in data &&
+          data.error === 'QuoteMismatch' &&
+          'current' in data
+        ) {
+          const mismatch = data as OrderQuoteMismatchError;
+          setValidated(mismatch.current);
+          setQuoteStatus(mismatch.current.ok ? 'ready' : 'stale');
+          setNeedsReconfirm(true);
+          setError(
+            mismatch.message ||
+              'Сумма заказа изменилась. Проверьте итог и нажмите «Оформить заказ» ещё раз.',
+          );
+          setPending(false);
+          return;
+        }
         const msg =
           data && 'message' in data
             ? Array.isArray(data.message)
@@ -322,6 +436,18 @@ export function CheckoutForm() {
     }
   }
 
+  const canSubmit =
+    !pending &&
+    quoteStatus === 'ready' &&
+    Boolean(validated?.ok) &&
+    !validated?.issues.some((i) => i.code !== 'PRICE_CHANGED');
+
+  const submitLabel = pending
+    ? 'Отправка…'
+    : needsReconfirm
+      ? 'Подтвердить новую сумму'
+      : 'Оформить заказ';
+
   if (cart.items.length === 0) {
     return (
       <div className="sf-checkout-empty">
@@ -336,7 +462,12 @@ export function CheckoutForm() {
       ? BigInt(validated?.deliveryFeeMinor ?? options?.deliveryFeeMinor ?? '0')
       : 0n;
   const subtotal = BigInt(validated?.subtotalMinor ?? '0');
-  const total = subtotal + deliveryFee;
+  const total =
+    validated && quoteStatus !== 'error'
+      ? fulfillmentType === 'DELIVERY'
+        ? BigInt(validated.totalMinor)
+        : subtotal
+      : subtotal + deliveryFee;
 
   function chipClass(active: boolean) {
     return `sf-checkout-chip${active ? ' sf-checkout-chip--active' : ''}`;
@@ -683,6 +814,24 @@ export function CheckoutForm() {
           </ul>
         ) : null}
 
+        {quoteStatus === 'loading' ? (
+          <p className="sf-checkout-hint" aria-live="polite">
+            Считаем сумму заказа…
+          </p>
+        ) : null}
+
+        {quoteStatus === 'error' ? (
+          <p className="sf-checkout-hint">
+            <button
+              type="button"
+              className="sf-text-link"
+              onClick={() => void refreshQuote(cart, fulfillmentType)}
+            >
+              Пересчитать сумму
+            </button>
+          </p>
+        ) : null}
+
         {error ? (
           <p role="alert" className="sf-checkout-error">
             {error}
@@ -696,8 +845,12 @@ export function CheckoutForm() {
           Оплата на сайте не производится — менеджер сообщит способы после проверки заказа.
         </p>
 
-        <button type="submit" disabled={pending} className="sf-cta sf-checkout-submit sf-checkout-submit--mobile">
-          {pending ? 'Отправка…' : 'Оформить заказ'}
+        <button
+          type="submit"
+          disabled={!canSubmit}
+          className="sf-cta sf-checkout-submit sf-checkout-submit--mobile"
+        >
+          {submitLabel}
         </button>
       </div>
 
@@ -763,8 +916,12 @@ export function CheckoutForm() {
             <span>{formatPriceFromMinor(total.toString())}</span>
           </p>
         </div>
-        <button type="submit" disabled={pending} className="sf-cta sf-checkout-submit sf-checkout-submit--desktop">
-          {pending ? 'Отправка…' : 'Оформить заказ'}
+        <button
+          type="submit"
+          disabled={!canSubmit}
+          className="sf-cta sf-checkout-submit sf-checkout-submit--desktop"
+        >
+          {submitLabel}
         </button>
         <p className="sf-checkout-hint">
           Заказ уйдёт в обработку. Менеджер подтвердит детали — это ещё не финальное подтверждение.

@@ -1,6 +1,8 @@
 import {
   BadRequestException,
   ConflictException,
+  HttpException,
+  HttpStatus,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
@@ -22,12 +24,12 @@ import {
   type OrderCreatedResponse,
   type OrderEventDto,
   type OrderItemPublicDto,
+  type OrderQuoteMismatchError,
   type OrderStatus,
   type OrderTrackingDto,
   type PaymentMethod,
   type PaymentStatus,
   type TelegramNotifyStatus,
-  type TimeWindowDto,
   isManagerTimeWindowId,
 } from '@bouquet-one/contracts';
 import type { OrderEventType, Prisma } from '@bouquet-one/database';
@@ -51,7 +53,11 @@ import {
   isTimeWindowSelectable,
 } from './business-time.util';
 import { resolvePricedOptions, type OptionValueRow } from '../catalog/product-options.util';
-import { validateCartLines, type VariantPriceSource } from './cart-validation';
+import {
+  confirmedQuoteMatches,
+  validateCartLines,
+  type VariantPriceSource,
+} from './cart-validation';
 import { FulfillmentSettingsService } from './fulfillment-settings.service';
 import { maskPhoneE164, normalizeByPhone } from './phone.util';
 import {
@@ -257,10 +263,14 @@ export class OrdersService {
       priorUnitPrices: prior,
       now,
     });
+    const chargeDelivery =
+      dto.fulfillmentType === 'PICKUP'
+        ? false
+        : dto.fulfillmentType === 'DELIVERY'
+          ? true
+          : true; // legacy clients without fulfillmentType still see delivery fee
     const deliveryFee =
-      result.ok && result.items.length > 0 ? settings.deliveryFeeMinor : 0n;
-    // Delivery fee applied only when validating with intent — keep fee in response for UX;
-    // actual fee decided at create based on fulfillment type.
+      result.ok && result.items.length > 0 && chargeDelivery ? settings.deliveryFeeMinor : 0n;
     return {
       ok: result.ok,
       currency: 'BYN',
@@ -296,7 +306,7 @@ export class OrdersService {
       where: { idempotencyKey },
     });
     if (existing) {
-      return this.replayOrConflict(existing, requestHash);
+      return this.replayOrConflict(existing, dto);
     }
 
     const purchaserPhone = normalizeByPhone(dto.purchaserPhone);
@@ -388,6 +398,13 @@ export class OrdersService {
     }
     const anonymousCard = Boolean(dto.anonymousCard);
 
+    if (!dto.confirmedQuote) {
+      throw new BadRequestException('confirmedQuote is required');
+    }
+    if (dto.confirmedQuote.fulfillmentType !== dto.fulfillmentType) {
+      throw new BadRequestException('confirmedQuote.fulfillmentType must match fulfillmentType');
+    }
+
     const built = await this.buildResolver(dto.items, now);
     const priced = validateCartLines({
       lines: dto.items,
@@ -436,6 +453,37 @@ export class OrdersService {
           });
         }
         const freshTotal = fresh.subtotalMinor + deliveryFee;
+
+        // Bind create to the totals the buyer confirmed (same locked pricing as persist).
+        if (
+          !confirmedQuoteMatches({
+            confirmed: dto.confirmedQuote,
+            lines: dto.items,
+            fulfillmentType: dto.fulfillmentType,
+            pricedItems: fresh.items,
+            subtotalMinor: fresh.subtotalMinor,
+            deliveryFeeMinor: deliveryFee,
+            totalMinor: freshTotal,
+          })
+        ) {
+          const current: CheckoutValidateResponse = {
+            ok: true,
+            currency: 'BYN',
+            items: fresh.items,
+            issues: fresh.issues,
+            subtotalMinor: fresh.subtotalMinor.toString(),
+            deliveryFeeMinor: deliveryFee.toString(),
+            totalMinor: freshTotal.toString(),
+          };
+          const body: OrderQuoteMismatchError = {
+            statusCode: 409,
+            error: 'QuoteMismatch',
+            message:
+              'Сумма или условия заказа изменились. Проверьте итог и подтвердите снова.',
+            current,
+          };
+          throw new HttpException(body, HttpStatus.CONFLICT);
+        }
 
         // Allocate order number — row lock via upsert + update
         await tx.orderNumberSequence.upsert({
@@ -582,7 +630,7 @@ export class OrdersService {
       }, { timeout: 15_000 });
 
       if (order.kind === 'replay') {
-        return this.replayOrConflict(order.order, requestHash);
+        return this.replayOrConflict(order.order, dto);
       }
 
       return {
@@ -609,7 +657,7 @@ export class OrdersService {
         const again = await this.prisma.client.order.findUnique({
           where: { idempotencyKey },
         });
-        if (again) return this.replayOrConflict(again, requestHash);
+        if (again) return this.replayOrConflict(again, dto);
       }
       throw error;
     }
@@ -626,7 +674,7 @@ export class OrdersService {
       totalMinor: bigint;
       idempotencyKey: string;
     },
-    requestHash: string,
+    dto: CreateOrderRequest,
   ): Promise<OrderCreatedResponse> {
     const record = await this.prisma.client.idempotencyRecord.findUnique({
       where: {
@@ -638,7 +686,7 @@ export class OrdersService {
     });
 
     if (record) {
-      if (record.requestHash !== requestHash) {
+      if (!idempotencyHashesMatch(record.requestHash, dto)) {
         throw new ConflictException('Idempotency key reused with a different payload');
       }
     } else {
@@ -887,7 +935,10 @@ export class OrdersService {
     if (event.status === 'PROCESSING') {
       throw new ConflictException('Идёт отправка в ERP — подождите');
     }
-    await this.outbox.manualRetry(event.id);
+    const retried = await this.outbox.manualRetry(event.id);
+    if (!retried.applied) {
+      throw new ConflictException('Повтор ERP не применён — событие занято или уже доставлено');
+    }
     await this.prisma.client.order.update({
       where: { id },
       data: { erpSyncStatus: 'PENDING' },
@@ -918,26 +969,16 @@ export class OrdersService {
         'Нет Telegram-события. Дождитесь результата ERP или повторите ERP.',
       );
     }
-    if (event.status === 'DELIVERED') {
-      // Allow re-notify: reset same outbox to PENDING (idempotent send to chat is acceptable).
-      await this.prisma.client.outboxEvent.update({
-        where: { id: event.id },
-        data: {
-          status: 'PENDING',
-          availableAt: new Date(),
-          nextAttemptAt: null,
-          leaseOwner: null,
-          leaseExpiresAt: null,
-          failureCategory: null,
-          lastErrorSanitized: null,
-          deliveredAt: null,
-          processedAt: null,
-        },
-      });
-    } else if (event.status === 'PROCESSING') {
+    if (event.status === 'PROCESSING') {
       throw new ConflictException('Идёт отправка в Telegram — подождите');
-    } else {
-      await this.outbox.manualRetry(event.id);
+    }
+    // DELIVERED re-notify is allowed (at-least-once to chat). Same outbox id / eventId preserved
+    // only for non-delivered retries; delivered reset clears remote reference intentionally.
+    const retried = await this.outbox.manualRetry(event.id, {
+      allowDelivered: event.status === 'DELIVERED',
+    });
+    if (!retried.applied) {
+      throw new ConflictException('Повтор Telegram не применён — событие занято');
     }
     await this.prisma.client.order.update({
       where: { id },
@@ -1297,16 +1338,51 @@ function mapAdminDetail(
   };
 }
 
-/** Stable hash of commercially relevant create payload for idempotency conflict detection. */
+/**
+ * Stable hash of commercially relevant create payload for idempotency conflict detection.
+ * Confirmed quote amounts are intentionally excluded so a successful create can be
+ * replayed after prices drift (same cart + contacts → same order).
+ * Option value ids are included (v2). Legacy v1 hashes omit options for replay compat.
+ */
 export function hashCreateOrderPayload(dto: CreateOrderRequest): string {
-  const canonical = {
-    items: [...dto.items]
-      .map((i) => ({
+  return hashCreateOrderPayloadVersion(dto, 'v2');
+}
+
+/** Pre-option-hash algorithm kept so already-stored idempotency records still replay. */
+export function hashCreateOrderPayloadLegacy(dto: CreateOrderRequest): string {
+  return hashCreateOrderPayloadVersion(dto, 'v1');
+}
+
+function hashCreateOrderPayloadVersion(
+  dto: CreateOrderRequest,
+  version: 'v1' | 'v2',
+): string {
+  const items = [...dto.items]
+    .map((i) => {
+      const base: {
+        productId: string;
+        variantId: string;
+        quantity: number;
+        optionValueIds?: string[];
+      } = {
         productId: i.productId,
         variantId: i.variantId,
         quantity: i.quantity,
-      }))
-      .sort((a, b) => a.variantId.localeCompare(b.variantId)),
+      };
+      if (version === 'v2') {
+        base.optionValueIds = [...(i.optionValueIds ?? [])].sort();
+      }
+      return base;
+    })
+    .sort((a, b) => {
+      const byVariant = a.variantId.localeCompare(b.variantId);
+      if (byVariant !== 0) return byVariant;
+      const aOpts = (a.optionValueIds ?? []).join(',');
+      const bOpts = (b.optionValueIds ?? []).join(',');
+      return aOpts.localeCompare(bOpts);
+    });
+  const canonical = {
+    items,
     fulfillmentType: dto.fulfillmentType,
     purchaserName: dto.purchaserName.trim(),
     purchaserPhone: dto.purchaserPhone.replace(/\D/g, ''),
@@ -1324,4 +1400,14 @@ export function hashCreateOrderPayload(dto: CreateOrderRequest): string {
     paymentMethod: dto.paymentMethod === 'CARD_ONLINE' ? 'CARD_ONLINE' : 'CASH_ON_DELIVERY',
   };
   return createHash('sha256').update(JSON.stringify(canonical)).digest('hex');
+}
+
+export function idempotencyHashesMatch(
+  storedHash: string,
+  dto: CreateOrderRequest,
+): boolean {
+  return (
+    storedHash === hashCreateOrderPayload(dto) ||
+    storedHash === hashCreateOrderPayloadLegacy(dto)
+  );
 }
