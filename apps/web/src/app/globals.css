@@ -166,6 +166,23 @@ select:focus-visible,
   align-items: center;
 }
 
+/* Mobile full-screen menu — avoid .sf-nav-link inline-flex collisions */
+.sf-mobile-menu__nav {
+  padding-bottom: max(4rem, env(safe-area-inset-bottom, 0px));
+}
+
+.sf-mobile-menu__link,
+.sf-mobile-menu__sublink {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  text-decoration: none;
+}
+
+.sf-mobile-menu__link {
+  min-height: 2.75rem;
+}
+
 .sf-price {
   font-family: var(--font-sans);
   font-size: clamp(1rem, 1.25vw, 1.15rem);
@@ -477,6 +494,9 @@ select:focus-visible,
 }
 
 .sf-site-header {
+  position: sticky;
+  top: 0;
+  z-index: 40;
   backdrop-filter: blur(10px);
   background: color-mix(in oklab, var(--color-surface) 94%, var(--color-background));
   border-bottom: 1px solid color-mix(in oklab, var(--color-border) 88%, transparent);
@@ -523,14 +543,21 @@ select:focus-visible,
   backdrop-filter: blur(2px);
 }
 
-/* Full-width mega panel under the header nav */
+/* Mega panel anchors to the sticky header (full width), not the nav column.
+   Inline primary-nav must stay position:static so this escapes the middle cell. */
+.sf-primary-nav--inline {
+  position: static;
+  z-index: auto;
+}
+
 .sf-nav-panel--mega {
   position: absolute;
-  top: calc(100% + 0.35rem);
+  top: calc(100% + 0.25rem);
   left: 50%;
   z-index: 70;
   display: none;
   width: min(52rem, calc(100vw - 2rem));
+  max-width: calc(100vw - 2rem);
   pointer-events: none;
   opacity: 0;
   transform: translate(-50%, 0.35rem);
@@ -658,11 +685,17 @@ select:focus-visible,
 
 .sf-nav-panel__tiles {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 0.75rem;
   margin: 0;
   padding: 0;
   list-style: none;
+}
+
+@media (min-width: 1100px) {
+  .sf-nav-panel__tiles {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
 }
 
 .sf-nav-panel__tile {
@@ -5619,10 +5652,28 @@ a.sf-instagram__handle:hover {
   scrollbar-width: none;
 }
 
+/* Few tiles: stretch to fill the row instead of leaving a dead strip */
+.sf-discovery-scroller--n1,
+.sf-discovery-scroller--n2,
+.sf-discovery-scroller--n3 {
+  grid-auto-columns: minmax(0, 1fr);
+  overflow: visible;
+  scroll-snap-type: none;
+}
+
 @media (min-width: 768px) {
   .sf-discovery-scroller {
     grid-auto-columns: 10.25rem;
     gap: 1rem;
+  }
+
+  .sf-discovery-scroller--n1,
+  .sf-discovery-scroller--n2,
+  .sf-discovery-scroller--n3,
+  .sf-discovery-scroller--n4 {
+    grid-auto-columns: minmax(0, 1fr);
+    overflow: visible;
+    scroll-snap-type: none;
   }
 }
 
@@ -6385,23 +6436,32 @@ a.sf-instagram__handle:hover {
   color: #3d3732;
 }
 
-/* Header chrome */
+/* Header chrome — utility/meta are desktop-only.
+   Never set bare `display: grid` outside lg: it overrides Tailwind `hidden`. */
 .sf-utility-shell {
-  display: grid;
-  grid-template-rows: 1fr;
-  overflow: hidden;
-  transition: grid-template-rows 0.32s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.24s ease;
+  display: none;
 }
 
-.sf-utility-shell[data-collapsed='true'] {
-  grid-template-rows: 0fr;
-  opacity: 0;
-  pointer-events: none;
-}
+@media (min-width: 1024px) {
+  .sf-utility-shell {
+    display: grid;
+    grid-template-rows: 1fr;
+    overflow: hidden;
+    transition:
+      grid-template-rows 0.32s cubic-bezier(0.22, 1, 0.36, 1),
+      opacity 0.24s ease;
+  }
 
-.sf-utility-shell > * {
-  min-height: 0;
-  overflow: hidden;
+  .sf-utility-shell[data-collapsed='true'] {
+    grid-template-rows: 0fr;
+    opacity: 0;
+    pointer-events: none;
+  }
+
+  .sf-utility-shell > * {
+    min-height: 0;
+    overflow: hidden;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -6464,38 +6524,50 @@ a.sf-instagram__handle:hover {
 }
 
 .sf-header-meta {
-  display: grid;
-  grid-template-rows: 0fr;
-  overflow: hidden;
-  border-top: 0 solid transparent;
-  background: color-mix(in oklab, var(--color-surface-muted) 55%, var(--color-background));
-  opacity: 0;
-  pointer-events: none;
-  transition:
-    grid-template-rows 0.28s cubic-bezier(0.22, 1, 0.36, 1),
-    opacity 0.22s ease,
-    border-color 0.22s ease;
+  display: none;
 }
 
-.sf-header-meta[data-visible='true'] {
-  grid-template-rows: 1fr;
-  border-top: 1px solid color-mix(in oklab, var(--color-border) 80%, transparent);
-  opacity: 1;
-  pointer-events: auto;
-}
+@media (min-width: 1024px) {
+  .sf-header-meta {
+    display: grid;
+    grid-template-rows: 0fr;
+    overflow: hidden;
+    border-top: 0 solid transparent;
+    background: color-mix(in oklab, var(--color-surface-muted) 55%, var(--color-background));
+    opacity: 0;
+    pointer-events: none;
+    transition:
+      grid-template-rows 0.28s cubic-bezier(0.22, 1, 0.36, 1),
+      opacity 0.22s ease,
+      border-color 0.22s ease;
+  }
 
-.sf-header-meta > * {
-  min-height: 0;
-  overflow: hidden;
+  .sf-header-meta[data-visible='true'] {
+    grid-template-rows: 1fr;
+    border-top: 1px solid color-mix(in oklab, var(--color-border) 80%, transparent);
+    opacity: 1;
+    pointer-events: auto;
+  }
+
+  .sf-header-meta > * {
+    min-height: 0;
+    overflow: hidden;
+  }
 }
 
 .sf-header-meta__inner {
   display: flex;
-  min-height: 1.9rem;
+  min-height: 0;
   align-items: center;
   gap: 0.75rem 1.15rem;
   font-size: 0.6875rem;
   color: var(--color-muted);
+}
+
+@media (min-width: 1024px) {
+  .sf-header-meta[data-visible='true'] .sf-header-meta__inner {
+    min-height: 1.9rem;
+  }
 }
 
 .sf-header-meta__place {
@@ -6654,7 +6726,8 @@ a.sf-instagram__handle:hover {
   --home-ink: var(--pdp-ink);
   --home-muted: var(--pdp-muted);
   --home-tile: var(--pdp-tile);
-  padding: 0.75rem 0 6.5rem;
+  /* Room for always-docked mobile sticky buy + safe area */
+  padding: 0.75rem 0 calc(5.75rem + env(safe-area-inset-bottom, 0px));
   color: var(--pdp-ink);
 }
 
@@ -8335,29 +8408,42 @@ a.sf-instagram__handle:hover {
   }
 }
 
-/* Sticky buy bar — slides up when main CTA leaves the viewport */
+/* Sticky buy bar — always docked on mobile; on desktop slides in when CTA leaves view */
 .sf-pdp-sticky {
   position: fixed;
   right: 0;
   bottom: 0;
   left: 0;
-  z-index: 40;
-  padding: 0.65rem 0.85rem max(0.65rem, env(safe-area-inset-bottom));
+  z-index: 38;
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 100vw;
+  padding: 0.55rem 0.75rem max(0.55rem, env(safe-area-inset-bottom, 0px));
   border-top: 1px solid var(--pdp-line);
   background: rgb(255 255 255 / 0.97);
   box-shadow: 0 -10px 30px -22px rgb(35 32 28 / 0.4);
-  transform: translateY(110%);
-  opacity: 0;
-  pointer-events: none;
+  transform: translateY(0);
+  opacity: 1;
+  pointer-events: auto;
   transition:
     transform 0.32s cubic-bezier(0.22, 1, 0.36, 1),
     opacity 0.28s ease;
 }
 
-.sf-pdp-sticky[data-visible='true'] {
-  transform: translateY(0);
-  opacity: 1;
-  pointer-events: auto;
+@media (min-width: 1024px) {
+  .sf-pdp-sticky {
+    z-index: 40;
+    padding: 0.65rem 0.85rem max(0.65rem, env(safe-area-inset-bottom, 0px));
+    transform: translateY(110%);
+    opacity: 0;
+    pointer-events: none;
+  }
+
+  .sf-pdp-sticky[data-visible='true'] {
+    transform: translateY(0);
+    opacity: 1;
+    pointer-events: auto;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -8369,25 +8455,45 @@ a.sf-instagram__handle:hover {
 .sf-pdp-sticky__inner {
   display: flex;
   max-width: 56rem;
+  min-width: 0;
   align-items: center;
-  gap: 0.7rem;
+  gap: 0.5rem;
   margin-inline: auto;
+}
+
+@media (min-width: 480px) {
+  .sf-pdp-sticky__inner {
+    gap: 0.7rem;
+  }
 }
 
 .sf-pdp-sticky__thumb {
   position: relative;
-  width: 2.75rem;
-  height: 2.75rem;
+  width: 2.5rem;
+  height: 2.5rem;
   flex-shrink: 0;
   overflow: hidden;
   border-radius: 0.55rem;
   background: var(--pdp-tile);
 }
 
+@media (max-width: 359.98px) {
+  .sf-pdp-sticky__thumb {
+    display: none;
+  }
+}
+
+@media (min-width: 480px) {
+  .sf-pdp-sticky__thumb {
+    width: 2.75rem;
+    height: 2.75rem;
+  }
+}
+
 .sf-pdp-sticky__text {
   display: flex;
   min-width: 0;
-  flex: 1;
+  flex: 1 1 auto;
   flex-direction: column;
 }
 
@@ -8410,10 +8516,14 @@ a.sf-instagram__handle:hover {
 }
 
 .sf-pdp-sticky__btn {
-  flex-shrink: 0;
-  min-height: 2.6rem;
-  max-width: min(100%, 18rem);
-  padding: 0 1.15rem;
+  display: inline-flex;
+  flex: 0 0 auto;
+  max-width: min(100%, 11.5rem);
+  min-width: 0;
+  min-height: 2.55rem;
+  align-items: center;
+  justify-content: center;
+  padding: 0 0.95rem;
   border: 0;
   border-radius: 999px;
   background: var(--pdp-green);
@@ -8423,9 +8533,25 @@ a.sf-instagram__handle:hover {
   white-space: nowrap;
 }
 
+.sf-pdp-sticky__btn-price {
+  display: none;
+}
+
+@media (min-width: 480px) {
+  .sf-pdp-sticky__btn {
+    max-width: min(100%, 16rem);
+    padding: 0 1.15rem;
+  }
+
+  .sf-pdp-sticky__btn-price {
+    display: inline;
+  }
+}
+
 @media (min-width: 768px) {
   .sf-pdp-sticky__btn {
     min-height: 2.85rem;
+    max-width: min(100%, 18rem);
     padding: 0 1.4rem;
     font-size: 0.875rem;
   }

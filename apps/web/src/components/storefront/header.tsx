@@ -70,11 +70,16 @@ export function StorefrontHeader({
   useEffect(() => {
     if (!menuOpen) return;
     closeRef.current?.focus();
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
     const onKey = (event: KeyboardEvent) => {
       if (event.key === 'Escape') setMenuOpen(false);
     };
     window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
+    return () => {
+      document.body.style.overflow = prevOverflow;
+      window.removeEventListener('keydown', onKey);
+    };
   }, [menuOpen]);
 
   const telHref = phone ? `tel:${phone.replace(/\s+/g, '')}` : null;
@@ -198,12 +203,12 @@ export function StorefrontHeader({
       {menuOpen ? (
         <div
           id={menuId}
-          className="fixed inset-0 z-50 overflow-y-auto bg-background lg:hidden"
+          className="sf-mobile-menu fixed inset-0 z-[60] overflow-y-auto overscroll-contain bg-background lg:hidden"
           role="dialog"
           aria-modal="true"
           aria-label="Меню"
         >
-          <div className="sf-container flex h-14 items-center justify-between">
+          <div className="sf-container sticky top-0 z-10 flex h-14 items-center justify-between border-b border-border/70 bg-background">
             <BrandLogo compact />
             <button
               ref={closeRef}
@@ -215,17 +220,17 @@ export function StorefrontHeader({
               <MenuIcon open />
             </button>
           </div>
-          <nav className="sf-container flex flex-col gap-1 pb-16 pt-2" aria-label="Мобильное меню">
+          <nav className="sf-mobile-menu__nav sf-container flex flex-col gap-0 pt-2" aria-label="Мобильное меню">
             {navItems.map((item) => {
               const hasBranch =
                 (item.children?.length ?? 0) > 0 || (item.groups?.length ?? 0) > 0;
               const branchOpen = openMobileBranch === item.id;
               return (
-                <div key={item.id} className="border-b border-border/80 py-1">
-                  <div className="flex items-center gap-1">
+                <div key={item.id} className="border-b border-border/80 py-0.5">
+                  <div className="flex min-w-0 items-center gap-1">
                     <Link
                       href={item.href}
-                      className={`sf-nav-link block flex-1 px-2 py-3 text-base transition-colors ${
+                      className={`sf-mobile-menu__link flex-1 px-2 py-3 text-base font-semibold transition-colors ${
                         item.accent ? 'text-accent' : 'text-foreground'
                       }`}
                       onClick={() => setMenuOpen(false)}
@@ -235,7 +240,7 @@ export function StorefrontHeader({
                     {hasBranch ? (
                       <button
                         type="button"
-                        className="inline-flex h-10 w-10 items-center justify-center text-muted"
+                        className="inline-flex h-11 w-11 shrink-0 items-center justify-center text-muted"
                         aria-expanded={branchOpen}
                         aria-label={branchOpen ? 'Свернуть' : `Открыть «${item.label}»`}
                         onClick={() =>
@@ -258,7 +263,7 @@ export function StorefrontHeader({
                               <li key={`${group.id}-${child.href}`}>
                                 <Link
                                   href={child.href}
-                                  className="sf-nav-link block py-2 text-sm text-foreground hover:text-brand"
+                                  className="sf-mobile-menu__sublink block py-2 text-sm text-foreground hover:text-brand"
                                   onClick={() => setMenuOpen(false)}
                                 >
                                   {child.label}
@@ -272,7 +277,7 @@ export function StorefrontHeader({
                         <Link
                           key={`${item.id}-${child.href}`}
                           href={child.href}
-                          className="sf-nav-link flex items-center gap-3 py-2 text-sm text-foreground hover:text-brand"
+                          className="sf-mobile-menu__sublink flex items-center gap-3 py-2 text-sm text-foreground hover:text-brand"
                           onClick={() => setMenuOpen(false)}
                         >
                           {item.panelLayout === 'TILES' && child.imageUrl ? (
@@ -284,7 +289,7 @@ export function StorefrontHeader({
                               decoding="async"
                             />
                           ) : null}
-                          {child.label}
+                          <span className="min-w-0">{child.label}</span>
                         </Link>
                       ))}
                       <Link

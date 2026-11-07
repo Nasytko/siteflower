@@ -140,7 +140,7 @@ export function PrimaryNav({ items = PRIMARY_NAV, inline = false }: Props) {
       <nav
         ref={rootRef}
         aria-label="Основное меню"
-        className={`sf-primary-nav relative z-[60] ${inline ? 'sf-primary-nav--inline min-w-0' : ''}`}
+        className={`sf-primary-nav ${inline ? 'sf-primary-nav--inline min-w-0' : 'relative z-[60]'}`}
         onMouseLeave={closeSoon}
         onMouseEnter={() => {
           if (closeTimer.current) {

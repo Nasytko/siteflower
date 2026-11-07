@@ -20,9 +20,8 @@ export function StoreHoursStatus({
   className = '',
 }: Props) {
   const hours = workingHours?.trim() || null;
-  const [open, setOpen] = useState<boolean | null>(() =>
-    typeof window === 'undefined' ? null : isStoreOpenNow(hours),
-  );
+  // Always start null so SSR markup matches the first client paint (avoids hydration mismatch).
+  const [open, setOpen] = useState<boolean | null>(null);
 
   useEffect(() => {
     const tick = () => setOpen(isStoreOpenNow(hours));

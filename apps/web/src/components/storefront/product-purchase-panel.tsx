@@ -827,7 +827,7 @@ export function ProductPostcardShelf() {
   );
 }
 
-/** Sticky buy bar — slides up when main CTA leaves the viewport (mobile + desktop). */
+/** Sticky buy bar — always docked on mobile; on desktop slides in when CTA leaves view. */
 export function ProductStickyBar() {
   const {
     product,
@@ -837,21 +837,47 @@ export function ProductStickyBar() {
     hydrated,
     onAdd,
   } = usePurchase();
-  const [visible, setVisible] = useState(false);
+  const [visible, setVisible] = useState(true);
   const primary = sortProductMedia(product.media)[0];
   const thumb = primary ? (pickDerivativeUrl(primary, 200) ?? primary.url) : null;
 
   useEffect(() => {
-    const cta = document.querySelector<HTMLElement>('[data-testid="add-to-cart"]');
-    if (!cta) return;
-    const observer = new IntersectionObserver(
-      ([entry]) => {
-        setVisible(!(entry?.isIntersecting ?? true));
-      },
-      { threshold: 0, rootMargin: '0px 0px -8% 0px' },
-    );
-    observer.observe(cta);
-    return () => observer.disconnect();
+    const mq = window.matchMedia('(min-width: 1024px)');
+    let observer: IntersectionObserver | null = null;
+
+    const clearObserver = () => {
+      observer?.disconnect();
+      observer = null;
+    };
+
+    const sync = () => {
+      clearObserver();
+      if (!mq.matches) {
+        setVisible(true);
+        return;
+      }
+
+      const cta = document.querySelector<HTMLElement>('[data-testid="add-to-cart"]');
+      if (!cta) {
+        setVisible(false);
+        return;
+      }
+
+      observer = new IntersectionObserver(
+        ([entry]) => {
+          setVisible(!(entry?.isIntersecting ?? true));
+        },
+        { threshold: 0, rootMargin: '0px 0px -8% 0px' },
+      );
+      observer.observe(cta);
+    };
+
+    sync();
+    mq.addEventListener('change', sync);
+    return () => {
+      mq.removeEventListener('change', sync);
+      clearObserver();
+    };
   }, []);
 
   return (
@@ -880,7 +906,8 @@ export function ProductStickyBar() {
           onClick={onAdd}
           className="sf-pdp-sticky__btn"
         >
-          В корзину · {cartAddTotalLabel}
+          В корзину
+          <span className="sf-pdp-sticky__btn-price"> · {cartAddTotalLabel}</span>
         </button>
       </div>
     </div>

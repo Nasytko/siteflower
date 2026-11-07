@@ -20,7 +20,7 @@ export function CategoryNav({ items }: Props) {
     <section className="sf-discovery-row" aria-label="Быстрые категории">
       <div className="sf-container-wide">
         <ul
-          className="sf-discovery-scroller"
+          className={`sf-discovery-scroller sf-discovery-scroller--n${Math.min(items.length, 7)}`}
           style={{ '--tile-count': Math.min(items.length, 7) } as CSSProperties}
         >
           {items.map((item) => (
