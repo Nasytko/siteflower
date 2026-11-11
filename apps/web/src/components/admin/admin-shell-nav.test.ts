@@ -45,6 +45,25 @@ test('SUPER_ADMIN sees primary admin sections including catalog and orders', () 
   assert.equal(hrefs.some((href) => href.startsWith('/admin/legal')), false);
 });
 
+test('sidebar splits daily work, catalog, storefront, and service tools', () => {
+  const groups = adminNavGroupsForRole('SUPER_ADMIN');
+  const byId = Object.fromEntries(groups.map((group) => [group.id, group.items.map((item) => item.label)]));
+
+  assert.deepEqual(byId.today, ['Главная', 'Заказы']);
+  assert.ok(byId.catalog.includes('Товары'));
+  assert.ok(byId.catalog.includes('Справочники'));
+  assert.equal(byId.catalog.includes('Instagram'), false);
+  assert.equal(byId.catalog.includes('Плитки на главной'), false);
+  assert.ok(byId.storefront.includes('Страницы каталога'));
+  assert.ok(byId.storefront.includes('Плитки на главной'));
+  assert.ok(byId.storefront.includes('Instagram'));
+  assert.deepEqual(byId.access, ['Пользователи']);
+  assert.ok(byId.system.includes('Журнал действий'));
+  assert.equal(groups.find((group) => group.id === 'storefront')?.collapsed, true);
+  assert.equal(groups.find((group) => group.id === 'system')?.collapsed, true);
+  assert.equal(groups.find((group) => group.id === 'catalog')?.collapsed, undefined);
+});
+
 test('CONTENT_MANAGER keeps catalog links but not users admin', () => {
   const groups = adminNavGroupsForRole('CONTENT_MANAGER');
   const labels = groups.flatMap((group) => group.items.map((item) => item.label));

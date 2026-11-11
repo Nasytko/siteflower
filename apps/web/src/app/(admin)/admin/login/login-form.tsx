@@ -60,7 +60,7 @@ export default function AdminLoginForm() {
         <header className="admin-login__header">
           <BrandLogo />
           <h1 className="admin-login__title">Вход в панель</h1>
-          <p className="admin-login__lead">Каталог, заказы и настройки магазина</p>
+          <p className="admin-login__lead">Заказы, товары и витрина</p>
         </header>
 
         <form className="admin-login__form" onSubmit={onSubmit} noValidate>

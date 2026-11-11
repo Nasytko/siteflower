@@ -690,7 +690,10 @@ export function ProductsManager({
           <div className="sf-ap-create__panel">
             <div className="sf-ap-create__head">
               <h2 id="sf-ap-create-title">Новый товар</h2>
-              <p>Выберите тип — откроется черновик.</p>
+              <p>
+                Выберите, что добавляете. Откроется пустая карточка: название, цена и фото. На сайте
+                товар появится только после публикации.
+              </p>
             </div>
             <div className="sf-ap-create__kinds" role="radiogroup" aria-label="Тип товара">
               {CREATE_KINDS.map((kind) => (

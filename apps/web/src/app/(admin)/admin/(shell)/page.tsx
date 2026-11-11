@@ -14,16 +14,16 @@ import { formatPriceFromMinor } from '@/lib/media';
 
 const SHORTCUTS = [
   {
-    href: '/admin/catalog/products',
-    label: 'Товары',
-    hint: 'Создать или найти',
-    permission: 'CATALOG_READ' as const,
-  },
-  {
     href: '/admin/orders',
     label: 'Заказы',
     hint: 'Сегодня и новые',
     permission: 'ORDERS_READ' as const,
+  },
+  {
+    href: '/admin/catalog/products',
+    label: 'Товары',
+    hint: 'Создать или найти',
+    permission: 'CATALOG_READ' as const,
   },
   {
     href: '/admin/promotions',
@@ -134,7 +134,7 @@ export default async function AdminDashboardPage() {
       <AdminPageHeader
         title={firstName ? `Добро пожаловать, ${firstName}` : 'Сводка'}
         lead={`${formatToday()}. ${
-          canCreateCatalog ? 'Начните с товара или заказов.' : 'Что нужно сделать сейчас.'
+          canCreateCatalog ? 'Заказы и товары — с них обычно начинают день.' : 'Что нужно сделать сейчас.'
         }`}
         actions={
           canCreateCatalog ? (
@@ -146,9 +146,8 @@ export default async function AdminDashboardPage() {
       />
 
       <p className="admin-notice">
-        Здесь правятся товары, акции, подборки, страницы каталога и Instagram. Меню сайта, тексты
-        главной, контакты, юридические страницы и правила доставки задаются в шаблоне сайта — без
-        отдельного редактора в панели.
+        Здесь заказы, товары, акции, подборки и оформление витрины. Меню сайта, тексты главной,
+        контакты и условия доставки в панели не меняются — они заданы в шаблоне сайта.
       </p>
 
       {canReadOrders || canReadCatalog ? (

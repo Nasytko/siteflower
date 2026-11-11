@@ -111,7 +111,7 @@ export function ProductEditorRelated({ product, canUpdate, members, onChanged }:
         <div>
           <h2>Связанные товары</h2>
           <p className="sf-pe-card__lead">
-            Другие карточки одной линейки — например разная длина стебля.
+            Другие карточки того же товара, например другой размер. Покупатель увидит их рядом.
           </p>
         </div>
       </div>

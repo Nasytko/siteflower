@@ -137,13 +137,19 @@ export function ProductEditorMainTab(props: Props) {
   const simplePrice = variants[0];
   const multiSize = variants.length > 1;
   const show = (block: (typeof blocks)[number]) => blocks.includes(block);
+  const kindHint: Partial<Record<ProductKind, string>> = {
+    BOUQUET: 'Состав из цветов, одна цена за весь букет.',
+    COMPOSITION: 'Цветы в корзине, коробке или шляпной коробке.',
+    STEM: 'Один цветок, цена за ветку.',
+    GIFT: 'Открытка, свеча и всё, что не букет.',
+  };
 
   return (
     <div className="space-y-4">
       {show('kind') ? (
         <section className="sf-pe-card sf-pe-card--quiet">
           <div className="sf-pe-card__body">
-            <p className="sf-pe-label">Тип</p>
+            <p className="sf-pe-label">Что это</p>
             <div className="sf-pe-seg" role="group" aria-label="Тип товара">
               {PRIMARY_PRODUCT_KINDS.map((value) => (
                 <button
@@ -158,6 +164,9 @@ export function ProductEditorMainTab(props: Props) {
                 </button>
               ))}
             </div>
+            {kindHint[productKind] ? (
+              <p className="sf-pe-note mt-2">{kindHint[productKind]}</p>
+            ) : null}
           </div>
         </section>
       ) : null}
@@ -166,7 +175,8 @@ export function ProductEditorMainTab(props: Props) {
       <section className="sf-pe-card">
         <div className="sf-pe-card__head">
           <div>
-            <h2>Основное</h2>
+            <h2>Название и цена</h2>
+            <p className="sf-pe-card__lead">Так товар называется в каталоге и сколько он стоит.</p>
           </div>
         </div>
         <div className="sf-pe-card__body sf-pe-form">
@@ -306,6 +316,9 @@ export function ProductEditorMainTab(props: Props) {
         <div className="sf-pe-card__head">
           <div>
             <h2>Описание</h2>
+            <p className="sf-pe-card__lead">
+              Короткий текст на карточке товара. Без него опубликовать нельзя.
+            </p>
           </div>
         </div>
         <div className="sf-pe-card__body">
@@ -336,7 +349,10 @@ export function ProductEditorMainTab(props: Props) {
       <section className="sf-pe-card">
         <div className="sf-pe-card__head">
           <div>
-            <h2>Повод, праздник и кому</h2>
+            <h2>Кому и к какому поводу</h2>
+            <p className="sf-pe-card__lead">
+              Для фильтров на сайте. На публикацию не влияет — можно заполнить позже.
+            </p>
           </div>
         </div>
         <div className="sf-pe-card__body grid gap-4 lg:grid-cols-2">

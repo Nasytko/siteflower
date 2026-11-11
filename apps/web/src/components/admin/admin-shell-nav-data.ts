@@ -15,6 +15,8 @@ export type AdminNavGroup = {
   label: string;
   /** Soft-demote rare/tech groups in the sidebar. */
   tier?: 'system';
+  /** Multi-item groups start closed until the manager opens them or lands inside. */
+  collapsed?: boolean;
   items: AdminNavItem[];
 };
 
@@ -33,18 +35,20 @@ function isDictionaryPath(pathname: string): boolean {
 }
 
 /**
- * Florist panel IA: Каталог · Заказы · Сайт (Instagram) · Пользователи · Система
+ * Florist panel IA, in the order a manager works:
+ * Сегодня · Каталог · Витрина · Доступ · Служебное
  */
 export const ADMIN_NAV_GROUPS: AdminNavGroup[] = [
   {
-    id: 'home',
-    label: 'Магазин',
+    id: 'today',
+    label: 'Сегодня',
     items: [
       {
         href: '/admin',
         label: 'Главная',
         isActive: (pathname) => pathname === '/admin',
       },
+      { href: '/admin/orders', label: 'Заказы', permission: 'ORDERS_READ' },
     ],
   },
   {
@@ -52,12 +56,6 @@ export const ADMIN_NAV_GROUPS: AdminNavGroup[] = [
     label: 'Каталог',
     items: [
       { href: '/admin/catalog/products', label: 'Товары', permission: 'CATALOG_READ' },
-      {
-        href: '/admin/catalog/dictionaries',
-        label: 'Справочники',
-        permission: 'CATALOG_READ',
-        isActive: isDictionaryPath,
-      },
       {
         href: '/admin/promotions',
         label: 'Акции',
@@ -72,6 +70,19 @@ export const ADMIN_NAV_GROUPS: AdminNavGroup[] = [
         isActive: (pathname) =>
           pathname === '/admin/bestsellers' || pathname.startsWith('/admin/bestsellers/'),
       },
+      {
+        href: '/admin/catalog/dictionaries',
+        label: 'Справочники',
+        permission: 'CATALOG_READ',
+        isActive: isDictionaryPath,
+      },
+    ],
+  },
+  {
+    id: 'storefront',
+    label: 'Витрина',
+    collapsed: true,
+    items: [
       {
         href: '/admin/catalog/pages',
         label: 'Страницы каталога',
@@ -101,21 +112,15 @@ export const ADMIN_NAV_GROUPS: AdminNavGroup[] = [
     ],
   },
   {
-    id: 'work',
-    label: 'Работа',
-    items: [{ href: '/admin/orders', label: 'Заказы', permission: 'ORDERS_READ' }],
-  },
-  {
-    id: 'admin',
-    label: 'Администрирование',
-    items: [
-      { href: '/admin/users', label: 'Пользователи', permission: 'USERS_READ' },
-    ],
+    id: 'access',
+    label: 'Доступ',
+    items: [{ href: '/admin/users', label: 'Пользователи', permission: 'USERS_READ' }],
   },
   {
     id: 'system',
-    label: 'Система',
+    label: 'Служебное',
     tier: 'system',
+    collapsed: true,
     items: [
       { href: '/admin/audit', label: 'Журнал действий', permission: 'AUDIT_READ' },
       {

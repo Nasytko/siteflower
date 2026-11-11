@@ -1118,7 +1118,7 @@ export function ProductEditor({
               disabled={pending}
               onClick={() => void runLifecycle('unpublish')}
             >
-              С витрины
+              Снять с витрины
             </button>
           ) : null}
           {canPublish && server.lifecycle === 'ARCHIVED' ? (
@@ -1128,17 +1128,7 @@ export function ProductEditor({
               disabled={pending}
               onClick={() => void runLifecycle('restore')}
             >
-              Из архива
-            </button>
-          ) : null}
-          {canPublish && server.lifecycle !== 'ARCHIVED' ? (
-            <button
-              type="button"
-              className="sf-pe-btn sf-pe-btn--quiet"
-              disabled={pending}
-              onClick={() => void runLifecycle('archive')}
-            >
-              В архив
+              Вернуть из архива
             </button>
           ) : null}
         </div>
@@ -1154,8 +1144,8 @@ export function ProductEditor({
 
       {justCreated ? (
         <div className="sf-pe-banner" role="status">
-          <strong>Черновик создан</strong>
-          <span>Заполните название, цену, фото и описание — затем опубликуйте.</span>
+          <strong>Карточка создана, на сайте её ещё нет</strong>
+          <span>Дальше по порядку: название и цена, фото, состав, описание. Сохраните и опубликуйте.</span>
         </div>
       ) : null}
 
@@ -1167,28 +1157,178 @@ export function ProductEditor({
         <ProductEditorMainTab {...mainTabShared} blocks={['kind']} />
 
         <div className="sf-pe-hero">
-          <section className="sf-pe-card sf-pe-card--media-preview" aria-label="Главное фото">
-            <div className="sf-pe-card__body sf-pe-card__body--flush">
-              {primaryMedia ? (
-                <button
-                  type="button"
-                  className="block w-full"
-                  onClick={() => jumpToReadinessIssue('photo')}
+          <section className="sf-pe-card" data-section="photo">
+            <div className="sf-pe-card__head">
+              <div>
+              <h2>Фото</h2>
+              <p className="sf-pe-card__lead">
+                {server.media.length} из 12. Сохраняется сразу — кнопку «Сохранить» нажимать не нужно.
+                Отмеченное «Главное» видно в каталоге.
+              </p>
+              </div>
+            </div>
+          <div className="sf-pe-card__body space-y-4">
+            {primaryMedia ? (
+              <img
+                src={toSameOriginMediaUrl(primaryMedia.url) ?? primaryMedia.url}
+                alt={primaryMedia.alt ?? ''}
+                className="sf-pe-hero__photo"
+              />
+            ) : (
+              <div className="admin-thumb-empty sf-pe-hero__photo">Фото для каталога</div>
+            )}
+            {canUpdate ? (
+                <div
+                  className="sf-pe-dropzone"
+                  onDragOver={(event) => event.preventDefault()}
+                  onDrop={(event) => {
+                    event.preventDefault();
+                    if (event.dataTransfer.files?.length) {
+                      void onUploadMany(event.dataTransfer.files);
+                    }
+                  }}
                 >
-                  <img
-                    src={toSameOriginMediaUrl(primaryMedia.url) ?? primaryMedia.url}
-                    alt={primaryMedia.alt ?? ''}
-                    className="sf-pe-hero__photo"
-                  />
-                </button>
-              ) : (
-                <button
-                  type="button"
-                  className="admin-thumb-empty sf-pe-hero__photo"
-                  onClick={() => jumpToReadinessIssue('photo')}
-                >
-                  Добавить фото
-                </button>
+                  <label className="sf-pe-btn inline-flex cursor-pointer">
+                    Добавить фото
+                    <input
+                      type="file"
+                      className="sr-only"
+                      accept="image/jpeg,image/png,image/webp,image/avif"
+                      multiple
+                      disabled={pending || server.media.length >= 12}
+                      onChange={(event) => {
+                        const files = event.target.files;
+                        if (files?.length) void onUploadMany(files);
+                        event.target.value = '';
+                      }}
+                    />
+                  </label>
+                  <p className="sf-pe-note">JPG, PNG, WebP, AVIF · до 25 МБ · можно перетащить</p>
+                </div>
+              ) : null}
+  
+              {uploadStates.length > 0 ? (
+                <ul className="admin-upload-status" aria-live="polite">
+                  {uploadStates.map((row) => {
+                    const icon =
+                      row.status === 'error'
+                        ? '✕'
+                        : row.status === 'uploaded' || row.status === 'done'
+                          ? '✓'
+                          : row.status === 'preparing' || row.status === 'uploading'
+                            ? '↻'
+                            : '◌';
+                    return (
+                      <li
+                        key={row.id}
+                        className={`admin-upload-status__row${
+                          row.status === 'uploaded' || row.status === 'done'
+                            ? ' admin-upload-status__row--done'
+                            : row.status === 'error'
+                              ? ' admin-upload-status__row--error'
+                              : ''
+                        }`}
+                      >
+                        <span>
+                          {icon} {row.name}
+                          {row.sizeLabel ? ` · ${row.sizeLabel}` : ''}
+                          {row.prepareSummary ? ` · ${row.prepareSummary}` : ''}
+                        </span>
+                        <span className="admin-upload-status__meta">
+                          {mediaPreflightStatusLabel(row.status)}
+                        </span>
+                        {row.error ? (
+                          <span className="admin-field-error">
+                            Не удалось обработать фотографию
+                            <br />
+                            Причина: {row.error}
+                            {row.requestId ? (
+                              <>
+                                <br />
+                                <span className="text-xs text-[var(--admin-muted)]">
+                                  Код запроса: {row.requestId}
+                                </span>
+                              </>
+                            ) : null}
+                          </span>
+                        ) : null}
+                      </li>
+                    );
+                  })}
+                </ul>
+              ) : null}
+  
+            {server.media.length === 0 ? (
+              <p className="sf-pe-note">Без фото опубликовать нельзя.</p>
+            ) : (
+              <ul className="sf-pe-media-grid">
+                  {[...server.media]
+                    .sort((a, b) => a.sortOrder - b.sortOrder)
+                    .map((media, index, sorted) => (
+                      <li key={media.id} className="sf-pe-media">
+                        <img
+                          src={toSameOriginMediaUrl(media.url) ?? media.url}
+                          alt={media.alt ?? ''}
+                          className="sf-pe-media__img"
+                        />
+                        <label className="sf-pe-field">
+                          <span>Подпись</span>
+                          <input
+                            className="sf-pe-input"
+                            defaultValue={media.alt ?? ''}
+                            maxLength={300}
+                            disabled={!canUpdate}
+                            placeholder={`«${basic.name.trim() || server.name}»`}
+                            onBlur={(event) => {
+                              const value = event.target.value.trim();
+                              if (value === (media.alt ?? '')) return;
+                              void patchMedia(media.id, { alt: value.length > 0 ? value : null });
+                            }}
+                          />
+                        </label>
+                        <div className="sf-pe-media__actions">
+                          {media.isPrimary ? (
+                            <span className="sf-pe-pill sf-pe-pill--accent">Главное</span>
+                          ) : (
+                            <button
+                              type="button"
+                              className="sf-pe-btn sf-pe-btn--quiet"
+                              disabled={!canUpdate || pending}
+                              onClick={() => void patchMedia(media.id, { isPrimary: true })}
+                            >
+                              Главное
+                            </button>
+                          )}
+                          <button
+                            type="button"
+                            className="sf-pe-iconbtn"
+                            aria-label="Раньше"
+                            disabled={!canUpdate || pending || index === 0}
+                            onClick={() => void reorderMedia(media.id, -1)}
+                          >
+                            ↑
+                          </button>
+                          <button
+                            type="button"
+                            className="sf-pe-iconbtn"
+                            aria-label="Позже"
+                            disabled={!canUpdate || pending || index === sorted.length - 1}
+                            onClick={() => void reorderMedia(media.id, 1)}
+                          >
+                            ↓
+                          </button>
+                          <button
+                            type="button"
+                            className="sf-pe-btn sf-pe-btn--quiet"
+                            disabled={!canUpdate || pending}
+                            onClick={() => void removeMedia(media.id)}
+                          >
+                            Удалить
+                          </button>
+                        </div>
+                      </li>
+                    ))}
+                </ul>
               )}
             </div>
           </section>
@@ -1215,172 +1355,6 @@ export function ProductEditor({
         ) : null}
 
         <ProductEditorMainTab {...mainTabShared} blocks={['copy']} />
-
-        <section className="sf-pe-card" data-section="photo">
-          <div className="sf-pe-card__head">
-            <div>
-              <h2>Фотографии</h2>
-              <p className="sf-pe-card__lead">
-                {server.media.length}/12 · сохраняются сразу · главное — в каталоге
-              </p>
-            </div>
-          </div>
-          <div className="sf-pe-card__body space-y-4">
-            {canUpdate ? (
-              <div
-                className="sf-pe-dropzone"
-                onDragOver={(event) => event.preventDefault()}
-                onDrop={(event) => {
-                  event.preventDefault();
-                  if (event.dataTransfer.files?.length) {
-                    void onUploadMany(event.dataTransfer.files);
-                  }
-                }}
-              >
-                <label className="sf-pe-btn inline-flex cursor-pointer">
-                  Добавить фото
-                  <input
-                    type="file"
-                    className="sr-only"
-                    accept="image/jpeg,image/png,image/webp,image/avif"
-                    multiple
-                    disabled={pending || server.media.length >= 12}
-                    onChange={(event) => {
-                      const files = event.target.files;
-                      if (files?.length) void onUploadMany(files);
-                      event.target.value = '';
-                    }}
-                  />
-                </label>
-                <p className="sf-pe-note">JPG, PNG, WebP, AVIF · до 25 МБ · можно перетащить</p>
-              </div>
-            ) : null}
-
-            {uploadStates.length > 0 ? (
-              <ul className="admin-upload-status" aria-live="polite">
-                {uploadStates.map((row) => {
-                  const icon =
-                    row.status === 'error'
-                      ? '✕'
-                      : row.status === 'uploaded' || row.status === 'done'
-                        ? '✓'
-                        : row.status === 'preparing' || row.status === 'uploading'
-                          ? '↻'
-                          : '◌';
-                  return (
-                    <li
-                      key={row.id}
-                      className={`admin-upload-status__row${
-                        row.status === 'uploaded' || row.status === 'done'
-                          ? ' admin-upload-status__row--done'
-                          : row.status === 'error'
-                            ? ' admin-upload-status__row--error'
-                            : ''
-                      }`}
-                    >
-                      <span>
-                        {icon} {row.name}
-                        {row.sizeLabel ? ` · ${row.sizeLabel}` : ''}
-                        {row.prepareSummary ? ` · ${row.prepareSummary}` : ''}
-                      </span>
-                      <span className="admin-upload-status__meta">
-                        {mediaPreflightStatusLabel(row.status)}
-                      </span>
-                      {row.error ? (
-                        <span className="admin-field-error">
-                          Не удалось обработать фотографию
-                          <br />
-                          Причина: {row.error}
-                          {row.requestId ? (
-                            <>
-                              <br />
-                              <span className="text-xs text-[var(--admin-muted)]">
-                                Код запроса: {row.requestId}
-                              </span>
-                            </>
-                          ) : null}
-                        </span>
-                      ) : null}
-                    </li>
-                  );
-                })}
-              </ul>
-            ) : null}
-
-            {server.media.length === 0 ? (
-              <p className="sf-pe-note">Без фото товар нельзя опубликовать.</p>
-            ) : (
-              <ul className="sf-pe-media-grid">
-                {[...server.media]
-                  .sort((a, b) => a.sortOrder - b.sortOrder)
-                  .map((media, index, sorted) => (
-                    <li key={media.id} className="sf-pe-media">
-                      <img
-                        src={toSameOriginMediaUrl(media.url) ?? media.url}
-                        alt={media.alt ?? ''}
-                        className="sf-pe-media__img"
-                      />
-                      <label className="sf-pe-field">
-                        <span>Подпись</span>
-                        <input
-                          className="sf-pe-input"
-                          defaultValue={media.alt ?? ''}
-                          maxLength={300}
-                          disabled={!canUpdate}
-                          placeholder={`Букет «${server.name}»`}
-                          onBlur={(event) => {
-                            const value = event.target.value.trim();
-                            if (value === (media.alt ?? '')) return;
-                            void patchMedia(media.id, { alt: value.length > 0 ? value : null });
-                          }}
-                        />
-                      </label>
-                      <div className="sf-pe-media__actions">
-                        {media.isPrimary ? (
-                          <span className="sf-pe-pill sf-pe-pill--accent">Главное</span>
-                        ) : (
-                          <button
-                            type="button"
-                            className="sf-pe-btn sf-pe-btn--quiet"
-                            disabled={!canUpdate || pending}
-                            onClick={() => void patchMedia(media.id, { isPrimary: true })}
-                          >
-                            Главное
-                          </button>
-                        )}
-                        <button
-                          type="button"
-                          className="sf-pe-iconbtn"
-                          aria-label="Раньше"
-                          disabled={!canUpdate || pending || index === 0}
-                          onClick={() => void reorderMedia(media.id, -1)}
-                        >
-                          ↑
-                        </button>
-                        <button
-                          type="button"
-                          className="sf-pe-iconbtn"
-                          aria-label="Позже"
-                          disabled={!canUpdate || pending || index === sorted.length - 1}
-                          onClick={() => void reorderMedia(media.id, 1)}
-                        >
-                          ↓
-                        </button>
-                        <button
-                          type="button"
-                          className="sf-pe-btn sf-pe-btn--quiet"
-                          disabled={!canUpdate || pending}
-                          onClick={() => void removeMedia(media.id)}
-                        >
-                          Удалить
-                        </button>
-                      </div>
-                    </li>
-                  ))}
-              </ul>
-            )}
-          </div>
-        </section>
 
         {needsComposition ? (
           <ProductEditorOptionsTab
@@ -1412,6 +1386,9 @@ export function ProductEditor({
           <div className="sf-pe-card__head">
             <div>
               <h2>Адрес и SEO</h2>
+              <p className="sf-pe-card__lead">
+                Ссылка на товар. Заголовок и описание для поиска подставятся сами, если оставить поля пустыми.
+              </p>
             </div>
           </div>
           <div className="sf-pe-card__body sf-pe-form sf-pe-form--seo">
@@ -1429,7 +1406,7 @@ export function ProductEditor({
               />
             </label>
             <label className="sf-pe-field">
-              <span>SEO title {titleIsAutomatic ? '(авто)' : ''}</span>
+              <span>Заголовок в поиске {titleIsAutomatic ? '(подставится сам)' : ''}</span>
               <input
                 className="sf-pe-input"
                 value={seo.seoTitle}
@@ -1442,7 +1419,7 @@ export function ProductEditor({
               />
             </label>
             <label className="sf-pe-field">
-              <span>Meta description {descriptionIsAutomatic ? '(авто)' : ''}</span>
+              <span>Описание в поиске {descriptionIsAutomatic ? '(подставится само)' : ''}</span>
               <textarea
                 className="sf-pe-input"
                 rows={3}
@@ -1465,7 +1442,7 @@ export function ProductEditor({
                   touch();
                 }}
               />
-              Не индексировать
+              Скрыть страницу от поиска
             </label>
             <p className="sf-pe-note sf-pe-field--full">SEO: {seoHealth.status}</p>
           </div>
@@ -1475,8 +1452,8 @@ export function ProductEditor({
       {(canDelete || canPublish) && server.lifecycle !== 'ARCHIVED' ? (
         <section className="sf-pe-danger">
           <div>
-            <h2>Опасная зона</h2>
-            <p>Архив скрывает товар с витрины. Удаление навсегда — только без заказов.</p>
+            <h2>Убрать товар</h2>
+            <p>Архив снимает товар с сайта, его можно вернуть. Удаление навсегда — только если заказов не было.</p>
           </div>
           <div className="sf-pe-danger__actions">
             {canPublish ? (
