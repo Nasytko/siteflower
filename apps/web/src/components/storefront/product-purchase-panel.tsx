@@ -13,10 +13,10 @@ import { trackEvent } from '@/lib/analytics';
 import {
   addToCart,
   CARD_MESSAGE_MAX,
+  cartLineKey,
   MAX_LINE_QTY,
   readCardDraft,
   readCart,
-  writeCardDraft,
   writeCart,
 } from '@/lib/cart';
 import { cartCompositionCount, stemCountLabel } from '@/lib/cart-labels';
@@ -79,6 +79,8 @@ type PurchaseState = {
   postcardId: string | null;
   setPostcardId: (id: string | null) => void;
   postcards: PostcardOption[];
+  /** This product is itself a postcard — the inscription belongs on this line. */
+  isPostcard: boolean;
   feedback: string | null;
   cartCount: number;
   onAdd: () => void;
@@ -95,10 +97,12 @@ function usePurchase(): PurchaseState {
 export function ProductPurchaseProvider({
   product,
   postcards,
+  isPostcard = false,
   children,
 }: {
   product: PurchaseProduct;
   postcards: PostcardOption[];
+  isPostcard?: boolean;
   children: ReactNode;
 }) {
   const sorted = useMemo(
@@ -179,7 +183,6 @@ export function ProductPurchaseProvider({
 
   function setCardEnabled(enabled: boolean) {
     setCardEnabledState(enabled);
-    writeCardDraft(enabled ? cardMessage : '');
     if (!enabled) {
       setPostcardId(null);
       return;
@@ -198,9 +201,7 @@ export function ProductPurchaseProvider({
   }
 
   function setCardMessage(message: string) {
-    const value = message.slice(0, CARD_MESSAGE_MAX);
-    setCardMessageState(value);
-    writeCardDraft(value);
+    setCardMessageState(message.slice(0, CARD_MESSAGE_MAX));
   }
 
   function onAdd() {
@@ -214,7 +215,7 @@ export function ProductPurchaseProvider({
       baseUnitPriceMinor: selected.effectivePriceMinor,
     });
     const isStem = product.productKind === 'STEM';
-    let next = addToCart(readCart(), {
+    const parentLine = {
       productId: product.id,
       variantId: selected.id,
       quantity: qty,
@@ -226,23 +227,27 @@ export function ProductPurchaseProvider({
       unitPriceMinor: selected.effectivePriceMinor,
       optionsTotalMinor: estimate.optionsTotalMinor,
       primaryImageUrl: primary,
-    });
-    const postcard = cardEnabled ? postcards.find((p) => p.id === postcardId) : undefined;
+      ...(isPostcard
+        ? { inscription: true, cardMessage: cardMessage.trim() || undefined }
+        : {}),
+    };
+    let next = addToCart(readCart(), parentLine);
+    const postcard = !isPostcard && cardEnabled ? postcards.find((p) => p.id === postcardId) : undefined;
     if (postcard?.defaultVariant) {
-      const alreadyInCart = next.items.some((i) => i.variantId === postcard.defaultVariant!.id);
-      if (!alreadyInCart) {
-        next = addToCart(next, {
-          productId: postcard.id,
-          variantId: postcard.defaultVariant.id,
-          quantity: 1,
-          productKind: 'GIFT',
-          productName: postcard.name,
-          productSlug: postcard.slug,
-          variantName: postcard.defaultVariant.name,
-          unitPriceMinor: postcard.defaultVariant.priceMinor,
-          primaryImageUrl: postcard.primaryImageUrl,
-        });
-      }
+      next = addToCart(next, {
+        productId: postcard.id,
+        variantId: postcard.defaultVariant.id,
+        quantity: 1,
+        productKind: 'GIFT',
+        productName: postcard.name,
+        productSlug: postcard.slug,
+        variantName: postcard.defaultVariant.name,
+        unitPriceMinor: postcard.defaultVariant.priceMinor,
+        primaryImageUrl: postcard.primaryImageUrl,
+        inscription: true,
+        cardMessage: cardMessage.trim() || undefined,
+        attachedToKey: cartLineKey(parentLine),
+      });
     }
     writeCart(next);
     trackEvent('add_to_cart', {
@@ -281,6 +286,7 @@ export function ProductPurchaseProvider({
     postcardId,
     setPostcardId,
     postcards,
+    isPostcard,
     feedback,
     cartCount,
     onAdd,
@@ -343,6 +349,9 @@ export function ProductBuyCard({
     onAdd,
     cardEnabled,
     setCardEnabled,
+    isPostcard,
+    cardMessage,
+    setCardMessage,
   } = usePurchase();
   const sorted = [...product.variants].sort((a, b) => a.sortOrder - b.sortOrder);
   const availability = availabilityBadge(product.availability);
@@ -503,6 +512,19 @@ export function ProductBuyCard({
           {stemCountLabel(qty)} собираем в один букет
           {optionGroups.length > 0 ? '; лента и упаковка — один раз' : ''}.
         </p>
+      ) : null}
+
+      {isPostcard ? (
+        <label className="sf-pdp-inscription">
+          <span>Текст на открытке</span>
+          <textarea
+            rows={2}
+            maxLength={CARD_MESSAGE_MAX}
+            placeholder="Напишем эти слова на открытке"
+            value={cardMessage}
+            onChange={(event) => setCardMessage(event.target.value)}
+          />
+        </label>
       ) : null}
 
       <div className="sf-pdp-buy__cta">
@@ -735,7 +757,7 @@ export function ProductPostcardCard() {
               {cardMessage.length}/{CARD_MESSAGE_MAX}
             </span>
           </label>
-          <p className="sf-pdp-postcard__note">Текст подставится в оформление заказа.</p>
+          <p className="sf-pdp-postcard__note">Текст будет на этой открытке, вместе с этим букетом.</p>
         </div>
       ) : null}
     </section>

@@ -11,6 +11,7 @@ import type { ProductKind } from '@bouquet-one/contracts';
 
 export const CART_STORAGE_KEY = 'bouquet-one:cart:v1';
 export const MAX_LINE_QTY = 20;
+export const CARD_MESSAGE_MAX = 200;
 
 export type CartLine = {
   productId: string;
@@ -29,6 +30,12 @@ export type CartLine = {
   /** Cached option surcharges for the line; omit/0 when none. Not baked into unitPriceMinor. */
   optionsTotalMinor?: string;
   primaryImageUrl?: string | null;
+  /** Words for this postcard. Shown in the cart and sent with the order. */
+  cardMessage?: string;
+  /** This line is a postcard that can carry an inscription. */
+  inscription?: boolean;
+  /** Cart line key of the bouquet this postcard belongs to. */
+  attachedToKey?: string;
 };
 
 export type CartState = {
@@ -40,13 +47,15 @@ export function emptyCart(): CartState {
   return { version: 1, items: [] };
 }
 
-/** Merge identity: same variant with different options = separate lines. */
+/** Merge identity: same variant with different options or a different bouquet = separate lines. */
 export function cartLineKey(line: {
   variantId: string;
   optionValueIds?: readonly string[];
+  attachedToKey?: string;
 }): string {
   const opts = [...(line.optionValueIds ?? [])].filter(Boolean).sort().join(',');
-  return `${line.variantId}:${opts}`;
+  const parent = line.attachedToKey ? `@${line.attachedToKey}` : '';
+  return `${line.variantId}:${opts}${parent}`;
 }
 
 function normalizeOptionValueIds(ids: string[] | undefined): string[] | undefined {
@@ -76,6 +85,15 @@ export function parseCart(raw: string | null): CartState {
               ? item.optionValueIds.filter((id): id is string => typeof id === 'string')
               : undefined,
           ),
+          cardMessage:
+            typeof item.cardMessage === 'string' && item.cardMessage.trim()
+              ? item.cardMessage.trim().slice(0, CARD_MESSAGE_MAX)
+              : undefined,
+          inscription: item.inscription === true ? true : undefined,
+          attachedToKey:
+            typeof item.attachedToKey === 'string' && item.attachedToKey
+              ? item.attachedToKey
+              : undefined,
         })),
     };
   } catch {
@@ -155,8 +173,41 @@ export function setCartQuantity(
 export function removeFromCart(state: CartState, lineKey: string): CartState {
   return {
     version: 1,
-    items: state.items.filter((i) => cartLineKey(i) !== lineKey),
+    items: state.items.filter(
+      (i) => cartLineKey(i) !== lineKey && i.attachedToKey !== lineKey,
+    ),
   };
+}
+
+export function setLineCardMessage(
+  state: CartState,
+  lineKey: string,
+  message: string,
+): CartState {
+  const value = message.slice(0, CARD_MESSAGE_MAX);
+  return {
+    version: 1,
+    items: state.items.map((item) =>
+      cartLineKey(item) === lineKey
+        ? { ...item, cardMessage: value || undefined, inscription: true }
+        : item,
+    ),
+  };
+}
+
+/** One order field, labeled so each text stays with its bouquet or postcard. */
+export function formatOrderCardMessage(items: CartLine[]): string | null {
+  const lines = items.flatMap((line) => {
+    const text = line.cardMessage?.trim();
+    if (!text) return [];
+    const parent = line.attachedToKey
+      ? items.find((item) => cartLineKey(item) === line.attachedToKey)
+      : undefined;
+    const label = parent?.productName ?? line.productName ?? 'Открытка';
+    return [`${parent ? 'К' : 'На'} «${label}»: ${text}`];
+  });
+  if (lines.length === 0) return null;
+  return lines.join('\n').slice(0, 500);
 }
 
 export function clearCart(): CartState {
@@ -166,7 +217,6 @@ export function clearCart(): CartState {
 
 /** Postcard text typed on the product page; prefilled into checkout `cardMessage`. */
 export const CARD_DRAFT_STORAGE_KEY = 'bouquet-one:card-draft:v1';
-export const CARD_MESSAGE_MAX = 200;
 
 export function readCardDraft(): string {
   if (typeof window === 'undefined') return '';

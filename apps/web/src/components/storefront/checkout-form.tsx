@@ -16,9 +16,12 @@ import { MANAGER_TIME_WINDOW_ID } from '@bouquet-one/contracts';
 import { formatPriceFromMinor } from '@/lib/media';
 import { trackEvent } from '@/lib/analytics';
 import {
+  cartLineKey,
   clearCart,
+  formatOrderCardMessage,
   readCardDraft,
   readCart,
+  setLineCardMessage,
   writeCardDraft,
   writeCart,
   type CartState,
@@ -432,8 +435,13 @@ export function CheckoutForm() {
       fulfillmentDate,
       timeWindowId: agreeWithManager ? MANAGER_TIME_WINDOW_ID : timeWindowId,
       surprise,
-      cardMessage: wantCard && cardMessage.trim() ? cardMessage.trim() : null,
-      anonymousCard: wantCard ? anonymousCard : false,
+      cardMessage:
+        formatOrderCardMessage(cart.items) ??
+        (wantCard && cardMessage.trim() ? cardMessage.trim() : null),
+      anonymousCard:
+        wantCard || cart.items.some((line) => line.inscription || line.attachedToKey)
+          ? anonymousCard
+          : false,
       customerComment: mergedComment || null,
       paymentMethod: 'CASH_ON_DELIVERY',
       confirmedQuote,
@@ -841,6 +849,43 @@ export function CheckoutForm() {
 
         <section className="sf-checkout-card">
           <h2 className="sf-checkout-card__title">Открытка и пожелания</h2>
+          {cart.items.some((line) => line.inscription || line.attachedToKey) ? (
+            <ul className="sf-checkout-inscriptions">
+              {cart.items
+                .filter((line) => line.inscription || line.attachedToKey)
+                .map((line) => {
+                  const key = cartLineKey(line);
+                  const parent = line.attachedToKey
+                    ? cart.items.find((item) => cartLineKey(item) === line.attachedToKey)
+                    : undefined;
+                  const title = parent
+                    ? `К «${parent.productName ?? 'букету'}»`
+                    : (line.productName ?? 'Открытка');
+                  return (
+                    <li key={key}>
+                      <label className="sf-checkout-field">
+                        <span className="sf-checkout-label">
+                          {title}
+                          {parent ? ` · ${line.productName ?? 'открытка'}` : ''}
+                        </span>
+                        <textarea
+                          maxLength={200}
+                          rows={2}
+                          value={line.cardMessage ?? ''}
+                          onChange={(event) => {
+                            const next = setLineCardMessage(cart, key, event.target.value);
+                            writeCart(next);
+                            setCart(next);
+                          }}
+                          className="sf-checkout-input sf-checkout-input--area"
+                          placeholder="Текст на этой открытке"
+                        />
+                      </label>
+                    </li>
+                  );
+                })}
+            </ul>
+          ) : (
           <label className="sf-checkout-check">
             <input
               type="checkbox"
@@ -858,7 +903,8 @@ export function CheckoutForm() {
               <em>Мы напишем текст от руки или напечатаем к букету.</em>
             </span>
           </label>
-          {wantCard ? (
+          )}
+          {wantCard && !cart.items.some((line) => line.inscription || line.attachedToKey) ? (
             <>
               <label className="sf-checkout-field">
                 <span className="sf-checkout-label">Текст открытки</span>
@@ -871,18 +917,20 @@ export function CheckoutForm() {
                   placeholder="Ваши тёплые слова…"
                 />
               </label>
-              <label className="sf-checkout-check">
-                <input
-                  type="checkbox"
-                  checked={anonymousCard}
-                  onChange={(e) => setAnonymousCard(e.target.checked)}
-                />
-                <span>
-                  <strong>Без подписи отправителя</strong>
-                  <em>На открытке не будет вашего имени.</em>
-                </span>
-              </label>
             </>
+          ) : null}
+          {wantCard || cart.items.some((line) => line.inscription || line.attachedToKey) ? (
+            <label className="sf-checkout-check">
+              <input
+                type="checkbox"
+                checked={anonymousCard}
+                onChange={(e) => setAnonymousCard(e.target.checked)}
+              />
+              <span>
+                <strong>Без подписи отправителя</strong>
+                <em>На открытке не будет вашего имени.</em>
+              </span>
+            </label>
           ) : null}
           <label className="sf-checkout-field">
             <span className="sf-checkout-label">Комментарий к заказу</span>

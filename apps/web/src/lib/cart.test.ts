@@ -7,6 +7,7 @@ import {
   clearCart,
   emptyCart,
   parseCart,
+  formatOrderCardMessage,
   removeFromCart,
   setCartQuantity,
   syncCardDraftWithCart,
@@ -96,6 +97,38 @@ test('removeFromCart', () => {
 test('parseCart rejects garbage', () => {
   assert.equal(parseCart('not-json').items.length, 0);
   assert.equal(parseCart('{"version":2,"items":[]}').items.length, 0);
+});
+
+test('postcard stays with its bouquet and leaves with it', () => {
+  const bouquet = { productId: 'rose', variantId: 'rose-v', quantity: 1, productName: 'Роза' };
+  let cart = addToCart(emptyCart(), bouquet);
+  const parentKey = cartLineKey(bouquet);
+  cart = addToCart(cart, {
+    productId: 'card',
+    variantId: 'card-v',
+    quantity: 1,
+    productName: 'Открытка Мама',
+    inscription: true,
+    cardMessage: 'Любимой маме',
+    attachedToKey: parentKey,
+  });
+  cart = addToCart(cart, {
+    productId: 'card',
+    variantId: 'card-v',
+    quantity: 1,
+    productName: 'Открытка Мама',
+    inscription: true,
+    cardMessage: 'Отдельно',
+  });
+  assert.equal(cart.items.length, 3);
+  assert.equal(
+    formatOrderCardMessage(cart.items),
+    'К «Роза»: Любимой маме\nНа «Открытка Мама»: Отдельно',
+  );
+
+  cart = removeFromCart(cart, parentKey);
+  assert.equal(cart.items.length, 1);
+  assert.equal(cart.items[0]?.cardMessage, 'Отдельно');
 });
 
 test('clearCart and empty cart clear postcard draft; active cart keeps it', () => {

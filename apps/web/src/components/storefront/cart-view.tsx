@@ -71,13 +71,14 @@ export function CartView() {
   return (
     <div className="sf-cart">
       <ul className="sf-cart__list">
-        {cart.items.map((line) => {
+        {cart.items.filter((line) => !line.attachedToKey).map((line) => {
           const key = cartLineKey(line);
           const unit = BigInt(line.unitPriceMinor ?? '0');
           const options = BigInt(line.optionsTotalMinor ?? '0');
           const lineTotal = unit * BigInt(line.quantity) + options;
           const stemLine = isStemBouquetLine(line);
           const subtitle = cartLineSubtitle(line);
+          const attached = cart.items.filter((item) => item.attachedToKey === key);
           return (
             <li key={key} className="sf-cart__item">
               <Link
@@ -113,6 +114,31 @@ export function CartView() {
                         +{formatPriceFromMinor(options.toString())} упаковка
                       </p>
                     ) : null}
+                    {line.cardMessage ? (
+                      <p className="sf-cart__card-note">Текст: {line.cardMessage}</p>
+                    ) : null}
+                    {attached.map((card) => {
+                      const cardKey = cartLineKey(card);
+                      const cardUnit = BigInt(card.unitPriceMinor ?? '0');
+                      return (
+                        <div key={cardKey} className="sf-cart__card">
+                          <p className="sf-cart__card-name">
+                            Открытка «{card.productName ?? 'открытка'}» ·{' '}
+                            {formatPriceFromMinor(cardUnit.toString())}
+                          </p>
+                          <p className="sf-cart__card-note">
+                            {card.cardMessage ? `Текст: ${card.cardMessage}` : 'Без текста'}
+                          </p>
+                          <button
+                            type="button"
+                            className="sf-cart__remove"
+                            onClick={() => update(removeFromCart(cart, cardKey))}
+                          >
+                            Убрать открытку
+                          </button>
+                        </div>
+                      );
+                    })}
                     <p className="sf-cart__unit">
                       {formatPriceFromMinor(unit.toString())} {unitPriceSuffix(line.productKind)}
                     </p>

@@ -154,7 +154,11 @@ export default async function ProductPage({ params }: { params: Params }) {
       <div className="sf-container-wide">
         <Breadcrumbs className="sf-pdp-crumbs" items={breadcrumbItems} />
 
-        <ProductPurchaseProvider product={purchaseProduct} postcards={postcards}>
+        <ProductPurchaseProvider
+          product={purchaseProduct}
+          postcards={postcards}
+          isPostcard={product.catalogCategory?.slug === POSTCARD_CATEGORY_SLUG}
+        >
           <article className="sf-pdp-top">
             <div className="sf-pdp-top__col">
               <div className="sf-pdp-top__gallery">

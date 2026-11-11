@@ -8135,6 +8135,32 @@ a.sf-instagram__handle:hover {
   color: var(--pdp-muted);
 }
 
+.sf-pdp-inscription {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.sf-pdp-inscription span {
+  font-size: 0.75rem;
+  font-weight: 650;
+  color: var(--pdp-ink);
+}
+
+.sf-pdp-inscription textarea {
+  width: 100%;
+  min-height: 4.2rem;
+  resize: vertical;
+  border: 1px solid color-mix(in oklab, var(--pdp-pink) 35%, var(--pdp-line));
+  border-radius: 0.75rem;
+  background: color-mix(in oklab, var(--pdp-pink-soft) 45%, #fff);
+  padding: 0.65rem 0.75rem;
+  font: inherit;
+  font-size: 0.875rem;
+  line-height: 1.45;
+  color: var(--pdp-ink);
+}
+
 /* Postcard recommendations under product card */
 .sf-pdp-postcards {
   margin-top: 1.35rem;
@@ -9038,6 +9064,42 @@ a.sf-instagram__handle:hover {
 
 .sf-cart__name:hover {
   color: var(--color-brand);
+}
+
+.sf-cart__card {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.15rem;
+  margin-top: 0.45rem;
+  padding: 0.45rem 0.6rem;
+  border-radius: 0.65rem;
+  background: color-mix(in oklab, var(--pdp-pink-soft, #fde4e8) 70%, #fff);
+}
+
+.sf-cart__card-name,
+.sf-cart__card-note {
+  margin: 0;
+  font-size: 0.75rem;
+  line-height: 1.4;
+}
+
+.sf-cart__card-name {
+  font-weight: 650;
+  color: var(--color-ink, #23201c);
+}
+
+.sf-cart__card-note {
+  color: var(--color-muted, #6f675e);
+}
+
+.sf-checkout-inscriptions {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  margin: 0 0 0.85rem;
+  padding: 0;
+  list-style: none;
 }
 
 .sf-cart__meta,
