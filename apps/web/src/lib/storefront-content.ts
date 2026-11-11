@@ -93,7 +93,7 @@ export const FIXED_PRIMARY_NAV: PrimaryNavItem[] = [
         children: [
           { id: 'birthday', label: 'День рождения', href: '/povod/den-rozhdeniya' },
           { id: 'love', label: 'Любимым', href: '/povod/lyubimym' },
-          { id: 'march8', label: '8 марта', href: '/povod/8-marta' },
+          { id: 'march8', label: '8 марта', href: '/k-prazdniku/8-marta' },
           { id: 'wedding', label: 'Свадьба', href: '/povod/svadba' },
           { id: 'thanks', label: 'Благодарность', href: '/povod/blagodarnost' },
         ],

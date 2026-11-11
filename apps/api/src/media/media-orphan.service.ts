@@ -39,23 +39,20 @@ export type CleanupReport = {
   estimatedReclaimableBytes: number;
 };
 
-/**
- * Max time for one orphan purge transaction (FOR UPDATE held across S3 deletes).
- * CLI-only path; keeps the MediaAsset row locked so ProductMedia FK inserts block.
- */
-const ORPHAN_PURGE_TX_TIMEOUT_MS = 120_000;
-const ORPHAN_PURGE_TX_MAX_WAIT_MS = 10_000;
+const ORPHAN_CLAIM_TX_TIMEOUT_MS = 15_000;
+const ORPHAN_CLAIM_TX_MAX_WAIT_MS = 10_000;
+const ORPHAN_FINALIZE_TX_TIMEOUT_MS = 15_000;
 
 /**
  * Orphan = MediaAsset with zero ProductMedia and zero NavigationMenuItem refs.
  * Physical delete only after orphanedAt + grace period. Idempotent; missing objects OK.
  *
- * Deletion order (single DB transaction, row locked):
- *   FOR UPDATE → final ref/grace check → storage delete (master + derivatives) → DB delete
+ * Deletion order (durable across partial storage failures):
+ *   1) Claim TX: FOR UPDATE → ref/grace check → set purgeStartedAt (blocks re-attach)
+ *   2) Storage delete master + derivatives (missing keys OK; failures leave claim for retry)
+ *   3) Finalize TX: FOR UPDATE → re-check refs → delete derivatives + asset rows
  *
- * Holding FOR UPDATE across storage deletes is intentional: PostgreSQL FK inserts into
- * product_media / navigation_menu_items take KEY SHARE on media_assets, which conflicts
- * with FOR UPDATE, so a concurrent attach cannot commit while S3 objects are removed.
+ * `deletedKeys` / `deletedAssets` are recorded only after finalize commits.
  */
 @Injectable()
 export class MediaOrphanService {
@@ -69,13 +66,14 @@ export class MediaOrphanService {
   /**
    * Heal marker drift (e.g. ProductMedia cascade without app detach):
    * - unreferenced + null orphanedAt → set orphanedAt = now (starts grace)
-   * - referenced + orphanedAt set → clear orphanedAt
+   * - referenced + orphanedAt set → clear orphanedAt (and abort a stale purge claim)
    */
   async reconcileOrphanMarkers(): Promise<{ marked: number; cleared: number }> {
     const marked = await this.prisma.client.$executeRaw`
       UPDATE media_assets AS ma
       SET orphaned_at = NOW()
       WHERE ma.orphaned_at IS NULL
+        AND ma.purge_started_at IS NULL
         AND NOT EXISTS (
           SELECT 1 FROM product_media pm WHERE pm.media_asset_id = ma.id
         )
@@ -85,8 +83,12 @@ export class MediaOrphanService {
     `;
     const cleared = await this.prisma.client.$executeRaw`
       UPDATE media_assets AS ma
-      SET orphaned_at = NULL
-      WHERE ma.orphaned_at IS NOT NULL
+      SET orphaned_at = NULL,
+          purge_started_at = NULL
+      WHERE (
+          ma.orphaned_at IS NOT NULL
+          OR ma.purge_started_at IS NOT NULL
+        )
         AND (
           EXISTS (SELECT 1 FROM product_media pm WHERE pm.media_asset_id = ma.id)
           OR EXISTS (SELECT 1 FROM navigation_menu_items nmi WHERE nmi.media_asset_id = ma.id)
@@ -192,7 +194,8 @@ export class MediaOrphanService {
     }
 
     const cutoff = orphanGraceCutoff(MEDIA_ORPHAN_GRACE_HOURS);
-    if (!asset.orphanedAt || asset.orphanedAt > cutoff) {
+    const claimed = Boolean(asset.purgeStartedAt);
+    if (!claimed && (!asset.orphanedAt || asset.orphanedAt > cutoff)) {
       throw new BadRequestException('Media asset is still within the grace period');
     }
 
@@ -201,7 +204,7 @@ export class MediaOrphanService {
       storageKey: asset.storageKey,
       byteSize: asset.byteSize,
       createdAt: asset.createdAt.toISOString(),
-      orphanedAt: asset.orphanedAt.toISOString(),
+      orphanedAt: (asset.orphanedAt ?? asset.createdAt).toISOString(),
       derivativeKeys: asset.derivatives.map((d) => d.storageKey),
       estimatedBytes:
         asset.byteSize + asset.derivatives.reduce((sum, d) => sum + d.byteSize, 0),
@@ -258,12 +261,16 @@ export class MediaOrphanService {
       case 'grace':
         return {
           ...unreferenced,
+          purgeStartedAt: null,
           orphanedAt: { not: null, gt: cutoff },
         };
       case 'purgeable':
         return {
           ...unreferenced,
-          orphanedAt: { not: null, lte: cutoff },
+          OR: [
+            { purgeStartedAt: { not: null } },
+            { orphanedAt: { not: null, lte: cutoff } },
+          ],
         };
       default: {
         const _exhaustive: never = status;
@@ -289,10 +296,13 @@ export class MediaOrphanService {
       where: {
         productMedia: { none: {} },
         navigationMenuItems: { none: {} },
-        orphanedAt: { not: null, lte: cutoff },
+        OR: [
+          { purgeStartedAt: { not: null } },
+          { orphanedAt: { not: null, lte: cutoff } },
+        ],
       },
       include: { derivatives: { select: { storageKey: true, byteSize: true } } },
-      orderBy: { orphanedAt: 'asc' },
+      orderBy: [{ purgeStartedAt: 'asc' }, { orphanedAt: 'asc' }],
       take: limit,
     });
 
@@ -363,10 +373,72 @@ export class MediaOrphanService {
     const cutoff = orphanGraceCutoff(graceHours);
     const keys = [candidate.storageKey, ...candidate.derivativeKeys];
 
+    const claimed = await this.prisma.client.$transaction(
+      async (tx) => {
+        const rows = await tx.$queryRaw<
+          Array<{ id: string; orphaned_at: Date | null; purge_started_at: Date | null }>
+        >`
+          SELECT id, orphaned_at, purge_started_at
+          FROM media_assets
+          WHERE id = ${candidate.id}::uuid
+          FOR UPDATE
+        `;
+        if (rows.length === 0) {
+          return 'missing' as const;
+        }
+
+        const productRefs = await tx.productMedia.count({
+          where: { mediaAssetId: candidate.id },
+        });
+        const navRefs = await tx.navigationMenuItem.count({
+          where: { mediaAssetId: candidate.id },
+        });
+        if (productRefs + navRefs > 0) {
+          await tx.mediaAsset.update({
+            where: { id: candidate.id },
+            data: { orphanedAt: null, purgeStartedAt: null },
+          });
+          return 'referenced' as const;
+        }
+
+        const row = rows[0]!;
+        if (!row.purge_started_at) {
+          const orphanedAt = row.orphaned_at;
+          if (!orphanedAt || orphanedAt > cutoff) {
+            return 'in_grace' as const;
+          }
+          await tx.mediaAsset.update({
+            where: { id: candidate.id },
+            data: { purgeStartedAt: new Date() },
+          });
+        }
+        return 'claimed' as const;
+      },
+      {
+        timeout: ORPHAN_CLAIM_TX_TIMEOUT_MS,
+        maxWait: ORPHAN_CLAIM_TX_MAX_WAIT_MS,
+      },
+    );
+
+    if (claimed !== 'claimed') {
+      report.skippedLocked.push(candidate.id);
+      return;
+    }
+
+    // Physical deletes happen only after the durable claim. Partial failure leaves
+    // purgeStartedAt set so the next cleanup pass retries; missing keys are OK.
+    for (const key of keys) {
+      try {
+        await this.storage.delete(key);
+      } catch (err) {
+        throw new Error(`storage_delete_failed key=${key}: ${(err as Error).message}`);
+      }
+    }
+
     await this.prisma.client.$transaction(
       async (tx) => {
-        const rows = await tx.$queryRaw<Array<{ id: string; orphaned_at: Date | null }>>`
-          SELECT id, orphaned_at FROM media_assets WHERE id = ${candidate.id}::uuid FOR UPDATE
+        const rows = await tx.$queryRaw<Array<{ id: string }>>`
+          SELECT id FROM media_assets WHERE id = ${candidate.id}::uuid FOR UPDATE
         `;
         if (rows.length === 0) {
           report.skippedLocked.push(candidate.id);
@@ -382,35 +454,20 @@ export class MediaOrphanService {
         if (productRefs + navRefs > 0) {
           await tx.mediaAsset.update({
             where: { id: candidate.id },
-            data: { orphanedAt: null },
+            data: { orphanedAt: null, purgeStartedAt: null },
           });
           report.skippedLocked.push(candidate.id);
           return;
         }
 
-        const orphanedAt = rows[0]?.orphaned_at;
-        if (!orphanedAt || orphanedAt > cutoff) {
-          report.skippedLocked.push(candidate.id);
-          return;
-        }
-
-        // Storage deletes while the row lock is held — closes TOCTOU vs attach.
-        for (const key of keys) {
-          try {
-            await this.storage.delete(key);
-            report.deletedKeys.push(key);
-          } catch (err) {
-            throw new Error(`storage_delete_failed key=${key}: ${(err as Error).message}`);
-          }
-        }
-
         await tx.mediaDerivative.deleteMany({ where: { mediaAssetId: candidate.id } });
         await tx.mediaAsset.delete({ where: { id: candidate.id } });
         report.deletedAssets.push(candidate.id);
+        report.deletedKeys.push(...keys);
       },
       {
-        timeout: ORPHAN_PURGE_TX_TIMEOUT_MS,
-        maxWait: ORPHAN_PURGE_TX_MAX_WAIT_MS,
+        timeout: ORPHAN_FINALIZE_TX_TIMEOUT_MS,
+        maxWait: ORPHAN_CLAIM_TX_MAX_WAIT_MS,
       },
     );
 

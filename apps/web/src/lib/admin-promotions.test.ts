@@ -91,7 +91,7 @@ test('active promotion shows sale price and status', () => {
   const active = row();
   assert.equal(promotionSalePriceLabel(active), '79,20 BYN');
   assert.equal(promotionDiscountLabel(active), '−20%');
-  assert.equal(promotionStatusView(active).label, 'Идёт сейчас');
+  assert.equal(promotionStatusView(active).label, 'На витрине');
   assert.equal(promotionTypeForRow(active), 'Процент скидки');
 });
 

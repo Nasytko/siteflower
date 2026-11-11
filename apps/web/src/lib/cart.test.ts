@@ -2,11 +2,15 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
   addToCart,
+  CARD_DRAFT_STORAGE_KEY,
   cartLineKey,
+  clearCart,
   emptyCart,
   parseCart,
   removeFromCart,
   setCartQuantity,
+  syncCardDraftWithCart,
+  writeCardDraft,
 } from './cart';
 
 test('addToCart merges same variant', () => {
@@ -92,4 +96,47 @@ test('removeFromCart', () => {
 test('parseCart rejects garbage', () => {
   assert.equal(parseCart('not-json').items.length, 0);
   assert.equal(parseCart('{"version":2,"items":[]}').items.length, 0);
+});
+
+test('clearCart and empty cart clear postcard draft; active cart keeps it', () => {
+  const memory = new Map<string, string>();
+  const localStorage = {
+    getItem: (key: string) => memory.get(key) ?? null,
+    setItem: (key: string, value: string) => {
+      memory.set(key, value);
+    },
+    removeItem: (key: string) => {
+      memory.delete(key);
+    },
+  };
+  // @ts-expect-error test shim
+  globalThis.window = { localStorage };
+
+  writeCardDraft('С днём рождения!');
+  assert.equal(memory.get(CARD_DRAFT_STORAGE_KEY), 'С днём рождения!');
+
+  let cart = addToCart(emptyCart(), {
+    productId: 'bouquet-a',
+    variantId: 'v-a',
+    quantity: 1,
+  });
+  cart = addToCart(cart, {
+    productId: 'bouquet-b',
+    variantId: 'v-b',
+    quantity: 1,
+  });
+  syncCardDraftWithCart(cart);
+  assert.equal(memory.get(CARD_DRAFT_STORAGE_KEY), 'С днём рождения!');
+
+  cart = removeFromCart(cart, cartLineKey(cart.items[0]!));
+  syncCardDraftWithCart(cart);
+  assert.equal(memory.get(CARD_DRAFT_STORAGE_KEY), 'С днём рождения!');
+
+  cart = removeFromCart(cart, cartLineKey(cart.items[0]!));
+  syncCardDraftWithCart(cart);
+  assert.equal(memory.has(CARD_DRAFT_STORAGE_KEY), false);
+
+  writeCardDraft('Ещё раз');
+  clearCart();
+  assert.equal(memory.has(CARD_DRAFT_STORAGE_KEY), false);
 });

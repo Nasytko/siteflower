@@ -11,6 +11,7 @@ import {
   cartLineKey,
   removeFromCart,
   setCartQuantity,
+  syncCardDraftWithCart,
   writeCart,
   type CartState,
 } from '@/lib/cart';
@@ -37,6 +38,7 @@ export function CartView() {
   }, []);
 
   function update(next: CartState) {
+    syncCardDraftWithCart(next);
     writeCart(next);
     setCart(next);
   }

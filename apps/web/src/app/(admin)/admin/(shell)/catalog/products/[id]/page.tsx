@@ -8,7 +8,6 @@ import {
   fetchProductTaxonomies,
 } from '@/lib/admin-catalog-api';
 import { categoryPickerOptions } from '@/lib/admin-catalog-picker-labels';
-import { formatAdminDateTime } from '@/lib/admin-labels';
 import { requireAdminPermission } from '@/lib/admin-page-auth';
 import { ProductEditor } from '@/components/admin/product-editor';
 
@@ -59,25 +58,6 @@ export default async function AdminProductEditPage({ params, searchParams }: Pro
         canPublish={roleHasPermission(me.user.role, 'CATALOG_PUBLISH')}
         canDelete={roleHasPermission(me.user.role, 'CATALOG_DELETE')}
       />
-      <details className="admin-disclosure">
-        <summary>Дата и ссылка</summary>
-        <div className="admin-disclosure__body admin-meta">
-          <span className="admin-meta__item">
-            Адрес: <strong>/products/{product.slug}</strong>
-          </span>
-          <span className="admin-meta__item">
-            Создан: <strong>{formatAdminDateTime(product.createdAt)}</strong>
-          </span>
-          <span className="admin-meta__item">
-            Изменён: <strong>{formatAdminDateTime(product.updatedAt)}</strong>
-          </span>
-          {product.publishedAt ? (
-            <span className="admin-meta__item">
-              Опубликован: <strong>{formatAdminDateTime(product.publishedAt)}</strong>
-            </span>
-          ) : null}
-        </div>
-      </details>
     </main>
   );
 }

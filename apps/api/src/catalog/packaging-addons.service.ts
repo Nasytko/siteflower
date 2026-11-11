@@ -20,6 +20,7 @@ import { hashIp } from '../auth/crypto.util';
 import type { ActorContext } from '../common/actor.util';
 import { AppConfigService } from '../config/app-config.service';
 import { PrismaService } from '../database/prisma.service';
+import { StorefrontRevalidateService } from '../storefront/storefront-revalidate.service';
 import {
   erpSkuConflict,
   isErpSkuUniqueViolation,
@@ -54,7 +55,16 @@ export class PackagingAddonsService {
     private readonly prisma: PrismaService,
     private readonly audit: AuditService,
     private readonly appConfig: AppConfigService,
+    private readonly revalidate: StorefrontRevalidateService,
   ) {}
+
+  private async bumpStorefrontCache(): Promise<void> {
+    // Addon edits sync into product option values; invalidate product/catalog caches.
+    await this.revalidate.ping({
+      tags: ['catalog', 'products', 'storefront'],
+      paths: ['/', '/catalog/bouquets'],
+    });
+  }
 
   async list(options?: { includeInactive?: boolean }): Promise<PackagingAddonDto[]> {
     const rows = await this.prisma.client.packagingAddon.findMany({
@@ -130,6 +140,7 @@ export class PackagingAddonsService {
         throw err;
       });
 
+    await this.bumpStorefrontCache();
     return toDto(created);
   }
 
@@ -240,6 +251,7 @@ export class PackagingAddonsService {
         throw err;
       });
 
+    await this.bumpStorefrontCache();
     return toDto(updated);
   }
 
@@ -259,6 +271,7 @@ export class PackagingAddonsService {
       await tx.packagingAddon.delete({ where: { id } });
       await this.recordAudit(tx, actor, 'PACKAGING_ADDON_DELETED', id, { name: existing.name });
     });
+    await this.bumpStorefrontCache();
   }
 
   /** Resolve option-value write rows against the packaging directory. */

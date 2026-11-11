@@ -39,6 +39,7 @@ import { AuditService } from '../audit/audit.service';
 import { hashIp } from '../auth/crypto.util';
 import { AppConfigService } from '../config/app-config.service';
 import { PrismaService } from '../database/prisma.service';
+import { assertMediaAttachable } from '../media/media-attach.guard';
 import { MediaService } from '../media/media.service';
 import { PRODUCT_MEDIA_MAX } from '../media/media.constants';
 import type { ActorContext } from '../common/actor.util';
@@ -312,7 +313,53 @@ export class ProductsService {
     const family = familyId
       ? await this.families.getDto(familyId, this.urlFor, product.id)
       : null;
-    return toProductAdminDto(product, this.urlFor, new Date(), family);
+    const dto = toProductAdminDto(product, this.urlFor, new Date(), family);
+    const authors = await this.productChangeAuthors(id);
+    return { ...dto, ...authors };
+  }
+
+  /** Who opened the card and who last changed it, from the existing audit journal. */
+  private async productChangeAuthors(id: string): Promise<{
+    createdByName: string | null;
+    updatedByName: string | null;
+  }> {
+    const edited: AuditAction[] = [
+      'PRODUCT_UPDATED',
+      'PRODUCT_PUBLISHED',
+      'PRODUCT_UNPUBLISHED',
+      'PRODUCT_ARCHIVED',
+      'PRODUCT_RESTORED',
+      'PRODUCT_MEDIA_ADDED',
+      'PRODUCT_MEDIA_REMOVED',
+      'PRODUCT_MEDIA_REORDERED',
+      'PRODUCT_VARIANT_CHANGED',
+      'PROMOTION_UPDATED',
+      'BESTSELLER_UPDATED',
+    ];
+    const [created, updated] = await Promise.all([
+      this.prisma.client.auditLog.findFirst({
+        where: {
+          entityType: 'Product',
+          entityId: id,
+          action: { in: ['PRODUCT_CREATED', 'PRODUCT_DUPLICATED'] },
+        },
+        orderBy: { createdAt: 'asc' },
+        select: { actor: { select: { displayName: true } } },
+      }),
+      this.prisma.client.auditLog.findFirst({
+        where: {
+          entityType: 'Product',
+          entityId: id,
+          action: { in: edited },
+        },
+        orderBy: { createdAt: 'desc' },
+        select: { actor: { select: { displayName: true } } },
+      }),
+    ]);
+    return {
+      createdByName: created?.actor?.displayName ?? null,
+      updatedByName: updated?.actor?.displayName ?? null,
+    };
   }
 
   async preview(id: string): Promise<ProductPublicDto> {
@@ -572,6 +619,10 @@ export class ProductsService {
 
       // Shared MediaAsset references — new ProductMedia rows only (Restrict FK).
       if (source.media.length > 0) {
+        const sharedAssetIds = [...new Set(source.media.map((item) => item.mediaAssetId))];
+        for (const mediaAssetId of sharedAssetIds) {
+          await assertMediaAttachable(tx, mediaAssetId);
+        }
         await tx.productMedia.createMany({
           data: source.media.map((item) => ({
             productId: product.id,
@@ -582,10 +633,9 @@ export class ProductsService {
             caption: item.caption,
           })),
         });
-        const sharedAssetIds = [...new Set(source.media.map((item) => item.mediaAssetId))];
         await tx.mediaAsset.updateMany({
           where: { id: { in: sharedAssetIds } },
-          data: { orphanedAt: null },
+          data: { orphanedAt: null, purgeStartedAt: null },
         });
       }
 
@@ -1433,6 +1483,7 @@ export class ProductsService {
             data: { isPrimary: false },
           });
         }
+        await assertMediaAttachable(tx, asset.id);
         await tx.productMedia.create({
           data: {
             productId: id,
@@ -1445,7 +1496,7 @@ export class ProductsService {
         });
         await tx.mediaAsset.update({
           where: { id: asset.id },
-          data: { orphanedAt: null },
+          data: { orphanedAt: null, purgeStartedAt: null },
         });
         await this.products.bumpVersion(id, tx);
         await this.recordAudit(tx, actor, 'PRODUCT_MEDIA_ADDED', id, {

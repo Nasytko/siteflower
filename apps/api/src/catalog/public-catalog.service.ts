@@ -538,6 +538,7 @@ export class PublicCatalogService {
       { path: '/akcii', updatedAt: newestProductUpdate },
       { path: '/povod', updatedAt: newestProductUpdate },
       { path: '/k-prazdniku', updatedAt: newestProductUpdate },
+      { path: '/komu', updatedAt: newestProductUpdate },
       ...products.map((product) => ({
         path: `/products/${product.slug}`,
         updatedAt: product.updatedAt.toISOString(),

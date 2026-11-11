@@ -5,6 +5,7 @@ import {
   PRIMARY_PRODUCT_KINDS,
   normalizeSlug,
   productKindNeedsGiftSubtype,
+  PRODUCT_CARD_LEAD_MAX_LENGTH,
   suggestProductNameFromComposition,
   type CommercialAvailability,
   type ProductKind,
@@ -317,7 +318,7 @@ export function ProductEditorMainTab(props: Props) {
           <div>
             <h2>Описание</h2>
             <p className="sf-pe-card__lead">
-              Короткий текст на карточке товара. Без него опубликовать нельзя.
+              Текст на карточке товара, не длиннее четырёх строк. Без него опубликовать нельзя.
             </p>
           </div>
         </div>
@@ -327,13 +328,34 @@ export function ProductEditorMainTab(props: Props) {
           <textarea
             className="sf-pe-input"
             rows={4}
+            maxLength={
+              basic.shortDescription.length > PRODUCT_CARD_LEAD_MAX_LENGTH
+                ? undefined
+                : PRODUCT_CARD_LEAD_MAX_LENGTH
+            }
             value={basic.shortDescription}
             disabled={!canUpdate}
             onChange={(event) => {
-              setBasic((prev) => ({ ...prev, shortDescription: event.target.value }));
+              const raw = event.target.value;
+              const previous = basic.shortDescription;
+              const next =
+                raw.length <= PRODUCT_CARD_LEAD_MAX_LENGTH
+                  ? raw
+                  : raw.length < previous.length
+                    ? raw
+                    : previous.length > PRODUCT_CARD_LEAD_MAX_LENGTH
+                      ? previous
+                      : raw.slice(0, PRODUCT_CARD_LEAD_MAX_LENGTH);
+              setBasic((prev) => ({ ...prev, shortDescription: next }));
               touch();
             }}
           />
+          <p className="sf-pe-note">
+            {basic.shortDescription.length} из {PRODUCT_CARD_LEAD_MAX_LENGTH}. На карточке четыре строки
+            {basic.shortDescription.length > PRODUCT_CARD_LEAD_MAX_LENGTH
+              ? ' — сократите текст.'
+              : '.'}
+          </p>
         </label>
 
         {legacyDescriptionConflict ? (
@@ -355,8 +377,7 @@ export function ProductEditorMainTab(props: Props) {
             </p>
           </div>
         </div>
-        <div className="sf-pe-card__body grid gap-4 lg:grid-cols-2">
-        <div className="contents">
+        <div className="sf-pe-card__body sf-pe-picks">
           <TaxonomyQuickPick
             kind="occasions"
             legend="Повод"
@@ -414,38 +435,33 @@ export function ProductEditorMainTab(props: Props) {
             }}
             onCreated={(item) => onTaxonomyCreated('recipients', item)}
           />
-        </div>
 
         {traitOptions.length > 0 ? (
-          <div className="sf-pe-block lg:col-span-2" data-section="traits">
+          <div className="sf-pe-block sf-pe-picks__wide" data-section="traits">
             <p className="sf-pe-label">Особенности</p>
-            <ul className="sf-pe-trait-list">
+            <ul className="sf-pe-chips">
               {traitOptions.map((trait) => {
                 const checked = discovery.traitKeys.includes(trait.key);
                 return (
                   <li key={trait.key}>
-                    <label className="sf-pe-trait">
-                      <input
-                        type="checkbox"
-                        checked={checked}
-                        disabled={!canUpdate}
-                        onChange={() => {
-                          setDiscovery((prev) => ({
-                            ...prev,
-                            traitKeys: checked
-                              ? prev.traitKeys.filter((k) => k !== trait.key)
-                              : [...prev.traitKeys, trait.key],
-                          }));
-                          touch();
-                        }}
-                      />
-                      <span>
-                        <span className="sf-pe-trait__name">{trait.name}</span>
-                        {trait.description ? (
-                          <span className="sf-pe-trait__hint">{trait.description}</span>
-                        ) : null}
-                      </span>
-                    </label>
+                    <button
+                      type="button"
+                      className={`sf-pe-chip${checked ? ' sf-pe-chip--on' : ''}`}
+                      aria-pressed={checked}
+                      disabled={!canUpdate}
+                      title={trait.description ?? undefined}
+                      onClick={() => {
+                        setDiscovery((prev) => ({
+                          ...prev,
+                          traitKeys: checked
+                            ? prev.traitKeys.filter((k) => k !== trait.key)
+                            : [...prev.traitKeys, trait.key],
+                        }));
+                        touch();
+                      }}
+                    >
+                      {trait.name}
+                    </button>
                   </li>
                 );
               })}
@@ -453,11 +469,10 @@ export function ProductEditorMainTab(props: Props) {
           </div>
         ) : null}
 
-        <div className="sf-pe-block lg:col-span-2">
-          <p className="sf-pe-label">Цвета для фильтров</p>
+        <div className="sf-pe-block sf-pe-picks__wide">
           <TaxonomyQuickPick
             kind="colors"
-            legend="Гамма"
+            legend="Цвета"
             options={colors}
             selectedIds={discovery.colorIds}
             canCreate={canCreate}

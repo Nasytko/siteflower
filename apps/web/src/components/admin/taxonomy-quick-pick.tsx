@@ -38,11 +38,19 @@ export function TaxonomyQuickPick({
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const filtered = useMemo(() => {
+  const selected = useMemo(
+    () => options.filter((option) => selectedIds.includes(option.id)),
+    [options, selectedIds],
+  );
+
+  const available = useMemo(() => {
     const q = query.trim().toLowerCase();
-    if (!q) return options;
-    return options.filter((option) => option.name.toLowerCase().includes(q));
-  }, [options, query]);
+    return options.filter((option) => {
+      if (selectedIds.includes(option.id)) return false;
+      if (!q) return true;
+      return option.name.toLowerCase().includes(q);
+    });
+  }, [options, query, selectedIds]);
 
   const exactMatch = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -53,9 +61,7 @@ export function TaxonomyQuickPick({
   function toggleId(id: string) {
     if (!canUpdate) return;
     onChange(
-      selectedIds.includes(id)
-        ? selectedIds.filter((item) => item !== id)
-        : [...selectedIds, id],
+      selectedIds.includes(id) ? selectedIds.filter((item) => item !== id) : [...selectedIds, id],
     );
   }
 
@@ -92,56 +98,86 @@ export function TaxonomyQuickPick({
   }
 
   return (
-    <fieldset className="admin-fieldset">
-      <legend>{legend}</legend>
-      <label className="admin-field mb-2">
-        <span className="sr-only">Поиск</span>
-        <input
-          className="admin-input"
-          value={query}
-          disabled={!canUpdate}
-          placeholder="Поиск…"
-          onChange={(event) => {
-            setQuery(event.target.value);
-            setError(null);
-          }}
-        />
-      </label>
-      {filtered.length > 0 ? (
-        <div className="admin-checks">
-          {filtered.map((option) => (
-            <label key={option.id} className="admin-check">
-              <input
-                type="checkbox"
+    <section className="sf-pe-pick" aria-label={legend}>
+      <div className="sf-pe-pick__head">
+        <p className="sf-pe-label">{legend}</p>
+        <p className="sf-pe-note">{selected.length > 0 ? `Выбрано ${selected.length}` : 'Не выбрано'}</p>
+      </div>
+
+      {selected.length > 0 ? (
+        <ul className="sf-pe-chips">
+          {selected.map((option) => (
+            <li key={option.id}>
+              <button
+                type="button"
+                className="sf-pe-chip sf-pe-chip--on"
                 disabled={!canUpdate}
-                checked={selectedIds.includes(option.id)}
-                onChange={() => toggleId(option.id)}
-              />
-              {kind === 'colors' ? (
-                <span
-                  aria-hidden
-                  className="admin-swatch admin-swatch--sm"
-                  style={option.swatch ? { background: option.swatch } : undefined}
-                />
-              ) : null}
-              {option.name}
-            </label>
+                onClick={() => toggleId(option.id)}
+              >
+                {kind === 'colors' ? <Swatch swatch={option.swatch} /> : null}
+                {option.name}
+                <span className="sf-pe-chip__x" aria-hidden>
+                  ×
+                </span>
+                <span className="sr-only">Убрать</span>
+              </button>
+            </li>
           ))}
-        </div>
-      ) : (
-        <p className="admin-help">Ничего не найдено.</p>
-      )}
+        </ul>
+      ) : null}
+
+      <input
+        className="sf-pe-input"
+        value={query}
+        disabled={!canUpdate}
+        placeholder={`Найти ${KIND_LABEL[kind]}`}
+        onChange={(event) => {
+          setQuery(event.target.value);
+          setError(null);
+        }}
+      />
+
+      {available.length > 0 ? (
+        <ul className="sf-pe-chips">
+          {available.map((option) => (
+            <li key={option.id}>
+              <button
+                type="button"
+                className="sf-pe-chip"
+                disabled={!canUpdate}
+                onClick={() => toggleId(option.id)}
+              >
+                {kind === 'colors' ? <Swatch swatch={option.swatch} /> : null}
+                {option.name}
+              </button>
+            </li>
+          ))}
+        </ul>
+      ) : query.trim().length > 0 ? (
+        <p className="sf-pe-note">Ничего не найдено.</p>
+      ) : null}
+
       {canCreate && canUpdate && query.trim().length > 0 && !exactMatch ? (
         <button
           type="button"
-          className="admin-btn-ghost mt-2 text-sm"
+          className="sf-pe-btn sf-pe-btn--quiet"
           disabled={creating}
           onClick={() => void onCreate()}
         >
-          {creating ? 'Создание…' : `+ Создать «${query.trim()}»`}
+          {creating ? 'Создание…' : `Добавить «${query.trim()}»`}
         </button>
       ) : null}
-      {error ? <p className="admin-field-error mt-2">{error}</p> : null}
-    </fieldset>
+      {error ? <p className="admin-field-error">{error}</p> : null}
+    </section>
+  );
+}
+
+function Swatch({ swatch }: { swatch?: string | null }) {
+  return (
+    <span
+      aria-hidden
+      className="admin-swatch admin-swatch--sm"
+      style={swatch ? { background: swatch } : undefined}
+    />
   );
 }

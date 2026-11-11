@@ -40,6 +40,13 @@ export function unitPriceSuffix(kind: ProductKind | undefined): string {
   return 'за букет';
 }
 
+/** Short unit under a catalog price. STEM is one flower; a ready arrangement is a bouquet. */
+export function cardPriceUnitLabel(kind: ProductKind | undefined): string {
+  if (kind === 'STEM') return 'за цветок';
+  if (kind === 'GIFT' || kind === 'PLANT' || kind === 'OTHER') return 'за штуку';
+  return 'за букет';
+}
+
 /** Line subtitle under the product name. */
 export function cartLineSubtitle(line: CartLine): string | null {
   if (isStemBouquetLine(line)) {

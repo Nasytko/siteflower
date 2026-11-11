@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useState, type MouseEvent } from 'react';
 import type { ProductListItemDto } from '@bouquet-one/contracts';
 import { addToCart, readCart, writeCart } from '@/lib/cart';
+import { cardPriceUnitLabel } from '@/lib/cart-labels';
 import { FavoriteButton } from './favorite-button';
 
 type Props = {
@@ -54,6 +55,7 @@ export function ProductCard({
   const originalLabel = promotion ? promotion.originalPrice.label : null;
   const percentOff = promotion?.percentOff ?? null;
   const displayName = product.name?.trim() || 'Без названия';
+  const unitLabel = priceLabel ? cardPriceUnitLabel(product.productKind) : null;
 
   function onAddToCart(event: MouseEvent) {
     event.preventDefault();
@@ -107,7 +109,7 @@ export function ProductCard({
         <Link
           href={`/products/${product.slug}`}
           className="absolute inset-0 block outline-offset-4"
-          aria-label={`${displayName}${priceLabel ? `, ${priceLabel}` : ''}`}
+          aria-label={`${displayName}${priceLabel ? `, ${priceLabel}${unitLabel ? `, ${unitLabel}` : ''}` : ''}`}
         >
           {product.primaryImageUrl ? (
             <Image
@@ -184,6 +186,7 @@ export function ProductCard({
             ) : (
               <span className="sf-small text-muted">Цена уточняется</span>
             )}
+            {unitLabel ? <span className="sf-product-card__unit">{unitLabel}</span> : null}
           </p>
 
           {canQuickAdd ? (

@@ -988,6 +988,9 @@ model MediaAsset {
   /// Set when the asset has zero ProductMedia and NavigationMenuItem refs; cleared on re-attach.
   /// Physical cleanup uses this timestamp (not createdAt) + grace period.
   orphanedAt     DateTime?   @map("orphaned_at") @db.Timestamptz(3)
+  /// Set before the first storage delete during orphan purge. Blocks re-attach until purge
+  /// finishes or is aborted. Survives partial storage failures so cleanup can retry.
+  purgeStartedAt DateTime?   @map("purge_started_at") @db.Timestamptz(3)
   createdAt      DateTime    @default(now()) @map("created_at") @db.Timestamptz(3)
 
   derivatives         MediaDerivative[]
@@ -995,6 +998,7 @@ model MediaAsset {
   navigationMenuItems NavigationMenuItem[]
 
   @@index([orphanedAt])
+  @@index([purgeStartedAt])
   @@map("media_assets")
 }
 

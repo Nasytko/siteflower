@@ -160,6 +160,7 @@ export function removeFromCart(state: CartState, lineKey: string): CartState {
 }
 
 export function clearCart(): CartState {
+  writeCardDraft('');
   return emptyCart();
 }
 
@@ -184,5 +185,12 @@ export function writeCardDraft(message: string): void {
     else window.localStorage.removeItem(CARD_DRAFT_STORAGE_KEY);
   } catch {
     /* ignore */
+  }
+}
+
+/** Drop the postcard draft when the cart has no lines (clear / last-item remove). */
+export function syncCardDraftWithCart(state: CartState): void {
+  if (state.items.length === 0) {
+    writeCardDraft('');
   }
 }

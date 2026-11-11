@@ -27,6 +27,7 @@ import { hashIp } from '../auth/crypto.util';
 import type { ActorContext } from '../common/actor.util';
 import { AppConfigService } from '../config/app-config.service';
 import { PrismaService } from '../database/prisma.service';
+import { assertMediaAttachable } from '../media/media-attach.guard';
 import {
   LIST_IMAGE_TARGET_WIDTH,
   pickDerivativeStorageUrl,
@@ -387,6 +388,7 @@ export class NavigationMenuService {
     const previousMediaId = existing.mediaAssetId;
 
     await this.prisma.client.$transaction(async (tx) => {
+      await assertMediaAttachable(tx, asset.id);
       await tx.navigationMenuItem.update({
         where: { id },
         data: {
@@ -396,7 +398,7 @@ export class NavigationMenuService {
       });
       await tx.mediaAsset.update({
         where: { id: asset.id },
-        data: { orphanedAt: null },
+        data: { orphanedAt: null, purgeStartedAt: null },
       });
       if (previousMediaId && previousMediaId !== asset.id) {
         await this.maybeMarkMediaOrphaned(tx, previousMediaId);

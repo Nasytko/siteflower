@@ -9,7 +9,7 @@ export type StoreHoursRange = {
 /** Parse strings like `9:00–21:00`, `09:00 - 21:00`, `пн–вс 9:00—21:00`. */
 export function parseWorkingHoursRange(raw: string | null | undefined): StoreHoursRange | null {
   if (!raw?.trim()) return null;
-  const match = raw.match(/(\d{1,2})\s*[:.]\s*(\d{2})\s*[–—−\-]\s*(\d{1,2})\s*[:.]\s*(\d{2})/);
+  const match = raw.match(/(\d{1,2})\s*[:.]\s*(\d{2})\s*[–—−-]\s*(\d{1,2})\s*[:.]\s*(\d{2})/);
   if (!match) return null;
   const openH = Number(match[1]);
   const openM = Number(match[2]);

@@ -36,6 +36,12 @@ export type OccasionKind = (typeof OCCASION_KINDS)[number];
 export const ERP_SKU_MAX_LENGTH = 64;
 
 /**
+ * Storefront product lead is four lines at the buy-column width.
+ * 250 glyphs matches a full four-line block; shorter copy keeps the same height.
+ */
+export const PRODUCT_CARD_LEAD_MAX_LENGTH = 250;
+
+/**
  * Normalized ERP article pattern after `normalizeErpSku`.
  * Starts with alphanumeric; then A–Z, 0–9, `.`, `_`, `-` (max 64).
  */
@@ -2138,6 +2144,10 @@ export type ProductAdminDto = {
   bestsellerGroupIds: string[];
   createdAt: string;
   updatedAt: string;
+  /** Display name from the create audit row. Null when the journal has no actor. */
+  createdByName: string | null;
+  /** Display name from the latest product change in the journal. Null when nothing was edited after create, or the actor was removed. */
+  updatedByName: string | null;
 };
 
 export type ProductOptionValueDto = {

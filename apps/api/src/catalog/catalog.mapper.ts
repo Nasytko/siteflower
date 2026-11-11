@@ -455,6 +455,8 @@ export function toProductAdminDto(
     bestsellerGroupIds: product.bestsellerLinks.map((link) => link.groupId),
     createdAt: product.createdAt.toISOString(),
     updatedAt: product.updatedAt.toISOString(),
+    createdByName: null,
+    updatedByName: null,
   };
 }
 

@@ -33,7 +33,7 @@ export default defineConfig({
   retries: process.env.CI ? 1 : 0,
   reporter: process.env.CI ? 'github' : 'list',
   use: {
-    trace: 'on-first-retry',
+    trace: process.env.CI ? 'on-first-retry' : 'retain-on-failure',
     screenshot: 'only-on-failure',
     ...(useSystemChrome ? { channel: 'chrome' as const } : {}),
   },
@@ -77,15 +77,18 @@ export default defineConfig({
       },
     },
     {
+      // Matches deploy/Dockerfile.web: node apps/web/server.js from .next/standalone.
       command: 'pnpm --filter @bouquet-one/web start',
       url: webUrl,
       reuseExistingServer: !process.env.CI,
-      timeout: 120_000,
+      timeout: 180_000,
       env: {
         ...process.env,
         NODE_ENV: 'production',
+        PORT: '3000',
+        HOSTNAME: '127.0.0.1',
         NEXT_PUBLIC_SITE_URL: webUrl,
-        ALLOW_INDEXING: 'false',
+        ALLOW_INDEXING: process.env.ALLOW_INDEXING ?? 'false',
         API_URL: apiUrl,
         // Local seed media uses 127.0.0.1/localhost; Next/Image blocks private IPs in production unless opted in.
         ALLOW_LOCAL_IMAGE_IP: 'true',

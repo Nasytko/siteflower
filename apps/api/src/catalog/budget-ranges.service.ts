@@ -11,6 +11,7 @@ import { hashIp } from '../auth/crypto.util';
 import type { ActorContext } from '../common/actor.util';
 import { AppConfigService } from '../config/app-config.service';
 import { PrismaService } from '../database/prisma.service';
+import { StorefrontRevalidateService } from '../storefront/storefront-revalidate.service';
 import { OCC_CONFLICT_MESSAGE } from './catalog.logic';
 import { toBudgetRangeAdminDto, toBudgetRangePublicDto } from './catalog.mapper';
 import type { BudgetBound } from './products.repository';
@@ -40,7 +41,15 @@ export class BudgetRangesService {
     private readonly prisma: PrismaService,
     private readonly audit: AuditService,
     private readonly appConfig: AppConfigService,
+    private readonly revalidate: StorefrontRevalidateService,
   ) {}
+
+  private async bumpStorefrontCache(): Promise<void> {
+    await this.revalidate.ping({
+      tags: ['catalog', 'budget-ranges', 'storefront'],
+      paths: ['/', '/catalog/bouquets'],
+    });
+  }
 
   async list(): Promise<BudgetRangeDto[]> {
     const rows = await this.prisma.client.budgetRange.findMany({
@@ -99,6 +108,7 @@ export class BudgetRangesService {
       return row;
     });
 
+    await this.bumpStorefrontCache();
     return toBudgetRangeAdminDto(created);
   }
 
@@ -136,6 +146,7 @@ export class BudgetRangesService {
       await this.recordAudit(tx, actor, id, { fields: Object.keys(data) });
     });
 
+    await this.bumpStorefrontCache();
     return this.getById(id);
   }
 
@@ -151,6 +162,7 @@ export class BudgetRangesService {
       }
       await this.recordAudit(tx, actor, id, { deleted: true });
     });
+    await this.bumpStorefrontCache();
   }
 
   async reorder(ids: string[], actor: ActorContext): Promise<BudgetRangeDto[]> {
@@ -171,6 +183,7 @@ export class BudgetRangesService {
       }
       await this.recordAudit(tx, actor, unique[0]!, { reordered: unique });
     });
+    await this.bumpStorefrontCache();
     return this.list();
   }
 

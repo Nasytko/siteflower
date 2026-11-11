@@ -27,6 +27,7 @@ import {
   PRODUCT_OPTION_SELECTIONS,
   PRODUCT_SORTS,
   PROMOTION_TYPES,
+  PRODUCT_CARD_LEAD_MAX_LENGTH,
   VARIANT_STATUSES,
   normalizeErpSku,
   type CommercialAvailability,
@@ -150,6 +151,12 @@ export class SaveProductEditorDto extends ExpectedVersionDto {
   @MaxLength(160)
   slug!: string;
 
+  @IsOptional()
+  @ValidateIf((_, value) => value !== null)
+  @IsString()
+  @MaxLength(PRODUCT_CARD_LEAD_MAX_LENGTH)
+  shortDescription?: string | null;
+
   /**
    * ERP permanent article (manager-entered). Empty/null clears. Not auto-generated.
    * Publish remains allowed without SKU until ERP integration requires it.
@@ -166,12 +173,6 @@ export class SaveProductEditorDto extends ExpectedVersionDto {
     message: 'erpSku must be A–Z / 0–9 / . _ - and start with alphanumeric',
   })
   erpSku?: string | null;
-
-  @IsOptional()
-  @ValidateIf((_, value) => value !== null)
-  @IsString()
-  @MaxLength(500)
-  shortDescription?: string | null;
 
   @IsOptional()
   @ValidateIf((_, value) => value !== null)
@@ -407,7 +408,7 @@ export class CreateProductDto {
 
   @IsOptional()
   @IsString()
-  @MaxLength(500)
+  @MaxLength(PRODUCT_CARD_LEAD_MAX_LENGTH)
   shortDescription?: string;
 
   @IsOptional()
@@ -494,7 +495,7 @@ export class UpdateProductDto extends ExpectedVersionDto {
   @IsOptional()
   @ValidateIf((_, value) => value !== null)
   @IsString()
-  @MaxLength(500)
+  @MaxLength(PRODUCT_CARD_LEAD_MAX_LENGTH)
   shortDescription?: string | null;
 
   @IsOptional()

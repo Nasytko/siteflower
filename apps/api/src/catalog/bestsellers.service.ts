@@ -17,6 +17,7 @@ import type { ActorContext } from '../common/actor.util';
 import { AppConfigService } from '../config/app-config.service';
 import { PrismaService } from '../database/prisma.service';
 import { MediaService } from '../media/media.service';
+import { StorefrontRevalidateService } from '../storefront/storefront-revalidate.service';
 import { OCC_CONFLICT_MESSAGE } from './catalog.logic';
 import {
   toBestsellerGroupAdminDto,
@@ -54,9 +55,17 @@ export class BestsellersService {
     private readonly media: MediaService,
     private readonly audit: AuditService,
     private readonly appConfig: AppConfigService,
+    private readonly revalidate: StorefrontRevalidateService,
   ) {}
 
   private readonly urlFor = (storageKey: string) => this.media.getPublicUrl(storageKey);
+
+  private async bumpStorefrontCache(slug?: string): Promise<void> {
+    await this.revalidate.ping({
+      tags: ['catalog', 'bestsellers', 'storefront', ...(slug ? [`bestseller:${slug}`] : [])],
+      paths: ['/', '/catalog/bouquets'],
+    });
+  }
 
   async listAdmin(): Promise<BestsellerGroupAdminDto[]> {
     const groups = await this.prisma.client.bestsellerGroup.findMany({
@@ -134,6 +143,7 @@ export class BestsellersService {
       return group;
     });
 
+    await this.bumpStorefrontCache(slug);
     return this.getAdmin(created.id);
   }
 
@@ -178,10 +188,12 @@ export class BestsellersService {
       await this.recordAudit(tx, actor, id, { fields: Object.keys(data) });
     });
 
+    await this.bumpStorefrontCache(nextSlug);
     return this.getAdmin(id);
   }
 
   async remove(id: string, expectedVersion: number, actor: ActorContext): Promise<void> {
+    let removedSlug: string | undefined;
     await this.prisma.client.$transaction(async (tx) => {
       const current = await tx.bestsellerGroup.findUnique({ where: { id } });
       if (!current) {
@@ -204,8 +216,10 @@ export class BestsellersService {
       if (deleted.count === 0) {
         throw new ConflictException(OCC_CONFLICT_MESSAGE);
       }
+      removedSlug = current.slug;
       await this.recordAudit(tx, actor, id, { deleted: true, slug: current.slug, name: current.name });
     });
+    await this.bumpStorefrontCache(removedSlug);
   }
 
   /** Replaces membership and its display order in one shot (order = array order). */
@@ -241,7 +255,9 @@ export class BestsellersService {
       await this.recordAudit(tx, actor, id, { members: unique.length });
     });
 
-    return this.getAdmin(id);
+    const group = await this.getAdmin(id);
+    await this.bumpStorefrontCache(group.slug);
+    return group;
   }
 
   async reorderProducts(
@@ -268,6 +284,7 @@ export class BestsellersService {
       await this.recordAudit(tx, actor, id, { reordered: unique.length });
     });
 
+    await this.bumpStorefrontCache(group.slug);
     return this.getAdmin(id);
   }
 

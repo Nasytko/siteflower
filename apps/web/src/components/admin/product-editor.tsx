@@ -22,6 +22,7 @@ import {
   type ProductDeleteImpactDto,
   type ProductKind,
   DEFAULT_PRODUCT_VARIANT_NAME,
+  PRODUCT_CARD_LEAD_MAX_LENGTH,
 } from '@bouquet-one/contracts';
 import type { CategoryPickerOption } from '@/lib/admin-catalog-picker-labels';
 import {
@@ -39,6 +40,7 @@ import {
 import { adminEndpoints, withQuery } from '@/lib/admin-endpoints';
 import {
   availabilityLabel,
+  formatAdminDateTime,
   fromDateTimeLocalValue,
   lifecycleLabel,
   toDateTimeLocalValue,
@@ -112,6 +114,63 @@ const READINESS_SECTION: Record<string, string> = {
 
 function familyMemberSortOrderFor(product: ProductAdminDto): number | undefined {
   return product.family?.members.find((member) => member.productId === product.id)?.sortOrder;
+}
+
+function ProductFacts({ product }: { product: ProductAdminDto }) {
+  const editedLater =
+    Math.abs(new Date(product.updatedAt).getTime() - new Date(product.createdAt).getTime()) >=
+    2000;
+  const editorName = product.updatedByName
+    ? product.updatedByName
+    : editedLater
+      ? 'Не записано'
+      : null;
+
+  return (
+    <section className="sf-pe-facts" aria-label="Технические данные">
+      <p className="sf-pe-facts__kicker">Технические данные</p>
+      <dl className="sf-pe-facts__grid">
+        <div>
+          <dt>Ссылка</dt>
+          <dd>
+            <a
+              className="admin-link"
+              href={`/products/${product.slug}`}
+              target="_blank"
+              rel="noreferrer"
+            >
+              /products/{product.slug}
+            </a>
+          </dd>
+        </div>
+        <div>
+          <dt>Создал</dt>
+          <dd>
+            {product.createdByName ?? 'Не записано'}
+            <span className="sf-pe-facts__when">{formatAdminDateTime(product.createdAt)}</span>
+          </dd>
+        </div>
+        <div>
+          <dt>Последняя правка</dt>
+          <dd>
+            {editorName ?? 'Правок не было'}
+            {editorName ? (
+              <span className="sf-pe-facts__when">{formatAdminDateTime(product.updatedAt)}</span>
+            ) : null}
+          </dd>
+        </div>
+        <div>
+          <dt>На сайте</dt>
+          <dd>
+            {product.publishedAt ? 'Опубликован' : 'Ещё не публиковали'}
+            {product.publishedAt ? (
+              <span className="sf-pe-facts__when">{formatAdminDateTime(product.publishedAt)}</span>
+            ) : null}
+          </dd>
+        </div>
+      </dl>
+    </section>
+  );
 }
 
 export function ProductEditor({
@@ -559,6 +618,9 @@ export function ProductEditor({
   const descriptionIsAutomatic = !seo.seoDescription.trim();
 
   function validate(): string | null {
+    if (basic.shortDescription.trim().length > PRODUCT_CARD_LEAD_MAX_LENGTH) {
+      return `Описание на карточке — не больше ${PRODUCT_CARD_LEAD_MAX_LENGTH} символов, это четыре строки`;
+    }
     if (basic.name.trim().length === 0) return 'Укажите название товара';
     if (basic.slug.trim().length === 0) return 'Укажите адрес в ссылке';
     const erpSkuNormalized = normalizeErpSku(basic.erpSku);
@@ -968,6 +1030,11 @@ export function ProductEditor({
     }
   }
 
+  const mediaByOrder = [...server.media].sort((a, b) => a.sortOrder - b.sortOrder);
+  const mediaGallery = [...mediaByOrder].sort((a, b) =>
+    a.isPrimary === b.isPrimary ? 0 : a.isPrimary ? -1 : 1,
+  );
+
   const statusPhase: FormSavePhase =
     savePhase === 'saving' ||
     savePhase === 'validation' ||
@@ -1014,10 +1081,6 @@ export function ProductEditor({
     touch,
     legacyDescriptionConflict,
   };
-
-  const primaryMedia =
-    server.media.find((item) => item.isPrimary) ??
-    [...server.media].sort((a, b) => a.sortOrder - b.sortOrder)[0];
 
   return (
     <div className="sf-pe space-y-5">
@@ -1154,9 +1217,12 @@ export function ProductEditor({
       ) : null}
 
       <div className="sf-pe-stack">
+        <ProductFacts product={server} />
+
         <ProductEditorMainTab {...mainTabShared} blocks={['kind']} />
 
         <div className="sf-pe-hero">
+          <ProductEditorMainTab {...mainTabShared} blocks={['identity']} />
           <section className="sf-pe-card" data-section="photo">
             <div className="sf-pe-card__head">
               <div>
@@ -1168,15 +1234,9 @@ export function ProductEditor({
               </div>
             </div>
           <div className="sf-pe-card__body space-y-4">
-            {primaryMedia ? (
-              <img
-                src={toSameOriginMediaUrl(primaryMedia.url) ?? primaryMedia.url}
-                alt={primaryMedia.alt ?? ''}
-                className="sf-pe-hero__photo"
-              />
-            ) : (
+            {server.media.length === 0 ? (
               <div className="admin-thumb-empty sf-pe-hero__photo">Фото для каталога</div>
-            )}
+            ) : null}
             {canUpdate ? (
                 <div
                   className="sf-pe-dropzone"
@@ -1261,11 +1321,14 @@ export function ProductEditor({
             {server.media.length === 0 ? (
               <p className="sf-pe-note">Без фото опубликовать нельзя.</p>
             ) : (
-              <ul className="sf-pe-media-grid">
-                  {[...server.media]
-                    .sort((a, b) => a.sortOrder - b.sortOrder)
-                    .map((media, index, sorted) => (
-                      <li key={media.id} className="sf-pe-media">
+              <ul className="sf-pe-media-grid sf-pe-gallery">
+                {mediaGallery.map((media) => {
+                    const orderIndex = mediaByOrder.findIndex((item) => item.id === media.id);
+                    return (
+                    <li
+                      key={media.id}
+                      className={`sf-pe-media${media.isPrimary ? ' sf-pe-media--main' : ''}`}
+                    >
                         <img
                           src={toSameOriginMediaUrl(media.url) ?? media.url}
                           alt={media.alt ?? ''}
@@ -1303,7 +1366,7 @@ export function ProductEditor({
                             type="button"
                             className="sf-pe-iconbtn"
                             aria-label="Раньше"
-                            disabled={!canUpdate || pending || index === 0}
+                            disabled={!canUpdate || pending || orderIndex <= 0}
                             onClick={() => void reorderMedia(media.id, -1)}
                           >
                             ↑
@@ -1312,7 +1375,7 @@ export function ProductEditor({
                             type="button"
                             className="sf-pe-iconbtn"
                             aria-label="Позже"
-                            disabled={!canUpdate || pending || index === sorted.length - 1}
+                            disabled={!canUpdate || pending || orderIndex >= mediaByOrder.length - 1}
                             onClick={() => void reorderMedia(media.id, 1)}
                           >
                             ↓
@@ -1327,12 +1390,12 @@ export function ProductEditor({
                           </button>
                         </div>
                       </li>
-                    ))}
+                    );
+                  })}
                 </ul>
               )}
             </div>
           </section>
-          <ProductEditorMainTab {...mainTabShared} blocks={['identity']} />
         </div>
 
         {needsComposition ? (

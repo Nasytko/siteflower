@@ -13,11 +13,20 @@ import {
   catalogCountLabel,
   katalogHasActiveFilters,
   katalogHref,
+  taxonomyKatalogHref,
   toggleSlug,
   type KatalogSearchState,
+  type TaxonomyLock,
 } from '@/lib/katalog-search-params';
 import { SORT_OPTIONS } from '@/lib/catalog-search-params';
 import { PriceRangeFilter } from '@/components/storefront/price-range-filter';
+
+/** Serializable taxonomy landing route — never pass functions across the RSC boundary. */
+export type TaxonomyHrefRoute = {
+  pathPrefix: '/komu' | '/povod' | '/k-prazdniku';
+  taxonomySlug: string;
+  lock: TaxonomyLock;
+};
 
 type Props = {
   categorySlug: string;
@@ -29,8 +38,8 @@ type Props = {
   /** Price slider bounds in BYN (major). */
   priceBoundMin?: number;
   priceBoundMax?: number;
-  /** Override link builder (taxonomy landings stay on /komu|/povod). */
-  buildHref?: (state: KatalogSearchState, patch?: Partial<KatalogSearchState>) => string;
+  /** Taxonomy landings stay on /komu|/povod|/k-prazdniku (serializable). */
+  taxonomyRoute?: TaxonomyHrefRoute;
   /** “Clear filters” target; defaults to clean category URL. */
   clearHref?: string;
   /** Facets locked by the page URL — hidden from the sidebar. */
@@ -38,6 +47,24 @@ type Props = {
   /** Treat these facets as non-user filters for the clear link. */
   ignoreActiveKeys?: readonly CatalogFilterKey[];
 };
+
+function hrefForState(
+  categorySlug: string,
+  state: KatalogSearchState,
+  patch: Partial<KatalogSearchState> | undefined,
+  taxonomyRoute?: TaxonomyHrefRoute,
+): string {
+  if (taxonomyRoute) {
+    return taxonomyKatalogHref(
+      taxonomyRoute.pathPrefix,
+      taxonomyRoute.taxonomySlug,
+      taxonomyRoute.lock,
+      state,
+      patch,
+    );
+  }
+  return katalogHref(categorySlug, state, patch);
+}
 
 function ChevronIcon({ open }: { open: boolean }) {
   return (
@@ -211,7 +238,7 @@ export function KatalogFiltersPanel({
   hideToolbar = false,
   priceBoundMin = 0,
   priceBoundMax = 500,
-  buildHref,
+  taxonomyRoute,
   clearHref: clearHrefProp,
   hiddenFilterKeys = [],
   ignoreActiveKeys = [],
@@ -219,7 +246,7 @@ export function KatalogFiltersPanel({
   const router = useRouter();
   const [, startTransition] = useTransition();
   const hrefOf = (patch?: Partial<KatalogSearchState>) =>
-    buildHref ? buildHref(state, patch) : katalogHref(categorySlug, state, patch);
+    hrefForState(categorySlug, state, patch, taxonomyRoute);
   const hidden = new Set(hiddenFilterKeys);
   const ignore = new Set(ignoreActiveKeys);
   const clearProbe: KatalogSearchState = {
@@ -372,16 +399,16 @@ export function KatalogToolbar({
   state,
   total,
   listingKind = null,
-  buildHref,
+  taxonomyRoute,
 }: {
   categorySlug: string;
   state: KatalogSearchState;
   total: number;
   listingKind?: CatalogListingKind | null;
-  buildHref?: (state: KatalogSearchState, patch?: Partial<KatalogSearchState>) => string;
+  taxonomyRoute?: TaxonomyHrefRoute;
 }) {
   const hrefOf = (patch?: Partial<KatalogSearchState>) =>
-    buildHref ? buildHref(state, patch) : katalogHref(categorySlug, state, patch);
+    hrefForState(categorySlug, state, patch, taxonomyRoute);
 
   return (
     <div className="sf-catalog-toolbar">

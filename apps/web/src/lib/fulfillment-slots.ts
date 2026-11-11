@@ -158,3 +158,30 @@ export function selectableHourlyWindows(input: {
     })
     .sort((a, b) => a.sortOrder - b.sortOrder);
 }
+
+/** True when a previously chosen hourly slot is no longer selectable at `now`. */
+export function isSelectedSlotStale(input: {
+  selectedId: string;
+  windows: TimeWindowDto[];
+  fulfillmentDate: string;
+  fulfillmentType: 'DELIVERY' | 'PICKUP';
+  now?: Date;
+  minLeadMinutes?: number;
+  agreeWithManager?: boolean;
+}): boolean {
+  if (input.agreeWithManager || isManagerTimeWindowId(input.selectedId)) {
+    return false;
+  }
+  if (!input.selectedId) return false;
+  const available = selectableHourlyWindows(input);
+  return !available.some((w) => w.id === input.selectedId);
+}
+
+const SLOT_UNAVAILABLE_RE =
+  /интервал|дата или время|недост|слот|time window|fulfillment/i;
+
+/** Server rejected the chosen slot (lead/midnight boundary) — refresh client list. */
+export function isFulfillmentSlotRejectionMessage(message: string | null | undefined): boolean {
+  if (!message) return false;
+  return SLOT_UNAVAILABLE_RE.test(message);
+}

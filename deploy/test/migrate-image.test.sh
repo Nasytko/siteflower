@@ -359,12 +359,30 @@ echo "$PREFLIGHT_PRISMA_ACTIVE_FAILED_SQL" | grep -q 'finished_at IS NULL AND ro
   || fail "active-failed predicate wrong"
 pass "historical rolled-back OK; active failed blocks"
 
-# real checkout 41
+# real checkout: compare migration *name sets* (checkout listing vs manifest),
+# not a hardcoded count — count can drift while a missing folder still matches a stale number.
 checkout_prisma_migrations_dir() {
   printf '%s/packages/database/prisma/migrations\n' "$ROOT"
 }
-[[ "$(checkout_migration_count)" -eq 41 ]] || fail "expected 41 migrations"
-pass "real checkout has 41 migrations"
+mapfile -t _checkout_names < <(checkout_migration_names)
+[[ "${#_checkout_names[@]}" -gt 0 ]] || fail "checkout has no Prisma migrations"
+if printf '%s\n' "${_checkout_names[@]}" | sort | uniq -d | grep -q .; then
+  fail "duplicate migration folder names in checkout"
+fi
+_man="$(checkout_migration_manifest)" || fail "cannot build checkout migration manifest"
+mapfile -t _manifest_names < <(
+  printf '%s\n' "$_man" | awk -F'\t' '$1 != "migration_lock.toml" { print $1 }' | LC_ALL=C sort
+)
+if ! diff -u \
+  <(printf '%s\n' "${_checkout_names[@]}") \
+  <(printf '%s\n' "${_manifest_names[@]}") >/dev/null; then
+  fail "checkout migration names do not match manifest name set"
+fi
+for _n in "${_checkout_names[@]}"; do
+  [[ -f "$(checkout_prisma_migrations_dir)/${_n}/migration.sql" ]] \
+    || fail "migration ${_n} missing migration.sql"
+done
+pass "real checkout migration name set matches manifest (${#_checkout_names[@]} migrations)"
 
 # dangerous commands
 for f in "${ROOT}/deploy.sh" "${ROOT}/scripts/release.sh" "${ROOT}/deploy/lib/preflight.sh" "${ROOT}/deploy/lib/migrate-image.sh"; do

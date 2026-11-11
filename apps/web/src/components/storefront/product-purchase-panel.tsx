@@ -376,9 +376,7 @@ export function ProductBuyCard({
       </div>
 
       <h1 className="sf-pdp-buy__title">{product.name}</h1>
-      {product.shortDescription ? (
-        <p className="sf-pdp-buy__lead">{product.shortDescription}</p>
-      ) : null}
+      <p className="sf-pdp-buy__lead">{product.shortDescription}</p>
 
       {(sorted.length > 1 || children || optionGroups.length > 0) ? (
         <div className="sf-pdp-buy__configure">
@@ -766,6 +764,7 @@ export function ProductPostcardShelf() {
     <section id="pdp-postcards" className="sf-pdp-postcards" aria-label="Открытки к букету">
       <HomeSectionHead
         title="Открытки к букету"
+        subtitle="Выберите дизайн — добавим к заказу"
         href={POSTCARD_CATALOG_HREF}
         linkLabel="Все открытки"
       />

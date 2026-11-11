@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import type { Metadata } from 'next';
-import { notFound } from 'next/navigation';
+import { notFound, permanentRedirect } from 'next/navigation';
 import type { TaxonomyLandingKind } from '@bouquet-one/contracts';
 import { Breadcrumbs } from '@/components/storefront/breadcrumbs';
 import { CatalogPager } from '@/components/storefront/catalog-filters';
@@ -127,6 +127,29 @@ export async function TaxonomyLandingPage({
     taxonomy = await getTaxonomy(kind, slug);
   } catch (error) {
     if (error instanceof PublicApiError && error.status === 404) {
+      // Calendar holidays used to live under /povod; keep old links working.
+      if (kind === 'occasion') {
+        try {
+          const holiday = await getTaxonomy('holiday', slug);
+          const qs = new URLSearchParams();
+          for (const [key, value] of Object.entries(searchParams)) {
+            if (value == null) continue;
+            if (Array.isArray(value)) {
+              for (const item of value) qs.append(key, item);
+            } else {
+              qs.set(key, value);
+            }
+          }
+          const query = qs.toString();
+          permanentRedirect(
+            `/k-prazdniku/${encodeURIComponent(holiday.slug)}${query ? `?${query}` : ''}`,
+          );
+        } catch (holidayError) {
+          if (!(holidayError instanceof PublicApiError && holidayError.status === 404)) {
+            throw holidayError;
+          }
+        }
+      }
       notFound();
     }
     throw error;
@@ -144,14 +167,26 @@ export async function TaxonomyLandingPage({
   const totalPages =
     products.pageSize > 0 ? Math.max(1, Math.ceil(products.total / products.pageSize)) : 1;
 
-  const buildHref = (
-    current: typeof state,
-    patch: Partial<typeof state> = {},
-  ) => taxonomyKatalogHref(meta.pathPrefix, taxonomy.slug, lock, current, patch);
-
+  const taxonomyRoute = {
+    pathPrefix: meta.pathPrefix,
+    taxonomySlug: taxonomy.slug,
+    lock,
+  } as const;
   const clearHref = `${meta.pathPrefix}/${encodeURIComponent(taxonomy.slug)}`;
   const hiddenFilterKeys = [lock.kind] as const;
   const hasFilters = filters.length > 0;
+  const prevHref =
+    state.page > 1
+      ? taxonomyKatalogHref(meta.pathPrefix, taxonomy.slug, lock, state, {
+          page: state.page - 1,
+        })
+      : null;
+  const nextHref =
+    state.page < totalPages
+      ? taxonomyKatalogHref(meta.pathPrefix, taxonomy.slug, lock, state, {
+          page: state.page + 1,
+        })
+      : null;
 
   return (
     <main id="main-content" className="sf-container-wide py-5 sm:py-7">
@@ -181,7 +216,7 @@ export async function TaxonomyLandingPage({
               filters={filters}
               listingKind="BOUQUETS"
               hideToolbar
-              buildHref={buildHref}
+              taxonomyRoute={taxonomyRoute}
               clearHref={clearHref}
               hiddenFilterKeys={hiddenFilterKeys}
               ignoreActiveKeys={hiddenFilterKeys}
@@ -195,7 +230,7 @@ export async function TaxonomyLandingPage({
             state={state}
             total={products.total}
             listingKind="BOUQUETS"
-            buildHref={buildHref}
+            taxonomyRoute={taxonomyRoute}
           />
 
           {products.items.length === 0 ? (
@@ -222,12 +257,8 @@ export async function TaxonomyLandingPage({
           <CatalogPager
             page={state.page}
             totalPages={totalPages}
-            prevHref={
-              state.page > 1 ? buildHref(state, { page: state.page - 1 }) : null
-            }
-            nextHref={
-              state.page < totalPages ? buildHref(state, { page: state.page + 1 }) : null
-            }
+            prevHref={prevHref}
+            nextHref={nextHref}
           />
         </div>
       </div>

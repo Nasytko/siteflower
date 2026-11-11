@@ -39,7 +39,6 @@ export default async function ProductPreviewPage({ params }: Props) {
       </div>
 
       {primarySrc ? (
-        // eslint-disable-next-line @next/next/no-img-element
         <img
           src={primarySrc}
           alt={primary?.alt ?? product.name}

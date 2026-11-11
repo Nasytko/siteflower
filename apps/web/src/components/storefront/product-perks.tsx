@@ -1,4 +1,3 @@
-import Link from 'next/link';
 import type { ReactNode } from 'react';
 import type { FulfillmentSettingsPublicDto } from '@bouquet-one/contracts';
 import { formatDeliveryFee } from './product-detail-info';
@@ -17,7 +16,6 @@ type Perk = {
   icon: ReactNode;
   title: string;
   lines: string[];
-  href: string;
 };
 
 /** Delivery / pickup facts from Admin settings — a perk is omitted when its data is missing. */
@@ -37,10 +35,7 @@ export function ProductPerks({
       key: 'delivery',
       icon: <TruckIcon />,
       title: fee ? `Доставка ${fee}` : 'Бесплатная доставка',
-      lines: [
-        `${city ? `по ${city}` : 'курьером'}${outOfCityDeliveryNote ? ' в черте города' : ''}`,
-      ],
-      href: '/dostavka',
+      lines: [city ? `по ${city}` : 'по городу'],
     });
   }
   if (fulfillment?.deliveryEnabled && outOfCityDeliveryNote) {
@@ -48,8 +43,7 @@ export function ProductPerks({
       key: 'out-of-city',
       icon: <PinIcon />,
       title: 'За городом',
-      lines: [outOfCityDeliveryNote],
-      href: '/dostavka',
+      lines: ['по согласованию'],
     });
   }
   if (fulfillment?.pickupEnabled) {
@@ -58,16 +52,14 @@ export function ProductPerks({
       icon: <StoreIcon />,
       title: 'Самовывоз',
       lines: [workingHours, pickupAddress].filter((line): line is string => Boolean(line)),
-      href: '/kontakty',
     });
   }
   if (photoReportNote) {
     perks.push({
       key: 'photo',
       icon: <CameraIcon />,
-      title: 'Фото перед отправкой',
-      lines: [photoReportNote],
-      href: '/dostavka',
+      title: 'Фото по запросу клиента',
+      lines: [],
     });
   }
 
@@ -78,34 +70,17 @@ export function ProductPerks({
       <ul className="sf-pdp-perks__list" data-count={perks.length}>
         {perks.map((perk) => (
           <li key={perk.key}>
-            <Link href={perk.href} className="sf-pdp-perk">
+            <div className="sf-pdp-perk">
               <span className="sf-pdp-perk__icon">{perk.icon}</span>
               <span className="sf-pdp-perk__text">
-                <strong>
-                  {perk.title}
-                  {perk.key === 'pickup' && workingHours ? (
-                    <span className="sf-pdp-perk__inline">: {workingHours}</span>
-                  ) : null}
-                </strong>
-                {perk.lines.map((line, index) => (
-                  <span
-                    key={line}
-                    className={
-                      perk.key === 'pickup' && index === 0 && workingHours
-                        ? 'sf-pdp-perk__line sf-pdp-perk__line--desktop'
-                        : 'sf-pdp-perk__line'
-                    }
-                  >
+                <strong>{perk.title}</strong>
+                {perk.lines.map((line) => (
+                  <span key={line} className="sf-pdp-perk__line">
                     {line}
                   </span>
                 ))}
               </span>
-              <span className="sf-pdp-perk__chevron" aria-hidden>
-                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="m9 6 6 6-6 6" />
-                </svg>
-              </span>
-            </Link>
+            </div>
           </li>
         ))}
       </ul>

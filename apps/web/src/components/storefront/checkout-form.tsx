@@ -24,7 +24,11 @@ import {
   type CartState,
 } from '@/lib/cart';
 import { isStemBouquetLine, stemCountLabel } from '@/lib/cart-labels';
-import { selectableHourlyWindows } from '@/lib/fulfillment-slots';
+import {
+  isFulfillmentSlotRejectionMessage,
+  isSelectedSlotStale,
+  selectableHourlyWindows,
+} from '@/lib/fulfillment-slots';
 
 type QuoteStatus = 'loading' | 'ready' | 'stale' | 'error';
 
@@ -108,6 +112,8 @@ export function CheckoutForm() {
   const [dateMode, setDateMode] = useState<'today' | 'tomorrow' | 'pick'>('tomorrow');
   const [fulfillmentDate, setFulfillmentDate] = useState('');
   const [timeWindowId, setTimeWindowId] = useState('');
+  /** Tick so hourly slots re-filter while the form stays open (Europe/Minsk lead). */
+  const [slotClock, setSlotClock] = useState(() => Date.now());
   const [agreeWithManager, setAgreeWithManager] = useState(false);
   const [desiredTimeNote, setDesiredTimeNote] = useState('');
   const [purchaserName, setPurchaserName] = useState('');
@@ -246,15 +252,31 @@ export function CheckoutForm() {
     }
   }, [dateMode, options]);
 
+  useEffect(() => {
+    const bump = () => setSlotClock(Date.now());
+    const id = window.setInterval(bump, 30_000);
+    const onVis = () => {
+      if (document.visibilityState === 'visible') bump();
+    };
+    window.addEventListener('focus', bump);
+    document.addEventListener('visibilitychange', onVis);
+    return () => {
+      window.clearInterval(id);
+      window.removeEventListener('focus', bump);
+      document.removeEventListener('visibilitychange', onVis);
+    };
+  }, []);
+
   const windows = useMemo(() => {
     if (!options || !fulfillmentDate) return [];
     return selectableHourlyWindows({
       windows: options.timeWindows,
       fulfillmentDate,
       fulfillmentType,
+      now: new Date(slotClock),
       minLeadMinutes: options.minLeadTimeMinutes,
     });
-  }, [options, fulfillmentType, fulfillmentDate]);
+  }, [options, fulfillmentType, fulfillmentDate, slotClock]);
 
   useEffect(() => {
     if (agreeWithManager) {
@@ -262,13 +284,41 @@ export function CheckoutForm() {
       return;
     }
     if (windows.length === 0) {
-      setTimeWindowId('');
+      if (timeWindowId) {
+        setTimeWindowId('');
+        setError(
+          'Нет доступных интервалов на эту дату — выберите другой день или согласуйте время с менеджером',
+        );
+      }
+      return;
+    }
+    if (
+      timeWindowId &&
+      isSelectedSlotStale({
+        selectedId: timeWindowId,
+        windows: options?.timeWindows ?? [],
+        fulfillmentDate,
+        fulfillmentType,
+        now: new Date(slotClock),
+        minLeadMinutes: options?.minLeadTimeMinutes,
+      })
+    ) {
+      setTimeWindowId(windows[0]!.id);
+      setError('Выбранный интервал уже недоступен. Выберите другое время — ваши данные сохранены.');
       return;
     }
     if (!windows.some((w) => w.id === timeWindowId)) {
       setTimeWindowId(windows[0]!.id);
     }
-  }, [agreeWithManager, windows, timeWindowId]);
+  }, [
+    agreeWithManager,
+    windows,
+    timeWindowId,
+    options,
+    fulfillmentDate,
+    fulfillmentType,
+    slotClock,
+  ]);
 
   async function onSubmit(event: FormEvent) {
     event.preventDefault();
@@ -316,14 +366,47 @@ export function CheckoutForm() {
       return;
     }
 
+    const now = new Date();
+    setSlotClock(now.getTime());
+    const liveWindows =
+      options && fulfillmentDate
+        ? selectableHourlyWindows({
+            windows: options.timeWindows,
+            fulfillmentDate,
+            fulfillmentType,
+            now,
+            minLeadMinutes: options.minLeadTimeMinutes,
+          })
+        : windows;
+
     if (agreeWithManager) {
       if (!desiredTimeNote.trim()) {
         setError('Укажите желаемое время для согласования с менеджером');
         setPending(false);
         return;
       }
-    } else if (!timeWindowId || windows.length === 0) {
-      setError('Нет доступных интервалов на эту дату — выберите другой день или согласуйте время с менеджером');
+    } else if (
+      !timeWindowId ||
+      liveWindows.length === 0 ||
+      isSelectedSlotStale({
+        selectedId: timeWindowId,
+        windows: options?.timeWindows ?? [],
+        fulfillmentDate,
+        fulfillmentType,
+        now,
+        minLeadMinutes: options?.minLeadTimeMinutes,
+      })
+    ) {
+      if (liveWindows.length > 0) {
+        setTimeWindowId(liveWindows[0]!.id);
+      } else {
+        setTimeWindowId('');
+      }
+      setError(
+        liveWindows.length === 0
+          ? 'Нет доступных интервалов на эту дату — выберите другой день или согласуйте время с менеджером'
+          : 'Выбранный интервал уже недоступен. Выберите другое время — ваши данные сохранены.',
+      );
       setPending(false);
       return;
     }
@@ -402,6 +485,14 @@ export function CheckoutForm() {
               ? data.message.join(', ')
               : data.message
             : 'Не удалось создать заказ';
+        if (isFulfillmentSlotRejectionMessage(typeof msg === 'string' ? msg : null)) {
+          setSlotClock(Date.now());
+          setError(
+            'Выбранный интервал уже недоступен. Выберите другое время — ваши данные сохранены.',
+          );
+          setPending(false);
+          return;
+        }
         setError(msg ?? 'Не удалось создать заказ');
         setPending(false);
         return;
