@@ -89,6 +89,65 @@ class UpdateHomepageDiscoveryTilesBodyDto {
   discoveryTiles!: DiscoveryTileBodyDto[];
 }
 
+class HeroSlideBodyDto {
+  @IsString()
+  @MaxLength(80)
+  id!: string;
+
+  @IsString()
+  @MaxLength(200)
+  title!: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  subtitle?: string;
+
+  @ValidateIf((_, value) => value !== null && value !== undefined)
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  imageUrl?: string | null;
+
+  @ValidateIf((_, value) => value !== null && value !== undefined)
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  mobileImageUrl?: string | null;
+
+  @IsString()
+  @MaxLength(80)
+  ctaLabel!: string;
+
+  @IsString()
+  @MaxLength(500)
+  ctaHref!: string;
+
+  @ValidateIf((_, value) => value !== null && value !== undefined)
+  @IsOptional()
+  @IsString()
+  @MaxLength(80)
+  kicker?: string | null;
+
+  @IsBoolean()
+  enabled!: boolean;
+
+  @IsInt()
+  @Min(0)
+  sortOrder!: number;
+}
+
+class UpdateHomepageHeroSlidesBodyDto {
+  @IsInt()
+  @Min(1)
+  expectedVersion!: number;
+
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => HeroSlideBodyDto)
+  heroSlides!: HeroSlideBodyDto[];
+}
+
 @ApiTags('admin-storefront-homepage')
 @Controller('admin/storefront/homepage')
 export class AdminHomepageController {
@@ -113,6 +172,35 @@ export class AdminHomepageController {
         seoTitle: body.seoTitle,
         seoDescription: body.seoDescription,
         h1: body.h1,
+      },
+      actorFrom(admin, req),
+    );
+  }
+
+  @Patch('hero-slides')
+  @RequirePermissions('CONTENT_UPDATE')
+  updateHeroSlides(
+    @Body() body: UpdateHomepageHeroSlidesBodyDto,
+    @CurrentAdmin() admin: AuthenticatedAdmin,
+    @Req() req: Request,
+  ) {
+    return this.homepage.updateHeroSlides(
+      {
+        expectedVersion: body.expectedVersion,
+        heroSlides: body.heroSlides.map((slide, index) => ({
+          id: slide.id,
+          title: slide.title,
+          subtitle: slide.subtitle ?? '',
+          imageUrl: slide.imageUrl ?? null,
+          mobileImageUrl: slide.mobileImageUrl ?? null,
+          ctaLabel: slide.ctaLabel,
+          ctaHref: slide.ctaHref,
+          kicker: slide.kicker ?? null,
+          enabled: slide.enabled,
+          sortOrder: slide.sortOrder ?? (index + 1) * 10,
+          startsAt: null,
+          endsAt: null,
+        })),
       },
       actorFrom(admin, req),
     );

@@ -351,13 +351,13 @@ export function CheckoutForm() {
     }
 
     if (fulfillmentType === 'DELIVERY' && !recipientIsMe) {
-      if (!recipientName.trim() || recipientName.trim().length < 2) {
-        setError('Укажите имя получателя');
+      if (recipientName.trim() && recipientName.trim().length < 2) {
+        setError('Имя получателя слишком короткое. Можно оставить поле пустым.');
         setPending(false);
         return;
       }
-      if (!recipientPhone.trim() || recipientPhone.trim().length < 7) {
-        setError('Укажите телефон получателя');
+      if (recipientPhone.trim() && recipientPhone.trim().length < 7) {
+        setError('Телефон получателя указан не полностью. Можно оставить поле пустым.');
         setPending(false);
         return;
       }
@@ -448,8 +448,8 @@ export function CheckoutForm() {
     };
 
     if (fulfillmentType === 'DELIVERY') {
-      body.recipientName = recipientIsMe ? purchaserName : recipientName;
-      body.recipientPhone = recipientIsMe ? purchaserPhone : recipientPhone;
+      body.recipientName = recipientIsMe ? purchaserName : recipientName.trim() || null;
+      body.recipientPhone = recipientIsMe ? purchaserPhone : recipientPhone.trim() || null;
       body.addressKnown = addressKnown;
       body.deliveryAddress = addressKnown ? deliveryAddress : null;
       body.addressDetails = addressDetails || null;
@@ -748,33 +748,33 @@ export function CheckoutForm() {
             </div>
 
             {!recipientIsMe ? (
-              <div className="sf-checkout-grid">
-                <label className="sf-checkout-field">
-                  <span className="sf-checkout-label">Имя получателя</span>
-                  <input
-                    required
-                    value={recipientName}
-                    onChange={(e) => setRecipientName(e.target.value)}
-                    className="sf-checkout-input"
-                    placeholder="Как обратиться при вручении"
-                  />
-                </label>
-                <label className="sf-checkout-field">
-                  <span className="sf-checkout-label">Телефон получателя</span>
-                  <input
-                    required
-                    type="tel"
-                    inputMode="tel"
-                    value={recipientPhone}
-                    onChange={(e) => setRecipientPhone(e.target.value)}
-                    className="sf-checkout-input"
-                    placeholder="+375 …"
-                  />
-                  <span className="sf-checkout-hint">
-                    Нужен, чтобы согласовать вручение. При сюрпризе курьер не назовёт отправителя.
-                  </span>
-                </label>
-              </div>
+              <>
+                <div className="sf-checkout-grid">
+                  <label className="sf-checkout-field">
+                    <span className="sf-checkout-label">Имя получателя</span>
+                    <input
+                      value={recipientName}
+                      onChange={(e) => setRecipientName(e.target.value)}
+                      className="sf-checkout-input"
+                      placeholder="Необязательно"
+                    />
+                  </label>
+                  <label className="sf-checkout-field">
+                    <span className="sf-checkout-label">Телефон получателя</span>
+                    <input
+                      type="tel"
+                      inputMode="tel"
+                      value={recipientPhone}
+                      onChange={(e) => setRecipientPhone(e.target.value)}
+                      className="sf-checkout-input"
+                      placeholder="Необязательно"
+                    />
+                  </label>
+                </div>
+                <p className="sf-checkout-hint">
+                  Можно не указывать. Тогда вручение согласуем с вами, без данных получателя.
+                </p>
+              </>
             ) : (
               <p className="sf-checkout-hint">Доставим вам по указанному адресу.</p>
             )}
@@ -978,9 +978,14 @@ export function CheckoutForm() {
         ) : null}
 
         <p className="sf-checkout-legal">
+          Используем указанные данные, чтобы связаться с вами, согласовать заказ и организовать
+          доставку. Подробнее — в{' '}
+          <Link href="/privacy">Политике обработки персональных данных</Link>.
+        </p>
+        <p className="sf-checkout-legal">
           Оформляя заказ, вы подтверждаете, что ознакомились с{' '}
-          <Link href="/oferta">условиями заказа</Link>, <Link href="/dostavka">доставкой и оплатой</Link>
-          , <Link href="/vozvrat">возвратом</Link> и <Link href="/privacy">политикой данных</Link>.
+          <Link href="/oferta">договором публичной оферты</Link>, <Link href="/dostavka">доставкой и оплатой</Link>
+          , <Link href="/vozvrat">возвратом</Link> и <Link href="/privacy">политикой обработки персональных данных</Link>.
           Оплата на сайте не производится — менеджер сообщит способы после проверки заказа.
         </p>
 

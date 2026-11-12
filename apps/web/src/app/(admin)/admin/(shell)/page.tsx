@@ -44,6 +44,12 @@ const SHORTCUTS = [
     permission: 'CATALOG_READ' as const,
   },
   {
+    href: '/admin/storefront/hero',
+    label: 'Баннер',
+    hint: 'Фото на главной',
+    permission: 'CONTENT_READ' as const,
+  },
+  {
     href: '/admin/storefront/instagram',
     label: 'Instagram',
     hint: 'Кадры для главной',

@@ -8,8 +8,9 @@ import { getFixedLegalDocument } from '@/lib/legal-content';
 import { buildPageMetadata } from '@/lib/seo/metadata';
 
 export const metadata: Metadata = buildPageMetadata({
-  title: 'Условия заказа',
-  description: 'Публичная оферта и условия оформления заказа в интернет-магазине BUKET №1.',
+  title: 'Договор публичной оферты',
+  description:
+    'Договор публичной оферты интернет-магазина BUKET №1 о дистанционной продаже цветов, букетов и сопутствующих товаров.',
   path: '/oferta',
 });
 

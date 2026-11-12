@@ -19,14 +19,14 @@ const CATALOG_LINKS = [
 
 const BUYER_LINKS = [
   { href: '/dostavka', label: 'Доставка и оплата' },
-  { href: '/oferta', label: 'Условия заказа' },
+  { href: '/oferta', label: 'Договор публичной оферты' },
   { href: '/vozvrat', label: 'Возврат' },
 ] as const;
 
 const COMPANY_LINKS = [
   { href: '/o-nas', label: 'О нас' },
   { href: '/kontakty', label: 'Контакты' },
-  { href: '/privacy', label: 'Политика конфиденциальности' },
+  { href: '/privacy', label: 'Персональные данные' },
 ] as const;
 
 export function StorefrontFooter({ settings, seller = null }: Props) {

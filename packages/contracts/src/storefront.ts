@@ -57,6 +57,8 @@ export type HomepageHeroSlideDto = {
   ctaLabel: string;
   /** Resolved public href (storefront reads this). */
   ctaHref: string;
+  /** Small line above the title, for example «Скидка». */
+  kicker?: string | null;
   /** Stable CTA target; resolved into ctaHref on save. */
   ctaDestination?: LinkDestinationDto | null;
   enabled: boolean;
@@ -409,8 +411,9 @@ export function defaultHomepageHeroSlides(): HomepageHeroSlideDto[] {
   return [
     {
       id: 'main',
+      kicker: 'Сезонная коллекция',
       title: 'Осенние букеты',
-      subtitle: 'Сезонная коллекция — тёплые оттенки и свежая сборка с доставкой по Гродно.',
+      subtitle: 'Тёплые оттенки и свежая сборка с доставкой по Гродно.',
       imageUrl: '/categories/autumn-bouquet-warm.jpg',
       mobileImageUrl: null,
       ctaLabel: 'Смотреть коллекцию',
@@ -420,7 +423,46 @@ export function defaultHomepageHeroSlides(): HomepageHeroSlideDto[] {
       startsAt: null,
       endsAt: null,
     },
+    {
+      id: 'roses',
+      kicker: 'Свежие розы',
+      title: 'Букеты из роз',
+      subtitle: 'От одного цветка до большого букета — перейдите и выберите.',
+      imageUrl: '/categories/discovery-buket-roz.png',
+      mobileImageUrl: null,
+      ctaLabel: 'Смотреть розы',
+      ctaHref: '/catalog/bouquets',
+      enabled: true,
+      sortOrder: 20,
+      startsAt: null,
+      endsAt: null,
+    },
+    {
+      id: 'sale',
+      kicker: 'Скидка',
+      title: 'Букеты выгоднее',
+      subtitle: 'Перейдите и посмотрите, что сейчас по специальной цене.',
+      imageUrl: '/categories/discovery-roza.png',
+      mobileImageUrl: null,
+      ctaLabel: 'Смотреть акции',
+      ctaHref: '/akcii',
+      enabled: true,
+      sortOrder: 30,
+      startsAt: null,
+      endsAt: null,
+    },
   ];
+}
+
+/** Keep a short slider: one saved frame is joined with the starter frames, never past three. */
+export function homepageHeroSlidesForDisplay(
+  slides: HomepageHeroSlideDto[],
+): HomepageHeroSlideDto[] {
+  const list = [...slides].sort((a, b) => a.sortOrder - b.sortOrder || a.id.localeCompare(b.id));
+  if (list.length >= 2) return list.slice(0, 3);
+  const ids = new Set(list.map((slide) => slide.id));
+  const extras = defaultHomepageHeroSlides().filter((slide) => !ids.has(slide.id));
+  return [...list, ...extras].slice(0, 3);
 }
 
 export function defaultHomepageConfig(): HomepageConfigDto {

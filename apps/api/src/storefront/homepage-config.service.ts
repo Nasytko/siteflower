@@ -82,6 +82,13 @@ const heroSlideSchema = z
     ctaLabel: z.string().trim().min(1).max(80),
     ctaHref: z.string().trim().min(1).max(500),
     ctaDestination: linkDestinationSchema,
+    kicker: z
+      .string()
+      .trim()
+      .max(80)
+      .nullable()
+      .optional()
+      .transform((value) => (typeof value === 'string' ? value.trim() : '')),
     enabled: z.boolean(),
     sortOrder: z.number().int().min(0).max(10_000),
     startsAt: z.string().trim().max(40).nullable().optional(),
@@ -437,6 +444,7 @@ export function parseHomepageConfig(
       ctaLabel: slide.ctaLabel,
       ctaHref,
       ctaDestination: { ...ctaDestination, href: ctaHref },
+      kicker: slide.kicker?.trim() || null,
       enabled: slide.enabled,
       sortOrder: slide.sortOrder,
       startsAt: slide.startsAt ?? null,
@@ -565,6 +573,51 @@ export class HomepageConfigService {
       hasManualTitle: Boolean(nextSeoTitle),
       hasManualDescription: Boolean(nextSeoDescription),
       hasManualH1: Boolean(nextH1),
+    });
+
+    const dto = await this.getAdmin();
+    await this.revalidate.ping({ tags: ['storefront', 'homepage'], paths: ['/'] });
+    return dto;
+  }
+
+  /** Replace only the homepage slider. Keeps tiles, shelves, perks and SEO as they are. */
+  async updateHeroSlides(
+    input: {
+      expectedVersion: number;
+      heroSlides: HomepageHeroSlideDto[];
+    },
+    actor: ActorContext,
+  ): Promise<HomepageConfigAdminDto> {
+    if (input.heroSlides.length < 2 || input.heroSlides.length > 3) {
+      throw new BadRequestException('Нужно от 2 до 3 слайдов');
+    }
+    if (input.heroSlides.some((slide) => slide.enabled && !slide.imageUrl?.trim())) {
+      throw new BadRequestException('У включённого слайда должно быть фото');
+    }
+    const row = await this.getOrCreate();
+    const current = await this.configFromRow(row);
+    const resolveCtx = await this.loadResolveContext({ heroSlides: input.heroSlides });
+    let config: HomepageConfigDto;
+    try {
+      config = parseHomepageConfig(
+        {
+          ...current,
+          heroSlides: input.heroSlides,
+        },
+        'write',
+        resolveCtx,
+      );
+    } catch (err) {
+      if (err instanceof BadRequestException) throw err;
+      throw new BadRequestException(
+        err instanceof Error ? err.message : 'Некорректные слайды главной',
+      );
+    }
+
+    await this.persistConfig(config, input.expectedVersion, actor, {
+      heroSlidesOnly: true,
+      slideCount: config.heroSlides.length,
+      enabledSlideCount: config.heroSlides.filter((slide) => slide.enabled).length,
     });
 
     const dto = await this.getAdmin();

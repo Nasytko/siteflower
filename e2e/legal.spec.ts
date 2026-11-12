@@ -29,16 +29,19 @@ test.describe('Belarus legal storefront', () => {
     }
   });
 
-  test('delivery page states no online payment', async ({ page }) => {
+  test('delivery page explains free Grodno delivery and ERIP', async ({ page }) => {
     await page.goto(`${webUrl}/dostavka`, { waitUntil: 'domcontentloaded' });
-    await expect(page.getByText(/онлайн-оплат/i).first()).toBeVisible();
-    await expect(page.getByText(/Visa|Mastercard|ЕРИП/i)).toHaveCount(0);
+    await expect(page.getByRole('heading', { name: 'Доставка и оплата' })).toBeVisible();
+    await expect(page.getByText(/Бесплатно доставляем букеты/i).first()).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Через ЕРИП' })).toBeVisible();
+    await expect(page.getByRole('link', { name: /Позвонить в BUKET/i })).toBeVisible();
+    await expect(page.getByText(/Visa|Mastercard/i)).toHaveCount(0);
   });
 
   test('checkout acknowledges legal docs and uses Оформить заказ', async ({ page }) => {
     await page.goto(`${webUrl}/checkout`, { waitUntil: 'domcontentloaded' });
     await expect(page.getByRole('button', { name: 'Оформить заказ' }).first()).toBeVisible();
-    await expect(page.getByRole('link', { name: /условиями заказа/i }).first()).toBeVisible();
+    await expect(page.getByRole('link', { name: /договором публичной оферты/i }).first()).toBeVisible();
     await expect(page.getByRole('link', { name: /политикой обработки/i }).first()).toBeVisible();
     await expect(page.getByText(/Оплата на сайте не производится/i).first()).toBeVisible();
     await expect(page.getByRole('button', { name: /Оплатить/i })).toHaveCount(0);

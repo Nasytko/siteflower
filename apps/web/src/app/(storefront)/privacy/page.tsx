@@ -8,9 +8,9 @@ import { getFixedLegalDocument } from '@/lib/legal-content';
 import { buildPageMetadata } from '@/lib/seo/metadata';
 
 export const metadata: Metadata = buildPageMetadata({
-  title: 'Политика конфиденциальности',
+  title: 'Политика обработки персональных данных',
   description:
-    'Политика обработки персональных данных и сведения о cookies / локальном хранении в BUKET №1.',
+    'Какие данные BUKET №1 получает при заявке, как использует их для заказа и доставки и как реализовать свои права.',
   path: '/privacy',
 });
 
@@ -53,7 +53,7 @@ export default function PrivacyPolicyPage() {
       <LegalDocumentView document={document} appendix={<CookiesAppendix />} />
       <LegalRelatedNav
         links={[
-          { href: '/oferta', label: 'Условия заказа' },
+          { href: '/oferta', label: 'Договор публичной оферты' },
           { href: '/vozvrat', label: 'Возврат и отмена' },
           { href: '/kontakty', label: 'Контакты' },
         ]}

@@ -24,6 +24,7 @@ test('SUPER_ADMIN sees primary admin sections including catalog and orders', () 
   assert.ok(labels.includes('Страницы каталога'));
   assert.ok(labels.includes('Заказы'));
   assert.ok(labels.includes('Плитки на главной'));
+  assert.ok(labels.includes('Баннер на главной'));
   assert.ok(labels.includes('Instagram'));
   assert.ok(labels.includes('Пользователи'));
   assert.equal(labels.includes('Цветы'), false);
@@ -55,6 +56,7 @@ test('sidebar splits daily work, catalog, storefront, and service tools', () => 
   assert.equal(byId.catalog.includes('Instagram'), false);
   assert.equal(byId.catalog.includes('Плитки на главной'), false);
   assert.ok(byId.storefront.includes('Страницы каталога'));
+  assert.ok(byId.storefront.includes('Баннер на главной'));
   assert.ok(byId.storefront.includes('Плитки на главной'));
   assert.ok(byId.storefront.includes('Instagram'));
   assert.deepEqual(byId.access, ['Пользователи']);

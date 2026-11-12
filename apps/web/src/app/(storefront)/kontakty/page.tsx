@@ -171,7 +171,7 @@ export default async function ContactsPage() {
       <LegalRelatedNav
         links={[
           { href: '/dostavka', label: 'Доставка и оплата' },
-          { href: '/oferta', label: 'Условия заказа' },
+          { href: '/oferta', label: 'Договор публичной оферты' },
           { href: '/vozvrat', label: 'Возврат и отмена' },
           { href: '/privacy', label: 'Персональные данные' },
         ]}

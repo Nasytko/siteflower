@@ -17,10 +17,10 @@ export const LEGAL_DOCUMENT_VERSION_STATUSES = ['DRAFT', 'PUBLISHED'] as const;
 export type LegalDocumentVersionStatus = (typeof LEGAL_DOCUMENT_VERSION_STATUSES)[number];
 
 export const LEGAL_DOCUMENT_KIND_LABELS: Record<LegalDocumentKind, string> = {
-  ORDER_TERMS: 'Условия заказа (публичная оферта)',
+  ORDER_TERMS: 'Договор публичной оферты',
   PRIVACY_POLICY: 'Политика обработки персональных данных',
   RETURNS_POLICY: 'Возврат, отмена и претензии',
-  DELIVERY_PAYMENT: 'Доставка и оплата (пояснения)',
+  DELIVERY_PAYMENT: 'Доставка и оплата',
   SUBSTITUTION_POLICY: 'Замена цветов и соответствие фото',
 };
 

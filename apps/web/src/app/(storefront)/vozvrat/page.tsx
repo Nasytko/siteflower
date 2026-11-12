@@ -21,7 +21,7 @@ export default function ReturnsPolicyPage() {
       <LegalDocumentView document={document} />
       <LegalRelatedNav
         links={[
-          { href: '/oferta', label: 'Условия заказа' },
+          { href: '/oferta', label: 'Договор публичной оферты' },
           { href: '/privacy', label: 'Персональные данные' },
           { href: '/kontakty', label: 'Контакты' },
         ]}

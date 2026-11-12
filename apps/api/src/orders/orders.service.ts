@@ -369,11 +369,11 @@ export class OrdersService {
 
     if (dto.fulfillmentType === 'DELIVERY') {
       recipientName = (dto.recipientName ?? '').trim() || null;
-      recipientPhone = dto.recipientPhone ? normalizeByPhone(dto.recipientPhone) : null;
-      if (!recipientName || recipientName.length < 2) {
+      recipientPhone = dto.recipientPhone?.trim() ? normalizeByPhone(dto.recipientPhone) : null;
+      if (recipientName && recipientName.length < 2) {
         throw new BadRequestException('Укажите имя получателя');
       }
-      if (!recipientPhone) {
+      if (dto.recipientPhone?.trim() && !recipientPhone) {
         throw new BadRequestException('Некорректный телефон получателя');
       }
       addressKnown = dto.addressKnown !== false;

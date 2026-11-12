@@ -179,6 +179,7 @@ export const adminEndpoints = {
   seoHealth: `${ADMIN}/seo/health`,
   homepage: `${ADMIN}/storefront/homepage`,
   homepageSeo: `${ADMIN}/storefront/homepage/seo`,
+  homepageHeroSlides: `${ADMIN}/storefront/homepage/hero-slides`,
   homepageDiscoveryTiles: `${ADMIN}/storefront/homepage/discovery-tiles`,
 } as const;
 

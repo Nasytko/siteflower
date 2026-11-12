@@ -10,6 +10,7 @@ import {
   DEFAULT_HOMEPAGE_SEO_DESCRIPTION,
   DEFAULT_HOMEPAGE_SEO_TITLE,
   HOMEPAGE_BRAND_ALTERNATE_NAMES,
+  homepageHeroSlidesForDisplay,
   resolveHomepageSeo,
 } from '@bouquet-one/contracts';
 import {
@@ -175,7 +176,7 @@ export default async function StorefrontHomePage() {
   const rosesSection = sectionOf(sections, 'roses');
   const helpSection = sectionOf(sections, 'help');
 
-  const heroSlidesSource =
+  const heroSlidesSource = homepageHeroSlidesForDisplay(
     homepage.heroSlides?.length > 0
       ? homepage.heroSlides
       : [
@@ -192,7 +193,8 @@ export default async function StorefrontHomePage() {
             startsAt: null,
             endsAt: null,
           } satisfies HomepageHeroSlideDto,
-        ];
+        ],
+  );
 
   const heroSlides: HeroSlide[] = heroSlidesSource
     .filter((slide) => isSlideLive(slide, now))
@@ -205,6 +207,7 @@ export default async function StorefrontHomePage() {
       ctaHref: slide.ctaHref,
       imageUrl: slide.imageUrl || '/categories/hero.jpg',
       mobileImageUrl: slide.mobileImageUrl,
+      kicker: slide.kicker,
     }));
 
   const promoLimit = promoSection?.limit ?? 5;

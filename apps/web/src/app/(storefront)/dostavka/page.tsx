@@ -1,179 +1,136 @@
 import type { Metadata } from 'next';
-import Link from 'next/link';
 import { LegalPageShell, LegalRelatedNav } from '@/components/storefront/legal-document-view';
-import { SafeMarkdown } from '@/components/storefront/safe-markdown';
-import {
-  FIXED_SELLER,
-  getFixedLegalDocument,
-  getFixedLegalSeller,
-} from '@/lib/legal-content';
-import { isManagerTimeWindowId } from '@bouquet-one/contracts';
-import { formatDeliveryFeeLabel } from '@/lib/delivery-fee-label';
-import { getFulfillmentOptions, getStorefrontSettings } from '@/lib/public-api';
 import { buildPageMetadata } from '@/lib/seo/metadata';
 
 export const metadata: Metadata = buildPageMetadata({
-  title: 'Доставка цветов по Гродно и области',
+  title: 'Доставка и оплата',
   description:
-    'Бесплатная доставка букетов в черте Гродно. Условия и сроки доставки за город уточняйте у магазина до заказа.',
+    'Бесплатная доставка букетов по Гродно с 09:00 до 21:00. Ближайшая доставка от 1 часа после подтверждения заказа. Оплата наличными или через ЕРИП.',
   path: '/dostavka',
 });
 
-function formatLeadTime(minutes: number): string | null {
-  if (!Number.isFinite(minutes) || minutes <= 0) return null;
-  if (minutes < 60) return `от ${minutes} мин`;
-  const hours = Math.round(minutes / 60);
-  return `от ${hours} ч`;
-}
+const CONDITIONS = [
+  ['В пределах Гродно', 'Бесплатно'],
+  [
+    'В ближайшие города',
+    'По согласованию. Возможность доставки, её стоимость и срок зависят от адреса. Мы сообщим их до подтверждения заказа.',
+  ],
+  ['График доставки', 'Ежедневно, с 09:00 до 21:00'],
+  [
+    'Доставка к выбранной дате',
+    'Сообщите менеджеру желаемую дату и время. Он проверит наличие цветов и предложит доступный интервал.',
+  ],
+] as const;
 
-export default async function DeliveryPage() {
-  const [settings, fulfillment] = await Promise.all([
-    getStorefrontSettings().catch(() => null),
-    getFulfillmentOptions().catch(() => null),
-  ]);
+const STEPS = [
+  {
+    title: 'Оставьте заявку на сайте.',
+    text: 'Выберите букет и укажите своё имя, номер телефона, имя получателя и адрес доставки. Заявку можно отправить круглосуточно.',
+  },
+  {
+    title: 'Дождитесь звонка менеджера.',
+    text: 'Мы обрабатываем заявки с 09:00 до 21:00. Менеджер уточнит наличие цветов, состав заказа, адрес и время доставки.',
+  },
+  {
+    title: 'Согласуйте стоимость и способ оплаты.',
+    text: 'До заключения договора вы получите информацию о стоимости товаров, сроке и стоимости доставки, итоговой сумме и условиях оплаты.',
+  },
+  {
+    title: 'Получите подтверждение.',
+    text: 'После согласования мы направим электронное сообщение с номером заказа и согласованными условиями, включая состав заказа, адрес, дату и время или интервал доставки, итоговую сумму и способ оплаты.',
+  },
+] as const;
 
-  const seller = getFixedLegalSeller(settings);
-  const deliveryDoc = getFixedLegalDocument('delivery_payment');
-  const city = seller.city;
-  const summary = settings?.deliverySummary?.trim() || null;
-  const outOfCityNote =
-    settings?.outOfCityDeliveryNote?.trim() ||
-    'Доставка за пределы Гродно — по согласованию с менеджером. Тарифы, сроки и населённые пункты уточняйте у магазина до заказа.';
-  const pickupAddress = seller.pickupAddress?.trim() || null;
-  const offlinePayment = FIXED_SELLER.actualOfflinePaymentDescription;
-  const windows =
-    fulfillment?.timeWindows
-      .filter((w) => w.active !== false && !isManagerTimeWindowId(w.id))
-      .sort((a, b) => a.sortOrder - b.sortOrder) ?? [];
-
-  const cityFeeLabel = fulfillment
-    ? formatDeliveryFeeLabel(fulfillment.deliveryFeeMinor, fulfillment.currency)
-    : 'Бесплатно';
-  const cityLead = fulfillment ? formatLeadTime(fulfillment.minLeadTimeMinutes) : null;
-
+export default function DeliveryPage() {
   return (
     <LegalPageShell>
-      <header className="sf-legal-page-intro">
-        <p className="sf-label">{city}</p>
-        <h1 className="sf-display">Доставка и оплата</h1>
-        {summary ? (
-          <p className="sf-body mt-4 whitespace-pre-line text-muted">{summary}</p>
-        ) : (
-          <p className="sf-body mt-4 text-muted">
-            Бесплатная доставка в черте Гродно. После оформления заказа менеджер подтвердит детали
-            доставки или самовывоза.
+      <article className="sf-legal-doc">
+        <header className="sf-legal-doc__header">
+          <h1 className="sf-legal-doc__title">Доставка и оплата</h1>
+          <p className="sf-legal-p mt-4">
+            Бесплатно доставляем букеты, композиции и подарки по Гродно. Доставка работает
+            ежедневно с 09:00 до 21:00. Ближайшая доставка возможна от 1 часа после подтверждения
+            заказа. Точное время менеджер согласует с вами при звонке.
           </p>
-        )}
-      </header>
+        </header>
 
-      <div className="sf-legal-grid">
-        <section className="sf-legal-block" aria-labelledby="city-delivery-heading">
-          <h2 id="city-delivery-heading" className="sf-h3">
-            В черте Гродно
-          </h2>
-          {!fulfillment ? (
-            <p className="sf-body mt-4 text-muted">
-              Актуальные условия уточняйте у менеджера после оформления заказа.
-            </p>
-          ) : fulfillment.deliveryEnabled ? (
-            <dl className="sf-legal-dl mt-5">
-              <div>
-                <dt>Курьерская доставка</dt>
-                <dd>
-                  {[cityFeeLabel, cityLead, `по ${city}`].filter(Boolean).join(' · ')}
-                </dd>
+        <div className="sf-legal-prose">
+          <h2 className="sf-legal-h2">Куда и когда доставляем</h2>
+          <dl className="sf-legal-dl">
+            {CONDITIONS.map(([label, value]) => (
+              <div key={label}>
+                <dt>{label}</dt>
+                <dd>{value}</dd>
               </div>
-              {fulfillment.maxAdvanceDays > 0 ? (
-                <div>
-                  <dt>Предзаказ</dt>
-                  <dd>До {fulfillment.maxAdvanceDays} дн. вперёд</dd>
-                </div>
-              ) : null}
-              {windows.length > 0 ? (
-                <div>
-                  <dt>Интервалы доставки</dt>
-                  <dd>
-                    <p className="mb-2">
-                      Каждый час с 9:00 до 21:00. Ближайший слот — не раньше чем через час от
-                      момента заказа. Вне рабочих часов можно согласовать время с менеджером при
-                      оформлении.
-                    </p>
-                    <ul className="mt-1 grid grid-cols-2 gap-1 sm:grid-cols-3">
-                      {windows.map((window) => (
-                        <li key={window.id ?? `${window.label}-${window.startMinutes}`}>
-                          {window.label}
-                        </li>
-                      ))}
-                    </ul>
-                  </dd>
-                </div>
-              ) : null}
-            </dl>
-          ) : (
-            <p className="sf-body mt-4 text-muted">Курьерская доставка сейчас недоступна.</p>
-          )}
-        </section>
+            ))}
+          </dl>
 
-        <section className="sf-legal-block" aria-labelledby="suburb-delivery-heading">
-          <h2 id="suburb-delivery-heading" className="sf-h3">
-            За пределами Гродно
-          </h2>
-          <p className="sf-body mt-4 text-muted whitespace-pre-line">{outOfCityNote}</p>
-          <p className="sf-body mt-3 text-muted">
-            Отдельные страницы населённых пунктов не публикуем. Перед заказом уточните у магазина
-            стоимость, срок и возможность доставки по вашему адресу —{' '}
-            <Link href="/kontakty" className="sf-link">
-              контакты
-            </Link>
-            .
+          <h2 className="sf-legal-h2">Как оформить заказ</h2>
+          <ol className="sf-legal-list">
+            {STEPS.map((step) => (
+              <li key={step.title}>
+                <strong>{step.title}</strong> {step.text}
+              </li>
+            ))}
+          </ol>
+          <p className="sf-legal-p">
+            Отправка формы означает, что мы получили вашу заявку. Заказ подтверждается после
+            согласования его условий.
           </p>
-        </section>
 
-        <section className="sf-legal-block" aria-labelledby="pickup-heading">
-          <h2 id="pickup-heading" className="sf-h3">
-            Самовывоз
-          </h2>
-          {!fulfillment ? (
-            <p className="sf-body mt-4 text-muted">Условия самовывоза уточняйте у менеджера.</p>
-          ) : fulfillment.pickupEnabled ? (
-            <dl className="sf-legal-dl mt-5">
-              <div>
-                <dt>Адрес</dt>
-                <dd>
-                  {pickupAddress ? <span className="block">{pickupAddress}</span> : null}
-                  {fulfillment.pickupInstructions?.trim() ? (
-                    <span className="mt-1 block text-muted">
-                      {fulfillment.pickupInstructions.trim()}
-                    </span>
-                  ) : pickupAddress ? null : (
-                    'Доступен — адрес и время сообщит менеджер'
-                  )}
-                </dd>
-              </div>
-            </dl>
-          ) : (
-            <p className="sf-body mt-4 text-muted">Самовывоз сейчас недоступен.</p>
-          )}
-        </section>
+          <h2 className="sf-legal-h2">Как оплатить заказ</h2>
+          <p className="sf-legal-p">
+            Все расчёты производятся в белорусских рублях. Способ оплаты вы выбираете при
+            согласовании заказа с менеджером.
+          </p>
+          <h3 className="sf-legal-h3">Наличными при получении</h3>
+          <p className="sf-legal-p">
+            Оплатите согласованную сумму при вручении заказа. Если букет будет получать другой
+            человек, заранее сообщите менеджеру, кто оплатит заказ.
+          </p>
+          <h3 className="sf-legal-h3">Через ЕРИП</h3>
+          <p className="sf-legal-p">
+            После согласования заказа менеджер сообщит сумму, порядок оплаты через ЕРИП и номер
+            заказа или другой идентификатор, если он нужен для платежа. Перед оплатой проверьте
+            получателя платежа и сумму. Сохраните подтверждение операции на случай, если
+            потребуется сверить платёж.
+          </p>
+          <p className="sf-legal-p">
+            Если для вашего заказа необходима предоплата, её сумму и срок согласуем до заключения
+            договора.
+          </p>
 
-        <section className="sf-legal-block" aria-labelledby="payment-heading">
-          <h2 id="payment-heading" className="sf-h3">
-            Оплата
-          </h2>
-          <p className="sf-body mt-4 whitespace-pre-line text-muted">{offlinePayment}</p>
-        </section>
-      </div>
+          <h2 className="sf-legal-h2">Если букет — сюрприз</h2>
+          <p className="sf-legal-p">
+            Оставьте в заявке свой номер телефона. Менеджер свяжется с вами, чтобы согласовать
+            вручение. Если для вас важно сохранить сюрприз или доставить букет к определённому
+            времени, скажите об этом при звонке.
+          </p>
+          <p className="sf-legal-p">
+            Если вручить заказ по согласованному адресу не удастся, мы свяжемся с вами и обсудим
+            дальнейшие действия. При необходимости повторной доставки заранее согласуем её время и
+            возможную стоимость.
+          </p>
 
-      <section className="mt-10 max-w-[40rem]" aria-labelledby="doc-heading">
-        <h2 id="doc-heading" className="sr-only">
-          {deliveryDoc.title}
-        </h2>
-        <SafeMarkdown markdown={deliveryDoc.bodyMarkdown} className="sf-legal-prose" />
-      </section>
+          <h2 className="sf-legal-h2">Как изменить или отменить заказ</h2>
+          <p className="sf-legal-p">
+            Если нужно изменить адрес, перенести доставку или отменить заказ, позвоните нам с 09:00
+            до 21:00. Назовите номер заказа или телефон, указанный в заявке. Если заказ уже
+            оплачен, менеджер подскажет, как оформить возврат.
+          </p>
+
+          <p className="sf-legal-p">
+            <a className="sf-home-btn" href="tel:+375297982222">
+              Позвонить в BUKET №1
+              <span>+375 (29) 798-22-22</span>
+            </a>
+          </p>
+        </div>
+      </article>
 
       <LegalRelatedNav
         links={[
-          { href: '/oferta', label: 'Условия заказа' },
+          { href: '/oferta', label: 'Договор публичной оферты' },
           { href: '/vozvrat', label: 'Возврат и отмена' },
           { href: '/kontakty', label: 'Контакты' },
         ]}

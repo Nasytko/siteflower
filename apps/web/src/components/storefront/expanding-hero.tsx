@@ -89,7 +89,7 @@ export function ExpandingHero({ slides, deliveryNote = null, intervalMs = 7000 }
         >
           {safeSlides.map((slide, i) => {
             const isActive = i === index;
-            const kicker = slide.kicker?.trim() || 'Сезонная коллекция';
+            const kicker = slide.kicker?.trim();
             return (
               <div
                 key={slide.id}
@@ -128,7 +128,7 @@ export function ExpandingHero({ slides, deliveryNote = null, intervalMs = 7000 }
                   )}
                 </div>
                 <div className="sf-hero__overlay">
-                  <p className="sf-hero__kicker">{kicker}</p>
+                  {kicker ? <p className="sf-hero__kicker">{kicker}</p> : null}
                   {/* Promo headlines stay <p> — stable SEO H1 lives near the assortment. */}
                   <p className="sf-hero__headline">
                     <HeadlineText title={slide.title} />
@@ -138,7 +138,7 @@ export function ExpandingHero({ slides, deliveryNote = null, intervalMs = 7000 }
                   ) : null}
                   <Link href={slide.ctaHref} className="sf-home-btn sf-hero__cta">
                     {slide.ctaLabel}
-                    <span aria-hidden> →</span>
+                    <span aria-hidden>→</span>
                   </Link>
                 </div>
               </div>

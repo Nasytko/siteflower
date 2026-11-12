@@ -5789,15 +5789,6 @@ a.sf-instagram__handle:hover {
   pointer-events: auto;
 }
 
-.sf-hero__kicker {
-  margin: 0;
-  font-size: 0.6875rem;
-  font-weight: 600;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  color: #e9cfb2;
-}
-
 .sf-hero__headline {
   margin: 0.55rem 0 0;
   max-width: 15ch;
@@ -5823,9 +5814,44 @@ a.sf-instagram__handle:hover {
   color: rgb(255 255 255 / 0.88);
 }
 
+.sf-hero__kicker {
+  display: inline-flex;
+  margin: 0 0 0.7rem;
+  padding: 0.28rem 0.7rem;
+  border-radius: 999px;
+  background: rgb(255 255 255 / 0.16);
+  color: #fff;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
 .sf-hero__cta {
-  margin-top: 1.3rem;
-  border-color: rgb(255 255 255 / 0.22);
+  margin-top: 1.15rem;
+  min-height: 3rem;
+  padding: 0.3rem 0.35rem 0.3rem 1.15rem;
+  border: 0;
+  background: #fff;
+  color: #1b2820;
+  box-shadow: 0 14px 30px -18px rgb(0 0 0 / 0.7);
+  pointer-events: auto;
+}
+
+.sf-hero__cta:hover {
+  background: #f7f1e8;
+  color: #1b2820;
+}
+
+.sf-hero__cta span {
+  display: inline-flex;
+  width: 2rem;
+  height: 2rem;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  background: #18392b;
+  color: #fff;
 }
 
 .sf-hero__badge {
